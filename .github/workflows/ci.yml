@@ -119,3 +119,13 @@ jobs:
         run: |
           sleep 15
           scripts/ci-run.sh "Verificar /api/health" curl -sS --fail-with-body "https://${{ vars.KIANDA_HOSTNAME }}/api/health"
+
+      - name: Verificar base de dados (login de demonstração)
+        if: vars.KIANDA_HOSTNAME != '' && vars.KIANDA_SEED_DEMO == 'true'
+        run: |
+          printf '{"email":"admin@kwanzalog.co.ao","password":"%s"}' "$PW" > /tmp/login.json
+          scripts/ci-run.sh "Login de demonstração (Worker → Hyperdrive → Neon)" curl -sS --fail-with-body -o /tmp/login.out -X POST -H 'content-type: application/json' --data @/tmp/login.json "https://${{ vars.KIANDA_HOSTNAME }}/api/v1/auth/login"
+          grep -q '"company"' /tmp/login.out && echo "Login OK — a API chega à base de dados."
+          rm -f /tmp/login.json /tmp/login.out
+        env:
+          PW: ${{ secrets.KIANDA_SEED_OWNER_PASSWORD }}
