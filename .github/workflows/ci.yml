@@ -63,7 +63,7 @@ jobs:
       - run: pnpm --filter @kianda/core build
       - run: pnpm --filter @kianda/db build
 
-      - name: Migrações na base de dados de produção (Supabase)
+      - name: Migrações na base de dados de produção (Neon)
         run: pnpm db:migrate
         env:
           DATABASE_URL: ${{ secrets.KIANDA_DATABASE_URL }}

@@ -20,7 +20,7 @@ export function getDb(connectionString = process.env.DATABASE_URL): Db {
   if (scoped) return scoped;
   if (!connectionString) throw new Error('DATABASE_URL não definida');
   if (!instance) {
-    // DATABASE_CA_CERT (opcional): certificado CA do Supabase em PEM → TLS com verificação completa (CI / scripts).
+    // DATABASE_CA_CERT (opcional): certificado CA do fornecedor em PEM (só se for privada) → TLS com verificação completa (CI / scripts).
     const ca = process.env.DATABASE_CA_CERT?.replace(/\\n/g, '\n');
     const pool = new pg.Pool({ connectionString, max: 10, ...(ca ? { ssl: { ca, rejectUnauthorized: true } } : {}) });
     instance = { pool, db: drizzle(pool, { schema }) };

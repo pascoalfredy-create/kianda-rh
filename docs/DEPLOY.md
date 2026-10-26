@@ -1,4 +1,4 @@
-# Publicação — Cloudflare + Supabase
+# Publicação — Cloudflare + Neon (PostgreSQL)
 
 Igual ao Enterprise: **cada push para `main` verifica, testa e publica automaticamente** (GitHub Actions → Cloudflare Workers).
 
@@ -6,28 +6,29 @@ Igual ao Enterprise: **cada push para `main` verifica, testa e publica automatic
 Navegador ──► rh.seudominio.com  (Worker kianda-web, Next.js via OpenNext)
                     │ service binding (interno, sem endereço público)
                     ▼
-              Worker kianda-api (Hono) ──► Hyperdrive ──► PostgreSQL (Supabase)
+              Worker kianda-api (Hono) ──► Hyperdrive ──► PostgreSQL (Neon, Frankfurt)
 ```
 
 - A API **não tem endereço público**: só o Worker web lhe chega.
 - A sessão é um cookie httpOnly no domínio da web.
-- O Hyperdrive mantém as ligações ao Supabase abertas (menos latência a partir de Luanda) e trata do TLS.
+- O Hyperdrive mantém as ligações à base de dados abertas (menos latência a partir de Luanda) e trata do TLS.
+
+> **Porquê Neon e não Supabase?** O plano gratuito do Supabase permite só 2 projectos activos e **pausa o projecto após 7 dias sem uso** — o site ficaria em baixo até alguém o reactivar à mão. O Neon gratuito permite 100 projectos e, quando está inactivo, suspende a computação e **retoma sozinho em poucas centenas de milissegundos** no pedido seguinte. O Kianda usa PostgreSQL puro: mudar de fornecedor é só mudar a connection string.
 
 ## Configuração única (≈ 20 minutos)
 
-### 1. Supabase — base de dados
+### 1. Neon — base de dados
 
-1. Em [supabase.com](https://supabase.com) → **New project** → nome `kianda-rh`, região **Frankfurt (eu-central-1)** ou **London (eu-west-2)** (as mais próximas de Angola). Guarde a palavra-passe da base de dados.
-2. **Project Settings → Database → Connection string → URI**, modo **Session pooler** (porta 5432). Fica assim:
-   `postgresql://postgres.<ref>:<PASSWORD>@aws-0-eu-central-1.pooler.supabase.com:5432/postgres`
-3. (Recomendado) **Project Settings → Database → SSL Configuration → Download certificate**. O conteúdo do ficheiro `.crt` vai para o secret `KIANDA_DATABASE_CA_CERT` (verificação TLS completa nas migrações).
+1. Em [neon.com](https://neon.com) → criar conta (pode entrar com o GitHub) → **New project** → nome `kianda-rh`, Postgres 17, região **AWS Europe Central 1 (Frankfurt)** — a mais próxima de Angola.
+2. No painel do projecto → **Connect** → desligue **Connection pooling** (o Hyperdrive já faz o pooling) → copie a connection string. Fica assim:
+   `postgresql://neondb_owner:<PASSWORD>@ep-xxxx-xxxx.eu-central-1.aws.neon.tech/neondb?sslmode=require`
 
-> Projecto separado do usado pelo Enterprise: dados de RH isolados, cópias de segurança e limites próprios.
+O certificado do Neon é público: não é preciso o secret `KIANDA_DATABASE_CA_CERT`.
 
 ### 2. Cloudflare — Hyperdrive
 
 1. Painel Cloudflare → **Storage & Databases → Hyperdrive → Create configuration**.
-2. Nome `kianda-db`, cole a connection string do passo 1.2 → **Create**.
+2. Nome `kianda-db`, cole a connection string do passo 1.2 → **Create**. (Em alternativa, o painel tem uma ligação directa ao Neon.)
 3. Copie o **ID** da configuração (secret `KIANDA_HYPERDRIVE_ID`).
 
 ### 3. Cloudflare — token da API
@@ -52,7 +53,7 @@ Repositório `kianda-rh` → **Settings → Secrets and variables → Actions**.
 | `CLOUDFLARE_API_TOKEN` | token do passo 3 |
 | `CLOUDFLARE_ACCOUNT_ID` | o mesmo do Enterprise (painel Cloudflare → barra lateral) |
 | `KIANDA_DATABASE_URL` | connection string do passo 1.2 (usada só para migrações) |
-| `KIANDA_DATABASE_CA_CERT` | conteúdo do certificado do passo 1.3 (opcional; sem ele, acrescente `?sslmode=no-verify` ao URL) |
+| `KIANDA_DATABASE_CA_CERT` | não necessário com o Neon (só para fornecedores com CA privada, ex.: Supabase) |
 | `KIANDA_HYPERDRIVE_ID` | ID do passo 2.3 |
 | `KIANDA_JWT_SECRET` | segredo aleatório com 48+ caracteres (ex.: `openssl rand -base64 48`) |
 | `KIANDA_SEED_OWNER_PASSWORD` | palavra-passe do utilizador demo (só se activar os dados de demonstração) |
@@ -75,6 +76,7 @@ O custom domain cria automaticamente o registo DNS e o certificado HTTPS do subd
 
 - **Regra de limite de tentativas** (recomendado): Cloudflare → o seu domínio → **Security → WAF → Rate limiting rules** → URI path `equals /api/v1/auth/login`, 10 pedidos / 1 minuto por IP → Block. O limite interno da API é por instância; esta regra é global.
 - **Logs**: Workers & Pages → `kianda-web` / `kianda-api` → **Logs** (observabilidade activa).
+- **Neon gratuito**: 0,5 GB e 100 horas de computação por mês por projecto — com suspensão automática quando parado, chega para dezenas de empresas pequenas. Ao crescer, o plano Launch não tem mensalidade mínima (paga-se o uso).
 - **Plano**: o plano gratuito dos Workers chega para começar. Com uso real (dezenas de utilizadores em simultâneo), o Workers Paid (5 USD/mês) aumenta o tempo de CPU por pedido e o número de pedidos.
 
 ## Desenvolvimento local

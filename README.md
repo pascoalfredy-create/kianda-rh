@@ -67,4 +67,4 @@ Primeira estrutura funcional. Ver [docs/ROADMAP.md](docs/ROADMAP.md) para o que 
 
 ## Publicação
 
-Cada push para `main` testa e publica no Cloudflare (Workers + Hyperdrive + Supabase). Configuração única em [docs/DEPLOY.md](docs/DEPLOY.md).
+Cada push para `main` testa e publica no Cloudflare (Workers + Hyperdrive + Neon PostgreSQL). Configuração única em [docs/DEPLOY.md](docs/DEPLOY.md).

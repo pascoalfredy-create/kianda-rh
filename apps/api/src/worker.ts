@@ -7,7 +7,7 @@ import { withRequestDb } from '@kianda/db';
 import { buildApp, type App } from './app.js';
 
 interface Env {
-  /** Hyperdrive (produção): pool de ligações do Cloudflare à base de dados no Supabase. */
+  /** Hyperdrive (produção): pool de ligações do Cloudflare à base de dados PostgreSQL (Neon). */
   HYPERDRIVE?: { connectionString: string };
   /** Alternativa sem Hyperdrive (ex.: wrangler dev). */
   DATABASE_URL?: string;

@@ -13,7 +13,7 @@
 
 ```
 apps/web (Next.js) ──/api/* ─► apps/api (Hono) ──► packages/db (Drizzle) ──► PostgreSQL
-   (produção: Worker web ──service binding──► Worker API ──Hyperdrive──► Supabase)
+   (produção: Worker web ──service binding──► Worker API ──Hyperdrive──► PostgreSQL no Neon)
         │                           │
         └──────────► packages/core ◄┘   (mesmo motor nos dois lados)
 ```
