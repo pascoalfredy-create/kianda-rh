@@ -64,6 +64,20 @@
       "when": 1793030338102,
       "tag": "0008_conciliacao_bancaria",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793055092567,
+      "tag": "0009_remover_prototipo_despesas",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793055093391,
+      "tag": "0010_despesas",
+      "breakpoints": true
     }
   ]
 }

@@ -32,6 +32,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {['owner', 'payroll', 'finance', 'hr_admin'].includes(me.user.role) && <Link href="/obrigacoes">Obrigações</Link>}
           {['owner', 'payroll', 'finance'].includes(me.user.role) && <Link href="/financas">Finanças de pessoal</Link>}
           {['owner', 'payroll', 'finance'].includes(me.user.role) && <Link href="/conciliacao">Conciliação bancária</Link>}
+          <Link href="/despesas">Despesas</Link>
           {me.user.employeeId && <Link href="/recibos">Os meus recibos</Link>}
           <Link href="/simulador">Simulador salarial</Link>
           {(me.user.role === 'owner' || me.user.role === 'hr_admin') && <Link href="/definicoes">Definições</Link>}
@@ -48,6 +49,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <Link href="/">Início</Link>
         <Link href="/assiduidade">Ponto</Link>
         <Link href="/ausencias">Ausências</Link>
+        <Link href="/despesas">Despesas</Link>
         {staff ? <Link href="/colaboradores">Equipa</Link> : me.user.employeeId ? <Link href={`/colaboradores/${me.user.employeeId}`}>Ficha</Link> : null}
         <LogoutButton label="Sair" />
       </nav>

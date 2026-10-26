@@ -1,6 +1,6 @@
 import { getPack, luandaDate, OBLIGATION_LABEL, paymentJournal, payrollObligations, type ObligationKind } from '@kianda/core';
 import {
-  and, auditLogs, like, bankAccounts, bankLines, bankMatches, eq, journalEntries, journalLines, payrollLines, payrollPayments, payrollRuns, type Db,
+  and, auditLogs, like, bankAccounts, expenseClaims, bankLines, bankMatches, eq, journalEntries, journalLines, payrollLines, payrollPayments, payrollRuns, type Db,
 } from '@kianda/db';
 import { companyAccounts, DomainError } from './payroll.js';
 
@@ -90,5 +90,6 @@ export async function registerPayment(
 export async function undoMatch(tx: Tx, companyId: string, matchId: string) {
   await tx.update(bankLines).set({ status: 'pending', matchId: null }).where(and(eq(bankLines.matchId, matchId), eq(bankLines.companyId, companyId)));
   await tx.update(payrollPayments).set({ matchId: null }).where(and(eq(payrollPayments.matchId, matchId), eq(payrollPayments.companyId, companyId)));
+  await tx.update(expenseClaims).set({ matchId: null }).where(and(eq(expenseClaims.matchId, matchId), eq(expenseClaims.companyId, companyId)));
   await tx.delete(bankMatches).where(and(eq(bankMatches.id, matchId), eq(bankMatches.companyId, companyId)));
 }

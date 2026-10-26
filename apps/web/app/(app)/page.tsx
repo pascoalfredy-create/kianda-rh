@@ -28,6 +28,9 @@ export default async function Home() {
     : [];
   const late = obligations.filter((o) => o.status === 'overdue');
   const soon = obligations.filter((o) => o.status === 'due_soon');
+  const decider = ['owner', 'hr_admin', 'manager'].includes(me.user.role);
+  const expenseApprovals = decider ? await api<unknown[]>('/v1/expenses?scope=approve').catch(() => []) : [];
+  const toReimburse = ['owner', 'finance'].includes(me.user.role) ? await api<{ totalMinor: number }[]>('/v1/expenses?scope=pay').catch(() => []) : [];
   const proofLimit = new Date(Date.now() - 5 * 86_400_000).toISOString().slice(0, 10);
   const noProof = ['owner', 'finance'].includes(me.user.role) ? obligations.filter((o) => o.paidAt && o.reconciled === false && o.paidAt < proofLimit) : [];
   const staff = me.user.role !== 'employee';
@@ -55,6 +58,16 @@ export default async function Home() {
           <Link href="/obrigacoes" className="card kpi" style={{ borderColor: late.length ? '#f1c9c1' : '#f3d9a6' }}>
             <div className="l">Obrigações {late.length ? 'em atraso' : 'a vencer'}</div>
             <div className="v" style={{ color: late.length ? 'var(--red)' : 'var(--amber)' }}>{late.length || soon.length}</div>
+          </Link>
+        )}
+        {expenseApprovals.length > 0 && (
+          <Link href="/despesas?v=approve" className="card kpi" style={{ borderColor: '#f3d9a6' }}>
+            <div className="l">Notas de despesas para aprovar</div><div className="v" style={{ color: 'var(--amber)' }}>{expenseApprovals.length}</div>
+          </Link>
+        )}
+        {toReimburse.length > 0 && (
+          <Link href="/despesas?v=pay" className="card kpi">
+            <div className="l">Reembolsos de despesas por pagar</div><div className="v">{formatKz(toReimburse.reduce((s, c) => s + c.totalMinor, 0))}</div>
           </Link>
         )}
         {noProof.length > 0 && (

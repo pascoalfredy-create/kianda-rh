@@ -1,15 +1,15 @@
 import {
   angolanIbanProblem, luandaDate, matchPayments, missingProof, newRows, lineFingerprint, OBLIGATION_LABEL, parseStatement,
-  type ExpectedPayment, type ObligationKind, type StatementMapping,
+  type ExpectedPayment, type ObligationKind, type PaymentKind, type StatementMapping,
 } from '@kianda/core';
 import {
   and, asc, auditLogs, bankAccounts, bankLines, bankMatches, bankStatements, desc, eq, getDb, gte, inArray, isNull, lte, or,
-  payrollLines, payrollPayments, payrollRuns, type Db,
+  employees, expenseClaims, payrollLines, payrollPayments, payrollRuns, type Db,
 } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { body, requireCompany, requireRole, type AppEnv } from '../plugins/tenant.js';
-import { closedRun, obligationsFor, registerPayment, undoMatch } from '../services/payments.js';
+import { closedRun, obligationsFor, registerPayment, undoMatch, type Tx } from '../services/payments.js';
 import { DomainError } from '../services/payroll.js';
 
 const READERS = ['finance', 'payroll'] as const;
@@ -68,7 +68,24 @@ async function openPayments(db: Db, companyId: string, accountId: string) {
     .where(and(eq(payrollPayments.companyId, companyId), isNull(payrollPayments.matchId), or(eq(payrollPayments.bankAccountId, accountId), isNull(payrollPayments.bankAccountId))))
     .orderBy(asc(payrollPayments.paidOn));
   const parts = await netParts(db, rows.filter((r) => r.p.kind === 'salaries').map((r) => r.p.runId));
-  return rows.map(({ p, period }) => ({ ...p, period, parts: p.kind === 'salaries' ? parts.get(p.runId) : undefined }));
+  const payroll = rows.map(({ p, period }) => ({
+    id: p.id, runId: p.runId as string | null, kind: p.kind as PaymentKind, label: OBLIGATION_LABEL[p.kind], period, paidOn: p.paidOn, amountMinor: p.amountMinor, reference: p.reference,
+    parts: p.kind === 'salaries' ? parts.get(p.runId) : undefined,
+  }));
+  // Reembolsos de notas de despesas pagos e ainda sem movimento bancário.
+  const exp = await db.select({ c: expenseClaims, name: employees.name }).from(expenseClaims).innerJoin(employees, eq(employees.id, expenseClaims.employeeId))
+    .where(and(eq(expenseClaims.companyId, companyId), eq(expenseClaims.status, 'paid'), isNull(expenseClaims.matchId), or(eq(expenseClaims.bankAccountId, accountId), isNull(expenseClaims.bankAccountId))));
+  const expenses = exp.map(({ c, name }) => ({
+    id: `exp:${c.id}`, runId: null, kind: 'expense' as PaymentKind, label: `Reembolso ${c.number} — ${name}`, period: c.paidOn!.slice(0, 7), paidOn: c.paidOn!, amountMinor: c.totalMinor,
+    reference: c.paidReference ?? c.number, parts: undefined,
+  }));
+  return [...payroll, ...expenses].sort((a, b) => a.paidOn.localeCompare(b.paidOn));
+}
+
+/** Associa um pagamento (do processamento ou reembolso de despesas) a uma correspondência. */
+async function setPaymentMatch(tx: Tx, key: string, matchId: string, accountId: string) {
+  if (key.startsWith('exp:')) await tx.update(expenseClaims).set({ matchId, bankAccountId: accountId }).where(eq(expenseClaims.id, key.slice(4)));
+  else await tx.update(payrollPayments).set({ matchId, bankAccountId: accountId }).where(eq(payrollPayments.id, key));
 }
 
 async function pendingDebits(db: Db, accountId: string) {
@@ -87,7 +104,7 @@ async function autoMatch(db: Db, actor: { companyId: string; actorId: string }, 
       for (const m of auto) {
         const [bm] = await tx.insert(bankMatches).values({ companyId: actor.companyId, accountId, kind: 'auto', rule: m.rule, createdBy: actor.actorId }).returning();
         await tx.update(bankLines).set({ status: 'matched', matchId: bm!.id }).where(inArray(bankLines.id, m.lineIds));
-        await tx.update(payrollPayments).set({ matchId: bm!.id, bankAccountId: accountId }).where(eq(payrollPayments.id, m.key));
+        await setPaymentMatch(tx, m.key, bm!.id, accountId);
       }
     });
   }
@@ -234,7 +251,11 @@ export function bankRoutes() {
     const matchedRows = await db.select({ m: bankMatches, p: payrollPayments, period: payrollRuns.period }).from(bankMatches)
       .innerJoin(payrollPayments, eq(payrollPayments.matchId, bankMatches.id)).innerJoin(payrollRuns, eq(payrollRuns.id, payrollPayments.runId))
       .where(eq(bankMatches.accountId, acc.id));
-    const byMatch = Object.fromEntries(matchedRows.map(({ m, p, period }) => [m.id, { matchId: m.id, kind: m.kind, rule: m.rule, payment: `${OBLIGATION_LABEL[p.kind]} ${period}`, paymentAmountMinor: p.amountMinor }]));
+    const matchedExp = await db.select({ m: bankMatches, c: expenseClaims }).from(bankMatches).innerJoin(expenseClaims, eq(expenseClaims.matchId, bankMatches.id)).where(eq(bankMatches.accountId, acc.id));
+    const byMatch = Object.fromEntries([
+      ...matchedRows.map(({ m, p, period }) => [m.id, { matchId: m.id, kind: m.kind, rule: m.rule, payment: `${OBLIGATION_LABEL[p.kind]} ${period}`, paymentAmountMinor: p.amountMinor }]),
+      ...matchedExp.map(({ m, c: x }) => [m.id, { matchId: m.id, kind: m.kind, rule: m.rule, payment: `Reembolso ${x.number}`, paymentAmountMinor: x.totalMinor }]),
+    ]);
     return c.json({
       account: acc,
       summary: {
@@ -246,7 +267,7 @@ export function bankRoutes() {
       },
       lines: lines.map((l) => ({ ...l, match: l.matchId ? byMatch[l.matchId] ?? null : null })),
       payments: payments.map((p) => ({
-        id: p.id, runId: p.runId, kind: p.kind, label: OBLIGATION_LABEL[p.kind], period: p.period, paidOn: p.paidOn, amountMinor: p.amountMinor, reference: p.reference,
+        id: p.id, runId: p.runId, kind: p.kind, label: p.label, period: p.period, paidOn: p.paidOn, amountMinor: p.amountMinor, reference: p.reference,
         withoutProof: missingProof(p.paidOn, today), suggestion: sugg.find((s) => s.key === p.id) ?? null,
       })),
       unpaid: await unpaidWithCandidates(db, actor.companyId, acc.id),
@@ -268,9 +289,8 @@ export function bankRoutes() {
     const b = z.object({ accountId: z.string(), paymentId: z.string(), lineIds: z.array(z.string()).min(1, 'Escolha pelo menos um movimento').max(500) }).parse(await body(c));
     const db = getDb();
     await account(db, actor.companyId, b.accountId);
-    const [p] = await db.select().from(payrollPayments).where(and(eq(payrollPayments.id, b.paymentId), eq(payrollPayments.companyId, actor.companyId)));
-    if (!p) throw new DomainError('nao_encontrado', 'Pagamento inexistente', 404);
-    if (p.matchId) throw new DomainError('ja_conciliado', 'Este pagamento já está conciliado');
+    const p = (await openPayments(db, actor.companyId, b.accountId)).find((x) => x.id === b.paymentId);
+    if (!p) throw new DomainError('nao_encontrado', 'Pagamento inexistente ou já conciliado', 404);
     const lines = await db.select().from(bankLines).where(and(inArray(bankLines.id, b.lineIds), eq(bankLines.accountId, b.accountId)));
     if (lines.length !== new Set(b.lineIds).size) throw new DomainError('nao_encontrado', 'Movimento inexistente nesta conta', 404);
     if (lines.some((l) => l.status !== 'pending')) throw new DomainError('ja_conciliado', 'Há movimentos já conciliados ou ignorados');
@@ -280,8 +300,8 @@ export function bankRoutes() {
     const m = await db.transaction(async (tx) => {
       const [bm] = await tx.insert(bankMatches).values({ companyId: actor.companyId, accountId: b.accountId, kind: 'manual', rule: lines.length > 1 ? 'transferencias_individuais' : 'valor_exacto', createdBy: actor.actorId }).returning();
       await tx.update(bankLines).set({ status: 'matched', matchId: bm!.id }).where(inArray(bankLines.id, b.lineIds));
-      await tx.update(payrollPayments).set({ matchId: bm!.id, bankAccountId: b.accountId }).where(eq(payrollPayments.id, p.id));
-      await tx.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'reconcile', entity: 'payroll_payment', entityId: p.id, after: { matchId: bm!.id, lineIds: b.lineIds } });
+      await setPaymentMatch(tx, p.id, bm!.id, b.accountId);
+      await tx.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'reconcile', entity: p.id.startsWith('exp:') ? 'expense_claim' : 'payroll_payment', entityId: p.id, after: { matchId: bm!.id, lineIds: b.lineIds } });
       return bm!;
     });
     return c.json(m, 201);

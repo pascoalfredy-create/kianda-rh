@@ -19,6 +19,12 @@ export interface PgcAccountMap {
   /** Outros descontos retidos (empréstimos ao trabalhador, quotizações, seguros…). */
   otherDeductions: string;
   bank: string;
+  /** Despesas do pessoal reembolsadas (deslocações, alojamento, refeições…). */
+  staffExpenses: string;
+  /** Ajudas de custo (diárias). */
+  perDiem: string;
+  /** Reembolsos de despesas e ajudas de custo a pagar ao pessoal. */
+  expensesPayable: string;
 }
 
 export const DEFAULT_PGC_ACCOUNTS: PgcAccountMap = {
@@ -33,6 +39,9 @@ export const DEFAULT_PGC_ACCOUNTS: PgcAccountMap = {
   advances: '36.3',
   otherDeductions: '36.9',
   bank: '43.1',
+  staffExpenses: '75.2',
+  perDiem: '72.8',
+  expensesPayable: '36.9',
 };
 
 export interface JournalLine { account: string; description: string; costCenter?: string; debitMinor: Minor; creditMinor: Minor }

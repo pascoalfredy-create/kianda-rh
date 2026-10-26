@@ -56,6 +56,8 @@ export const AO_2026: CountryPack = {
     { title: 'Decreto Presidencial n.º 227/18 — regime de contribuições INSS' },
   ],
   toValidate: [
+    'Contas PGC sugeridas para despesas do pessoal (75.2), ajudas de custo (72.8) e reembolsos a pagar (36.9) — confirmar com o plano de contas de cada empresa',
+    'Ajudas de custo fora do IRT e do INSS até ao limite da diária fixada pela empresa — confirmar o limite legal aplicável (referência: diárias da função pública)',
     'Contas PGC sugeridas para INSS a pagar (34.9.1) e remunerações a pagar (36.1.2) — confirmar com o plano de contas de cada empresa',
     'Subsídio de férias fora da base do INSS (DP 227/18) e subsídio de Natal dentro — confirmar com consultor',
     'Limite de 30 h/mês para o acréscimo de 50% nas horas extra',

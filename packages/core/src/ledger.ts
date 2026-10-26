@@ -20,6 +20,9 @@ export const ACCOUNT_ROLES: Record<AccountRole, { label: string; expectedClass: 
   advances: { label: 'Pessoal — adiantamentos', expectedClass: '3', group: 'Terceiros' },
   otherDeductions: { label: 'Pessoal — outros (descontos retidos)', expectedClass: '3', group: 'Terceiros' },
   bank: { label: 'Depósitos à ordem — conta de pagamento de salários', expectedClass: '4', group: 'Meios monetários' },
+  staffExpenses: { label: 'Fornecimentos e serviços de terceiros — despesas do pessoal reembolsadas', expectedClass: '7', group: 'Despesas e ajudas de custo' },
+  perDiem: { label: 'Outros custos com o pessoal — ajudas de custo', expectedClass: '7', group: 'Despesas e ajudas de custo' },
+  expensesPayable: { label: 'Pessoal — reembolsos de despesas a pagar', expectedClass: '3', group: 'Despesas e ajudas de custo' },
 };
 
 export const PGC_CLASS_LABEL: Record<string, string> = {

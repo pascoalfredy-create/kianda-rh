@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import { useMutation } from '@/lib/client';
 
+const kzField = (v: FormDataEntryValue | null) => { const t = String(v ?? '').trim().replace(/\s/g, '').replace(/\./g, '').replace(',', '.'); return t ? Math.round(Number(t) * 100) : null; };
 const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
-export function SettingsForm({ s }: { s: { inssNumber: string | null; address: string | null; workdayMinutes: number; christmasSubsidyMonth: number; holidaySubsidyMonth: number | null } }) {
+export function SettingsForm({ s }: { s: { inssNumber: string | null; address: string | null; workdayMinutes: number; christmasSubsidyMonth: number; holidaySubsidyMonth: number | null; perDiemNationalMinor: number | null; perDiemInternationalMinor: number | null } }) {
   const { busy, error, run } = useMutation();
   const [ok, setOk] = useState('');
   return (
@@ -22,6 +23,8 @@ export function SettingsForm({ s }: { s: { inssNumber: string | null; address: s
           workdayMinutes: Math.round(Number(String(f.get('workdayHours')).replace(',', '.')) * 60),
           christmasSubsidyMonth: Number(f.get('christmasSubsidyMonth')),
           holidaySubsidyMonth: hol === 'ferias' ? null : Number(hol),
+          perDiemNationalMinor: kzField(f.get('perDiemNational')),
+          perDiemInternationalMinor: kzField(f.get('perDiemInternational')),
         });
         if (done) setOk('Definições gravadas.');
       }}
@@ -41,6 +44,10 @@ export function SettingsForm({ s }: { s: { inssNumber: string | null; address: s
         </select>
       </label>
       <p className="muted wide">Ambos os subsídios correspondem a 50% do salário base (pacote AO-2026); no ano de admissão são proporcionais. Nenhum subsídio é pago duas vezes no mesmo ano. Regras assinaladas para validação jurídica.</p>
+      <h3>Ajudas de custo</h3>
+      <label className="span2">Diária — território nacional (Kz)<input name="perDiemNational" inputMode="decimal" placeholder="Sem limite" defaultValue={s.perDiemNationalMinor ? String(s.perDiemNationalMinor / 100).replace('.', ',') : ''} /></label>
+      <label className="span2">Diária — estrangeiro (Kz)<input name="perDiemInternational" inputMode="decimal" placeholder="Sem limite" defaultValue={s.perDiemInternationalMinor ? String(s.perDiemInternationalMinor / 100).replace('.', ',') : ''} /></label>
+      <p className="muted wide">Valor máximo por dia nas notas de despesas. As ajudas de custo dentro da diária ficam fora do IRT e do INSS (limite legal assinalado para validação).</p>
       <div className="form-actions">
         {error ? <span className="err">{error}</span> : ok ? <span className="ok">{ok}</span> : null}
         <button className="btn" disabled={busy}>Gravar</button>

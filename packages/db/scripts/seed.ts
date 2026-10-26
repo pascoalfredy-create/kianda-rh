@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { DEFAULT_ACCOUNT_MAPPINGS, kz } from '@kianda/core';
 import { and, eq } from 'drizzle-orm';
-import { absences, accountMappings, bankAccounts, attendanceEntries, closeDb, companies, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, hashPassword, users, verifyPassword } from '../src/index.js';
+import { absences, accountMappings, bankAccounts, expenseClaims, expenseLines, attendanceEntries, closeDb, companies, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, hashPassword, users, verifyPassword } from '../src/index.js';
 
 /** Dados de demonstração: empresa fictícia com três departamentos, cinco colaboradores, hierarquia e documentos. Idempotente. */
 const db = getDb();
@@ -167,5 +167,22 @@ if (!anyPunch) {
 }
 
 console.log(`Empresa de demonstração pronta: ${company.name} (${company.id})`);
+// Diárias de ajudas de custo e uma nota de despesas da Joana à espera da chefia.
+if (company.perDiemNationalMinor === null) await db.update(companies).set({ perDiemNationalMinor: kz(15_000), perDiemInternationalMinor: kz(75_000) }).where(eq(companies.id, company.id));
+const [anyClaim] = await db.select({ id: expenseClaims.id }).from(expenseClaims).where(eq(expenseClaims.companyId, company.id)).limit(1);
+const [joanaUser] = await db.select().from(users).where(and(eq(users.companyId, company.id), eq(users.email, 'joana@kwanzalog.co.ao')));
+if (!anyClaim && joana && joanaUser) {
+  const d = (offset: number) => new Date(Date.now() + 3_600_000 - offset * 86_400_000).toISOString().slice(0, 10);
+  const [claim] = await db.insert(expenseClaims).values({
+    companyId: company.id, employeeId: joana.id, number: `ND-${d(0).slice(0, 4)}-0001`, title: 'Deslocação ao Lobito — inventário do armazém', tripFrom: d(6), tripTo: d(4),
+    status: 'submitted', totalMinor: kz(18_500) + kz(42_000) + kz(37_500), createdBy: joanaUser.id, submittedAt: new Date(),
+  }).returning();
+  await db.insert(expenseLines).values([
+    { claimId: claim!.id, position: 0, kind: 'expense', date: d(6), description: 'Táxi aeroporto', category: 'transport', documentRef: 'RC 0441', amountMinor: kz(18_500) },
+    { claimId: claim!.id, position: 1, kind: 'expense', date: d(5), description: 'Hotel, 2 noites', category: 'lodging', documentRef: 'FT 2026/1187', supplierNif: '5417000000', amountMinor: kz(42_000) },
+    { claimId: claim!.id, position: 2, kind: 'per_diem', date: d(6), description: 'Ajudas de custo Lobito', zone: 'national', halfDays: 5, rateMinor: kz(15_000), amountMinor: kz(37_500) },
+  ]);
+}
+
 console.log(`Acesso: ${OWNER_EMAIL} (proprietário), edson@kwanzalog.co.ao (chefia), joana@kwanzalog.co.ao (colaboradora) / ${owner ? '(palavra-passe já definida)' : ownerPassword}`);
 await closeDb();

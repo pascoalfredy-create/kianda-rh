@@ -678,6 +678,78 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
   });
 
+  describe('despesas e ajudas de custo (entrega 9)', () => {
+    const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
+    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
+    let manager = '';
+    let claimId = '';
+    const lines = [
+      { kind: 'expense', date: today, description: 'Hotel Lobito', category: 'lodging', amount: 45000, documentRef: 'FT 2026/118' },
+      { kind: 'per_diem', date: today, description: 'Deslocação ao Lobito', zone: 'national', days: 2.5, rate: 20000 },
+    ];
+
+    beforeAll(async () => { manager = await login(`chefe+${stamp}@a.ao`); });
+
+    it('diária da empresa nas definições', async () => {
+      const r = await app.inject({ method: 'PATCH', url: '/v1/company/settings', headers: as(owner), payload: { perDiemNationalMinor: 2_000_000 } });
+      expect(r.json().perDiemNationalMinor).toBe(2_000_000);
+    });
+
+    it('o colaborador cria, completa e submete a nota; numeração por ano', async () => {
+      expect((await post(employeeUser, '/v1/expenses', { title: 'Deslocação ao Lobito', employeeId: 'outro', lines })).statusCode).toBe(403);
+      const r = await post(employeeUser, '/v1/expenses', { title: 'Deslocação ao Lobito', lines: [{ ...lines[0], documentRef: '' }] });
+      expect(r.statusCode).toBe(201);
+      claimId = r.json().id;
+      expect(r.json().number).toMatch(/^ND-\d{4}-0001$/);
+      expect((await post(employeeUser, `/v1/expenses/${claimId}/submit`)).json().message).toContain('recibo ou factura');
+      const over = await app.inject({ method: 'PUT', url: `/v1/expenses/${claimId}`, headers: as(employeeUser), payload: { title: 'Deslocação ao Lobito', lines: [lines[0], { ...lines[1], rate: 25000 }] } });
+      expect(over.statusCode).toBe(200);
+      expect((await post(employeeUser, `/v1/expenses/${claimId}/submit`)).json().message).toContain('acima da fixada');
+      await app.inject({ method: 'PUT', url: `/v1/expenses/${claimId}`, headers: as(employeeUser), payload: { title: 'Deslocação ao Lobito', tripFrom: today, tripTo: today, lines } });
+      const d = (await get(employeeUser, `/v1/expenses/${claimId}`)).json();
+      expect(d.totals).toEqual({ expensesMinor: 4_500_000, perDiemMinor: 5_000_000, totalMinor: 9_500_000 });
+      expect(d.lines[1].days).toBe(2.5);
+      expect((await post(employeeUser, `/v1/expenses/${claimId}/submit`)).json().status).toBe('submitted');
+      expect((await app.inject({ method: 'PUT', url: `/v1/expenses/${claimId}`, headers: as(employeeUser), payload: { title: 'Alterada', lines } })).json().error).toBe('nao_editavel');
+    });
+
+    it('a chefia directa decide; o próprio não; recusa exige motivo; aprovação gera lançamento', async () => {
+      expect((await get(manager, '/v1/expenses?scope=approve')).json().map((x: { id: string }) => x.id)).toContain(claimId);
+      expect((await post(employeeUser, `/v1/expenses/${claimId}/decision`, { approve: true })).statusCode).toBe(403);
+      expect((await post(manager, `/v1/expenses/${claimId}/decision`, { approve: false })).json().error).toBe('motivo_obrigatorio');
+      const ok = await post(manager, `/v1/expenses/${claimId}/decision`, { approve: true, note: 'Ok' });
+      expect(ok.json().status).toBe('approved');
+      const je = (await get(financeUser, `/v1/ledger/journal?from=${today}&to=${today}`)).json().find((j: { reference: string }) => j.reference === ok.json().number);
+      expect(je.lines.map((l: { account: string; debitMinor: number; creditMinor: number }) => [l.account, l.debitMinor, l.creditMinor])).toEqual([['75.2', 4_500_000, 0], ['72.8', 5_000_000, 0], ['36.9', 0, 9_500_000]]);
+    });
+
+    it('Finanças reembolsa (ficheiro de transferências, lançamento, conciliação bancária) e pode estornar', async () => {
+      expect((await get(financeUser, '/v1/expenses?scope=pay')).json().map((x: { id: string }) => x.id)).toContain(claimId);
+      expect((await post(payrollUser, `/v1/expenses/${claimId}/pay`, { paidOn: today })).statusCode).toBe(403);
+      const account = (await get(financeUser, '/v1/bank/accounts')).json()[0];
+      const paid = await post(financeUser, `/v1/expenses/${claimId}/pay`, { paidOn: today, reference: 'TRF 777', bankAccountId: account.id });
+      expect(paid.json()).toMatchObject({ status: 'paid', paidOn: today });
+      const rec = (await get(financeUser, `/v1/bank/reconciliation?accountId=${account.id}`)).json();
+      const p = rec.payments.find((x: { id: string }) => x.id === `exp:${claimId}`);
+      expect(p).toMatchObject({ kind: 'expense', amountMinor: 9_500_000 });
+      const csv = `Data;Descritivo;Montante\n${today.split('-').reverse().join('/')};TRF REEMB DESPESAS;-95.000,00\n`;
+      expect((await post(financeUser, '/v1/bank/statements', { accountId: account.id, text: csv })).json().matched).toBe(1);
+      expect((await post(financeUser, `/v1/expenses/${claimId}/reverse-payment`, { note: 'Transferência devolvida' })).statusCode).toBe(200);
+      const after = (await get(financeUser, `/v1/expenses/${claimId}`)).json();
+      expect(after).toMatchObject({ status: 'approved', matchId: null });
+      expect((await get(financeUser, '/v1/expenses-bank-file')).statusCode).toBe(200);
+      const again = await post(financeUser, `/v1/expenses/${claimId}/pay`, { paidOn: today });
+      expect(again.json().status).toBe('paid');
+    });
+
+    it('colaborador só vê as suas; notas pagas não se anulam', async () => {
+      expect((await get(employeeUser, '/v1/expenses?scope=all')).json()).toEqual([]);
+      expect((await post(employeeUser, `/v1/expenses/${claimId}/cancel`)).json().error).toBe('estado_invalido');
+      expect((await get(ownerB, `/v1/expenses/${claimId}`)).statusCode).toBe(404);
+    });
+  });
+
   it('logout limpa o cookie', async () => {
     const r = await app.inject({ method: 'POST', url: '/v1/auth/logout', headers: as(owner) });
     expect(r.cookies.find((c) => c.name === 'kianda_session')?.value).toBe('');

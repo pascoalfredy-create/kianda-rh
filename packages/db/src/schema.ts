@@ -17,7 +17,7 @@ export const employeeStatusEnum = pgEnum('employee_status', ['active', 'suspende
 export const absenceTypeEnum = pgEnum('absence_type', ['vacation', 'sick', 'justified', 'unjustified', 'maternity', 'paternity', 'marriage', 'bereavement', 'training']);
 export const requestStatusEnum = pgEnum('request_status', ['pending', 'approved', 'rejected', 'cancelled']);
 export const payrollStatusEnum = pgEnum('payroll_status', ['draft', 'closed']);
-export const expenseStatusEnum = pgEnum('expense_status', ['pending', 'approved', 'rejected', 'paid']);
+export const expenseClaimStatusEnum = pgEnum('expense_claim_status', ['draft', 'submitted', 'approved', 'rejected', 'paid', 'cancelled']);
 export const documentTypeEnum = pgEnum('document_type', ['bi', 'passport', 'residence_card', 'work_visa', 'driving_licence', 'professional_card', 'other']);
 export const punchSourceEnum = pgEnum('punch_source', ['web', 'manual']);
 export const payrollVariableKindEnum = pgEnum('payroll_variable_kind', ['bonus', 'other_earning', 'advance', 'other_deduction']);
@@ -38,6 +38,9 @@ export const companies = pgTable('companies', {
   christmasSubsidyMonth: integer('christmas_subsidy_month').notNull().default(12),
   /** Mês fixo do subsídio de férias (1–12); vazio = no mês em que começam as primeiras férias aprovadas do ano (Dezembro como último recurso). */
   holidaySubsidyMonth: integer('holiday_subsidy_month'),
+  /** Diárias de ajudas de custo fixadas pela empresa (vazio = sem limite definido). */
+  perDiemNationalMinor: bigint('per_diem_national_minor', { mode: 'number' }),
+  perDiemInternationalMinor: bigint('per_diem_international_minor', { mode: 'number' }),
   createdAt: createdAt(),
 });
 
@@ -259,18 +262,48 @@ export const payrollLines = pgTable('payroll_lines', {
   calculationHash: text('calculation_hash'),
 }, (t) => [uniqueIndex('payroll_lines_run_employee').on(t.runId, t.employeeId)]);
 
-export const expenses = pgTable('expenses', {
+/** Nota de despesas: despesas documentadas e ajudas de custo de uma deslocação ou período. */
+export const expenseClaims = pgTable('expense_claims', {
   id: id(),
   companyId: text('company_id').notNull().references(() => companies.id),
   employeeId: text('employee_id').notNull().references(() => employees.id),
-  category: text('category').notNull(),
-  date: date('date').notNull(),
-  amountMinor: money('amount_minor'),
-  description: text('description').notNull(),
-  status: expenseStatusEnum('status').notNull().default('pending'),
-  paidAt: date('paid_at'),
+  number: text('number').notNull(),
+  title: text('title').notNull(),
+  tripFrom: date('trip_from'),
+  tripTo: date('trip_to'),
+  status: expenseClaimStatusEnum('status').notNull().default('draft'),
+  totalMinor: money('total_minor'),
+  createdBy: text('created_by').notNull(),
   createdAt: createdAt(),
-}, (t) => [index('expenses_company_status').on(t.companyId, t.status)]);
+  submittedAt: timestamp('submitted_at', { withTimezone: true }),
+  decidedBy: text('decided_by'),
+  decidedAt: timestamp('decided_at', { withTimezone: true }),
+  decisionNote: text('decision_note'),
+  approvalJournalId: text('approval_journal_id'),
+  paidOn: date('paid_on'),
+  paidReference: text('paid_reference'),
+  paymentJournalId: text('payment_journal_id'),
+  bankAccountId: text('bank_account_id'),
+  matchId: text('match_id'),
+}, (t) => [uniqueIndex('expense_claims_company_number').on(t.companyId, t.number), index('expense_claims_company_status').on(t.companyId, t.status), index('expense_claims_employee').on(t.employeeId)]);
+
+export const expenseLines = pgTable('expense_lines', {
+  id: id(),
+  claimId: text('claim_id').notNull().references(() => expenseClaims.id, { onDelete: 'cascade' }),
+  position: integer('position').notNull().default(0),
+  /** expense | per_diem */
+  kind: text('kind').notNull(),
+  date: date('date').notNull(),
+  description: text('description').notNull(),
+  category: text('category'),
+  documentRef: text('document_ref'),
+  supplierNif: text('supplier_nif'),
+  zone: text('zone'),
+  /** Dias × 2 (meios dias). */
+  halfDays: integer('half_days'),
+  rateMinor: bigint('rate_minor', { mode: 'number' }),
+  amountMinor: money('amount_minor'),
+}, (t) => [index('expense_lines_claim').on(t.claimId)]);
 
 /** Contas bancárias da empresa usadas para pagar salários e obrigações (cada uma com a sua conta PGC da classe 4). */
 export const bankAccounts = pgTable('bank_accounts', {

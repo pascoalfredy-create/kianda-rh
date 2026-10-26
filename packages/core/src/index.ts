@@ -13,3 +13,4 @@ export * from './attendance.js';
 export * from './obligations.js';
 export * from './ledger.js';
 export * from './bank.js';
+export * from './expenses.js';

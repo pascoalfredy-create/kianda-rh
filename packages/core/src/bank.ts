@@ -235,7 +235,7 @@ export function newRows<T extends StatementRow>(rows: T[], existing: Map<string,
 
 // ——— Correspondência ———
 
-export type PaymentKind = 'salaries' | 'inss' | 'irt';
+export type PaymentKind = 'salaries' | 'inss' | 'irt' | 'expense';
 export interface OpenBankLine { id: string; date: string; description: string; reference: string | null; amountMinor: Minor }
 /** Pagamento registado no Kianda ou obrigação por pagar. `parts` = líquidos individuais (salários pagos por transferências separadas). */
 export interface ExpectedPayment { key: string; kind: PaymentKind; period: string; amountMinor: Minor; date: string; reference: string | null; parts?: Minor[] }
@@ -245,6 +245,7 @@ const KEYWORDS: Record<PaymentKind, string[]> = {
   salaries: ['SALAR', 'VENCIM', 'ORDENAD', 'REMUNER', 'FOLHA'],
   inss: ['INSS', 'SEG SOCIAL', 'SEGURANCA SOCIAL', 'CONTRIB'],
   irt: ['IRT', 'AGT', 'IMPOSTO', 'RUP', 'DLI'],
+  expense: ['REEMB', 'DESPESA', 'AJUDA', 'DESLOC', 'ND-'],
 };
 const DAY = 86_400_000;
 const days = (a: string, b: string) => (Date.parse(a) - Date.parse(b)) / DAY;

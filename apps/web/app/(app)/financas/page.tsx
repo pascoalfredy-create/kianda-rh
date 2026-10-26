@@ -13,7 +13,7 @@ interface Entry { id: string; date: string; journal: string; reference: string; 
 const pt = (d: string) => d.split('-').reverse().join('/');
 const k = (v: number) => (v ? formatKz(v) : '');
 const lastDay = (p: string) => { const [y, m] = p.split('-').map(Number) as [number, number]; return `${p}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`; };
-const SOURCE: Record<string, string> = { payroll: 'Processamento', payroll_payment: 'Pagamento' };
+const SOURCE: Record<string, string> = { payroll: 'Processamento', payroll_payment: 'Pagamento', expense: 'Nota de despesas', expense_payment: 'Reembolso' };
 
 export default async function Financas({ searchParams }: { searchParams: Promise<{ s?: string; de?: string; ate?: string; conta?: string }> }) {
   const sp = await searchParams;
