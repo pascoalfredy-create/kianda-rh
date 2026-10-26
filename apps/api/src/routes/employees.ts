@@ -1,6 +1,6 @@
 import {
   buildOrgTree, compensationAt, compensationHistory, complianceAlerts, contractAlerts, createsCycle, documentAlerts, getPack,
-  isValidAngolanBI, isValidAngolanIban, kz, normalizeIban, packOrLatest, PackNotFoundError, type CountryPack, type DocumentType,
+  angolanIbanProblem, isValidAngolanBI, kz, normalizeIban, packOrLatest, PackNotFoundError, type CountryPack, type DocumentType,
 } from '@kianda/core';
 import {
   auditLogs, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, payrollRuns, users, type Db,
@@ -47,7 +47,7 @@ const personal = {
   biNumber: z.string().trim().toUpperCase().refine(isValidAngolanBI, 'BI com formato inválido (ex.: 004512398LA041)').optional().nullable(),
   nif: optionalText,
   inssNumber: optionalText,
-  iban: z.string().refine(isValidAngolanIban, 'IBAN angolano inválido (AO06 + 21 dígitos, com dígitos de controlo)').transform(normalizeIban).optional().nullable(),
+  iban: z.string().transform(normalizeIban).superRefine((v, ctx) => { const p = angolanIbanProblem(v); if (p) ctx.addIssue({ code: 'custom', message: p }); }).optional().nullable(),
   bank: optionalText,
   email: z.union([z.email(), z.literal(''), z.null()]).optional().transform((v) => (v === '' ? null : v)),
   phone: optionalText,

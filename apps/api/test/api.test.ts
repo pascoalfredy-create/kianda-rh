@@ -99,6 +99,7 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     const r = await app.inject({ method: 'POST', url: '/v1/employees', headers: as(owner), payload: { number: '1', name: 'Ana', jobTitle: 'Técnica', biNumber: '123', iban: 'AO06 0000', contract: { type: 'indefinite', startDate: '2026-01-05', base: 300000 } } });
     expect(r.statusCode).toBe(400);
     expect(r.json().issues.map((i: { path: string }) => i.path)).toEqual(expect.arrayContaining(['biNumber', 'iban']));
+    expect(r.json().issues.find((i: { path: string }) => i.path === 'iban').message).toMatch(/devem ser 21/);
   });
 
   it('colaborador regista as próprias férias com dias úteis e feriados', async () => {

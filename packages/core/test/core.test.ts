@@ -114,3 +114,17 @@ describe('conciliação bancária', () => {
     expect(m?.status).toBe('suggested');
   });
 });
+
+describe('IBAN angolano: formatos reais e mensagens', async () => {
+  const { angolanIbanProblem, normalizeIban } = await import('../src/index.js');
+  it('aceita pontos, traços, prefixo IBAN e só os 21 dígitos da conta', () => {
+    expect(isValidAngolanIban('AO06.0040.0000.5521.8890.1015.5')).toBe(true);
+    expect(isValidAngolanIban('IBAN: AO06-0040-0000-5521-8890-1015-5')).toBe(true);
+    expect(normalizeIban('004000005521889010155')).toBe('AO06004000005521889010155');
+  });
+  it('explica o erro: comprimento ou dígitos de controlo', () => {
+    expect(angolanIbanProblem('AO06 0040 0000 5521 8890 1015')).toMatch(/20 dígitos depois de AO06; devem ser 21/);
+    expect(angolanIbanProblem('AO06 0040 0000 5521 8890 1015 6')).toMatch(/dígitos de controlo não conferem/);
+    expect(angolanIbanProblem('AO06 0040 0000 5521 8890 1015 5')).toBeNull();
+  });
+});

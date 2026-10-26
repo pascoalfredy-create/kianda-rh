@@ -70,7 +70,17 @@ export async function body(c: Context): Promise<unknown> {
 }
 
 /**
- * Limite de tentativas por IP (janela deslizante, em memória).
+ * IP real do utilizador. A API não tem endereço público: só o Worker web lhe chega, e esse Worker
+ * escreve x-forwarded-for com o CF-Connecting-IP do navegador (substituindo o que o cliente enviar).
+ * O cf-connecting-ip visto aqui seria o do Worker web — igual para todos os utilizadores.
+ */
+export function clientIp(c: Context): string {
+  return c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || c.req.header('cf-connecting-ip') || 'local';
+}
+
+/**
+ * Limite de tentativas FALHADAS por IP (janela deslizante, em memória).
+ * Só contam respostas de erro (4xx): um login bem-sucedido não gasta tentativas.
  * Em Workers a memória é por instância: é uma primeira barreira; em produção complementar com a regra de rate limiting do Cloudflare.
  */
 const hits = new Map<string, number[]>();
@@ -79,14 +89,20 @@ export function setRateLimitEnabled(on: boolean) { rateLimitEnabled = on; }
 export function rateLimit(name: string, max: number, windowMs: number): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     if (!rateLimitEnabled) return next();
-    const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
-    const key = `${name}:${ip}`;
+    const key = `${name}:${clientIp(c)}`;
     const now = Date.now();
     const recent = (hits.get(key) ?? []).filter((t) => now - t < windowMs);
-    if (recent.length >= max) return c.json({ error: 'demasiados_pedidos', message: 'Demasiadas tentativas. Aguarde e tente novamente.' }, 429);
-    recent.push(now);
-    hits.set(key, recent);
-    if (hits.size > 10_000) hits.clear();
+    if (recent.length >= max) {
+      const wait = Math.ceil((windowMs - (now - recent[0]!)) / 60_000);
+      return c.json({ error: 'demasiados_pedidos', message: `Demasiadas tentativas falhadas. Tente novamente dentro de ${wait} minuto(s).` }, 429);
+    }
     await next();
+    if (c.res.status >= 400 && c.res.status < 500) {
+      recent.push(now);
+      hits.set(key, recent);
+      if (hits.size > 10_000) hits.clear();
+    } else if (recent.length) {
+      hits.set(key, recent);
+    }
   };
 }

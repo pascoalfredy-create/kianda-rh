@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { DEFAULT_PGC_ACCOUNTS, kz } from '@kianda/core';
 import { and, eq } from 'drizzle-orm';
-import { absences, accountMappings, closeDb, companies, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, hashPassword, users } from '../src/index.js';
+import { absences, accountMappings, closeDb, companies, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, hashPassword, users, verifyPassword } from '../src/index.js';
 
 /** Dados de demonstração: empresa fictícia com três departamentos, cinco colaboradores, hierarquia e documentos. Idempotente. */
 const db = getDb();
@@ -79,6 +79,15 @@ const demoUsers = [
 for (const [email, name, role, number] of demoUsers) {
   const [u] = await db.select().from(users).where(and(eq(users.companyId, company.id), eq(users.email, email)));
   if (!u && byNumber[number]) await db.insert(users).values({ companyId: company.id, email, name, role, employeeId: byNumber[number]!.id, passwordHash: await hashPassword(ownerPassword) });
+}
+
+// As contas de demonstração usam sempre a palavra-passe actual de SEED_OWNER_PASSWORD (se o secret mudar, acompanham).
+for (const email of [OWNER_EMAIL, ...demoUsers.map((d) => d[0])]) {
+  const [u] = await db.select().from(users).where(and(eq(users.companyId, company.id), eq(users.email, email)));
+  if (u && !(await verifyPassword(ownerPassword, u.passwordHash))) {
+    await db.update(users).set({ passwordHash: await hashPassword(ownerPassword) }).where(eq(users.id, u.id));
+    console.log(`Palavra-passe de demonstração sincronizada: ${email}`);
+  }
 }
 
 // Ausências de exemplo (só se a empresa ainda não tiver nenhuma).

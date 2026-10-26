@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { IbanField } from '@/components/iban-field';
 import { formObject, send } from '@/lib/client';
 import { PROVINCES, type Department, type PersonRef } from '@/lib/types';
 
@@ -43,7 +44,7 @@ export function NewEmployeeForm({ departments, people, nextNumber }: { departmen
           <label>Email<input type="email" name="email" /></label>
           <label>Telefone<input name="phone" /></label>
           <label>Banco<input name="bank" /></label>
-          <label className="wide">IBAN<input name="iban" placeholder="AO06 …" /></label>
+          <IbanField className="wide" />
         </div>
       </div>
 

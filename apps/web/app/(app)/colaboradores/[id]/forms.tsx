@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { IbanField } from '@/components/iban-field';
 import { formObject, useMutation } from '@/lib/client';
 import { DOC_LABEL, PROVINCES, type Department, type PersonRef, type Profile } from '@/lib/types';
 
@@ -82,7 +83,7 @@ export function PersonalForm({ p, departments, people }: { p: Profile; departmen
       <label>NIF<input name="nif" defaultValue={v(p.nif)} /></label>
       <label>N.º INSS<input name="inssNumber" defaultValue={v(p.inssNumber)} /></label>
       <label>Banco<input name="bank" defaultValue={v(p.bank)} /></label>
-      <label className="span2">IBAN<input name="iban" defaultValue={v(p.iban)} placeholder="AO06 0040 0000 5521 8890 1015 5" /></label>
+      <IbanField className="span2" defaultValue={p.iban} />
 
       <h3>Contactos</h3>
       <label>Email<input type="email" name="email" defaultValue={v(p.email)} /></label>

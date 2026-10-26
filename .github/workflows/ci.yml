@@ -123,9 +123,11 @@ jobs:
       - name: Verificar base de dados (login de demonstração)
         if: vars.KIANDA_HOSTNAME != '' && vars.KIANDA_SEED_DEMO == 'true'
         run: |
-          printf '{"email":"admin@kwanzalog.co.ao","password":"%s"}' "$PW" > /tmp/login.json
-          scripts/ci-run.sh "Login de demonstração (Worker → Hyperdrive → Neon)" curl -sS --fail-with-body -o /tmp/login.out -X POST -H 'content-type: application/json' --data @/tmp/login.json "https://${{ vars.KIANDA_HOSTNAME }}/api/v1/auth/login"
-          grep -q '"company"' /tmp/login.out && echo "Login OK — a API chega à base de dados."
+          for email in admin@kwanzalog.co.ao edson@kwanzalog.co.ao joana@kwanzalog.co.ao; do
+            printf '{"email":"%s","password":"%s"}' "$email" "$PW" > /tmp/login.json
+            scripts/ci-run.sh "Login de demonstração $email" curl -sS --fail-with-body -o /tmp/login.out -X POST -H 'content-type: application/json' --data @/tmp/login.json "https://${{ vars.KIANDA_HOSTNAME }}/api/v1/auth/login"
+            grep -q '"company"' /tmp/login.out && echo "Login OK: $email"
+          done
           rm -f /tmp/login.json /tmp/login.out
         env:
           PW: ${{ secrets.KIANDA_SEED_OWNER_PASSWORD }}
