@@ -67,4 +67,6 @@ Primeira estrutura funcional. Ver [docs/ROADMAP.md](docs/ROADMAP.md) para o que 
 
 ## Publicação
 
+**Produção:** https://kianda.yelaperformance.com
+
 Cada push para `main` testa e publica no Cloudflare (Workers + Hyperdrive + Neon PostgreSQL). Configuração única em [docs/DEPLOY.md](docs/DEPLOY.md).
