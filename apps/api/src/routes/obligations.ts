@@ -1,37 +1,13 @@
-import { angolanIbanProblem, csvMoney, getPack, luandaDate, OBLIGATION_LABEL, paymentJournal, payrollObligations, toCsv, type ObligationKind } from '@kianda/core';
+import { angolanIbanProblem, csvMoney, getPack, luandaDate, toCsv } from '@kianda/core';
 import {
-  and, asc, auditLogs, companies, desc, employees, eq, getDb, journalEntries, journalLines, payrollLines, payrollPayments, payrollRuns, type Db,
+  and, asc, auditLogs, companies, desc, employees, eq, getDb, journalEntries, journalLines, payrollLines, payrollPayments, payrollRuns,
 } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { body, requireCompany, requireRole, type AppEnv } from '../plugins/tenant.js';
-import { companyAccounts, DomainError } from '../services/payroll.js';
+import { closedRun, KIND_CODE, obligationsFor, registerPayment, undoMatch } from '../services/payments.js';
 
 const READERS = ['payroll', 'finance', 'hr_admin'] as const;
-const KIND_CODE: Record<ObligationKind, string> = { salaries: 'SAL', inss: 'INSS', irt: 'IRT' };
-
-async function runTotals(db: Db, runId: string) {
-  const lines = await db.select().from(payrollLines).where(eq(payrollLines.runId, runId));
-  return lines.reduce((t, l) => ({
-    netMinor: t.netMinor + l.netMinor, irtMinor: t.irtMinor + l.irtMinor,
-    inssEmployeeMinor: t.inssEmployeeMinor + l.inssEmployeeMinor, inssEmployerMinor: t.inssEmployerMinor + l.inssEmployerMinor,
-  }), { netMinor: 0, irtMinor: 0, inssEmployeeMinor: 0, inssEmployerMinor: 0 });
-}
-
-async function obligationsFor(db: Db, run: typeof payrollRuns.$inferSelect) {
-  const payments = await db.select().from(payrollPayments).where(eq(payrollPayments.runId, run.id));
-  const paid = Object.fromEntries(payments.map((p) => [p.kind, p.paidOn]));
-  const items = payrollObligations({ period: run.period, pack: getPack('AO', Number(run.period.slice(0, 4))), ...(await runTotals(db, run.id)), paid, today: luandaDate(new Date()) });
-  return items.map((o) => ({ ...o, reference: payments.find((p) => p.kind === o.kind)?.reference ?? null }));
-}
-
-async function closedRun(db: Db, companyId: string, id: string) {
-  const [run] = await db.select().from(payrollRuns).where(and(eq(payrollRuns.id, id), eq(payrollRuns.companyId, companyId)));
-  if (!run) throw new DomainError('nao_encontrado', 'Processamento inexistente', 404);
-  if (run.status !== 'closed') throw new DomainError('processamento_aberto', 'O processamento ainda não está fechado');
-  return run;
-}
-
 /**
  * Matéria colectável de linhas fechadas antes da coluna irt_taxable existir: reconstruída a partir do recibo,
  * com as mesmas regras do motor (alimentação/transporte isentos até ao limite do pacote; restantes abonos sujeitos).
@@ -68,29 +44,10 @@ export function obligationRoutes() {
   /** Registar o pagamento de uma obrigação: gera o lançamento PGC (dívida a débito, banco a crédito). */
   app.post('/v1/payroll-runs/:id/payments', requireRole('finance'), async (c) => {
     const actor = c.get('actor');
-    const b = z.object({ kind: z.enum(['salaries', 'inss', 'irt']), paidOn: z.iso.date(), reference: z.string().trim().max(80).optional().nullable() }).parse(await body(c));
+    const b = z.object({ kind: z.enum(['salaries', 'inss', 'irt']), paidOn: z.iso.date(), reference: z.string().trim().max(80).optional().nullable(), bankAccountId: z.string().optional().nullable() }).parse(await body(c));
     const db = getDb();
     const run = await closedRun(db, actor.companyId, c.req.param('id'));
-    if (b.paidOn > luandaDate(new Date())) throw new DomainError('data_futura', 'A data de pagamento não pode ser futura', 400);
-    if (b.paidOn < `${run.period}-01`) throw new DomainError('data_invalida', 'A data de pagamento é anterior ao mês processado', 400);
-    const [exists] = await db.select({ id: payrollPayments.id }).from(payrollPayments).where(and(eq(payrollPayments.runId, run.id), eq(payrollPayments.kind, b.kind)));
-    if (exists) throw new DomainError('ja_pago', `${OBLIGATION_LABEL[b.kind]} de ${run.period} já está registado como pago`);
-    const t = await runTotals(db, run.id);
-    const amount = b.kind === 'salaries' ? t.netMinor : b.kind === 'irt' ? t.irtMinor : t.inssEmployeeMinor + t.inssEmployerMinor;
-    const acc = await companyAccounts(db, actor.companyId);
-    const payable = b.kind === 'salaries' ? acc.netPayable : b.kind === 'irt' ? acc.irtPayable : acc.socialSecurityPayable;
-    const ref = `PG-${KIND_CODE[b.kind]}-${run.period.replace('-', '')}`;
-    const entry = paymentJournal(b.paidOn, ref, `Pagamento ${OBLIGATION_LABEL[b.kind]} ${run.period}${b.reference ? ` (${b.reference})` : ''}`, payable, amount, acc);
-    const result = await db.transaction(async (tx) => {
-      const [je] = await tx.insert(journalEntries).values({ companyId: actor.companyId, date: entry.date, journal: entry.journal, reference: entry.reference, description: entry.description, source: 'payroll_payment' }).returning();
-      await tx.insert(journalLines).values(entry.lines.map((l) => ({ entryId: je!.id, account: l.account, description: l.description, debitMinor: l.debitMinor, creditMinor: l.creditMinor })));
-      const [p] = await tx.insert(payrollPayments).values({ companyId: actor.companyId, runId: run.id, kind: b.kind, paidOn: b.paidOn, amountMinor: amount, reference: b.reference ?? null, journalEntryId: je!.id, createdBy: actor.actorId }).returning();
-      const col = b.kind === 'salaries' ? { paidSalariesAt: b.paidOn } : b.kind === 'irt' ? { paidIrtAt: b.paidOn } : { paidInssAt: b.paidOn };
-      await tx.update(payrollRuns).set(col).where(eq(payrollRuns.id, run.id));
-      await tx.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'pay', entity: 'payroll_run', entityId: run.id, after: { ...p, journal: ref } });
-      return p;
-    });
-    return c.json({ ...result, journalReference: ref }, 201);
+    return c.json(await registerPayment(db, actor, run, b), 201);
   });
 
   /** Anular um pagamento registado por engano: lançamento de estorno (nunca se apagam lançamentos). */
@@ -110,6 +67,7 @@ export function obligationRoutes() {
         const [je] = await tx.insert(journalEntries).values({ companyId: actor.companyId, date: today, journal: 'Bancos', reference: ref, description: `Estorno de ${original.reference}: ${note}`, source: 'payroll_payment' }).returning();
         await tx.insert(journalLines).values(original.lines.map((l) => ({ entryId: je!.id, account: l.account, description: `Estorno: ${l.description}`, debitMinor: l.creditMinor, creditMinor: l.debitMinor })));
       }
+      if (p.matchId) await undoMatch(tx, actor.companyId, p.matchId);
       await tx.delete(payrollPayments).where(eq(payrollPayments.id, p.id));
       const col = kind === 'salaries' ? { paidSalariesAt: null } : kind === 'irt' ? { paidIrtAt: null } : { paidInssAt: null };
       await tx.update(payrollRuns).set(col).where(eq(payrollRuns.id, run.id));

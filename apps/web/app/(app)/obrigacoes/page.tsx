@@ -8,7 +8,7 @@ import { PayButton, ReverseButton } from './actions';
 
 export const dynamic = 'force-dynamic';
 
-interface Ob { kind: 'salaries' | 'inss' | 'irt'; label: string; amountMinor: number; dueDate: string; paidAt: string | null; status: 'paid' | 'overdue' | 'due_soon' | 'open'; daysLeft: number; reference: string | null }
+interface Ob { kind: 'salaries' | 'inss' | 'irt'; label: string; amountMinor: number; dueDate: string; paidAt: string | null; status: 'paid' | 'overdue' | 'due_soon' | 'open'; daysLeft: number; reference: string | null; reconciled: boolean | null }
 interface Row { runId: string; period: string; obligations: Ob[] }
 interface BankInfo { count: number; totalMinor: number; excluded: { name: string; netMinor: number; reason: string }[] }
 
@@ -56,7 +56,7 @@ export default async function Obrigacoes() {
                     <td><b>{o.label}</b>{o.kind === 'salaries' && bank && <div className="muted">{bank.count} transferência(s){bank.excluded.length ? ` · ${bank.excluded.length} fora do ficheiro` : ''}</div>}</td>
                     <td className="num"><b>{formatKz(o.amountMinor)}</b></td>
                     <td>{pt(o.dueDate)}{o.status !== 'paid' && <div className="muted">{o.daysLeft < 0 ? `há ${-o.daysLeft} dia(s)` : o.daysLeft === 0 ? 'hoje' : `faltam ${o.daysLeft} dia(s)`}</div>}</td>
-                    <td><span className={`st ${STATUS[o.status][1]}`}>{STATUS[o.status][0]}</span>{o.paidAt && <div className="muted">em {pt(o.paidAt)}{o.reference ? ` · ${o.reference}` : ''}</div>}</td>
+                    <td><span className={`st ${STATUS[o.status][1]}`}>{STATUS[o.status][0]}</span>{o.paidAt && <div className="muted">em {pt(o.paidAt)}{o.reference ? ` · ${o.reference}` : ''} · {o.reconciled ? <span className="tag future">conciliado</span> : <Link href="/conciliacao" className="tag">por conciliar</Link>}</div>}</td>
                     <td className="num">{canPay && (o.paidAt ? <ReverseButton runId={r.runId} kind={o.kind} /> : <PayButton runId={r.runId} kind={o.kind} label={o.label} />)}</td>
                   </tr>
                 ))}

@@ -24,10 +24,12 @@ export default async function Home() {
   ]);
   const mine = balances.find((b) => b.employee.id === me.user.employeeId);
   const obligations = ['owner', 'payroll', 'finance', 'hr_admin'].includes(me.user.role)
-    ? (await api<{ obligations: { status: string; amountMinor: number }[] }[]>('/v1/obligations').catch(() => [])).flatMap((r) => r.obligations)
+    ? (await api<{ obligations: { status: string; amountMinor: number; paidAt: string | null; reconciled: boolean | null }[] }[]>('/v1/obligations').catch(() => [])).flatMap((r) => r.obligations)
     : [];
   const late = obligations.filter((o) => o.status === 'overdue');
   const soon = obligations.filter((o) => o.status === 'due_soon');
+  const proofLimit = new Date(Date.now() - 5 * 86_400_000).toISOString().slice(0, 10);
+  const noProof = ['owner', 'finance'].includes(me.user.role) ? obligations.filter((o) => o.paidAt && o.reconciled === false && o.paidAt < proofLimit) : [];
   const staff = me.user.role !== 'employee';
 
   return (
@@ -53,6 +55,12 @@ export default async function Home() {
           <Link href="/obrigacoes" className="card kpi" style={{ borderColor: late.length ? '#f1c9c1' : '#f3d9a6' }}>
             <div className="l">Obrigações {late.length ? 'em atraso' : 'a vencer'}</div>
             <div className="v" style={{ color: late.length ? 'var(--red)' : 'var(--amber)' }}>{late.length || soon.length}</div>
+          </Link>
+        )}
+        {noProof.length > 0 && (
+          <Link href="/conciliacao" className="card kpi" style={{ borderColor: '#f1c9c1' }}>
+            <div className="l">Pagamentos sem comprovativo bancário</div>
+            <div className="v" style={{ color: 'var(--red)' }}>{noProof.length}</div>
           </Link>
         )}
         {mine && (

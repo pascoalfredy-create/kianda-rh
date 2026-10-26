@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { DEFAULT_ACCOUNT_MAPPINGS, kz } from '@kianda/core';
 import { and, eq } from 'drizzle-orm';
-import { absences, accountMappings, attendanceEntries, closeDb, companies, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, hashPassword, users, verifyPassword } from '../src/index.js';
+import { absences, accountMappings, bankAccounts, attendanceEntries, closeDb, companies, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, hashPassword, users, verifyPassword } from '../src/index.js';
 
 /** Dados de demonstração: empresa fictícia com três departamentos, cinco colaboradores, hierarquia e documentos. Idempotente. */
 const db = getDb();
@@ -85,6 +85,10 @@ if (joana) {
     companyId: company.id, employeeId: joana.id, effectiveDate: '2025-01-01', baseMinor: kz(420_000), mealMinor: kz(30_000), transportMinor: kz(25_000), reason: 'Promoção a Técnica de Contabilidade',
   }).onConflictDoNothing();
 }
+
+// Conta bancária de salários (IBAN fictício do banco 0000).
+const [hasBank] = await db.select({ id: bankAccounts.id }).from(bankAccounts).where(eq(bankAccounts.companyId, company.id));
+if (!hasBank) await db.insert(bankAccounts).values({ companyId: company.id, name: 'Conta de salários', bankName: 'Banco de demonstração', iban: 'AO06000000000000000000000', ledgerAccount: '43.1' });
 
 for (const { role, account, label } of DEFAULT_ACCOUNT_MAPPINGS) {
   await db.insert(accountMappings).values({ companyId: company.id, role, account, label }).onConflictDoNothing();

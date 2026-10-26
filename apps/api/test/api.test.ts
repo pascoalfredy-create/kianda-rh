@@ -580,6 +580,104 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
   });
 
+  describe('conciliação bancária (entrega 8)', () => {
+    const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
+    const post = (cookie: string, url: string, payload: object) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
+    const pt = (d: string) => d.split('-').reverse().join('/');
+    const kzs = (m: number) => { const v = (Math.abs(m) / 100).toFixed(2).split('.'); return `${v[0]!.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${v[1]}`; };
+    let accountId = '';
+    let oct = '';
+    let salaries = 0;
+    let irt = 0;
+    let csv = '';
+
+    it('conta bancária: só Finanças cria; conta PGC da classe 4; IBAN validado', async () => {
+      expect((await post(payrollUser, '/v1/bank/accounts', { name: 'BAI', ledgerAccount: '43.1' })).statusCode).toBe(403);
+      expect((await post(financeUser, '/v1/bank/accounts', { name: 'BAI', ledgerAccount: '62.1' })).statusCode).toBe(400);
+      expect((await post(financeUser, '/v1/bank/accounts', { name: 'BAI', ledgerAccount: '43.1', iban: 'AO06 1234' })).json().error).toBe('iban_invalido');
+      const r = await post(financeUser, '/v1/bank/accounts', { name: 'BAI — salários', bankName: 'BAI', ledgerAccount: '43.1' });
+      expect(r.statusCode).toBe(201);
+      accountId = r.json().id;
+      expect((await get(ownerB, `/v1/bank/reconciliation?accountId=${accountId}`)).statusCode).toBe(404);
+    });
+
+    it('pré-visualiza e importa o extracto; concilia automaticamente o IRT já registado', async () => {
+      const obl = (await get(financeUser, '/v1/obligations')).json().find((r: { period: string }) => r.period === '2026-10');
+      oct = obl.runId;
+      salaries = obl.obligations.find((o: { kind: string }) => o.kind === 'salaries').amountMinor;
+      irt = obl.obligations.find((o: { kind: string }) => o.kind === 'irt').amountMinor;
+      const rows = [
+        [today, 'TRF RECEBIDA CLIENTE', 0, 50_000_000],
+        [today, 'PAG AGT IRT GRUPO A 10/2026', irt, 0],
+        [today, 'TRF SALARIOS 10/2026', salaries, 0],
+        [today, 'COMISSAO MANUTENCAO', 150_000, 0],
+      ] as const;
+      let bal = 100_000_000;
+      const lines = rows.map(([d, desc, deb, cred]) => { bal += cred - deb; return `${pt(d)};${pt(d)};${desc};${deb ? kzs(deb) : ''};${cred ? kzs(cred) : ''};${kzs(bal)}`; });
+      csv = `Extracto BAI\nConta;0040 0000\n\nData Mov.;Data Valor;Descritivo;Débito;Crédito;Saldo\n${lines.reverse().join('\n')}\n`;
+      const pv = (await post(financeUser, '/v1/bank/statements/preview', { accountId, text: csv })).json();
+      expect(pv).toMatchObject({ headerRow: 3, count: 4, newCount: 4, duplicates: 0, balance: { ok: true, openingMinor: 100_000_000 } });
+      expect((await post(payrollUser, '/v1/bank/statements', { accountId, text: csv })).statusCode).toBe(403);
+      const imp = await post(financeUser, '/v1/bank/statements', { accountId, fileName: 'extracto-out.csv', text: csv });
+      expect(imp.statusCode).toBe(201);
+      expect(imp.json()).toMatchObject({ count: 4, newCount: 4, matched: 1 });
+      const again = (await post(financeUser, '/v1/bank/statements', { accountId, text: csv })).json();
+      expect(again).toMatchObject({ newCount: 0, duplicates: 4, matched: 0 });
+    });
+
+    it('obrigação por pagar com movimento correspondente: regista o pagamento a partir do extracto', async () => {
+      const rec = (await get(financeUser, `/v1/bank/reconciliation?accountId=${accountId}`)).json();
+      expect(rec.summary).toMatchObject({ matched: 1, pendingDebits: 2 });
+      expect(rec.payments.find((p: { kind: string; period: string }) => p.kind === 'irt' && p.period === '2026-10')).toBeUndefined();
+      const sal = rec.unpaid.find((u: { kind: string; period: string }) => u.kind === 'salaries' && u.period === '2026-10');
+      expect(sal.candidate.lineIds).toHaveLength(1);
+      const commission = rec.lines.find((l: { description: string }) => l.description === 'COMISSAO MANUTENCAO').id;
+      expect((await post(financeUser, '/v1/bank/register-payment', { accountId, runId: oct, kind: 'salaries', lineIds: [commission] })).json().error).toBe('valor_diferente');
+      const r = await post(financeUser, '/v1/bank/register-payment', { accountId, runId: oct, kind: 'salaries', lineIds: sal.candidate.lineIds });
+      expect(r.statusCode).toBe(201);
+      expect(r.json()).toMatchObject({ paidOn: today, reference: 'TRF SALARIOS 10/2026', bankAccountId: accountId });
+      const o = (await get(financeUser, '/v1/obligations')).json().find((x: { period: string }) => x.period === '2026-10').obligations.find((x: { kind: string }) => x.kind === 'salaries');
+      expect(o).toMatchObject({ status: 'paid', reconciled: true });
+    });
+
+    it('movimentos que não são de pessoal: ignorar com motivo e repor', async () => {
+      const rec = (await get(financeUser, `/v1/bank/reconciliation?accountId=${accountId}`)).json();
+      const ids = rec.lines.filter((l: { status: string }) => l.status === 'pending').map((l: { id: string }) => l.id);
+      expect(ids).toHaveLength(2);
+      expect((await post(financeUser, '/v1/bank/lines/ignore', { lineIds: ids, note: '' })).statusCode).toBe(400);
+      expect((await post(financeUser, '/v1/bank/lines/ignore', { lineIds: ids, note: 'Não é de pessoal' })).json().ignored).toBe(2);
+      expect((await post(financeUser, `/v1/bank/lines/${ids[0]}/restore`, {})).statusCode).toBe(200);
+      expect((await get(financeUser, `/v1/bank/reconciliation?accountId=${accountId}`)).json().summary).toMatchObject({ pending: 1, outOfScope: 1, matched: 2 });
+    });
+
+    it('desfazer e conciliar manualmente; valores têm de bater; extracto conciliado não se apaga', async () => {
+      const rec = (await get(financeUser, `/v1/bank/reconciliation?accountId=${accountId}&status=matched`)).json();
+      const irtLine = rec.lines.find((l: { description: string }) => l.description.includes('IRT'));
+      expect(irtLine.match).toMatchObject({ kind: 'auto', payment: 'IRT retido (Grupo A) 2026-10' });
+      expect((await app.inject({ method: 'DELETE', url: `/v1/bank/matches/${irtLine.matchId}`, headers: as(financeUser) })).statusCode).toBe(200);
+      const after = (await get(financeUser, `/v1/bank/reconciliation?accountId=${accountId}`)).json();
+      const pay = after.payments.find((p: { kind: string; period: string }) => p.kind === 'irt' && p.period === '2026-10');
+      expect(pay.suggestion.lineIds).toEqual([irtLine.id]);
+      const other = after.lines.find((l: { status: string; amountMinor: number }) => l.status === 'pending' && l.id !== irtLine.id);
+      if (other) expect((await post(financeUser, '/v1/bank/matches', { accountId, paymentId: pay.id, lineIds: [other.id] })).statusCode).toBe(400);
+      expect((await post(financeUser, '/v1/bank/matches', { accountId, paymentId: pay.id, lineIds: [irtLine.id] })).statusCode).toBe(201);
+      const st = (await get(financeUser, `/v1/bank/statements?accountId=${accountId}`)).json();
+      expect(st).toHaveLength(2);
+      expect(st.find((s: { newCount: number }) => s.newCount === 4).balanceOk).toBe(true);
+      expect((await app.inject({ method: 'DELETE', url: `/v1/bank/statements/${st.find((s: { newCount: number }) => s.newCount === 4).id}`, headers: as(financeUser) })).json().error).toBe('extracto_conciliado');
+      expect((await app.inject({ method: 'DELETE', url: `/v1/bank/statements/${st.find((s: { newCount: number }) => s.newCount === 0).id}`, headers: as(financeUser) })).statusCode).toBe(200);
+    });
+
+    it('estorno de um pagamento conciliado devolve o movimento a "por conciliar"', async () => {
+      const r = await post(financeUser, `/v1/payroll-runs/${oct}/payments/salaries/reverse`, { note: 'Teste de estorno' });
+      expect(r.statusCode).toBe(200);
+      const rec = (await get(financeUser, `/v1/bank/reconciliation?accountId=${accountId}`)).json();
+      expect(rec.lines.some((l: { description: string }) => l.description === 'TRF SALARIOS 10/2026')).toBe(true);
+      expect(rec.unpaid.find((u: { kind: string; period: string }) => u.kind === 'salaries' && u.period === '2026-10').candidate).not.toBeNull();
+    });
+  });
+
   it('logout limpa o cookie', async () => {
     const r = await app.inject({ method: 'POST', url: '/v1/auth/logout', headers: as(owner) });
     expect(r.cookies.find((c) => c.name === 'kianda_session')?.value).toBe('');

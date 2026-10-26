@@ -214,6 +214,9 @@ export const payrollPayments = pgTable('payroll_payments', {
   amountMinor: money('amount_minor'),
   reference: text('reference'),
   journalEntryId: text('journal_entry_id'),
+  /** Conciliação bancária: conta usada e correspondência com o extracto. */
+  bankAccountId: text('bank_account_id'),
+  matchId: text('match_id'),
   createdBy: text('created_by').notNull(),
   createdAt: createdAt(),
 }, (t) => [uniqueIndex('payroll_payments_run_kind').on(t.runId, t.kind)]);
@@ -269,24 +272,67 @@ export const expenses = pgTable('expenses', {
   createdAt: createdAt(),
 }, (t) => [index('expenses_company_status').on(t.companyId, t.status)]);
 
+/** Contas bancárias da empresa usadas para pagar salários e obrigações (cada uma com a sua conta PGC da classe 4). */
+export const bankAccounts = pgTable('bank_accounts', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  name: text('name').notNull(),
+  bankName: text('bank_name'),
+  iban: text('iban'),
+  ledgerAccount: text('ledger_account').notNull().default('43.1'),
+  active: boolean('active').notNull().default(true),
+  createdAt: createdAt(),
+}, (t) => [index('bank_accounts_company').on(t.companyId)]);
+
 export const bankStatements = pgTable('bank_statements', {
   id: id(),
   companyId: text('company_id').notNull().references(() => companies.id),
+  accountId: text('account_id').references(() => bankAccounts.id),
   accountIban: text('account_iban'),
   fileName: text('file_name').notNull(),
   importedAt: createdAt(),
+  importedBy: text('imported_by'),
+  fromDate: date('from_date'),
+  toDate: date('to_date'),
+  lineCount: integer('line_count').notNull().default(0),
+  newCount: integer('new_count').notNull().default(0),
+  openingBalanceMinor: bigint('opening_balance_minor', { mode: 'number' }),
+  closingBalanceMinor: bigint('closing_balance_minor', { mode: 'number' }),
+  /** null = extracto sem coluna de saldo. */
+  balanceOk: boolean('balance_ok'),
+});
+
+/** Correspondência entre movimentos bancários e pagamentos registados (um pagamento pode ter vários movimentos). */
+export const bankMatches = pgTable('bank_matches', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  accountId: text('account_id').notNull().references(() => bankAccounts.id),
+  /** auto | manual */
+  kind: text('kind').notNull(),
+  rule: text('rule'),
+  createdBy: text('created_by').notNull(),
+  createdAt: createdAt(),
 });
 
 export const bankLines = pgTable('bank_lines', {
   id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  accountId: text('account_id').notNull().references(() => bankAccounts.id),
   statementId: text('statement_id').notNull().references(() => bankStatements.id),
   date: date('date').notNull(),
   description: text('description').notNull(),
+  reference: text('reference'),
   amountMinor: money('amount_minor'),
+  balanceMinor: bigint('balance_minor', { mode: 'number' }),
+  fingerprint: text('fingerprint').notNull(),
+  /** pending = por conciliar; matched = conciliado; out_of_scope = não é de pessoal (ignorado com nota). */
   status: bankLineStatusEnum('status').notNull().default('pending'),
+  matchId: text('match_id').references(() => bankMatches.id),
+  note: text('note'),
   obligationKey: text('obligation_key'),
   category: text('category'),
-}, (t) => [index('bank_lines_statement_status').on(t.statementId, t.status)]);
+  createdAt: createdAt(),
+}, (t) => [index('bank_lines_statement_status').on(t.statementId, t.status), index('bank_lines_account_status').on(t.accountId, t.status), index('bank_lines_account_fp').on(t.accountId, t.fingerprint)]);
 
 /** Correspondência entre eventos de RH e contas do PGC Angola (Decreto n.º 82/2001), parametrizável por empresa. */
 export const accountMappings = pgTable('account_mappings', {

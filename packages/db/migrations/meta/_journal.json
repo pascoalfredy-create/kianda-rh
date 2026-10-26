@@ -57,6 +57,13 @@
       "when": 1793029034772,
       "tag": "0007_financas_pessoal",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793030338102,
+      "tag": "0008_conciliacao_bancaria",
+      "breakpoints": true
     }
   ]
 }
