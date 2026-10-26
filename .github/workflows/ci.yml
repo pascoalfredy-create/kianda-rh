@@ -86,19 +86,21 @@ jobs:
       - name: Publicar API (kianda-api, sem endereço público)
         working-directory: apps/api
         run: |
-          npx wrangler deploy --config wrangler.deploy.json
-          printf '{"API_JWT_SECRET":"%s"}' "$API_JWT_SECRET" | npx wrangler secret bulk --config wrangler.deploy.json
+          ../../scripts/ci-run.sh "wrangler deploy (API)" npx wrangler deploy --config wrangler.deploy.json
+          printf '{"API_JWT_SECRET":"%s"}' "$API_JWT_SECRET" > /tmp/secrets.json
+          ../../scripts/ci-run.sh "wrangler secret bulk (API)" npx wrangler secret bulk /tmp/secrets.json --config wrangler.deploy.json
+          rm -f /tmp/secrets.json
         env:
           API_JWT_SECRET: ${{ secrets.KIANDA_JWT_SECRET }}
 
       - name: Publicar web (kianda-web)
         working-directory: apps/web
         run: |
-          pnpm cf:build
-          npx wrangler deploy --config wrangler.deploy.json
+          ../../scripts/ci-run.sh "OpenNext build (web)" pnpm cf:build
+          ../../scripts/ci-run.sh "wrangler deploy (web)" npx wrangler deploy --config wrangler.deploy.json
 
       - name: Verificar
         if: vars.KIANDA_HOSTNAME != ''
         run: |
-          sleep 10
-          curl -fsS "https://${{ vars.KIANDA_HOSTNAME }}/api/health"
+          sleep 15
+          scripts/ci-run.sh "Verificar /api/health" curl -sS --fail-with-body "https://${{ vars.KIANDA_HOSTNAME }}/api/health"
