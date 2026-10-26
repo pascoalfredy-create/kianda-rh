@@ -30,7 +30,7 @@ export function PersonalForm({ p, departments, people }: { p: Profile; departmen
       onSubmit={async (e) => {
         e.preventDefault();
         setOk('');
-        if (await run(`/v1/employees/${p.id}`, 'PATCH', formObject(e.currentTarget))) setOk('Alterações gravadas.');
+        if (await run(`/v1/employees/${p.id}`, 'PATCH', formObject(e.currentTarget, ['vacationCarryOver']))) setOk('Alterações gravadas.');
       }}
     >
       <h3>Profissional</h3>
@@ -53,6 +53,9 @@ export function PersonalForm({ p, departments, people }: { p: Profile; departmen
           <option value="">—</option>
           {PROVINCES.map((x) => <option key={x}>{x}</option>)}
         </select>
+      </label>
+      <label>Dias de férias transitados
+        <input name="vacationCarryOver" type="number" min={0} max={44} defaultValue={p.vacationCarryOver ?? 0} />
       </label>
       <label>Situação
         <select name="status" defaultValue={p.status} disabled={p.status === 'terminated'}>

@@ -4,8 +4,10 @@ import { notFound } from 'next/navigation';
 import { api, ApiError, currentUser } from '@/lib/api';
 import {
   CAN_EDIT, CONTRACT_LABEL, DOC_LABEL, ROLE_LABEL, STATUS_LABEL,
-  type Department, type EmployeeRow, type HistoryEntry, type PersonRef, type Profile,
+  ABSENCE_STATUS_LABEL, type AbsenceRow, type BalanceRow, type Department, type EmployeeRow, type HistoryEntry, type PersonRef, type Profile,
 } from '@/lib/types';
+import { ABSENCE_POLICIES, type AbsenceType } from '@kianda/core';
+import { AbsenceActions } from '../../ausencias/actions';
 import { CompensationForm, ContractForm, DeleteDocument, DocumentForm, PersonalForm } from './forms';
 
 export const dynamic = 'force-dynamic';
@@ -14,6 +16,7 @@ const TABS = [
   ['dados', 'Dados'],
   ['contrato', 'Contrato e remuneração'],
   ['documentos', 'Documentos'],
+  ['ausencias', 'Ausências'],
   ['equipa', 'Hierarquia'],
   ['historico', 'Histórico'],
 ] as const;
@@ -75,6 +78,7 @@ export default async function Ficha({ params, searchParams }: { params: Promise<
       {tab === 'dados' && <DataTab p={p} canEdit={canEdit} />}
       {tab === 'contrato' && <ContractTab p={p} canEdit={canEdit} />}
       {tab === 'documentos' && <DocumentsTab p={p} canEdit={canEdit} />}
+      {tab === 'ausencias' && <AbsencesTab p={p} />}
       {tab === 'equipa' && <TeamTab p={p} />}
       {tab === 'historico' && canEdit && <HistoryTab id={p.id} />}
     </>
@@ -214,6 +218,46 @@ function DocumentsTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
         {!p.documents.length && <div className="empty">Nenhum documento registado</div>}
       </div>
       <p className="muted" style={{ marginTop: 10 }}>O carregamento das cópias digitalizadas chega com o módulo de documentos (entrega 11).</p>
+    </>
+  );
+}
+
+async function AbsencesTab({ p }: { p: Profile }) {
+  const year = new Date().getFullYear();
+  const [[b], rows] = await Promise.all([
+    api<BalanceRow[]>(`/v1/leave/balances?year=${year}&employeeId=${p.id}`),
+    api<AbsenceRow[]>(`/v1/absences?employeeId=${p.id}`),
+  ]);
+  const list = [...rows].sort((x, y) => y.startDate.localeCompare(x.startDate));
+  return (
+    <>
+      {b && (
+        <div className="grid">
+          <div className="card kpi"><div className="l">Direito {year}</div><div className="v">{b.entitlement}{b.carriedOver ? ` + ${b.carriedOver}` : ''} dias</div></div>
+          <div className="card kpi"><div className="l">Gozados / aprovados</div><div className="v">{b.taken}</div></div>
+          <div className="card kpi"><div className="l">Pendentes</div><div className="v">{b.pending}</div></div>
+          <div className="card kpi"><div className="l">Disponíveis</div><div className="v" style={{ color: 'var(--brand)' }}>{b.available}</div></div>
+        </div>
+      )}
+      {b?.eligibleFrom && b.eligibleFrom > new Date().toISOString().slice(0, 10) && <div className="warn">Pode gozar férias a partir de {fmtDate(b.eligibleFrom)} (6 meses de serviço).</div>}
+      <div className="card">
+        <table>
+          <thead><tr><th>Tipo</th><th>Período</th><th className="num">Dias úteis</th><th>Estado</th><th /></tr></thead>
+          <tbody>
+            {list.map((a) => (
+              <tr key={a.id}>
+                <td><span className="dot" style={{ background: ABSENCE_POLICIES[a.type as AbsenceType]?.color }} />{ABSENCE_POLICIES[a.type as AbsenceType]?.label ?? a.type}{a.reason && <div className="muted">{a.reason}</div>}</td>
+                <td>{fmtDate(a.startDate)}{a.endDate !== a.startDate ? ` – ${fmtDate(a.endDate)}` : ''}</td>
+                <td className="num">{a.workingDays}</td>
+                <td><span className={`st ${a.status}`}>{ABSENCE_STATUS_LABEL[a.status]}</span>{a.decisionNote && <div className="muted">{a.decisionNote}</div>}</td>
+                <td className="num"><AbsenceActions id={a.id} canDecide={a.canDecide} canCancel={a.canCancel} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!list.length && <div className="empty">Sem ausências registadas</div>}
+      </div>
+      <p className="muted" style={{ marginTop: 10 }}><Link href="/ausencias" style={{ color: 'var(--brand)' }}>Registar ou pedir ausência →</Link></p>
     </>
   );
 }

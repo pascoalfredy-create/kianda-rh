@@ -136,10 +136,12 @@ export const absences = pgTable('absences', {
   workingDays: integer('working_days').notNull(),
   reason: text('reason'),
   status: requestStatusEnum('status').notNull().default('pending'),
+  requestedBy: text('requested_by'),
   decidedBy: text('decided_by'),
   decidedAt: timestamp('decided_at', { withTimezone: true }),
+  decisionNote: text('decision_note'),
   createdAt: createdAt(),
-}, (t) => [index('absences_company_status').on(t.companyId, t.status)]);
+}, (t) => [index('absences_company_status').on(t.companyId, t.status), index('absences_employee_dates').on(t.employeeId, t.startDate)]);
 
 export const payrollRuns = pgTable('payroll_runs', {
   id: id(),

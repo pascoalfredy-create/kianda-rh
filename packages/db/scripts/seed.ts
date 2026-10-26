@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { DEFAULT_PGC_ACCOUNTS, kz } from '@kianda/core';
 import { and, eq } from 'drizzle-orm';
-import { accountMappings, closeDb, companies, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, hashPassword, users } from '../src/index.js';
+import { absences, accountMappings, closeDb, companies, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, hashPassword, users } from '../src/index.js';
 
 /** Dados de demonstração: empresa fictícia com três departamentos, cinco colaboradores, hierarquia e documentos. Idempotente. */
 const db = getDb();
@@ -71,6 +71,32 @@ const ownerPassword = process.env.SEED_OWNER_PASSWORD ?? 'Kianda2026demo';
 const [owner] = await db.select().from(users).where(and(eq(users.companyId, company.id), eq(users.email, OWNER_EMAIL)));
 if (!owner) await db.insert(users).values({ companyId: company.id, email: OWNER_EMAIL, name: 'Teresa Mbala', role: 'owner', passwordHash: await hashPassword(ownerPassword) });
 
+// Utilizadores de demonstração com perfis diferentes (mesma palavra-passe do proprietário).
+const demoUsers = [
+  ['edson@kwanzalog.co.ao', 'Edson Kiala Mateus', 'manager', '1002'],
+  ['joana@kwanzalog.co.ao', 'Joana Cassoma', 'employee', '1003'],
+] as const;
+for (const [email, name, role, number] of demoUsers) {
+  const [u] = await db.select().from(users).where(and(eq(users.companyId, company.id), eq(users.email, email)));
+  if (!u && byNumber[number]) await db.insert(users).values({ companyId: company.id, email, name, role, employeeId: byNumber[number]!.id, passwordHash: await hashPassword(ownerPassword) });
+}
+
+// Ausências de exemplo (só se a empresa ainda não tiver nenhuma).
+const [anyAbsence] = await db.select({ id: absences.id }).from(absences).where(eq(absences.companyId, company.id)).limit(1);
+if (!anyAbsence) {
+  const demo = [
+    ['1002', 'vacation', '2026-11-16', '2026-11-27', 10, 'approved', null],
+    ['1006', 'vacation', '2026-11-23', '2026-12-04', 10, 'pending', null],
+    ['1009', 'sick', '2026-11-03', '2026-11-05', 3, 'approved', 'Atestado médico entregue'],
+    ['1003', 'training', '2026-11-19', '2026-11-20', 2, 'approved', 'Formação IRT e INSS 2026'],
+    ['1003', 'vacation', '2026-12-21', '2026-12-31', 8, 'pending', 'Natal com a família'],
+  ] as const;
+  for (const [number, type, startDate, endDate, workingDays, status, reason] of demo) {
+    const e = byNumber[number];
+    if (e) await db.insert(absences).values({ companyId: company.id, employeeId: e.id, type, startDate, endDate, workingDays, status, reason, decidedAt: status === 'approved' ? new Date() : null });
+  }
+}
+
 console.log(`Empresa de demonstração pronta: ${company.name} (${company.id})`);
-console.log(`Acesso: ${OWNER_EMAIL} / ${owner ? '(palavra-passe já definida)' : ownerPassword}`);
+console.log(`Acesso: ${OWNER_EMAIL} (proprietário), edson@kwanzalog.co.ao (chefia), joana@kwanzalog.co.ao (colaboradora) / ${owner ? '(palavra-passe já definida)' : ownerPassword}`);
 await closeDb();

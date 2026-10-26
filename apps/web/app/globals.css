@@ -113,3 +113,37 @@ td a:hover b { color: var(--brand); }
 .form h3 { grid-column: 1 / -1; font-size: 12px; text-transform: uppercase; letter-spacing: .4px; color: var(--ink3); padding-top: 6px; border-top: 1px solid #f0f1f4; }
 .form h3:first-child { border-top: 0; padding-top: 0; }
 @media (max-width: 1000px) { .form.cols4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ── Ausências e mapa de férias ── */
+.st { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.st.pending { background: var(--amber-soft); color: var(--amber); }
+.st.approved { background: var(--brand-soft); color: var(--brand); }
+.st.rejected { background: var(--red-soft); color: var(--red); }
+.st.cancelled { background: #eceef1; color: var(--ink3); }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 6px; vertical-align: 0; }
+.actions { display: flex; gap: 6px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
+.btn.sm { height: 30px; padding: 0 12px; font-size: 13px; }
+.btn.ok { background: var(--brand); }
+.inline-note { display: flex; gap: 6px; align-items: center; }
+.inline-note input { height: 30px; width: 220px; }
+.preview { grid-column: 1 / -1; padding: 10px 12px; border-radius: 9px; background: #f6f8fa; color: var(--ink2); font-size: 13px; }
+.preview.bad { background: var(--red-soft); color: #8a2b1c; }
+.preview.good { background: var(--brand-soft); color: var(--brand); }
+.map-wrap { overflow-x: auto; }
+.map { border-collapse: separate; border-spacing: 0; min-width: 100%; }
+.map th, .map td { padding: 0; border-bottom: 1px solid #f0f1f4; }
+.map th.name, .map td.name { position: sticky; left: 0; background: #fff; z-index: 1; padding: 8px 12px; min-width: 210px; text-align: left; border-right: 1px solid var(--line); }
+.map th.day { width: 30px; min-width: 30px; text-align: center; font-size: 11px; padding: 6px 0; text-transform: none; }
+.map th.day small { display: block; color: var(--ink3); font-weight: 500; }
+.map td.cell { height: 34px; text-align: center; border-left: 1px solid #f4f5f7; }
+.map .we { background: #f6f7f9; }
+.map .hol { background: #fdeee9; }
+.map .today { box-shadow: inset 0 0 0 2px #1aa28655; }
+.bar { display: block; height: 20px; margin: 0 1px; border-radius: 4px; color: #fff; font-size: 10px; line-height: 20px; font-weight: 700; }
+.bar.pending { opacity: .45; background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.35) 0 4px, transparent 4px 8px); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; padding: 10px 14px; font-size: 12.5px; color: var(--ink2); border-top: 1px solid var(--line); }
+.month-nav { display: flex; gap: 8px; align-items: center; }
+.month-nav b { min-width: 150px; text-align: center; }
+.meter { height: 8px; background: #eef0f3; border-radius: 6px; overflow: hidden; display: flex; min-width: 120px; }
+.meter i { display: block; height: 100%; }
+.h2-inline { font-size: 13px; text-transform: uppercase; letter-spacing: .4px; color: var(--ink3); }

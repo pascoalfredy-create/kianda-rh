@@ -6,7 +6,7 @@ Ordem proposta a partir do protótipo HTML do Kianda RH (funcionalidades já val
 | --- | --- | --- |
 | 1 ✅ | Autenticação e perfis | Login, sessões (JWT/cookies httpOnly), perfis `owner`, `hr_admin`, `payroll`, `finance`, `manager`, `employee`; substitui o cabeçalho `x-company-id`. **Concluída**: registo, login, logout, gestão de utilizadores, protecção de rotas no Next (`proxy.ts`), limitação de tentativas |
 | 2 ✅ | Ficha do colaborador completa | Edição, documentos de identificação, organograma, histórico de contratos e salários. **Concluída**: ficha com separadores, admissão, alterações salariais com data de efeito (bloqueadas em meses fechados; o processamento usa a remuneração em vigor no fim do mês), renovação de contratos, documentos com alertas de validade, organograma com protecção contra ciclos, histórico de auditoria |
-| 3 | Ausências e férias | Aprovação, saldos de 22 dias úteis, calendário com feriados, mapa de férias |
+| 3 ✅ | Ausências e férias | Aprovação, saldos de 22 dias úteis, calendário com feriados, mapa de férias. **Concluída**: pedidos com pré-visualização (dias úteis, feriados, limites legais, saldo), aprovação pela chefia directa ou RH (nunca o próprio), recusa com motivo, cancelamento, saldos com regra do ano de admissão e elegibilidade aos 6 meses, férias entre dois anos, mapa mensal, feriados gerados para qualquer ano |
 | 4 | Assiduidade | Registo de entrada/saída web e móvel, horas extra para o processamento |
 | 5 | Processamento completo | Variáveis do mês (horas extra, faltas, prémios, adiantamentos), subsídios de férias e Natal, recibos com hash |
 | 6 | Obrigações e pagamentos | Mapas de IRT e INSS, prazos, ficheiro de transferência bancária, marcação de pagamentos |
@@ -20,7 +20,7 @@ Ordem proposta a partir do protótipo HTML do Kianda RH (funcionalidades já val
 
 ## Antes de produção
 
-- [ ] Registar o pacote **AO-2027** quando o OGE 2027 for publicado (o processamento de Janeiro de 2027 é recusado até lá).
+- [ ] Registar o pacote **AO-2027** (as férias e ausências de 2027 já funcionam com o calendário gerado; o processamento salarial fica bloqueado até lá) quando o OGE 2027 for publicado (o processamento de Janeiro de 2027 é recusado até lá).
 - [ ] Validação jurídica dos pontos listados em `AO_2026.toValidate`.
 - [ ] Armazenamento de ficheiros (cópias digitalizadas de documentos) — S3/R2 com URLs assinados.
 - [ ] Recuperação de palavra-passe por email e 2FA para `owner`/`finance`.

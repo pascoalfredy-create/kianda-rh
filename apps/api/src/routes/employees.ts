@@ -1,6 +1,6 @@
 import {
   buildOrgTree, compensationAt, compensationHistory, complianceAlerts, contractAlerts, createsCycle, documentAlerts, getPack,
-  isValidAngolanBI, isValidAngolanIban, kz, normalizeIban, PackNotFoundError, type CountryPack, type DocumentType,
+  isValidAngolanBI, isValidAngolanIban, kz, normalizeIban, packOrLatest, PackNotFoundError, type CountryPack, type DocumentType,
 } from '@kianda/core';
 import {
   auditLogs, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, payrollRuns, users, type Db,
@@ -14,6 +14,8 @@ import { DomainError } from '../services/payroll.js';
 const STAFF = ['hr_admin', 'payroll', 'finance', 'manager'] as const;
 const today = () => new Date().toISOString().slice(0, 10);
 const packFor = (date: string) => getPack('AO', Number(date.slice(0, 4)));
+/** Para alertas informativos com a data de hoje: nunca falha num ano sem pacote publicado (usa o mais recente). */
+const alertPack = (date: string) => packOrLatest('AO', Number(date.slice(0, 4)));
 
 const optionalText = z.string().trim().max(200).optional().nullable().transform((v) => (v === '' ? null : v));
 const optionalDate = z.union([z.iso.date(), z.literal(''), z.null()]).optional().transform((v) => (v === '' ? null : v));
@@ -55,7 +57,7 @@ const personal = {
 };
 
 const createBody = z.object({ number: z.string().trim().min(1), ...personal, contract: contractBody });
-const patchBody = z.object({ ...personal, status: z.enum(['active', 'suspended']) }).partial();
+const patchBody = z.object({ ...personal, status: z.enum(['active', 'suspended']), vacationCarryOver: z.coerce.number().int().min(0, 'Dias transitados não podem ser negativos').max(44, 'Máximo de 44 dias transitados') }).partial();
 
 const compensationBody = money.extend({ effectiveDate: z.iso.date(), reason: z.string().trim().min(3, 'Indique o motivo da alteração') });
 
@@ -150,7 +152,7 @@ export function employeeRoutes() {
     const comp = await db.select().from(compensationChanges).where(eq(compensationChanges.companyId, req.companyId));
     const docs = await db.select().from(employeeDocuments).where(eq(employeeDocuments.companyId, req.companyId));
     const t = today();
-    const pack = packFor(t);
+    const pack = alertPack(t);
     const seen = new Set<string>();
     return ctx.json(rows.filter((r) => !seen.has(r.e.id) && seen.add(r.e.id)).map(({ e, c, dept }) => {
       const current = compensationAt(comp.filter((x) => x.employeeId === e.id), t);
@@ -213,7 +215,7 @@ export function employeeRoutes() {
       .where(and(eq(employees.companyId, req.companyId), eq(employees.managerId, e.id))).orderBy(employees.name);
     const [account] = await db.select({ email: users.email, role: users.role }).from(users).where(and(eq(users.companyId, req.companyId), eq(users.employeeId, e.id)));
     const t = today();
-    const pack = packFor(t);
+    const pack = alertPack(t);
     const current = compensationAt(e.compensation, t);
     const contract = e.contracts[0] ?? null;
     const { compensation, documents, contracts: allContracts, ...rest } = e;

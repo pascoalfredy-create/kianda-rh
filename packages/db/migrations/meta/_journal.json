@@ -22,6 +22,13 @@
       "when": 1792980322956,
       "tag": "0002_ficha_colaborador",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793005895262,
+      "tag": "0003_ausencias_aprovacao",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,6 @@
 import { AO_2026 } from './ao-2026.js';
 export { AO_2026 };
+import { angolaHolidays } from '../holidays.js';
 import type { CountryPack } from './types.js';
 export type { CountryPack, IrtBracket, Holiday } from './types.js';
 
@@ -17,6 +18,27 @@ export function getPack(country: 'AO', year: number): CountryPack {
   const pack = PACKS[`${country}-${year}`];
   if (!pack) throw new PackNotFoundError(country, year);
   return pack;
+}
+
+/**
+ * Regras LABORAIS de um ano (férias, licenças, feriados) — para planeamento de ausências.
+ * Usa o pacote do ano se existir; senão o mais recente anterior, com os feriados gerados para o ano pedido.
+ * NUNCA usar para cálculos fiscais (IRT/INSS/salário mínimo): para isso, getPack (estrito).
+ */
+export function labourRules(country: 'AO', year: number): CountryPack {
+  const exact = PACKS[`${country}-${year}`];
+  if (exact) return exact;
+  const years = Object.values(PACKS).filter((p) => p.country === country).map((p) => p.year).sort((a, b) => a - b);
+  const base = PACKS[`${country}-${years.filter((y) => y <= year).at(-1) ?? years[0]}`]!;
+  return { ...base, year, version: `${base.version}+calendário-${year}`, holidays: angolaHolidays(year) };
+}
+
+/** Pacote para alertas informativos (ex.: salário mínimo na ficha): o do ano, ou o mais recente publicado. */
+export function packOrLatest(country: 'AO', year: number): CountryPack {
+  const exact = PACKS[`${country}-${year}`];
+  if (exact) return exact;
+  const years = Object.values(PACKS).filter((p) => p.country === country).map((p) => p.year).sort((a, b) => a - b);
+  return PACKS[`${country}-${years.filter((y) => y <= year).at(-1) ?? years[0]}`]!;
 }
 
 /** Regista um pacote (ex.: AO-2027 quando o OGE for publicado), validando a tabela de IRT. */

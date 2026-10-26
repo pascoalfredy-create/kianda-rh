@@ -1,4 +1,4 @@
-import { AO_2026, calculatePayroll, getPack, kz, listPacks, PackNotFoundError, solveBaseForNet } from '@kianda/core';
+import { AO_2026, calculatePayroll, getPack, kz, labourRules, listPacks, PackNotFoundError, solveBaseForNet } from '@kianda/core';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { body, type AppEnv } from '../plugins/tenant.js';
@@ -36,6 +36,12 @@ export function publicRoutes() {
     const b = simulateBody.parse(await body(c));
     const rest = { period: b.period, mealMinor: kz(b.meal), transportMinor: kz(b.transport), overtimeHours: b.overtimeHours, holidaySubsidy: b.holidaySubsidy, christmasSubsidy: b.christmasSubsidy };
     return c.json(b.base !== undefined ? calculatePayroll({ ...rest, baseMinor: kz(b.base) }) : solveBaseForNet(kz(b.targetNet!), rest));
+  });
+
+  /** Feriados nacionais do ano (gerados; disponíveis mesmo sem pacote fiscal publicado). */
+  app.get('/v1/holidays/:year', (c) => {
+    const { year } = z.object({ year: z.coerce.number().int().min(2020).max(2100) }).parse(c.req.param());
+    return c.json(labourRules('AO', year).holidays);
   });
 
   app.get('/v1/packs', (c) => c.json({ available: listPacks(), current: AO_2026.version }));

@@ -1,4 +1,5 @@
 import { kz } from '../money.js';
+import { angolaHolidays } from '../holidays.js';
 import type { CountryPack, IrtBracket } from './types.js';
 
 const b = (upper: number, fixed: number, ratePct: number, excessFrom: number): IrtBracket =>
@@ -37,21 +38,17 @@ export const AO_2026: CountryPack = {
     christmasSubsidyBps: 5000,
     dailyRateDivisor: 30,
   },
+  leave: {
+    firstYearDaysPerMonth: 2,
+    vacationMinServiceMonths: 6,
+    marriageWorkingDays: 10,
+    bereavementWorkingDays: 8,
+    paternityWorkingDays: 7,
+    paternityPaid: false,
+    maternityCalendarDays: 90,
+  },
   deadlines: { inssDayOfNextMonth: 10, irtEndOfNextMonth: true },
-  holidays: [
-    { date: '2026-01-01', name: 'Dia do Ano Novo' },
-    { date: '2026-02-04', name: 'Dia do Início da Luta Armada' },
-    { date: '2026-02-17', name: 'Carnaval' },
-    { date: '2026-03-08', name: 'Dia Internacional da Mulher' },
-    { date: '2026-03-23', name: 'Dia da Libertação da África Austral' },
-    { date: '2026-04-03', name: 'Sexta-feira Santa' },
-    { date: '2026-04-04', name: 'Dia da Paz e Reconciliação' },
-    { date: '2026-05-01', name: 'Dia Internacional do Trabalhador' },
-    { date: '2026-09-17', name: 'Dia do Fundador da Nação e do Herói Nacional' },
-    { date: '2026-11-02', name: 'Dia dos Finados' },
-    { date: '2026-11-11', name: 'Dia da Independência Nacional' },
-    { date: '2026-12-25', name: 'Dia de Natal e da Família' },
-  ],
+  holidays: angolaHolidays(2026),
   sources: [
     { title: 'Lei n.º 14/25 — OGE 2026, Anexo I (tabela IRT Grupo A, isenção até 150 000 Kz)' },
     { title: 'Lei n.º 12/23 — Lei Geral do Trabalho' },
@@ -63,5 +60,8 @@ export const AO_2026: CountryPack = {
     'Limite de 30 h/mês para o acréscimo de 50% nas horas extra',
     'Período experimental de 60 dias (contratos por tempo indeterminado)',
     'Calendário de feriados: confirmar pontes e alterações publicadas',
+    'Férias no ano de admissão: 2 dias úteis por mês completo, gozo só após 6 meses de serviço',
+    'Faltas justificadas: casamento 10 dias úteis; luto até 8 dias úteis (cônjuge, pais, filhos; 4 para outros familiares)',
+    'Licença de paternidade de 7 dias úteis não remunerada e licença de maternidade de 90 dias (Lei n.º 12/23)',
   ],
 };

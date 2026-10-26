@@ -217,6 +217,84 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
   });
 
+  describe('ausências e férias (entrega 3)', () => {
+    let managerUser = '';
+    let chiefId = '';
+    let vacationId = '';
+    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
+
+    beforeAll(async () => {
+      chiefId = (await get(owner, `/v1/employees/${empId}`)).json().managerId;
+      const r = await post(owner, '/v1/users', { name: 'Chefe', email: `chefe+${stamp}@a.ao`, password: pw, role: 'manager', employeeId: chiefId });
+      expect(r.statusCode).toBe(201);
+      managerUser = await login(`chefe+${stamp}@a.ao`);
+    });
+
+    it('feriados de qualquer ano, mesmo sem pacote fiscal', async () => {
+      const h = (await app.inject({ method: 'GET', url: '/v1/holidays/2027' })).json();
+      expect(h.find((x: { name: string }) => x.name === 'Sexta-feira Santa').date).toBe('2027-03-26');
+    });
+
+    it('a chefia vê e aprova o pedido da equipa; ninguém aprova o próprio', async () => {
+      const mine = (await get(employeeUser, '/v1/absences')).json();
+      vacationId = mine.find((a: { type: string }) => a.type === 'vacation').id;
+      expect((await post(employeeUser, `/v1/absences/${vacationId}/approve`)).statusCode).toBe(403);
+      const awaiting = (await get(managerUser, '/v1/absences?awaitingMe=1')).json();
+      expect(awaiting.map((a: { id: string }) => a.id)).toContain(vacationId);
+      const ok = await post(managerUser, `/v1/absences/${vacationId}/approve`);
+      expect(ok.statusCode).toBe(200);
+      expect(ok.json().status).toBe('approved');
+      expect((await post(managerUser, `/v1/absences/${vacationId}/approve`)).json().error).toBe('estado_invalido');
+    });
+
+    it('saldo de férias: 22 dias, 9 gozados, 13 disponíveis; pedido acima do saldo é recusado', async () => {
+      const [b] = (await get(employeeUser, `/v1/leave/balances?year=2026&employeeId=${empId}`)).json();
+      expect(b).toMatchObject({ entitlement: 22, taken: 9, pending: 0, available: 13, eligibleFrom: '2026-07-05' });
+      const r = await post(employeeUser, '/v1/absences', { employeeId: empId, type: 'vacation', startDate: '2026-11-16', endDate: '2026-12-11' });
+      expect(r.statusCode).toBe(409);
+      expect(r.json().error).toBe('saldo_insuficiente');
+    });
+
+    it('férias de Dezembro a Janeiro contam em dois saldos (2027 sem pacote fiscal)', async () => {
+      const r = await post(employeeUser, '/v1/absences', { employeeId: empId, type: 'vacation', startDate: '2026-12-21', endDate: '2027-01-08' });
+      expect(r.statusCode).toBe(201);
+      expect(r.json()).toMatchObject({ workingDays: 13, status: 'pending' });
+      const [b] = (await get(owner, `/v1/leave/balances?year=2026&employeeId=${empId}`)).json();
+      expect(b).toMatchObject({ pending: 8, available: 5 });
+      const cancel = await post(employeeUser, `/v1/absences/${r.json().id}/cancel`);
+      expect(cancel.json().status).toBe('cancelled');
+    });
+
+    it('recusa exige motivo', async () => {
+      const r = await post(employeeUser, '/v1/absences', { employeeId: empId, type: 'training', startDate: '2026-11-17', endDate: '2026-11-18', reason: 'Curso de Excel' });
+      expect((await post(managerUser, `/v1/absences/${r.json().id}/reject`)).statusCode).toBe(400);
+      const ok = await post(managerUser, `/v1/absences/${r.json().id}/reject`, { note: 'Fecho do mês' });
+      expect(ok.json()).toMatchObject({ status: 'rejected', decisionNote: 'Fecho do mês' });
+    });
+
+    it('limites legais, faltas injustificadas e elegibilidade de 6 meses', async () => {
+      const pat = await post(employeeUser, '/v1/absences', { employeeId: empId, type: 'paternity', startDate: '2026-11-23', endDate: '2026-12-04' });
+      expect(pat.json().error).toBe('limite_legal');
+      expect((await post(employeeUser, '/v1/absences', { employeeId: empId, type: 'unjustified', startDate: '2026-11-19', endDate: '2026-11-19' })).statusCode).toBe(403);
+      const hr = await post(owner, '/v1/absences', { employeeId: empId, type: 'unjustified', startDate: '2026-11-19', endDate: '2026-11-19', approve: true });
+      expect(hr.json()).toMatchObject({ status: 'approved', workingDays: 1 });
+      const novo = await post(owner, '/v1/employees', { number: '12', name: 'Recém Admitido', jobTitle: 'Técnico', contract: { type: 'indefinite', startDate: '2026-09-01', base: 200000 } });
+      const early = await post(owner, '/v1/absences', { employeeId: novo.json().id, type: 'vacation', startDate: '2026-11-02', endDate: '2026-11-06' });
+      expect(early.statusCode).toBe(422);
+      expect(early.json().message).toContain('01/03/2027');
+    });
+
+    it('visibilidade: colaborador só as suas, chefia a equipa, outra empresa nada', async () => {
+      const mine = (await get(employeeUser, '/v1/absences')).json();
+      expect(mine.every((a: { employeeId: string }) => a.employeeId === empId)).toBe(true);
+      const team = (await get(managerUser, '/v1/absences')).json();
+      expect(team.every((a: { employeeId: string }) => [empId, chiefId].includes(a.employeeId))).toBe(true);
+      expect((await get(ownerB, '/v1/absences')).json()).toEqual([]);
+      expect((await post(ownerB, `/v1/absences/${vacationId}/cancel`)).statusCode).toBe(404);
+    });
+  });
+
   it('logout limpa o cookie', async () => {
     const r = await app.inject({ method: 'POST', url: '/v1/auth/logout', headers: as(owner) });
     expect(r.cookies.find((c) => c.name === 'kianda_session')?.value).toBe('');

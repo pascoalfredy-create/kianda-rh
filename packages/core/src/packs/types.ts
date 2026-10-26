@@ -29,6 +29,18 @@ export interface CountryPack {
     christmasSubsidyBps: number;
     dailyRateDivisor: number;
   };
+  /** Férias e licenças (LGT). Limites em dias úteis, excepto onde indicado. */
+  leave: {
+    /** No ano de admissão: dias por cada mês completo de serviço (limitado a vacationWorkingDays). */
+    firstYearDaysPerMonth: number;
+    /** Meses de serviço antes de poder gozar férias. */
+    vacationMinServiceMonths: number;
+    marriageWorkingDays: number;
+    bereavementWorkingDays: number;
+    paternityWorkingDays: number;
+    paternityPaid: boolean;
+    maternityCalendarDays: number;
+  };
   deadlines: { inssDayOfNextMonth: number; irtEndOfNextMonth: boolean };
   holidays: readonly Holiday[];
   sources: readonly { title: string; url?: string }[];

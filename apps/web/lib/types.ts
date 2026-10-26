@@ -71,6 +71,7 @@ export interface Profile {
   province: string | null;
   emergencyContactName: string | null;
   emergencyContactPhone: string | null;
+  vacationCarryOver: number;
   departmentId: string | null;
   managerId: string | null;
   department: Department | null;
@@ -110,3 +111,34 @@ export const CAN_EDIT = ['owner', 'hr_admin'];
 export const ROLE_LABEL: Record<string, string> = {
   owner: 'Proprietário', hr_admin: 'Administração de RH', payroll: 'Processamento salarial', finance: 'Finanças', manager: 'Chefia', employee: 'Colaborador',
 };
+
+export type AbsenceStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+export interface AbsenceRow {
+  id: string;
+  employeeId: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  workingDays: number;
+  reason: string | null;
+  status: AbsenceStatus;
+  decisionNote: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+  requesterName: string | null;
+  employee: { id: string; name: string; number: string; department: string | null };
+  canDecide: boolean;
+  canCancel: boolean;
+}
+export interface BalanceRow {
+  employee: { id: string; name: string; number: string; department: string | null };
+  hireDate: string | null;
+  eligibleFrom: string | null;
+  year: number;
+  entitlement: number;
+  carriedOver: number;
+  taken: number;
+  pending: number;
+  available: number;
+}
+export const ABSENCE_STATUS_LABEL: Record<AbsenceStatus, string> = { pending: 'Pendente', approved: 'Aprovada', rejected: 'Recusada', cancelled: 'Cancelada' };

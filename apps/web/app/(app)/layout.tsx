@@ -26,6 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {staff && <Link href="/colaboradores">Colaboradores</Link>}
           {staff && <Link href="/organograma">Organograma</Link>}
           {!staff && me.user.employeeId && <Link href={`/colaboradores/${me.user.employeeId}`}>A minha ficha</Link>}
+          <Link href="/ausencias">Ausências e férias</Link>
           <Link href="/simulador">Simulador salarial</Link>
         </nav>
         <div className="who">
