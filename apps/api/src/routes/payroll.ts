@@ -112,6 +112,7 @@ export function payrollRoutes() {
     const db = getDb();
     const [v] = await db.select().from(payrollVariables).where(and(eq(payrollVariables.id, c.req.param('id')), eq(payrollVariables.companyId, actor.companyId)));
     if (!v) return c.json({ error: 'nao_encontrado', message: 'Variável inexistente' }, 404);
+    if (v.terminationId) throw new DomainError('gerida_pela_cessacao', 'Esta linha faz parte de um fecho de contas: altere-a na cessação do contrato');
     const [run] = await db.select({ status: payrollRuns.status }).from(payrollRuns).where(and(eq(payrollRuns.companyId, actor.companyId), eq(payrollRuns.period, v.period)));
     if (run?.status === 'closed') throw new DomainError('processamento_fechado', 'O processamento deste mês já está fechado');
     await db.delete(payrollVariables).where(eq(payrollVariables.id, v.id));

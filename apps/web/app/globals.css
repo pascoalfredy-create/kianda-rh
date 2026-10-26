@@ -207,3 +207,8 @@ table.dense th, table.dense td { padding: 8px 8px; font-size: 13px; }
   body { background: #fff; }
   .payslip { border: 0; padding: 0; }
 }
+
+/* Documentos imprimíveis (fecho de contas, certificado) */
+.doc { padding: 40px 48px; max-width: 820px; margin: 0 auto 20px; font-size: 14.5px; }
+.doc p { margin: 10px 0; }
+@media print { .doc { border: 0; box-shadow: none; padding: 0; max-width: none; } }

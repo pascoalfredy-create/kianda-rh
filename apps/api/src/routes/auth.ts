@@ -51,6 +51,7 @@ export function authRoutes() {
     const row = rows[0];
     // Mesma resposta para email inexistente e palavra-passe errada (não revela contas).
     if (!row || !(await verifyPassword(b.password, row.u.passwordHash))) return c.json({ error: 'credenciais_invalidas', message: 'Email ou palavra-passe incorrectos.' }, 401);
+    if (row.u.disabledAt) return c.json({ error: 'acesso_desactivado', message: 'O seu acesso foi desactivado. Contacte os Recursos Humanos.' }, 403);
     const token = await startSession(c, { sub: row.u.id, companyId: row.co.id, role: row.u.role, employeeId: row.u.employeeId, name: row.u.name });
     await db.insert(auditLogs).values({ companyId: row.co.id, actorId: row.u.id, action: 'login', entity: 'user', entityId: row.u.id });
     return c.json({ user: { id: row.u.id, name: row.u.name, email: row.u.email, role: row.u.role }, company: { id: row.co.id, name: row.co.name }, token });

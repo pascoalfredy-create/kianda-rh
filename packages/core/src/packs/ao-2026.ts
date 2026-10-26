@@ -47,6 +47,16 @@ export const AO_2026: CountryPack = {
     paternityPaid: false,
     maternityCalendarDays: 90,
   },
+  termination: {
+    resignationNoticeDays: 30,
+    objectiveDismissalNoticeDays: 30,
+    collectiveDismissalNoticeDays: 60,
+    fixedTermNoticeDays: 30,
+    fixedTermMissingNoticeDays: 30,
+    compensationFullYears: 5,
+    compensationExtraYearBps: 5000,
+    justCauseYearBps: 10_000,
+  },
   deadlines: { inssDayOfNextMonth: 10, irtEndOfNextMonth: true },
   holidays: angolaHolidays(2026),
   sources: [
@@ -56,6 +66,10 @@ export const AO_2026: CountryPack = {
     { title: 'Decreto Presidencial n.º 227/18 — regime de contribuições INSS' },
   ],
   toValidate: [
+    'Cessação (Lei n.º 12/23): aviso prévio de 30 dias na denúncia pelo trabalhador (art. 305.º) e no despedimento por causas objectivas (art. 286.º), 60 dias no colectivo (art. 293.º); compensação de 1 salário base por ano até 5 anos e 50% por ano adicional (arts. 289.º e 295.º); rescisão com justa causa: salário base × anos (arts. 307.º–310.º); antiguidade em anos completos (art. 311.º)',
+    'Cessação: falta de aviso prévio pelo trabalhador descontada no fecho de contas (dias em falta × base/30); falta de aviso pelo empregador paga como compensação',
+    'Cessação: férias vencidas e não gozadas, férias e subsídio de férias proporcionais ao tempo de serviço no ano da cessação (2 dias por mês completo), subsídio de Natal proporcional',
+    'Cessação: compensações legais por despedimento fora do INSS e isentas de IRT até ao valor legal; o excesso acordado é tributado. Contas PGC sugeridas: 72.8 (compensações) e 63 (compensação por falta de aviso do trabalhador)',
     'Contas PGC sugeridas para despesas do pessoal (75.2), ajudas de custo (72.8) e reembolsos a pagar (36.9) — confirmar com o plano de contas de cada empresa',
     'Ajudas de custo fora do IRT e do INSS até ao limite da diária fixada pela empresa — confirmar o limite legal aplicável (referência: diárias da função pública)',
     'Contas PGC sugeridas para INSS a pagar (34.9.1) e remunerações a pagar (36.1.2) — confirmar com o plano de contas de cada empresa',

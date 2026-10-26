@@ -8,7 +8,7 @@ import { DEFAULT_PGC_ACCOUNTS, type PgcAccountMap } from './pgc.js';
 export type AccountRole = keyof PgcAccountMap;
 
 /** Descrição funcional de cada papel (editável pela empresa) e classe PGC esperada. */
-export const ACCOUNT_ROLES: Record<AccountRole, { label: string; expectedClass: '3' | '4' | '7'; group: string }> = {
+export const ACCOUNT_ROLES: Record<AccountRole, { label: string; expectedClass: '3' | '4' | '6' | '7'; group: string }> = {
   baseSalary: { label: 'Remunerações do pessoal — vencimento base', expectedClass: '7', group: 'Custos com o pessoal' },
   allowances: { label: 'Remunerações do pessoal — subsídios', expectedClass: '7', group: 'Custos com o pessoal' },
   overtimeAndBonus: { label: 'Remunerações do pessoal — horas extra e prémios', expectedClass: '7', group: 'Custos com o pessoal' },
@@ -23,6 +23,8 @@ export const ACCOUNT_ROLES: Record<AccountRole, { label: string; expectedClass: 
   staffExpenses: { label: 'Fornecimentos e serviços de terceiros — despesas do pessoal reembolsadas', expectedClass: '7', group: 'Despesas e ajudas de custo' },
   perDiem: { label: 'Outros custos com o pessoal — ajudas de custo', expectedClass: '7', group: 'Despesas e ajudas de custo' },
   expensesPayable: { label: 'Pessoal — reembolsos de despesas a pagar', expectedClass: '3', group: 'Despesas e ajudas de custo' },
+  terminationCompensation: { label: 'Outros custos com o pessoal — compensações e indemnizações por cessação', expectedClass: '7', group: 'Cessação de contratos' },
+  terminationIncome: { label: 'Outros proveitos operacionais — compensação por falta de aviso prévio do trabalhador', expectedClass: '6', group: 'Cessação de contratos' },
 };
 
 export const PGC_CLASS_LABEL: Record<string, string> = {

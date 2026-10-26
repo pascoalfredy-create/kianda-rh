@@ -25,6 +25,10 @@ export interface PgcAccountMap {
   perDiem: string;
   /** Reembolsos de despesas e ajudas de custo a pagar ao pessoal. */
   expensesPayable: string;
+  /** Compensações e indemnizações por cessação do contrato. */
+  terminationCompensation: string;
+  /** Compensação recebida do trabalhador por falta de aviso prévio (proveito). */
+  terminationIncome: string;
 }
 
 export const DEFAULT_PGC_ACCOUNTS: PgcAccountMap = {
@@ -42,6 +46,8 @@ export const DEFAULT_PGC_ACCOUNTS: PgcAccountMap = {
   staffExpenses: '75.2',
   perDiem: '72.8',
   expensesPayable: '36.9',
+  terminationCompensation: '72.8',
+  terminationIncome: '63',
 };
 
 export interface JournalLine { account: string; description: string; costCenter?: string; debitMinor: Minor; creditMinor: Minor }
@@ -54,6 +60,8 @@ export interface PayrollTotalsByCostCenter {
   overtimeAndBonusMinor: Minor;
   holidayChristmasMinor: Minor;
   employerInssMinor: Minor;
+  /** Compensações por cessação e por falta de aviso prévio pago pela empresa. */
+  terminationMinor?: Minor;
 }
 
 export interface PayrollTotals {
@@ -63,6 +71,8 @@ export interface PayrollTotals {
   inssEmployerMinor: Minor;
   advancesMinor: Minor;
   otherDeductionsMinor?: Minor;
+  /** Compensação por falta de aviso prévio descontada ao trabalhador. */
+  noticeIncomeMinor?: Minor;
   netMinor: Minor;
 }
 
@@ -86,11 +96,13 @@ export function payrollJournal(period: string, t: PayrollTotals, accounts: PgcAc
     dr(accounts.overtimeAndBonus, `Horas extra e prémios ${period}`, c.overtimeAndBonusMinor, c.costCenter);
     dr(accounts.holidayChristmas, `Subsídios de férias/Natal ${period}`, c.holidayChristmasMinor, c.costCenter);
     dr(accounts.employerSocialSecurity, `INSS entidade ${period}`, c.employerInssMinor, c.costCenter);
+    dr(accounts.terminationCompensation, `Compensações por cessação ${period}`, c.terminationMinor ?? 0, c.costCenter);
   }
   cr(accounts.irtPayable, `IRT retido ${period}`, t.irtMinor);
   cr(accounts.socialSecurityPayable, `INSS ${period}`, t.inssEmployeeMinor + t.inssEmployerMinor);
   cr(accounts.advances, `Regularização de adiantamentos ${period}`, t.advancesMinor);
   cr(accounts.otherDeductions, `Outros descontos retidos ${period}`, t.otherDeductionsMinor ?? 0);
+  cr(accounts.terminationIncome, `Compensação por falta de aviso prévio ${period}`, t.noticeIncomeMinor ?? 0);
   cr(accounts.netPayable, `Remunerações a pagar ${period}`, t.netMinor);
   return assertBalanced({ date: lastDayOfMonth(period), journal: 'Pessoal', reference: `PS-${period.replace('-', '')}`, description: `Processamento salarial ${period}`, lines });
 }

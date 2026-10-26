@@ -23,6 +23,10 @@ export interface PayrollInput {
   absenceDays?: number;
   advancesMinor?: Minor;
   otherDeductionsMinor?: Minor;
+  /** Compensação por falta de aviso prévio do trabalhador, descontada no fecho de contas (não reduz bases). */
+  noticeDeductionMinor?: Minor;
+  /** Mês incompleto (admissão ou cessação a meio do mês): dias de calendário trabalhados; base e subsídios ÷ 30 × dias. */
+  workedDays?: number;
   /** Subsídio de férias: true (por inteiro) ou fracção 0–1 (proporcional, ex.: ano de admissão). */
   holidaySubsidy?: boolean | number;
   /** Subsídio de Natal: true (por inteiro) ou fracção 0–1 (proporcional). */
@@ -104,9 +108,12 @@ export function yearServiceFraction(year: number, from: string, until?: string |
 /** Processamento salarial mensal de um trabalhador (regime Angola, Grupo A). */
 export function calculatePayroll(input: PayrollInput): PayrollResult {
   const pack = input.pack ?? getPack('AO', periodYear(input.period));
-  const base = assertMinor(input.baseMinor, 'salário base');
-  const meal = assertMinor(input.mealMinor ?? 0, 'subsídio de alimentação');
-  const transport = assertMinor(input.transportMinor ?? 0, 'subsídio de transporte');
+  const fullBase = assertMinor(input.baseMinor, 'salário base');
+  const partial = input.workedDays !== undefined && input.workedDays < pack.labour.dailyRateDivisor;
+  const part = (v: Minor) => (partial ? prorate(v, Math.max(0, input.workedDays!), pack.labour.dailyRateDivisor) : v);
+  const base = part(fullBase);
+  const meal = part(assertMinor(input.mealMinor ?? 0, 'subsídio de alimentação'));
+  const transport = part(assertMinor(input.transportMinor ?? 0, 'subsídio de transporte'));
   const lines: PayrollLine[] = [];
   let inssBase = 0;
   let irtBase = 0;
@@ -118,16 +125,16 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
     if (inIrt) irtBase += amount;
   };
 
-  earn('BASE', 'Vencimento base', base, true, true);
+  earn('BASE', partial ? `Vencimento base (${input.workedDays} dia(s))` : 'Vencimento base', base, true, true);
   // Alimentação e transporte: fora do INSS; isentos de IRT até ao limite do pacote, cada um.
   const ex = pack.irt.allowanceExemptionMinor;
   if (meal) { lines.push({ code: 'ALIM', name: 'Subsídio de alimentação', kind: 'earning', amountMinor: meal }); irtBase += Math.max(0, meal - ex); }
   if (transport) { lines.push({ code: 'TRANSP', name: 'Subsídio de transporte', kind: 'earning', amountMinor: transport }); irtBase += Math.max(0, transport - ex); }
   for (const o of input.otherEarnings ?? []) earn(o.code, o.name, assertMinor(o.amountMinor, o.name), o.inInss ?? true, o.inIrt ?? true);
-  if (input.overtimeHours) earn('HE', `Horas extraordinárias (${input.overtimeHours} h)`, overtimeMinor(base, input.overtimeHours, pack), true, true);
+  if (input.overtimeHours) earn('HE', `Horas extraordinárias (${input.overtimeHours} h)`, overtimeMinor(fullBase, input.overtimeHours, pack), true, true);
   const subsidy = (flag: boolean | number | undefined, bps: number) => {
     const f = flag === true ? 1 : typeof flag === 'number' ? Math.min(1, Math.max(0, flag)) : 0;
-    return { f, amount: f ? Math.round(applyBps(base, bps) * f) : 0 };
+    return { f, amount: f ? Math.round(applyBps(fullBase, bps) * f) : 0 };
   };
   const pct = (f: number) => (f < 1 ? ` (proporcional ${String(Math.round(f * 1000) / 10).replace('.', ',')}%)` : '');
   const sf = subsidy(input.holidaySubsidy, pack.labour.holidaySubsidyBps);
@@ -135,7 +142,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   const sn = subsidy(input.christmasSubsidy, pack.labour.christmasSubsidyBps);
   if (sn.amount) earn('SUBNAT', `Subsídio de Natal${pct(sn.f)}`, sn.amount, pack.inss.christmasSubsidyInBase, true);
   if (input.absenceDays) {
-    const v = prorate(base, input.absenceDays, pack.labour.dailyRateDivisor);
+    const v = prorate(fullBase, input.absenceDays, pack.labour.dailyRateDivisor);
     lines.push({ code: 'FALTAS', name: `Faltas (${input.absenceDays} dia(s))`, kind: 'earning', amountMinor: -v });
     inssBase -= v;
     irtBase -= v;
@@ -150,11 +157,13 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   lines.push({ code: 'IRT', name: `IRT Grupo A (escalão ${irt.bracket})`, kind: 'deduction', amountMinor: irt.amountMinor });
   const adv = assertMinor(input.advancesMinor ?? 0);
   const other = assertMinor(input.otherDeductionsMinor ?? 0);
+  const notice = assertMinor(input.noticeDeductionMinor ?? 0);
   if (adv) lines.push({ code: 'ADIANT', name: 'Adiantamento salarial', kind: 'deduction', amountMinor: adv });
   if (other) lines.push({ code: 'OUTDESC', name: 'Outros descontos', kind: 'deduction', amountMinor: other });
+  if (notice) lines.push({ code: 'AVISODESC', name: 'Falta de aviso prévio do trabalhador', kind: 'deduction', amountMinor: notice });
   lines.push({ code: 'INSS_EMP', name: `INSS entidade empregadora (${pack.inss.employerBps / 100}%)`, kind: 'employer', amountMinor: inssEmployer });
 
-  const net = gross - inssEmployee - irt.amountMinor - adv - other;
+  const net = gross - inssEmployee - irt.amountMinor - adv - other - notice;
   if (net < 0) throw new NegativeNetError(net);
   return {
     period: input.period,

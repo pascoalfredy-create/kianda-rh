@@ -139,6 +139,12 @@ function ContractTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
       </div>
 
       {canEdit && p.status !== 'terminated' && (
+        <div className="actions" style={{ justifyContent: 'flex-start', marginBottom: 12 }}>
+          <Link className="btn danger" href={`/cessacoes/nova?colaborador=${p.id}`}>Cessar contrato…</Link>
+        </div>
+      )}
+      {p.status === 'terminated' && <div className="warn">Contrato cessado. <Link href="/cessacoes">Ver o fecho de contas e os documentos de cessação</Link>.</div>}
+      {canEdit && p.status !== 'terminated' && (
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16, alignItems: 'flex-start' }}>
           <div style={{ flex: '1 1 100%' }}><CompensationForm p={p} /></div>
           <div style={{ flex: '1 1 100%' }}><ContractForm p={p} /></div>

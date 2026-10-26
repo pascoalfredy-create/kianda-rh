@@ -17,6 +17,7 @@ export const employeeStatusEnum = pgEnum('employee_status', ['active', 'suspende
 export const absenceTypeEnum = pgEnum('absence_type', ['vacation', 'sick', 'justified', 'unjustified', 'maternity', 'paternity', 'marriage', 'bereavement', 'training']);
 export const requestStatusEnum = pgEnum('request_status', ['pending', 'approved', 'rejected', 'cancelled']);
 export const payrollStatusEnum = pgEnum('payroll_status', ['draft', 'closed']);
+export const terminationStatusEnum = pgEnum('termination_status', ['draft', 'confirmed', 'cancelled']);
 export const expenseClaimStatusEnum = pgEnum('expense_claim_status', ['draft', 'submitted', 'approved', 'rejected', 'paid', 'cancelled']);
 export const documentTypeEnum = pgEnum('document_type', ['bi', 'passport', 'residence_card', 'work_visa', 'driving_licence', 'professional_card', 'other']);
 export const punchSourceEnum = pgEnum('punch_source', ['web', 'manual']);
@@ -52,6 +53,8 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash').notNull(),
   role: roleEnum('role').notNull().default('employee'),
   employeeId: text('employee_id'),
+  /** Acesso desactivado (ex.: colaborador cessado). */
+  disabledAt: timestamp('disabled_at', { withTimezone: true }),
   createdAt: createdAt(),
 }, (t) => [uniqueIndex('users_company_email').on(t.companyId, t.email)]);
 
@@ -236,6 +239,10 @@ export const payrollVariables = pgTable('payroll_variables', {
   /** Só para abonos: incide INSS / IRT. */
   inInss: boolean('in_inss').notNull().default(true),
   inIrt: boolean('in_irt').notNull().default(true),
+  /** Código da rubrica no recibo (cessação: FERNG, COMP, AVISO…); vazio = BONUS/OUTABON/ADIANT/OUTDESC pelo tipo. */
+  code: text('code'),
+  /** Variáveis geradas por uma cessação (apagadas se a cessação for anulada). */
+  terminationId: text('termination_id'),
   note: text('note'),
   createdBy: text('created_by').notNull(),
   createdAt: createdAt(),
@@ -261,6 +268,32 @@ export const payrollLines = pgTable('payroll_lines', {
   breakdown: jsonb('breakdown').notNull().default([]),
   calculationHash: text('calculation_hash'),
 }, (t) => [uniqueIndex('payroll_lines_run_employee').on(t.runId, t.employeeId)]);
+
+/** Cessação do contrato: motivo, aviso prévio, fecho de contas proposto/ajustado e confirmação. */
+export const terminations = pgTable('terminations', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  employeeId: text('employee_id').notNull().references(() => employees.id),
+  contractId: text('contract_id').notNull(),
+  reason: text('reason').notNull(),
+  noticeDate: date('notice_date'),
+  effectiveDate: date('effective_date').notNull(),
+  period: text('period').notNull(),
+  status: terminationStatusEnum('status').notNull().default('draft'),
+  agreedCompensationMinor: bigint('agreed_compensation_minor', { mode: 'number' }),
+  /** Linhas do fecho de contas (propostas pelo motor e eventualmente ajustadas). */
+  items: jsonb('items').notNull().default([]),
+  /** Antiguidade, aviso prévio, notas do motor no momento da proposta. */
+  proposal: jsonb('proposal').notNull().default({}),
+  note: text('note'),
+  createdBy: text('created_by').notNull(),
+  createdAt: createdAt(),
+  confirmedBy: text('confirmed_by'),
+  confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+  cancelledBy: text('cancelled_by'),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelNote: text('cancel_note'),
+}, (t) => [index('terminations_company').on(t.companyId), index('terminations_employee').on(t.employeeId)]);
 
 /** Nota de despesas: despesas documentadas e ajudas de custo de uma deslocação ou período. */
 export const expenseClaims = pgTable('expense_claims', {

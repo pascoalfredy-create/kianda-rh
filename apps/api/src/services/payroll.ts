@@ -42,7 +42,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
     const periodEnd = lastDayOfMonth(period);
     const staff = await tx.select({ e: employees, c: contracts }).from(employees)
       .innerJoin(contracts, eq(contracts.employeeId, employees.id))
-      .where(and(eq(employees.companyId, companyId), eq(employees.status, 'active')))
+      .where(and(eq(employees.companyId, companyId), inArray(employees.status, ['active', 'terminated'])))
       .orderBy(employees.number, desc(contracts.startDate));
     const firstContract = new Map<string, string>();
     for (const r of await tx.select({ id: contracts.employeeId, d: contracts.startDate }).from(contracts)
@@ -94,10 +94,17 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       // Variáveis do mês
       const mine = variables.filter((v) => v.employeeId === e.id);
       const otherEarnings: EarningInput[] = mine.filter((v) => v.kind === 'bonus' || v.kind === 'other_earning').map((v) => ({
-        code: v.kind === 'bonus' ? 'BONUS' : 'OUTABON', name: v.label, amountMinor: v.amountMinor, inInss: v.inInss, inIrt: v.inIrt,
+        code: v.code ?? (v.kind === 'bonus' ? 'BONUS' : 'OUTABON'), name: v.label, amountMinor: v.amountMinor, inInss: v.inInss, inIrt: v.inIrt,
       }));
       const advancesMinor = mine.filter((v) => v.kind === 'advance').reduce((s, v) => s + v.amountMinor, 0);
-      const otherDeductionsMinor = mine.filter((v) => v.kind === 'other_deduction').reduce((s, v) => s + v.amountMinor, 0);
+      const otherDeductionsMinor = mine.filter((v) => v.kind === 'other_deduction' && v.code !== 'AVISODESC').reduce((s, v) => s + v.amountMinor, 0);
+      const noticeDeductionMinor = mine.filter((v) => v.kind === 'other_deduction' && v.code === 'AVISODESC').reduce((s, v) => s + v.amountMinor, 0);
+      // Fecho de contas: os subsídios do ano vêm da cessação (já calculados e eventualmente ajustados), não do automático.
+      const settling = mine.some((v) => v.terminationId);
+      // Mês incompleto: admissão ou cessação a meio do mês.
+      const from = hire > periodStart ? hire : periodStart;
+      const to = ended && ended < periodEnd ? ended : periodEnd;
+      const workedDays = from === periodStart && to === periodEnd ? undefined : Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1);
 
       // Subsídio de férias: mês fixo da empresa, ou mês em que começam as primeiras férias aprovadas do ano (Dezembro como último recurso)
       const ov = overrides[e.id] ?? {};
@@ -106,7 +113,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
         ? month === company.holidaySubsidyMonth
         : (firstVacation ? firstVacation.slice(0, 7) === period : false) || month === 12;
       let holidaySubsidy: number | false = false;
-      if (ov.holiday ?? holidayAuto) {
+      if (!settling && (ov.holiday ?? holidayAuto)) {
         if (paid(e.id, 'SUBFER')) {
           if (ov.holiday) warnings.push({ employeeId: e.id, message: `${e.name}: subsídio de férias de ${year} já foi pago — não incluído` });
         } else {
@@ -117,7 +124,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       }
       // Subsídio de Natal: mês definido pela empresa; proporcional ao tempo de serviço no ano
       let christmasSubsidy: number | false = false;
-      if (ov.christmas ?? month === (company?.christmasSubsidyMonth ?? 12)) {
+      if (!settling && (ov.christmas ?? month === (company?.christmasSubsidyMonth ?? 12))) {
         if (paid(e.id, 'SUBNAT')) {
           if (ov.christmas) warnings.push({ employeeId: e.id, message: `${e.name}: subsídio de Natal de ${year} já foi pago — não incluído` });
         } else {
@@ -129,7 +136,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       try {
         r = calculatePayroll({
           period, pack, baseMinor: pay.baseMinor, mealMinor: pay.mealMinor, transportMinor: pay.transportMinor,
-          overtimeHours, absenceDays, otherEarnings, advancesMinor, otherDeductionsMinor, holidaySubsidy, christmasSubsidy,
+          overtimeHours, absenceDays, otherEarnings, advancesMinor, otherDeductionsMinor, noticeDeductionMinor, holidaySubsidy, christmasSubsidy, workedDays,
         });
       } catch (err) {
         if (err instanceof NegativeNetError) throw new DomainError('liquido_negativo', `${e.name}: os descontos (adiantamentos e outros) excedem o ilíquido do mês. Reduza ou reparta pelos meses seguintes.`, 422);
@@ -186,11 +193,12 @@ export async function closePayroll(db: Db, companyId: string, runId: string, act
     const totals: PayrollTotals = { byCostCenter: [], irtMinor: 0, inssEmployeeMinor: 0, inssEmployerMinor: 0, advancesMinor: 0, otherDeductionsMinor: 0, netMinor: 0 };
     for (const { l, cc } of lines) {
       const key = cc ?? 'SEM-CC';
-      const t = byCc.get(key) ?? { costCenter: key, baseMinor: 0, allowancesMinor: 0, overtimeAndBonusMinor: 0, holidayChristmasMinor: 0, employerInssMinor: 0 };
+      const t = byCc.get(key) ?? { costCenter: key, baseMinor: 0, allowancesMinor: 0, overtimeAndBonusMinor: 0, holidayChristmasMinor: 0, employerInssMinor: 0, terminationMinor: 0 };
       for (const item of linesOf(l)) {
         if (item.kind !== 'earning') continue;
-        if (item.code === 'BASE' || item.code === 'FALTAS') t.baseMinor += item.amountMinor;
-        else if (item.code === 'SUBFER' || item.code === 'SUBNAT') t.holidayChristmasMinor += item.amountMinor;
+        if (item.code === 'BASE' || item.code === 'FALTAS' || item.code === 'FERNG' || item.code === 'FERPROP') t.baseMinor += item.amountMinor;
+        else if (item.code === 'SUBFER' || item.code === 'SUBNAT' || item.code === 'SUBFERPROP') t.holidayChristmasMinor += item.amountMinor;
+        else if (item.code === 'COMP' || item.code === 'COMPEXC' || item.code === 'AVISO') t.terminationMinor = (t.terminationMinor ?? 0) + item.amountMinor;
         else if (item.code === 'HE' || item.code.startsWith('BONUS')) t.overtimeAndBonusMinor += item.amountMinor;
         else t.allowancesMinor += item.amountMinor;
       }
@@ -201,6 +209,7 @@ export async function closePayroll(db: Db, companyId: string, runId: string, act
       totals.inssEmployerMinor += l.inssEmployerMinor;
       totals.advancesMinor += amountOf(l, 'ADIANT');
       totals.otherDeductionsMinor! += amountOf(l, 'OUTDESC');
+      totals.noticeIncomeMinor = (totals.noticeIncomeMinor ?? 0) + amountOf(l, 'AVISODESC');
       totals.netMinor += l.netMinor;
     }
     totals.byCostCenter = [...byCc.values()];

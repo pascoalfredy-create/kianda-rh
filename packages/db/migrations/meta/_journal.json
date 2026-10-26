@@ -78,6 +78,13 @@
       "when": 1793055093391,
       "tag": "0010_despesas",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793055872026,
+      "tag": "0011_cessacao",
+      "breakpoints": true
     }
   ]
 }

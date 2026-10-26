@@ -750,6 +750,73 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
   });
 
+  describe('cessação de contrato (entrega 10)', () => {
+    const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
+    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    let leaverId = '';
+    let terminationId = '';
+    const kase = () => ({ employeeId: leaverId, reason: 'objective_dismissal', effectiveDate: '2026-11-15', noticeDate: '2026-11-01' });
+
+    beforeAll(async () => {
+      const e = await post(owner, '/v1/employees', {
+        number: '77', name: 'Saída Teste', jobTitle: 'Motorista', biNumber: '004512399LA041', iban: 'AO06 0040 0000 5521 8890 1015 5',
+        contract: { type: 'indefinite', startDate: '2019-03-01', base: 300000, meal: 30000, transport: 25000 },
+      });
+      expect(e.statusCode).toBe(201);
+      leaverId = e.json().id;
+      expect((await post(owner, '/v1/users', { name: 'Saída', email: `saida+${stamp}@a.ao`, password: pw, role: 'employee', employeeId: leaverId })).statusCode).toBe(201);
+    });
+
+    it('pré-visualiza o fecho de contas: compensação legal, aviso em falta, férias e recibo final estimado', async () => {
+      expect((await post(payrollUser, '/v1/terminations/preview', kase())).statusCode).toBe(403);
+      const p = (await post(owner, '/v1/terminations/preview', kase())).json();
+      expect(p.proposal.seniority).toMatchObject({ years: 7, months: 8 });
+      expect(p.proposal.notice).toMatchObject({ requiredDays: 30, givenDays: 14, missingDays: 16 });
+      const by = (c: string) => p.items.find((i: { code: string }) => i.code === c)?.amountMinor;
+      expect(by('COMP')).toBe(30_000_000 * 5 + 15_000_000 * 2);
+      expect(by('AVISO')).toBe(16_000_000);
+      expect(by('FERNG')).toBe(30_000_000); // 22 dias por gozar = 1 mês
+      expect(p.payslip.lines.find((l: { code: string }) => l.code === 'BASE')).toMatchObject({ name: 'Vencimento base (15 dia(s))', amountMinor: 15_000_000 });
+      expect(p.payslip.netMinor).toBeGreaterThan(by('COMP'));
+    });
+
+    it('rascunho com ajuste manual; confirmação cessa contrato, desactiva o acesso e põe o fecho no processamento', async () => {
+      const p = (await post(owner, '/v1/terminations/preview', kase())).json();
+      const items = [...p.items, { code: 'OUTDESC', label: 'Devolução de telemóvel não efectuada', basis: 'Acordo', kind: 'deduction', amountMinor: 5_000_000, inInss: false, inIrt: false }];
+      const r = await post(owner, '/v1/terminations', { ...kase(), items, note: 'Extinção do posto (reestruturação logística)' });
+      expect(r.statusCode).toBe(201);
+      terminationId = r.json().id;
+      expect((await post(owner, '/v1/terminations', kase())).json().error).toBe('cessacao_existente');
+      const c = await post(owner, `/v1/terminations/${terminationId}/confirm`);
+      expect(c.json().status).toBe('confirmed');
+      expect((await app.inject({ method: 'POST', url: '/v1/auth/login', payload: { email: `saida+${stamp}@a.ao`, password: pw } })).json().error).toBe('acesso_desactivado');
+      expect((await get(owner, `/v1/employees/${leaverId}`)).json().status).toBe('terminated');
+      const vars = (await get(payrollUser, '/v1/payroll-variables?period=2026-11')).json().filter((v: { employeeId: string }) => v.employeeId === leaverId);
+      expect(vars.map((v: { code: string }) => v.code)).toContain('COMP');
+      expect((await app.inject({ method: 'DELETE', url: `/v1/payroll-variables/${vars[0].id}`, headers: as(payrollUser) })).json().error).toBe('gerida_pela_cessacao');
+      await post(payrollUser, '/v1/payroll-runs', { period: '2026-11' });
+      const run = (await get(payrollUser, '/v1/payroll-runs?period=2026-11')).json()[0];
+      const detail = (await get(payrollUser, `/v1/payroll-runs/${run.id}`)).json();
+      const line = detail.lines.find((l: { employeeId: string }) => l.employeeId === leaverId);
+      const codes = line.breakdown.map((b: { code: string }) => b.code);
+      expect(codes).toEqual(expect.arrayContaining(['BASE', 'COMP', 'AVISO', 'FERNG', 'OUTDESC']));
+      expect(line.breakdown.find((b: { code: string }) => b.code === 'BASE').amountMinor).toBe(15_000_000);
+      const dec = (await get(payrollUser, '/v1/payroll-runs?period=2026-12')).json()[0];
+      if (dec) expect((await get(payrollUser, `/v1/payroll-runs/${dec.id}`)).json().lines.some((l: { employeeId: string }) => l.employeeId === leaverId)).toBe(false);
+    });
+
+    it('documentos: dados para fecho de contas e certificado; anular reverte tudo enquanto o mês não fecha', async () => {
+      const d = (await get(financeUser, `/v1/terminations/${terminationId}`)).json();
+      expect(d).toMatchObject({ reasonLabel: 'Despedimento individual por causas objectivas', hireDate: '2019-03-01', employee: { name: 'Saída Teste' } });
+      expect(d.totals.deductionsMinor).toBe(5_000_000);
+      expect((await post(owner, `/v1/terminations/${terminationId}/cancel`, {})).statusCode).toBe(400);
+      expect((await post(owner, `/v1/terminations/${terminationId}/cancel`, { note: 'Acordo de permanência' })).json().status).toBe('cancelled');
+      expect((await get(owner, `/v1/employees/${leaverId}`)).json().status).toBe('active');
+      expect((await app.inject({ method: 'POST', url: '/v1/auth/login', payload: { email: `saida+${stamp}@a.ao`, password: pw } })).statusCode).toBe(200);
+      expect((await get(payrollUser, '/v1/payroll-variables?period=2026-11')).json().some((v: { employeeId: string }) => v.employeeId === leaverId)).toBe(false);
+    });
+  });
+
   it('logout limpa o cookie', async () => {
     const r = await app.inject({ method: 'POST', url: '/v1/auth/logout', headers: as(owner) });
     expect(r.cookies.find((c) => c.name === 'kianda_session')?.value).toBe('');

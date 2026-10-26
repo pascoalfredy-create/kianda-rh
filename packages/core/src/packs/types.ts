@@ -41,6 +41,21 @@ export interface CountryPack {
     paternityPaid: boolean;
     maternityCalendarDays: number;
   };
+  /** Cessação do contrato (LGT): avisos prévios em dias de calendário e compensações. */
+  termination: {
+    resignationNoticeDays: number;
+    objectiveDismissalNoticeDays: number;
+    collectiveDismissalNoticeDays: number;
+    fixedTermNoticeDays: number;
+    /** Falta do aviso de não renovação do contrato a termo: compensação em dias de salário. */
+    fixedTermMissingNoticeDays: number;
+    /** Despedimento por causas objectivas/colectivo: 1 salário base por ano até este número de anos… */
+    compensationFullYears: number;
+    /** …e esta percentagem (bps) do salário base por cada ano além desse limite. */
+    compensationExtraYearBps: number;
+    /** Rescisão pelo trabalhador com justa causa: percentagem (bps) do salário base por ano de antiguidade. */
+    justCauseYearBps: number;
+  };
   deadlines: { inssDayOfNextMonth: number; irtEndOfNextMonth: boolean };
   holidays: readonly Holiday[];
   sources: readonly { title: string; url?: string }[];
