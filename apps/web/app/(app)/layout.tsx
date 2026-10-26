@@ -28,7 +28,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {!staff && me.user.employeeId && <Link href={`/colaboradores/${me.user.employeeId}`}>A minha ficha</Link>}
           <Link href="/assiduidade">Assiduidade</Link>
           <Link href="/ausencias">Ausências e férias</Link>
+          {['owner', 'payroll', 'finance', 'hr_admin'].includes(me.user.role) && <Link href="/processamento">Processamento</Link>}
+          {me.user.employeeId && <Link href="/recibos">Os meus recibos</Link>}
           <Link href="/simulador">Simulador salarial</Link>
+          {(me.user.role === 'owner' || me.user.role === 'hr_admin') && <Link href="/definicoes">Definições</Link>}
         </nav>
         <div className="who">
           <b>{me.user.name}</b>

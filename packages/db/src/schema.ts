@@ -20,6 +20,7 @@ export const payrollStatusEnum = pgEnum('payroll_status', ['draft', 'closed']);
 export const expenseStatusEnum = pgEnum('expense_status', ['pending', 'approved', 'rejected', 'paid']);
 export const documentTypeEnum = pgEnum('document_type', ['bi', 'passport', 'residence_card', 'work_visa', 'driving_licence', 'professional_card', 'other']);
 export const punchSourceEnum = pgEnum('punch_source', ['web', 'manual']);
+export const payrollVariableKindEnum = pgEnum('payroll_variable_kind', ['bonus', 'other_earning', 'advance', 'other_deduction']);
 export const bankLineStatusEnum = pgEnum('bank_line_status', ['pending', 'suggested', 'matched', 'out_of_scope']);
 
 export const companies = pgTable('companies', {
@@ -33,6 +34,10 @@ export const companies = pgTable('companies', {
   bankAccountIban: text('bank_account_iban'),
   /** Jornada diária prevista (minutos), de segunda a sexta. */
   workdayMinutes: integer('workday_minutes').notNull().default(480),
+  /** Mês de pagamento do subsídio de Natal (1–12). */
+  christmasSubsidyMonth: integer('christmas_subsidy_month').notNull().default(12),
+  /** Mês fixo do subsídio de férias (1–12); vazio = no mês em que começam as primeiras férias aprovadas do ano (Dezembro como último recurso). */
+  holidaySubsidyMonth: integer('holiday_subsidy_month'),
   createdAt: createdAt(),
 });
 
@@ -190,8 +195,29 @@ export const payrollRuns = pgTable('payroll_runs', {
   paidSalariesAt: date('paid_salaries_at'),
   paidIrtAt: date('paid_irt_at'),
   paidInssAt: date('paid_inss_at'),
+  /** Decisões manuais de subsídios por colaborador: { [employeeId]: { holiday?: boolean, christmas?: boolean } }. */
+  subsidyOverrides: jsonb('subsidy_overrides').notNull().default({}),
+  /** Avisos do último cálculo (assiduidade por aprovar, subsídios já pagos…). */
+  warnings: jsonb('warnings').notNull().default([]),
   createdAt: createdAt(),
 }, (t) => [uniqueIndex('payroll_runs_company_period').on(t.companyId, t.period)]);
+
+/** Variáveis do mês: prémios, outros abonos, adiantamentos e outros descontos. */
+export const payrollVariables = pgTable('payroll_variables', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  employeeId: text('employee_id').notNull().references(() => employees.id),
+  period: text('period').notNull(),
+  kind: payrollVariableKindEnum('kind').notNull(),
+  label: text('label').notNull(),
+  amountMinor: money('amount_minor'),
+  /** Só para abonos: incide INSS / IRT. */
+  inInss: boolean('in_inss').notNull().default(true),
+  inIrt: boolean('in_irt').notNull().default(true),
+  note: text('note'),
+  createdBy: text('created_by').notNull(),
+  createdAt: createdAt(),
+}, (t) => [index('payroll_variables_company_period').on(t.companyId, t.period)]);
 
 export const payrollLines = pgTable('payroll_lines', {
   id: id(),

@@ -178,3 +178,62 @@ export interface OverviewRow extends MonthTotals {
   approval: Approval | null;
   canApprove: boolean;
 }
+
+export interface PayrollLineRow {
+  id: string;
+  employeeId: string;
+  overtimeHours: string;
+  absenceDays: number;
+  grossMinor: number;
+  inssEmployeeMinor: number;
+  irtMinor: number;
+  netMinor: number;
+  inssEmployerMinor: number;
+  irtBracket: number;
+  breakdown: { code: string; name: string; kind: 'earning' | 'deduction' | 'employer'; amountMinor: number }[];
+  calculationHash: string;
+  employee: { id: string; name: string; number: string; department: string | null; hasIban: boolean };
+}
+export interface PayrollRunDetail {
+  id: string;
+  period: string;
+  status: 'draft' | 'closed';
+  packVersion: string;
+  preparedBy: string | null;
+  preparedByName: string | null;
+  closedByName: string | null;
+  closedAt: string | null;
+  warnings: { employeeId?: string; message: string }[];
+  subsidyOverrides: Record<string, { holiday?: boolean; christmas?: boolean }>;
+  lines: PayrollLineRow[];
+}
+export interface PayrollVariableRow {
+  id: string;
+  employeeId: string;
+  kind: 'bonus' | 'other_earning' | 'advance' | 'other_deduction';
+  label: string;
+  amountMinor: number;
+  inInss: boolean;
+  inIrt: boolean;
+  employee: { id: string; name: string; number: string };
+}
+export interface JournalRow { id: string; reference: string; date: string; description: string; lines: { account: string; description: string; costCenter: string | null; debitMinor: number; creditMinor: number }[] }
+export interface Payslip {
+  id: string;
+  period: string;
+  status: 'draft' | 'closed';
+  packVersion: string;
+  closedAt: string | null;
+  company: { name: string; nif: string; inssNumber: string | null; address: string | null };
+  employee: { name: string; number: string; jobTitle: string; department: string | null; nif: string | null; inssNumber: string | null; iban: string | null; bank: string | null };
+  lines: PayrollLineRow['breakdown'];
+  grossMinor: number;
+  inssEmployeeMinor: number;
+  irtMinor: number;
+  netMinor: number;
+  inssEmployerMinor: number;
+  irtBracket: number;
+  hash: string;
+}
+export const VARIABLE_LABEL: Record<string, string> = { bonus: 'Prémio', other_earning: 'Outro abono', advance: 'Adiantamento', other_deduction: 'Outro desconto' };
+export const PAYROLL_ROLES = ['owner', 'payroll', 'finance', 'hr_admin'];

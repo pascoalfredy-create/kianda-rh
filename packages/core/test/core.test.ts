@@ -128,3 +128,20 @@ describe('IBAN angolano: formatos reais e mensagens', async () => {
     expect(angolanIbanProblem('AO06 0040 0000 5521 8890 1015 5')).toBeNull();
   });
 });
+
+describe('processamento completo: subsídios proporcionais e lançamento com outros descontos', async () => {
+  const { yearServiceFraction, NegativeNetError } = await import('../src/index.js');
+  it('subsídio de Natal proporcional ao tempo de serviço no ano', () => {
+    expect(yearServiceFraction(2026, '2026-07-02')).toBeCloseTo(0.5014, 3);
+    expect(yearServiceFraction(2026, '2023-01-16')).toBe(1);
+    const r = calculatePayroll({ period: '2026-12', baseMinor: kz(400_000), christmasSubsidy: 0.5 });
+    expect(r.lines.find((l) => l.code === 'SUBNAT')).toMatchObject({ amountMinor: kz(100_000), name: 'Subsídio de Natal (proporcional 50%)' });
+  });
+  it('descontos acima do ilíquido dão erro próprio', () => {
+    expect(() => calculatePayroll({ period: '2026-10', baseMinor: kz(200_000), advancesMinor: kz(300_000) })).toThrow(NegativeNetError);
+  });
+  it('lançamento equilibrado com adiantamentos e outros descontos', () => {
+    const e = payrollJournal('2026-10', { byCostCenter: [{ costCenter: 'CC1', baseMinor: 1000, allowancesMinor: 0, overtimeAndBonusMinor: 0, holidayChristmasMinor: 0, employerInssMinor: 80 }], irtMinor: 50, inssEmployeeMinor: 30, inssEmployerMinor: 80, advancesMinor: 100, otherDeductionsMinor: 70, netMinor: 750 });
+    expect(e.lines.find((l) => l.account === '36.9')?.creditMinor).toBe(70);
+  });
+});

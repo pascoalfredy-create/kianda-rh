@@ -23,8 +23,10 @@ export interface PayrollInput {
   absenceDays?: number;
   advancesMinor?: Minor;
   otherDeductionsMinor?: Minor;
-  holidaySubsidy?: boolean;
-  christmasSubsidy?: boolean;
+  /** Subsídio de férias: true (por inteiro) ou fracção 0–1 (proporcional, ex.: ano de admissão). */
+  holidaySubsidy?: boolean | number;
+  /** Subsídio de Natal: true (por inteiro) ou fracção 0–1 (proporcional). */
+  christmasSubsidy?: boolean | number;
   /** Permite injectar um pacote (testes ou regras próprias da empresa). */
   pack?: CountryPack;
 }
@@ -82,6 +84,23 @@ function periodYear(period: string): number {
   return Number(m[1]);
 }
 
+export class NegativeNetError extends RangeError {
+  constructor(public readonly netMinor: Minor) { super('Os descontos excedem a remuneração ilíquida'); this.name = 'NegativeNetError'; }
+}
+
+/**
+ * Fracção pro rata do ano civil em que o colaborador esteve ao serviço (ano de admissão/cessação).
+ * Usada no subsídio de Natal proporcional.
+ */
+export function yearServiceFraction(year: number, from: string, until?: string | null): number {
+  const start = from > `${year}-01-01` ? from : `${year}-01-01`;
+  const end = until && until < `${year}-12-31` ? until : `${year}-12-31`;
+  if (end < start) return 0;
+  const days = (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000 + 1;
+  const total = (Date.parse(`${year}-12-31T00:00:00Z`) - Date.parse(`${year}-01-01T00:00:00Z`)) / 86_400_000 + 1;
+  return Math.round((days / total) * 10_000) / 10_000;
+}
+
 /** Processamento salarial mensal de um trabalhador (regime Angola, Grupo A). */
 export function calculatePayroll(input: PayrollInput): PayrollResult {
   const pack = input.pack ?? getPack('AO', periodYear(input.period));
@@ -106,8 +125,15 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   if (transport) { lines.push({ code: 'TRANSP', name: 'Subsídio de transporte', kind: 'earning', amountMinor: transport }); irtBase += Math.max(0, transport - ex); }
   for (const o of input.otherEarnings ?? []) earn(o.code, o.name, assertMinor(o.amountMinor, o.name), o.inInss ?? true, o.inIrt ?? true);
   if (input.overtimeHours) earn('HE', `Horas extraordinárias (${input.overtimeHours} h)`, overtimeMinor(base, input.overtimeHours, pack), true, true);
-  if (input.holidaySubsidy) earn('SUBFER', 'Subsídio de férias', applyBps(base, pack.labour.holidaySubsidyBps), pack.inss.holidaySubsidyInBase, true);
-  if (input.christmasSubsidy) earn('SUBNAT', 'Subsídio de Natal', applyBps(base, pack.labour.christmasSubsidyBps), pack.inss.christmasSubsidyInBase, true);
+  const subsidy = (flag: boolean | number | undefined, bps: number) => {
+    const f = flag === true ? 1 : typeof flag === 'number' ? Math.min(1, Math.max(0, flag)) : 0;
+    return { f, amount: f ? Math.round(applyBps(base, bps) * f) : 0 };
+  };
+  const pct = (f: number) => (f < 1 ? ` (proporcional ${String(Math.round(f * 1000) / 10).replace('.', ',')}%)` : '');
+  const sf = subsidy(input.holidaySubsidy, pack.labour.holidaySubsidyBps);
+  if (sf.amount) earn('SUBFER', `Subsídio de férias${pct(sf.f)}`, sf.amount, pack.inss.holidaySubsidyInBase, true);
+  const sn = subsidy(input.christmasSubsidy, pack.labour.christmasSubsidyBps);
+  if (sn.amount) earn('SUBNAT', `Subsídio de Natal${pct(sn.f)}`, sn.amount, pack.inss.christmasSubsidyInBase, true);
   if (input.absenceDays) {
     const v = prorate(base, input.absenceDays, pack.labour.dailyRateDivisor);
     lines.push({ code: 'FALTAS', name: `Faltas (${input.absenceDays} dia(s))`, kind: 'earning', amountMinor: -v });
@@ -129,7 +155,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   lines.push({ code: 'INSS_EMP', name: `INSS entidade empregadora (${pack.inss.employerBps / 100}%)`, kind: 'employer', amountMinor: inssEmployer });
 
   const net = gross - inssEmployee - irt.amountMinor - adv - other;
-  if (net < 0) throw new RangeError('Os descontos excedem a remuneração ilíquida');
+  if (net < 0) throw new NegativeNetError(net);
   return {
     period: input.period,
     packVersion: pack.version,

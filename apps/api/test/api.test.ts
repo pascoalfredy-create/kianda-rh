@@ -369,6 +369,86 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
   });
 
+  describe('processamento completo (entrega 5)', () => {
+    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
+    const lineOf = async (runId: string) => (await get(payrollUser, `/v1/payroll-runs/${runId}`)).json().lines.find((l: { employeeId: string }) => l.employeeId === empId);
+    const codes = (l: { breakdown: { code: string }[] }) => l.breakdown.map((b) => b.code);
+    let decRun = '';
+    let bigAdvance = '';
+
+    it('variáveis do mês: só o processamento as lança', async () => {
+      expect((await post(employeeUser, '/v1/payroll-variables', { employeeId: empId, period: '2026-12', kind: 'bonus', label: 'Prémio', amount: 1 })).statusCode).toBe(403);
+      for (const [kind, label, amount] of [['bonus', 'Prémio de desempenho', 50000], ['advance', 'Adiantamento de 10/12', 30000], ['other_deduction', 'Quota sindical', 10000]] as const) {
+        expect((await post(payrollUser, '/v1/payroll-variables', { employeeId: empId, period: '2026-12', kind, label, amount })).statusCode).toBe(201);
+      }
+      bigAdvance = (await post(payrollUser, '/v1/payroll-variables', { employeeId: empId, period: '2026-12', kind: 'advance', label: 'Erro', amount: 5_000_000 })).json().id;
+    });
+
+    it('descontos acima do ilíquido são recusados com o nome do colaborador', async () => {
+      const r = await post(payrollUser, '/v1/payroll-runs', { period: '2026-12' });
+      expect(r.statusCode).toBe(422);
+      expect(r.json().message).toContain('Joana Teste');
+      expect((await app.inject({ method: 'DELETE', url: `/v1/payroll-variables/${bigAdvance}`, headers: as(payrollUser) })).statusCode).toBe(204);
+    });
+
+    it('Dezembro: Natal proporcional ao ano de admissão, subsídio de férias por pagar, variáveis no recibo', async () => {
+      const r = await post(payrollUser, '/v1/payroll-runs', { period: '2026-12' });
+      expect(r.statusCode).toBe(201);
+      decRun = r.json().run.id;
+      const l = await lineOf(decRun);
+      expect(codes(l)).toEqual(expect.arrayContaining(['BASE', 'BONUS', 'SUBFER', 'SUBNAT', 'ADIANT', 'OUTDESC']));
+      const natal = l.breakdown.find((b: { code: string }) => b.code === 'SUBNAT');
+      expect(natal.name).toMatch(/proporcional 98[.,]9/);
+    });
+
+    it('decisão manual: excluir o subsídio de férias e voltar à regra automática', async () => {
+      const off = await post(payrollUser, `/v1/payroll-runs/${decRun}/subsidies`, { employeeId: empId, holiday: false });
+      expect(off.statusCode).toBe(200);
+      expect(codes(await lineOf(decRun))).not.toContain('SUBFER');
+      await post(payrollUser, `/v1/payroll-runs/${decRun}/subsidies`, { employeeId: empId, holiday: null });
+      expect(codes(await lineOf(decRun))).toContain('SUBFER');
+    });
+
+    it('fecho: lançamento equilibrado com adiantamentos (36.3) e outros descontos (36.9)', async () => {
+      const close = await post(financeUser, `/v1/payroll-runs/${decRun}/close`);
+      expect(close.statusCode).toBe(200);
+      const je = (await get(financeUser, '/v1/journal')).json().find((j: { reference: string }) => j.reference === 'PS-202612');
+      const d = je.lines.reduce((s: number, x: { debitMinor: number }) => s + x.debitMinor, 0);
+      const cr = je.lines.reduce((s: number, x: { creditMinor: number }) => s + x.creditMinor, 0);
+      expect(d).toBe(cr);
+      expect(je.lines.find((x: { account: string }) => x.account === '36.9').creditMinor).toBe(1_000_000);
+      expect(je.lines.find((x: { account: string }) => x.account === '36.3').creditMinor).toBe(3_000_000);
+      expect((await post(payrollUser, '/v1/payroll-variables', { employeeId: empId, period: '2026-12', kind: 'bonus', label: 'Tarde', amount: 1 })).json().error).toBe('processamento_fechado');
+    });
+
+    it('nunca paga o mesmo subsídio duas vezes no ano', async () => {
+      const nov = (await get(payrollUser, '/v1/payroll-runs?period=2026-11')).json()[0];
+      const r = await post(payrollUser, `/v1/payroll-runs/${nov.id}/subsidies`, { employeeId: empId, christmas: true });
+      expect(r.json().warnings.map((w: { message: string }) => w.message)).toEqual(expect.arrayContaining([expect.stringContaining('subsídio de Natal de 2026 já foi pago')]));
+      expect(codes(await lineOf(nov.id))).not.toContain('SUBNAT');
+    });
+
+    it('recibos: o colaborador vê só os seus e só de processamentos fechados', async () => {
+      const list = (await get(employeeUser, '/v1/payslips')).json();
+      expect(list.map((p: { period: string }) => p.period)).toEqual(expect.arrayContaining(['2026-12', '2026-10']));
+      expect(list.map((p: { period: string }) => p.period)).not.toContain('2026-11');
+      const slip = (await get(employeeUser, `/v1/payslips/${list[0].id}`)).json();
+      expect(slip).toMatchObject({ period: '2026-12', employee: { name: 'Joana Teste' }, company: { name: 'Empresa A' } });
+      expect(slip.hash).toMatch(/^[0-9a-f]{64}$/);
+      const run = (await get(payrollUser, `/v1/payroll-runs/${decRun}`)).json();
+      const other = run.lines.find((l: { employeeId: string }) => l.employeeId !== empId).id;
+      expect((await get(employeeUser, `/v1/payslips/${other}`)).statusCode).toBe(404);
+      expect((await get(ownerB, `/v1/payslips/${list[0].id}`)).statusCode).toBe(404);
+    });
+
+    it('definições: mês do subsídio de Natal configurável pelo RH', async () => {
+      expect((await app.inject({ method: 'PATCH', url: '/v1/company/settings', headers: as(payrollUser), payload: { christmasSubsidyMonth: 11 } })).statusCode).toBe(403);
+      const r = await app.inject({ method: 'PATCH', url: '/v1/company/settings', headers: as(owner), payload: { christmasSubsidyMonth: 11, holidaySubsidyMonth: 6 } });
+      expect(r.json()).toMatchObject({ christmasSubsidyMonth: 11, holidaySubsidyMonth: 6 });
+    });
+  });
+
   it('logout limpa o cookie', async () => {
     const r = await app.inject({ method: 'POST', url: '/v1/auth/logout', headers: as(owner) });
     expect(r.cookies.find((c) => c.name === 'kianda_session')?.value).toBe('');

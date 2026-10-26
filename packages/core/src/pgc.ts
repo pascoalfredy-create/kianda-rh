@@ -15,6 +15,8 @@ export interface PgcAccountMap {
   socialSecurityPayable: string;
   netPayable: string;
   advances: string;
+  /** Outros descontos retidos (empréstimos ao trabalhador, quotizações, seguros…). */
+  otherDeductions: string;
   bank: string;
 }
 
@@ -28,6 +30,7 @@ export const DEFAULT_PGC_ACCOUNTS: PgcAccountMap = {
   socialSecurityPayable: '34.9.1',
   netPayable: '36.1.2',
   advances: '36.3',
+  otherDeductions: '36.9',
   bank: '43.1',
 };
 
@@ -49,6 +52,7 @@ export interface PayrollTotals {
   inssEmployeeMinor: Minor;
   inssEmployerMinor: Minor;
   advancesMinor: Minor;
+  otherDeductionsMinor?: Minor;
   netMinor: Minor;
 }
 
@@ -76,6 +80,7 @@ export function payrollJournal(period: string, t: PayrollTotals, accounts: PgcAc
   cr(accounts.irtPayable, `IRT retido ${period}`, t.irtMinor);
   cr(accounts.socialSecurityPayable, `INSS ${period}`, t.inssEmployeeMinor + t.inssEmployerMinor);
   cr(accounts.advances, `Regularização de adiantamentos ${period}`, t.advancesMinor);
+  cr(accounts.otherDeductions, `Outros descontos retidos ${period}`, t.otherDeductionsMinor ?? 0);
   cr(accounts.netPayable, `Remunerações a pagar ${period}`, t.netMinor);
   return assertBalanced({ date: `${period}-28`, journal: 'Pessoal', reference: `PS-${period.replace('-', '')}`, description: `Processamento salarial ${period}`, lines });
 }
