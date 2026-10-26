@@ -26,6 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {staff && <Link href="/colaboradores">Colaboradores</Link>}
           {staff && <Link href="/organograma">Organograma</Link>}
           {!staff && me.user.employeeId && <Link href={`/colaboradores/${me.user.employeeId}`}>A minha ficha</Link>}
+          {!staff && me.user.employeeId && <Link href="/portal/dados">Os meus dados</Link>}
           <Link href="/assiduidade">Assiduidade</Link>
           <Link href="/ausencias">Ausências e férias</Link>
           {['owner', 'payroll', 'finance', 'hr_admin'].includes(me.user.role) && <Link href="/processamento">Processamento</Link>}
@@ -39,6 +40,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {['owner', 'hr_admin', 'payroll', 'finance'].includes(me.user.role) && <Link href="/cessacoes">Cessações</Link>}
           {me.user.employeeId && <Link href="/recibos">Os meus recibos</Link>}
           <Link href="/simulador">Simulador salarial</Link>
+          {(me.user.role === 'owner' || me.user.role === 'hr_admin') && <Link href="/pedidos">Pedidos do portal</Link>}
           {(me.user.role === 'owner' || me.user.role === 'hr_admin') && <Link href="/definicoes">Definições</Link>}
         </nav>
         <div className="who">
@@ -53,8 +55,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <Link href="/">Início</Link>
         <Link href="/assiduidade">Ponto</Link>
         <Link href="/ausencias">Ausências</Link>
-        <Link href="/despesas">Despesas</Link>
-        {staff ? <Link href="/colaboradores">Equipa</Link> : me.user.employeeId ? <Link href={`/colaboradores/${me.user.employeeId}`}>Ficha</Link> : null}
+        {staff ? <Link href="/despesas">Despesas</Link> : <Link href="/recibos">Recibos</Link>}
+        {staff ? <Link href="/colaboradores">Equipa</Link> : me.user.employeeId ? <Link href="/portal/dados">Dados</Link> : null}
         <LogoutButton label="Sair" />
       </nav>
     </div>

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { ClockCard } from '@/components/clock-card';
 import { api, currentUser } from '@/lib/api';
 import type { AbsenceRow, BalanceRow } from '@/lib/types';
+import { PortalHome } from './portal-home';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,6 +11,7 @@ const pt = (d: string) => d.split('-').reverse().join('/');
 
 export default async function Home() {
   const me = (await currentUser())!;
+  if (me.user.role === 'employee' && me.user.employeeId) return <PortalHome name={me.user.name} employeeId={me.user.employeeId} />;
   const today = new Date().toISOString().slice(0, 10);
   const year = Number(today.slice(0, 4));
   const period = today.slice(0, 7);
@@ -34,6 +36,8 @@ export default async function Home() {
   const proofLimit = new Date(Date.now() - 5 * 86_400_000).toISOString().slice(0, 10);
   const noProof = ['owner', 'finance'].includes(me.user.role) ? obligations.filter((o) => o.paidAt && o.reconciled === false && o.paidAt < proofLimit) : [];
   const staff = me.user.role !== 'employee';
+  const inbox = ['owner', 'hr_admin'].includes(me.user.role) ? await api<{ documents: unknown[]; profiles: unknown[] }>('/v1/portal/inbox').catch(() => ({ documents: [], profiles: [] })) : { documents: [], profiles: [] };
+  const portalPending = inbox.documents.length + inbox.profiles.length;
 
   return (
     <>
@@ -58,6 +62,11 @@ export default async function Home() {
           <Link href="/obrigacoes" className="card kpi" style={{ borderColor: late.length ? '#f1c9c1' : '#f3d9a6' }}>
             <div className="l">Obrigações {late.length ? 'em atraso' : 'a vencer'}</div>
             <div className="v" style={{ color: late.length ? 'var(--red)' : 'var(--amber)' }}>{late.length || soon.length}</div>
+          </Link>
+        )}
+        {portalPending > 0 && (
+          <Link href="/pedidos" className="card kpi" style={{ borderColor: '#f3d9a6' }}>
+            <div className="l">Pedidos do portal por tratar</div><div className="v" style={{ color: 'var(--amber)' }}>{portalPending}</div>
           </Link>
         )}
         {expenseApprovals.length > 0 && (

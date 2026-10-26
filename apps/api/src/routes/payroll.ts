@@ -162,7 +162,7 @@ export function payrollRoutes() {
 
   app.get('/v1/company/settings', async (c) => {
     const [co] = await getDb().select().from(companies).where(eq(companies.id, c.get('actor').companyId));
-    return c.json({ name: co!.name, nif: co!.nif, inssNumber: co!.inssNumber, address: co!.address, workdayMinutes: co!.workdayMinutes, christmasSubsidyMonth: co!.christmasSubsidyMonth, holidaySubsidyMonth: co!.holidaySubsidyMonth, perDiemNationalMinor: co!.perDiemNationalMinor, perDiemInternationalMinor: co!.perDiemInternationalMinor });
+    return c.json({ name: co!.name, nif: co!.nif, inssNumber: co!.inssNumber, address: co!.address, workdayMinutes: co!.workdayMinutes, christmasSubsidyMonth: co!.christmasSubsidyMonth, holidaySubsidyMonth: co!.holidaySubsidyMonth, perDiemNationalMinor: co!.perDiemNationalMinor, perDiemInternationalMinor: co!.perDiemInternationalMinor, autoIssueDeclarations: co!.autoIssueDeclarations });
   });
 
   app.patch('/v1/company/settings', requireRole('hr_admin'), async (c) => {
@@ -175,6 +175,7 @@ export function payrollRoutes() {
       holidaySubsidyMonth: z.number().int().min(1).max(12).nullable().optional(),
       perDiemNationalMinor: z.number().int().positive().max(1e11).nullable().optional(),
       perDiemInternationalMinor: z.number().int().positive().max(1e11).nullable().optional(),
+      autoIssueDeclarations: z.boolean().optional(),
     }).parse(await body(c));
     const db = getDb();
     const [before] = await db.select().from(companies).where(eq(companies.id, actor.companyId));

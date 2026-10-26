@@ -42,6 +42,8 @@ export const companies = pgTable('companies', {
   /** Diárias de ajudas de custo fixadas pela empresa (vazio = sem limite definido). */
   perDiemNationalMinor: bigint('per_diem_national_minor', { mode: 'number' }),
   perDiemInternationalMinor: bigint('per_diem_international_minor', { mode: 'number' }),
+  /** Portal: declarações pedidas pelo colaborador emitidas automaticamente (sem passar pelo RH). */
+  autoIssueDeclarations: boolean('auto_issue_declarations').notNull().default(false),
   createdAt: createdAt(),
 });
 
@@ -268,6 +270,40 @@ export const payrollLines = pgTable('payroll_lines', {
   breakdown: jsonb('breakdown').notNull().default([]),
   calculationHash: text('calculation_hash'),
 }, (t) => [uniqueIndex('payroll_lines_run_employee').on(t.runId, t.employeeId)]);
+
+/** Portal do colaborador: pedidos de declarações. */
+export const documentRequests = pgTable('document_requests', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  employeeId: text('employee_id').notNull().references(() => employees.id),
+  templateKey: text('template_key').notNull(),
+  inputs: jsonb('inputs').notNull().default({}),
+  /** pending | issued | rejected | cancelled */
+  status: text('status').notNull().default('pending'),
+  documentId: text('document_id'),
+  decidedBy: text('decided_by'),
+  decidedAt: timestamp('decided_at', { withTimezone: true }),
+  decisionNote: text('decision_note'),
+  createdBy: text('created_by').notNull(),
+  createdAt: createdAt(),
+}, (t) => [index('document_requests_company_status').on(t.companyId, t.status), index('document_requests_employee').on(t.employeeId)]);
+
+/** Portal do colaborador: pedidos de alteração de dados pessoais (aprovados pelo RH; o IBAN nunca muda sem aprovação). */
+export const profileChangeRequests = pgTable('profile_change_requests', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  employeeId: text('employee_id').notNull().references(() => employees.id),
+  changes: jsonb('changes').notNull(),
+  previous: jsonb('previous').notNull(),
+  note: text('note'),
+  /** pending | approved | rejected | cancelled */
+  status: text('status').notNull().default('pending'),
+  decidedBy: text('decided_by'),
+  decidedAt: timestamp('decided_at', { withTimezone: true }),
+  decisionNote: text('decision_note'),
+  createdBy: text('created_by').notNull(),
+  createdAt: createdAt(),
+}, (t) => [index('profile_change_requests_company_status').on(t.companyId, t.status), index('profile_change_requests_employee').on(t.employeeId)]);
 
 /** Vagas de recrutamento. */
 export const jobOpenings = pgTable('job_openings', {

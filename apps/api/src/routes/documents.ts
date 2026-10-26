@@ -87,6 +87,30 @@ function verificationCode() {
   return [...bytes].map((b) => alphabet[b % alphabet.length]).join('').replace(/(.{4})(?!$)/g, '$1-');
 }
 
+/** Emite um documento (texto congelado, número anual, código de verificação). Usado pelo RH e pelos pedidos do portal. */
+export async function issueDocument(db: Db, actor: { companyId: string; actorId: string }, employeeId: string, templateKey: string, inputs: Record<string, string>) {
+  const r = await compose(db, actor.companyId, employeeId, templateKey, inputs);
+  if (r.missing.length) throw new DomainError('campos_em_falta', `Complete antes de emitir: ${r.missingLabels.join(', ')}`, 400);
+  const year = luandaDate(new Date()).slice(0, 4);
+  for (let attempt = 0; ; attempt++) {
+    const [n] = await db.select({ n: sql<number>`count(*)::int` }).from(issuedDocuments).where(and(eq(issuedDocuments.companyId, actor.companyId), like(issuedDocuments.number, `DOC-${year}-%`)));
+    try {
+      const [doc] = await db.insert(issuedDocuments).values({
+        companyId: actor.companyId, employeeId, number: `DOC-${year}-${String((n?.n ?? 0) + 1).padStart(4, '0')}`,
+        templateKey: r.template.key, templateVersion: r.template.version, title: r.template.title, body: r.text, inputs,
+        verificationCode: verificationCode(), issuedBy: actor.actorId,
+      }).returning();
+      await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'issue', entity: 'issued_document', entityId: doc!.id, after: { number: doc!.number, template: r.template.key, employeeId } });
+      return doc!;
+    } catch (err) {
+      if (attempt < 2 && String((err as { cause?: { code?: string } }).cause?.code ?? (err as { code?: string }).code) === '23505') continue;
+      throw err;
+    }
+  }
+}
+
+export { compose as composeDocument };
+
 const canSeeDoc = (actor: Actor, employeeId: string) => STAFF.includes(actor.role) || actor.employeeId === employeeId;
 
 export function documentRoutes() {
@@ -137,25 +161,7 @@ export function documentRoutes() {
   app.post('/v1/documents', requireRole('hr_admin'), async (c) => {
     const actor = c.get('actor');
     const b = z.object({ employeeId: z.string(), templateKey: z.string(), inputs: inputsBody }).parse(await body(c));
-    const db = getDb();
-    const r = await compose(db, actor.companyId, b.employeeId, b.templateKey, b.inputs);
-    if (r.missing.length) throw new DomainError('campos_em_falta', `Complete antes de emitir: ${r.missingLabels.join(', ')}`, 400);
-    const year = luandaDate(new Date()).slice(0, 4);
-    for (let attempt = 0; ; attempt++) {
-      const [n] = await db.select({ n: sql<number>`count(*)::int` }).from(issuedDocuments).where(and(eq(issuedDocuments.companyId, actor.companyId), like(issuedDocuments.number, `DOC-${year}-%`)));
-      try {
-        const [doc] = await db.insert(issuedDocuments).values({
-          companyId: actor.companyId, employeeId: b.employeeId, number: `DOC-${year}-${String((n?.n ?? 0) + 1).padStart(4, '0')}`,
-          templateKey: r.template.key, templateVersion: r.template.version, title: r.template.title, body: r.text, inputs: b.inputs,
-          verificationCode: verificationCode(), issuedBy: actor.actorId,
-        }).returning();
-        await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'issue', entity: 'issued_document', entityId: doc!.id, after: { number: doc!.number, template: r.template.key, employeeId: b.employeeId } });
-        return c.json(doc, 201);
-      } catch (err) {
-        if (attempt < 2 && String((err as { cause?: { code?: string } }).cause?.code ?? (err as { code?: string }).code) === '23505') continue;
-        throw err;
-      }
-    }
+    return c.json(await issueDocument(getDb(), actor, b.employeeId, b.templateKey, b.inputs), 201);
   });
 
   app.get('/v1/documents', async (c) => {

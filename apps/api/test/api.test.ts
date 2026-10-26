@@ -948,6 +948,52 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
   });
 
+  describe('portal do colaborador (entrega 13)', () => {
+    const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
+    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+
+    it('resumo do portal: último recibo, despesas, documentos e declarações disponíveis', async () => {
+      const p = (await get(employeeUser, '/v1/portal')).json();
+      expect(p.lastPayslip).toMatchObject({ period: expect.stringMatching(/^2026-/) });
+      expect(p.selfService.templates.map((t: { key: string }) => t.key)).toEqual(['declaracao_servico', 'declaracao_rendimentos']);
+      expect(p.selfService.autoIssue).toBe(false);
+    });
+
+    it('pedido de declaração: o RH emite ou recusa; com emissão automática sai logo', async () => {
+      expect((await post(employeeUser, '/v1/document-requests', { templateKey: 'contrato_indeterminado', inputs: {} })).statusCode).toBe(400);
+      expect((await post(employeeUser, '/v1/document-requests', { templateKey: 'declaracao_servico', inputs: {} })).json().error).toBe('campos_em_falta');
+      const r = await post(employeeUser, '/v1/document-requests', { templateKey: 'declaracao_servico', inputs: { 'pedido.finalidade': 'visto de turismo' } });
+      expect(r.json().status).toBe('pending');
+      const inbox = (await get(owner, '/v1/portal/inbox')).json();
+      expect(inbox.documents.map((d: { id: string }) => d.id)).toContain(r.json().id);
+      expect((await post(employeeUser, `/v1/document-requests/${r.json().id}/issue`)).statusCode).toBe(403);
+      const issued = await post(owner, `/v1/document-requests/${r.json().id}/issue`);
+      expect(issued.json()).toMatchObject({ status: 'issued', documentNumber: expect.stringMatching(/^DOC-/) });
+      expect((await get(employeeUser, `/v1/documents/${issued.json().documentId}`)).json().body).toContain('visto de turismo');
+      await app.inject({ method: 'PATCH', url: '/v1/company/settings', headers: as(owner), payload: { autoIssueDeclarations: true } });
+      const auto = await post(employeeUser, '/v1/document-requests', { templateKey: 'declaracao_rendimentos', inputs: { 'pedido.finalidade': 'crédito automóvel' } });
+      expect(auto.json()).toMatchObject({ status: 'issued', decisionNote: 'Emitida automaticamente' });
+      await app.inject({ method: 'PATCH', url: '/v1/company/settings', headers: as(owner), payload: { autoIssueDeclarations: false } });
+    });
+
+    it('alteração de dados pessoais: IBAN validado, sem alterações recusado, RH aprova e a ficha muda', async () => {
+      expect((await post(employeeUser, '/v1/profile-requests', { changes: { iban: 'AO06 1234' } })).json().error).toBe('iban_invalido');
+      const ficha = (await get(employeeUser, `/v1/employees/${empId}`)).json();
+      expect((await post(employeeUser, '/v1/profile-requests', { changes: { iban: ficha.iban } })).json().error).toBe('sem_alteracoes');
+      const r = await post(employeeUser, '/v1/profile-requests', { changes: { address: 'Rua Direita do Kinaxixi, 12, Luanda', phone: '923456789', iban: 'AO06.0040.0000.5521.8890.1025.2' }, note: 'Mudei de casa e de conta' });
+      expect(r.statusCode).toBe(201);
+      expect(r.json().changes.iban).toBe('AO06004000005521889010252');
+      expect(r.json().previous.address ?? null).toBe(ficha.address ?? null);
+      expect((await post(employeeUser, `/v1/profile-requests/${r.json().id}/approve`)).statusCode).toBe(403);
+      expect((await post(owner, `/v1/profile-requests/${r.json().id}/approve`)).json().status).toBe('approved');
+      const after = (await get(employeeUser, `/v1/employees/${empId}`)).json();
+      expect(after).toMatchObject({ address: 'Rua Direita do Kinaxixi, 12, Luanda', phone: '923456789', iban: 'AO06004000005521889010252' });
+      const r2 = await post(employeeUser, '/v1/profile-requests', { changes: { phone: '912000000' } });
+      expect((await post(owner, `/v1/profile-requests/${r2.json().id}/reject`, { note: 'Número inválido' })).json().status).toBe('rejected');
+      expect((await get(employeeUser, '/v1/profile-requests')).json().requests.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
   it('logout limpa o cookie', async () => {
     const r = await app.inject({ method: 'POST', url: '/v1/auth/logout', headers: as(owner) });
     expect(r.cookies.find((c) => c.name === 'kianda_session')?.value).toBe('');

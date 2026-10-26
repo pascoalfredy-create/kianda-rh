@@ -6,7 +6,7 @@ import { useMutation } from '@/lib/client';
 const kzField = (v: FormDataEntryValue | null) => { const t = String(v ?? '').trim().replace(/\s/g, '').replace(/\./g, '').replace(',', '.'); return t ? Math.round(Number(t) * 100) : null; };
 const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
-export function SettingsForm({ s }: { s: { inssNumber: string | null; address: string | null; workdayMinutes: number; christmasSubsidyMonth: number; holidaySubsidyMonth: number | null; perDiemNationalMinor: number | null; perDiemInternationalMinor: number | null } }) {
+export function SettingsForm({ s }: { s: { inssNumber: string | null; address: string | null; workdayMinutes: number; christmasSubsidyMonth: number; holidaySubsidyMonth: number | null; perDiemNationalMinor: number | null; perDiemInternationalMinor: number | null; autoIssueDeclarations: boolean } }) {
   const { busy, error, run } = useMutation();
   const [ok, setOk] = useState('');
   return (
@@ -25,6 +25,7 @@ export function SettingsForm({ s }: { s: { inssNumber: string | null; address: s
           holidaySubsidyMonth: hol === 'ferias' ? null : Number(hol),
           perDiemNationalMinor: kzField(f.get('perDiemNational')),
           perDiemInternationalMinor: kzField(f.get('perDiemInternational')),
+          autoIssueDeclarations: f.get('autoIssueDeclarations') === 'on',
         });
         if (done) setOk('Definições gravadas.');
       }}
@@ -48,6 +49,8 @@ export function SettingsForm({ s }: { s: { inssNumber: string | null; address: s
       <label className="span2">Diária — território nacional (Kz)<input name="perDiemNational" inputMode="decimal" placeholder="Sem limite" defaultValue={s.perDiemNationalMinor ? String(s.perDiemNationalMinor / 100).replace('.', ',') : ''} /></label>
       <label className="span2">Diária — estrangeiro (Kz)<input name="perDiemInternational" inputMode="decimal" placeholder="Sem limite" defaultValue={s.perDiemInternationalMinor ? String(s.perDiemInternationalMinor / 100).replace('.', ',') : ''} /></label>
       <p className="muted wide">Valor máximo por dia nas notas de despesas. As ajudas de custo dentro da diária ficam fora do IRT e do INSS (limite legal assinalado para validação).</p>
+      <h3>Portal do colaborador</h3>
+      <label className="wide" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><input type="checkbox" name="autoIssueDeclarations" defaultChecked={s.autoIssueDeclarations} /> Emitir automaticamente as declarações de serviço e de rendimentos pedidas no portal (sem passar pelo RH)</label>
       <div className="form-actions">
         {error ? <span className="err">{error}</span> : ok ? <span className="ok">{ok}</span> : null}
         <button className="btn" disabled={busy}>Gravar</button>
