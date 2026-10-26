@@ -11,6 +11,8 @@ import { bankRoutes } from './routes/bank.js';
 import { expenseRoutes } from './routes/expenses.js';
 import { terminationRoutes } from './routes/terminations.js';
 import { documentRoutes, documentVerificationRoutes } from './routes/documents.js';
+import { careersRoutes, recruitmentRoutes } from './routes/recruitment.js';
+import { performanceRoutes } from './routes/performance.js';
 import { authRoutes } from './routes/auth.js';
 import { employeeRoutes } from './routes/employees.js';
 import { payrollRoutes } from './routes/payroll.js';
@@ -58,6 +60,9 @@ export function buildApp(opts: { logger?: boolean; rateLimit?: boolean } = {}) {
   app.route('/', terminationRoutes());
   app.route('/', documentRoutes());
   app.route('/', documentVerificationRoutes());
+  app.route('/', recruitmentRoutes());
+  app.route('/', careersRoutes());
+  app.route('/', performanceRoutes());
   return app;
 }
 

@@ -269,6 +269,112 @@ export const payrollLines = pgTable('payroll_lines', {
   calculationHash: text('calculation_hash'),
 }, (t) => [uniqueIndex('payroll_lines_run_employee').on(t.runId, t.employeeId)]);
 
+/** Vagas de recrutamento. */
+export const jobOpenings = pgTable('job_openings', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  title: text('title').notNull(),
+  departmentId: text('department_id'),
+  /** Chefia responsável pela contratação (ficha do colaborador). */
+  hiringManagerId: text('hiring_manager_id'),
+  location: text('location'),
+  contractType: text('contract_type').notNull().default('indefinite'),
+  positions: integer('positions').notNull().default(1),
+  salaryMinMinor: bigint('salary_min_minor', { mode: 'number' }),
+  salaryMaxMinor: bigint('salary_max_minor', { mode: 'number' }),
+  description: text('description'),
+  requirements: text('requirements'),
+  /** draft | open | on_hold | closed */
+  status: text('status').notNull().default('draft'),
+  /** Publicada na página de carreiras. */
+  isPublic: boolean('is_public').notNull().default(false),
+  closesOn: date('closes_on'),
+  createdBy: text('created_by').notNull(),
+  createdAt: createdAt(),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+}, (t) => [index('job_openings_company_status').on(t.companyId, t.status)]);
+
+export const candidates = pgTable('candidates', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  openingId: text('opening_id').notNull().references(() => jobOpenings.id),
+  name: text('name').notNull(),
+  email: text('email'),
+  phone: text('phone'),
+  source: text('source').notNull().default('other'),
+  stage: text('stage').notNull().default('applied'),
+  rating: integer('rating'),
+  cvUrl: text('cv_url'),
+  coverLetter: text('cover_letter'),
+  expectedSalaryMinor: bigint('expected_salary_minor', { mode: 'number' }),
+  availableFrom: date('available_from'),
+  rejectionReason: text('rejection_reason'),
+  employeeId: text('employee_id'),
+  hiredAt: timestamp('hired_at', { withTimezone: true }),
+  consentAt: timestamp('consent_at', { withTimezone: true }),
+  createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('candidates_opening_stage').on(t.openingId, t.stage), index('candidates_company').on(t.companyId)]);
+
+/** Histórico do candidato: mudanças de etapa, comentários e entrevistas. */
+export const candidateEvents = pgTable('candidate_events', {
+  id: id(),
+  candidateId: text('candidate_id').notNull().references(() => candidates.id, { onDelete: 'cascade' }),
+  /** stage | comment | interview */
+  kind: text('kind').notNull(),
+  fromStage: text('from_stage'),
+  toStage: text('to_stage'),
+  text: text('text'),
+  scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
+  actorId: text('actor_id'),
+  actorName: text('actor_name'),
+  createdAt: createdAt(),
+}, (t) => [index('candidate_events_candidate').on(t.candidateId)]);
+
+/** Ciclos de avaliação de desempenho. */
+export const reviewCycles = pgTable('review_cycles', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  name: text('name').notNull(),
+  periodFrom: date('period_from').notNull(),
+  periodTo: date('period_to').notNull(),
+  deadline: date('deadline'),
+  /** draft | open | closed */
+  status: text('status').notNull().default('draft'),
+  selfReview: boolean('self_review').notNull().default(true),
+  competencies: jsonb('competencies').notNull().default([]),
+  /** Peso das competências na nota final (o resto é dos objectivos). */
+  competencyWeight: integer('competency_weight').notNull().default(60),
+  createdBy: text('created_by').notNull(),
+  createdAt: createdAt(),
+  launchedAt: timestamp('launched_at', { withTimezone: true }),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+}, (t) => [index('review_cycles_company').on(t.companyId)]);
+
+export const reviews = pgTable('reviews', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  cycleId: text('cycle_id').notNull().references(() => reviewCycles.id),
+  employeeId: text('employee_id').notNull().references(() => employees.id),
+  /** Avaliador (ficha da chefia); vazio = RH. */
+  reviewerEmployeeId: text('reviewer_employee_id'),
+  /** self | manager | acknowledgement | done */
+  status: text('status').notNull().default('self'),
+  objectives: jsonb('objectives').notNull().default([]),
+  selfScores: jsonb('self_scores').notNull().default({}),
+  selfComment: text('self_comment'),
+  selfSubmittedAt: timestamp('self_submitted_at', { withTimezone: true }),
+  managerScores: jsonb('manager_scores').notNull().default({}),
+  managerComment: text('manager_comment'),
+  recommendation: text('recommendation'),
+  finalScore: numeric('final_score', { precision: 4, scale: 2 }),
+  managerSubmittedAt: timestamp('manager_submitted_at', { withTimezone: true }),
+  managerSubmittedBy: text('manager_submitted_by'),
+  employeeComment: text('employee_comment'),
+  acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex('reviews_cycle_employee').on(t.cycleId, t.employeeId), index('reviews_reviewer').on(t.reviewerEmployeeId)]);
+
 /** Modelos de documentos adaptados pela empresa: cada gravação é uma nova versão (a última activa substitui o modelo do Kianda). */
 export const documentTemplates = pgTable('document_templates', {
   id: id(),

@@ -15,3 +15,4 @@ export * from './ledger.js';
 export * from './bank.js';
 export * from './expenses.js';
 export * from './documents.js';
+export * from './talent.js';

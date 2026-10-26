@@ -867,6 +867,87 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
   });
 
+  describe('recrutamento e desempenho (entrega 12)', () => {
+    const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
+    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const put = (cookie: string, url: string, payload: object) => app.inject({ method: 'PUT', url, headers: as(cookie), payload });
+    let manager = '';
+    let chiefId = '';
+    let openingId = '';
+    let candId = '';
+    let companyId = '';
+
+    beforeAll(async () => {
+      manager = await login(`chefe+${stamp}@a.ao`);
+      chiefId = (await get(owner, `/v1/employees/${empId}`)).json().managerId;
+      companyId = (await get(owner, '/v1/auth/me')).json().company.id;
+    });
+
+    it('vaga publicada recebe candidaturas pela página de carreiras; repetida e robô recusados', async () => {
+      expect((await post(employeeUser, '/v1/openings', { title: 'Motorista' })).statusCode).toBe(403);
+      const o = await post(owner, '/v1/openings', { title: 'Contabilista sénior', hiringManagerId: chiefId, positions: 1, salaryMin: 450000, salaryMax: 600000, status: 'open', isPublic: true, description: 'Fecho mensal e fiscalidade' });
+      expect(o.statusCode).toBe(201);
+      openingId = o.json().id;
+      const pub = (await app.inject({ method: 'GET', url: `/v1/public/careers/${companyId}` })).json();
+      expect(pub.openings.map((x: { id: string }) => x.id)).toContain(openingId);
+      expect(pub.openings[0].salaryMinMinor).toBeUndefined();
+      const apply = (p: object) => app.inject({ method: 'POST', url: `/v1/public/careers/${companyId}/openings/${openingId}/apply`, payload: p });
+      expect((await apply({ name: 'Ana Candidata', email: 'ana@x.ao', phone: '923000000' })).statusCode).toBe(400);
+      expect((await apply({ name: 'Robô', email: 'r@x.ao', phone: '923000001', consent: true, website: 'spam.com' })).statusCode).toBe(400);
+      expect((await apply({ name: 'Ana Candidata', email: 'Ana@x.ao', phone: '923000000', consent: true, cvUrl: 'https://drive.example.com/cv.pdf' })).statusCode).toBe(201);
+      expect((await apply({ name: 'Ana Candidata', email: 'ana@x.ao', phone: '923000000', consent: true })).json().error).toBe('candidatura_repetida');
+    });
+
+    it('pipeline: chefia responsável vê e comenta; recusa exige motivo; só se admite a partir da proposta', async () => {
+      const list = (await get(manager, '/v1/openings')).json();
+      expect(list.map((x: { id: string }) => x.id)).toEqual([openingId]);
+      const d = (await get(manager, `/v1/openings/${openingId}`)).json();
+      candId = d.candidates[0].id;
+      expect(d.stats).toMatchObject({ total: 1, active: 1, bySource: { site: 1 } });
+      expect((await get(employeeUser, `/v1/candidates/${candId}`)).statusCode).toBe(404);
+      expect((await post(manager, `/v1/candidates/${candId}/events`, { kind: 'interview', text: 'Entrevista técnica' })).json().error).toBe('data_obrigatoria');
+      expect((await post(manager, `/v1/candidates/${candId}/events`, { kind: 'interview', text: 'Entrevista técnica', scheduledAt: '2026-11-03T10:00:00+01:00' })).statusCode).toBe(201);
+      expect((await post(manager, `/v1/candidates/${candId}/stage`, { stage: 'rejected' })).json().error).toBe('motivo_obrigatorio');
+      for (const stage of ['screening', 'interview', 'offer']) expect((await post(manager, `/v1/candidates/${candId}/stage`, { stage })).statusCode).toBe(200);
+      expect((await post(owner, `/v1/candidates/${candId}/stage`, { stage: 'hired' })).json().error).toBe('usar_admissao');
+      const hire = await post(owner, '/v1/employees', { number: '88', name: 'Ana Candidata', jobTitle: 'Contabilista sénior', candidateId: candId, contract: { type: 'indefinite', startDate: '2026-11-16', base: 500000, meal: 30000, transport: 25000 } });
+      expect(hire.statusCode).toBe(201);
+      const c = (await get(owner, `/v1/candidates/${candId}`)).json();
+      expect(c).toMatchObject({ stage: 'hired', employeeId: hire.json().id });
+      expect(c.events.map((e: { kind: string }) => e.kind)).toEqual(expect.arrayContaining(['stage', 'interview']));
+      expect((await get(owner, `/v1/openings/${openingId}`)).json().stats.byStage.hired).toBe(1);
+    });
+
+    it('ciclo de avaliação: pesos validados, lançamento com a chefia como avaliadora', async () => {
+      expect((await post(owner, '/v1/review-cycles', { name: 'Anual 2026', periodFrom: '2026-01-01', periodTo: '2026-12-31', competencies: [{ key: 'a', label: 'Qualidade', weight: 50 }] })).json().error).toBe('ciclo_invalido');
+      const cy = await post(owner, '/v1/review-cycles', { name: 'Avaliação anual 2026', periodFrom: '2026-01-01', periodTo: '2026-12-31', deadline: '2026-12-15', competencyWeight: 60 });
+      expect(cy.statusCode).toBe(201);
+      const launch = await post(owner, `/v1/review-cycles/${cy.json().id}/launch`);
+      expect(launch.json().reviews).toBeGreaterThan(1);
+      const team = (await get(manager, '/v1/reviews')).json().team;
+      expect(team.map((r: { employeeName: string }) => r.employeeName)).toContain('Joana Teste');
+    });
+
+    it('auto-avaliação → chefia (objectivos e notas) → o colaborador toma conhecimento; notas da chefia só depois de submetidas', async () => {
+      const mine = (await get(employeeUser, '/v1/reviews')).json().mine[0];
+      const comps = (await get(employeeUser, `/v1/reviews/${mine.id}`)).json().cycle.competencies as { key: string }[];
+      const all = (v: number) => Object.fromEntries(comps.map((k) => [k.key, v]));
+      expect((await put(employeeUser, `/v1/reviews/${mine.id}/self`, { scores: { [comps[0]!.key]: 4 }, submit: true })).json().error).toBe('incompleta');
+      expect((await put(manager, `/v1/reviews/${mine.id}/objectives`, { objectives: [{ title: 'Fecho mensal até dia 5', weight: 60 }, { title: 'Reconciliações', weight: 30 }] })).json().error).toBe('pesos_invalidos');
+      expect((await put(manager, `/v1/reviews/${mine.id}/objectives`, { objectives: [{ title: 'Fecho mensal até dia 5', weight: 70 }, { title: 'Reconciliações bancárias semanais', weight: 30 }] })).statusCode).toBe(200);
+      expect((await put(employeeUser, `/v1/reviews/${mine.id}/self`, { scores: all(4), comment: 'Ano positivo', submit: true })).json().status).toBe('manager');
+      expect((await put(employeeUser, `/v1/reviews/${mine.id}/manager`, { scores: all(5), submit: false })).statusCode).toBe(409);
+      const m = await put(manager, `/v1/reviews/${mine.id}/manager`, { scores: all(3), objectives: [{ score: 5, result: 'Cumprido em 11 de 12 meses' }, { score: 4 }], comment: 'Bom ano; reforçar delegação', recommendation: 'training', submit: true });
+      expect(m.json()).toMatchObject({ status: 'acknowledgement', finalScore: '3.68' });
+      const seen = (await get(employeeUser, `/v1/reviews/${mine.id}`)).json();
+      expect(seen).toMatchObject({ finalScore: 3.68, rating: 'Supera', role: 'self', can: { acknowledge: true } });
+      expect((await post(employeeUser, `/v1/reviews/${mine.id}/acknowledge`, { comment: 'Concordo' })).json().status).toBe('done');
+      const cycles = (await get(owner, '/v1/review-cycles')).json();
+      const det = (await get(owner, `/v1/review-cycles/${cycles[0].id}`)).json();
+      expect(det.distribution.Supera).toBe(1);
+    });
+  });
+
   it('logout limpa o cookie', async () => {
     const r = await app.inject({ method: 'POST', url: '/v1/auth/logout', headers: as(owner) });
     expect(r.cookies.find((c) => c.name === 'kianda_session')?.value).toBe('');

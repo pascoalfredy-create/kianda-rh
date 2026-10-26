@@ -1,7 +1,7 @@
 import 'dotenv/config';
-import { DEFAULT_ACCOUNT_MAPPINGS, kz } from '@kianda/core';
+import { DEFAULT_ACCOUNT_MAPPINGS, DEFAULT_COMPETENCIES, kz } from '@kianda/core';
 import { and, eq } from 'drizzle-orm';
-import { absences, accountMappings, bankAccounts, expenseClaims, expenseLines, attendanceEntries, closeDb, companies, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, hashPassword, users, verifyPassword } from '../src/index.js';
+import { absences, accountMappings, bankAccounts, candidateEvents, candidates, expenseClaims, expenseLines, jobOpenings, reviewCycles, reviews, attendanceEntries, closeDb, companies, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, hashPassword, users, verifyPassword } from '../src/index.js';
 
 /** Dados de demonstração: empresa fictícia com três departamentos, cinco colaboradores, hierarquia e documentos. Idempotente. */
 const db = getDb();
@@ -182,6 +182,40 @@ if (!anyClaim && joana && joanaUser) {
     { claimId: claim!.id, position: 1, kind: 'expense', date: d(5), description: 'Hotel, 2 noites', category: 'lodging', documentRef: 'FT 2026/1187', supplierNif: '5417000000', amountMinor: kz(42_000) },
     { claimId: claim!.id, position: 2, kind: 'per_diem', date: d(6), description: 'Ajudas de custo Lobito', zone: 'national', halfDays: 5, rateMinor: kz(15_000), amountMinor: kz(37_500) },
   ]);
+}
+
+// Recrutamento: uma vaga publicada com candidatos em várias etapas.
+const [anyOpening] = await db.select({ id: jobOpenings.id }).from(jobOpenings).where(eq(jobOpenings.companyId, company.id)).limit(1);
+const edson = byNumber['1002'];
+if (!anyOpening && edson) {
+  const [o] = await db.insert(jobOpenings).values({
+    companyId: company.id, title: 'Contabilista sénior', departmentId: depIds['Finanças'], hiringManagerId: edson.id, location: 'Luanda (Talatona)', positions: 1,
+    salaryMinMinor: kz(550_000), salaryMaxMinor: kz(750_000), status: 'open', isPublic: true, createdBy: 'seed',
+    description: 'Fecho contabilístico mensal segundo o PGC Angola, apuramento de impostos (IRT, IVA, Imposto Industrial) e reporte à direcção financeira.',
+    requirements: 'Licenciatura em Contabilidade ou Gestão; 5 anos de experiência; inscrição na OCPCA; domínio de Excel.',
+  }).returning();
+  const day = (n: number) => new Date(Date.now() - n * 86_400_000);
+  for (const [name, email, source, stage, rating, ago] of [
+    ['Mariana Domingos', 'mariana.domingos@exemplo.ao', 'site', 'applied', null, 2],
+    ['Paulo Sebastião', 'paulo.sebastiao@exemplo.ao', 'linkedin', 'screening', 3, 6],
+    ['Helena Tchissola', 'helena.tchissola@exemplo.ao', 'referral', 'interview', 4, 12],
+    ['Rui Kassoma', 'rui.kassoma@exemplo.ao', 'site', 'offer', 5, 20],
+  ] as const) {
+    const [c] = await db.insert(candidates).values({ companyId: company.id, openingId: o!.id, name, email, phone: '923000000', source, stage, rating, createdAt: day(ago), consentAt: source === 'site' ? day(ago) : null }).returning();
+    await db.insert(candidateEvents).values({ candidateId: c!.id, kind: 'stage', toStage: stage, text: 'Dados de demonstração', actorName: 'Kianda', createdAt: day(ago) });
+  }
+}
+
+// Desempenho: ciclo anual aberto, com auto-avaliações por fazer.
+const [anyCycle] = await db.select({ id: reviewCycles.id }).from(reviewCycles).where(eq(reviewCycles.companyId, company.id)).limit(1);
+if (!anyCycle) {
+  const year = new Date().getFullYear();
+  const [cy] = await db.insert(reviewCycles).values({
+    companyId: company.id, name: `Avaliação anual ${year}`, periodFrom: `${year}-01-01`, periodTo: `${year}-12-31`, deadline: `${year}-12-15`,
+    status: 'open', selfReview: true, competencies: DEFAULT_COMPETENCIES, competencyWeight: 60, createdBy: 'seed', launchedAt: new Date(),
+  }).returning();
+  const staff = await db.select({ id: employees.id, managerId: employees.managerId }).from(employees).where(and(eq(employees.companyId, company.id), eq(employees.status, 'active')));
+  if (staff.length) await db.insert(reviews).values(staff.map((e) => ({ companyId: company.id, cycleId: cy!.id, employeeId: e.id, reviewerEmployeeId: e.managerId, status: 'self' })));
 }
 
 console.log(`Acesso: ${OWNER_EMAIL} (proprietário), edson@kwanzalog.co.ao (chefia), joana@kwanzalog.co.ao (colaboradora) / ${owner ? '(palavra-passe já definida)' : ownerPassword}`);

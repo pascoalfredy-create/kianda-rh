@@ -3,7 +3,7 @@ import {
   angolanIbanProblem, isValidAngolanBI, kz, normalizeIban, packOrLatest, PackNotFoundError, type CountryPack, type DocumentType,
 } from '@kianda/core';
 import {
-  auditLogs, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, payrollRuns, users, type Db,
+  candidates, candidateEvents, auditLogs, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, payrollRuns, users, type Db,
 } from '@kianda/db';
 import { and, asc, desc, eq, gte, inArray, or, sql } from '@kianda/db';
 import { Hono } from 'hono';
@@ -56,7 +56,7 @@ const personal = {
   emergencyContactPhone: optionalText,
 };
 
-const createBody = z.object({ number: z.string().trim().min(1), ...personal, contract: contractBody });
+const createBody = z.object({ number: z.string().trim().min(1), ...personal, contract: contractBody, candidateId: z.string().optional() });
 const patchBody = z.object({ ...personal, status: z.enum(['active', 'suspended']), vacationCarryOver: z.coerce.number().int().min(0, 'Dias transitados não podem ser negativos').max(44, 'Máximo de 44 dias transitados') }).partial();
 
 const compensationBody = money.extend({ effectiveDate: z.iso.date(), reason: z.string().trim().min(3, 'Indique o motivo da alteração') });
@@ -179,7 +179,10 @@ export function employeeRoutes() {
     await assertDepartment(db, req.companyId, b.departmentId);
     await assertManager(db, req.companyId, null, b.managerId);
     assertMinimumWage(kz(b.contract.base), b.contract.type, b.contract.startDate);
-    const { contract, ...data } = b;
+    const { contract, candidateId, ...data } = b;
+    const [cand] = candidateId ? await db.select().from(candidates).where(and(eq(candidates.id, candidateId), eq(candidates.companyId, req.companyId))) : [];
+    if (candidateId && !cand) throw new DomainError('nao_encontrado', 'Candidato inexistente', 404);
+    if (cand && cand.stage !== 'offer') throw new DomainError('etapa_invalida', 'Só se admite um candidato na etapa de proposta', 409);
     const result = await db.transaction(async (tx) => {
       const [e] = await tx.insert(employees).values({ companyId: req.companyId, ...data, biNumber: data.biNumber ?? null }).returning();
       const [c] = await tx.insert(contracts).values({
@@ -191,6 +194,11 @@ export function employeeRoutes() {
         baseMinor: c!.baseMinor, mealMinor: c!.mealMinor, transportMinor: c!.transportMinor, reason: 'Admissão', createdBy: req.actorId,
       });
       await tx.insert(auditLogs).values({ companyId: req.companyId, actorId: req.actorId, action: 'create', entity: 'employee', entityId: e!.id, after: { employee: e, contract: c } });
+      if (cand) {
+        // Recrutamento: o candidato passa a contratado e fica ligado à ficha.
+        await tx.update(candidates).set({ stage: 'hired', employeeId: e!.id, hiredAt: new Date(), updatedAt: new Date() }).where(eq(candidates.id, cand.id));
+        await tx.insert(candidateEvents).values({ candidateId: cand.id, kind: 'stage', fromStage: cand.stage, toStage: 'hired', text: `Admitido com o n.º ${e!.number}`, actorId: req.actorId, actorName: req.session.name ?? null });
+      }
       return { ...e!, contract: c };
     });
     return ctx.json(result, 201);
