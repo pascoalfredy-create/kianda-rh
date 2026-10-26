@@ -526,6 +526,60 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
   });
 
+  describe('finanças de pessoal (entrega 7)', () => {
+    const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
+    const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
+
+    it('balancete do período equilibrado, com saldos devedores e credores', async () => {
+      expect((await get(employeeUser, '/v1/ledger/trial-balance?from=2026-10-01&to=2026-12-31')).statusCode).toBe(403);
+      const tb = (await get(financeUser, '/v1/ledger/trial-balance?from=2026-10-01&to=2026-12-31')).json();
+      expect(tb.totals.balanced).toBe(true);
+      const acc = (code: string) => tb.rows.find((r: { account: string }) => r.account === code);
+      expect(acc('72.2.1').closingMinor).toBeGreaterThan(0);
+      expect(acc('34.3').closingMinor).toBeLessThan(0);
+      expect(acc('43.1').closingMinor).toBe(0); // pagamento de salários e respectivo estorno
+      expect(acc('72.2.1').label).toBe('Remunerações do pessoal — vencimento base');
+      const csv = (await get(financeUser, '/v1/ledger/trial-balance?from=2026-10-01&to=2026-12-31&format=csv')).body;
+      expect(csv.replace(/^\uFEFF/, '').startsWith('Conta;Descrição;Saldo inicial devedor')).toBe(true);
+    });
+
+    it('razão da conta com saldo acumulado', async () => {
+      const r = (await get(financeUser, '/v1/ledger/account?code=36.1.2&from=2026-10-01&to=2026-12-31')).json();
+      expect(r.movements.length).toBeGreaterThanOrEqual(4);
+      expect(r.closingMinor).toBe(r.movements.at(-1).balanceMinor);
+    });
+
+    it('plano de contas: classes validadas; alterações valem para lançamentos futuros', async () => {
+      const plan = (await get(financeUser, '/v1/ledger/accounts')).json();
+      expect(plan.find((p: { role: string }) => p.role === 'bank')).toMatchObject({ account: '43.1', expectedClass: '4' });
+      const put = (cookie: string, mappings: object[]) => app.inject({ method: 'PUT', url: '/v1/ledger/accounts', headers: as(cookie), payload: { mappings } });
+      expect((await put(payrollUser, [{ role: 'bank', account: '43.1.2', label: 'BAI — salários' }])).statusCode).toBe(403);
+      const bad = await put(financeUser, [{ role: 'baseSalary', account: '62.1', label: 'Errado' }]);
+      expect(bad.json().error).toBe('plano_invalido');
+      expect(bad.json().message).toContain('Classe 7');
+      expect((await put(financeUser, [{ role: 'bank', account: '43.1.2', label: 'BAI — conta de salários' }])).statusCode).toBe(200);
+      const oct = (await get(financeUser, '/v1/payroll-runs?period=2026-10')).json()[0].id;
+      const pay = await app.inject({ method: 'POST', url: `/v1/payroll-runs/${oct}/payments`, headers: as(financeUser), payload: { kind: 'irt', paidOn: today } });
+      expect(pay.statusCode).toBe(201);
+      const je = (await get(financeUser, `/v1/ledger/journal?from=${today}&to=${today}&source=payroll_payment`)).json().find((j: { reference: string }) => j.reference === 'PG-IRT-202610');
+      expect(je.lines.map((l: { account: string }) => l.account)).toEqual(['34.3', '43.1.2']);
+      const ps = (await get(financeUser, '/v1/ledger/journal?from=2026-10-01&to=2026-10-31&source=payroll')).json()[0];
+      expect(ps).toMatchObject({ reference: 'PS-202610', date: '2026-10-31' });
+      expect(ps.lines.some((l: { account: string }) => l.account === '43.1.2')).toBe(false);
+    });
+
+    it('exportação para o ERP: só os novos, e marcação para não repetir', async () => {
+      const csv = (await get(financeUser, '/v1/ledger/export?from=2026-10-01&to=2026-12-31&onlyNew=1')).body;
+      expect(csv).toContain('PS-202610');
+      expect(csv).toContain('31/10/2026;Pessoal;PS-202610');
+      expect((await app.inject({ method: 'POST', url: '/v1/ledger/export/mark', headers: as(payrollUser), payload: { from: '2026-10-01', to: '2026-12-31' } })).statusCode).toBe(403);
+      const mark = await app.inject({ method: 'POST', url: '/v1/ledger/export/mark', headers: as(financeUser), payload: { from: '2026-10-01', to: '2026-12-31' } });
+      expect(mark.json().marked).toBeGreaterThan(0);
+      const again = (await get(financeUser, '/v1/ledger/export?from=2026-10-01&to=2026-12-31&onlyNew=1')).body;
+      expect(again.replace(/^\uFEFF/, '').trim().split('\r\n')).toHaveLength(1);
+    });
+  });
+
   it('logout limpa o cookie', async () => {
     const r = await app.inject({ method: 'POST', url: '/v1/auth/logout', headers: as(owner) });
     expect(r.cookies.find((c) => c.name === 'kianda_session')?.value).toBe('');

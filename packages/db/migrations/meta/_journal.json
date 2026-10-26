@@ -50,6 +50,13 @@
       "when": 1793028306817,
       "tag": "0006_obrigacoes",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793029034772,
+      "tag": "0007_financas_pessoal",
+      "breakpoints": true
     }
   ]
 }

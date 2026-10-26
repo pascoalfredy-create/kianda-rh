@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { DEFAULT_PGC_ACCOUNTS, kz } from '@kianda/core';
+import { DEFAULT_ACCOUNT_MAPPINGS, kz } from '@kianda/core';
 import { and, eq } from 'drizzle-orm';
 import { absences, accountMappings, attendanceEntries, closeDb, companies, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, hashPassword, users, verifyPassword } from '../src/index.js';
 
@@ -86,8 +86,8 @@ if (joana) {
   }).onConflictDoNothing();
 }
 
-for (const [role, account] of Object.entries(DEFAULT_PGC_ACCOUNTS)) {
-  await db.insert(accountMappings).values({ companyId: company.id, role, account, label: role }).onConflictDoNothing();
+for (const { role, account, label } of DEFAULT_ACCOUNT_MAPPINGS) {
+  await db.insert(accountMappings).values({ companyId: company.id, role, account, label }).onConflictDoNothing();
 }
 
 const OWNER_EMAIL = 'admin@kwanzalog.co.ao';

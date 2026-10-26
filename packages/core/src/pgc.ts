@@ -1,3 +1,4 @@
+import { lastDayOfMonth } from './calendar.js';
 import { sum, type Minor } from './money.js';
 
 /**
@@ -82,7 +83,7 @@ export function payrollJournal(period: string, t: PayrollTotals, accounts: PgcAc
   cr(accounts.advances, `Regularização de adiantamentos ${period}`, t.advancesMinor);
   cr(accounts.otherDeductions, `Outros descontos retidos ${period}`, t.otherDeductionsMinor ?? 0);
   cr(accounts.netPayable, `Remunerações a pagar ${period}`, t.netMinor);
-  return assertBalanced({ date: `${period}-28`, journal: 'Pessoal', reference: `PS-${period.replace('-', '')}`, description: `Processamento salarial ${period}`, lines });
+  return assertBalanced({ date: lastDayOfMonth(period), journal: 'Pessoal', reference: `PS-${period.replace('-', '')}`, description: `Processamento salarial ${period}`, lines });
 }
 
 /** Lançamento de pagamento (salários, IRT ou INSS) contra a conta bancária. */

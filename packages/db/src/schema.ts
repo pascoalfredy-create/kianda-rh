@@ -306,6 +306,9 @@ export const journalEntries = pgTable('journal_entries', {
   description: text('description').notNull(),
   source: text('source').notNull(),
   provisional: boolean('provisional').notNull().default(false),
+  /** Quando foi exportado para o ERP (evita importar duas vezes). */
+  exportedAt: timestamp('exported_at', { withTimezone: true }),
+  exportedBy: text('exported_by'),
   createdAt: createdAt(),
 }, (t) => [uniqueIndex('journal_entries_company_reference').on(t.companyId, t.reference)]);
 
