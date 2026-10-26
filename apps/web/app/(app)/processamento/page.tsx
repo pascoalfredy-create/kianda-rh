@@ -45,6 +45,7 @@ export default async function Processamento({ searchParams }: { searchParams: Pr
           {run ? <>Preparado por {run.preparedByName ?? '—'}{run.closedAt ? ` · fechado por ${run.closedByName ?? '—'} em ${new Date(run.closedAt).toLocaleDateString('pt-PT')}` : ''}</> : 'Ainda não há processamento para este mês.'}
         </span>
         {canPrepare && (!run || draft) && <PrepareButton period={period} label={run ? 'Recalcular' : 'Preparar processamento'} />}
+        {run?.status === 'closed' && <Link href="/obrigacoes" className="btn ghost">Pagamentos e mapas →</Link>}
         {canClose && draft && <CloseButton runId={run!.id} period={period} selfPrepared={run!.preparedBy === me.user.sub} />}
       </div>
 

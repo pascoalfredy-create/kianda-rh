@@ -141,7 +141,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       })).digest('hex');
       const values = {
         overtimeHours: String(overtimeHours), absenceDays, bonusMinor: otherEarnings.reduce((s, x) => s + x.amountMinor, 0), advancesMinor,
-        grossMinor: r.grossMinor, inssEmployeeMinor: r.inssEmployeeMinor, irtMinor: r.irtMinor, netMinor: r.netMinor,
+        grossMinor: r.grossMinor, inssBaseMinor: r.inssBaseMinor, irtTaxableMinor: r.irtTaxableMinor, inssEmployeeMinor: r.inssEmployeeMinor, irtMinor: r.irtMinor, netMinor: r.netMinor,
         inssEmployerMinor: r.inssEmployerMinor, irtBracket: r.irtBracket, breakdown: r.lines, calculationHash: hash,
       };
       await tx.insert(payrollLines).values({ runId: run.id, employeeId: e.id, ...values })
@@ -161,7 +161,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
 }
 
 /** Contas PGC da empresa (parametrizadas), com as sugeridas por omissão. */
-async function companyAccounts(db: Db, companyId: string): Promise<PgcAccountMap> {
+export async function companyAccounts(db: Db, companyId: string): Promise<PgcAccountMap> {
   const rows = await db.select().from(accountMappings).where(eq(accountMappings.companyId, companyId));
   const map: PgcAccountMap = { ...DEFAULT_PGC_ACCOUNTS };
   for (const r of rows) if (r.role in map) (map as unknown as Record<string, string>)[r.role] = r.account;

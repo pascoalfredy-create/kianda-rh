@@ -38,6 +38,30 @@ for (const [number, name, jobTitle, base, type, dep, end] of people) {
   }).onConflictDoNothing();
 }
 
+// IBAN e n.º INSS de demonstração (só se faltarem). IBAN fictícios: código de banco 0000 (inexistente),
+// com dígitos de controlo válidos — nunca coincidem com contas reais.
+const demoIban = (seq: number) => {
+  const body = `00000000${String(seq).padStart(11, '0')}`;
+  for (let k = 0; k < 100; k++) {
+    const iban = `AO06${body}${String(k).padStart(2, '0')}`;
+    const moved = iban.slice(4) + '1024' + '06'; // "AO" → 10 24
+    let rem = 0;
+    for (const ch of moved) rem = (rem * 10 + Number(ch)) % 97;
+    if (rem === 1) return iban;
+  }
+  throw new Error('IBAN de demonstração');
+};
+{
+  const all = await db.select().from(employees).where(eq(employees.companyId, company.id));
+  for (const e of all) {
+    const n = Number(e.number) || 0;
+    const patch: Partial<typeof employees.$inferInsert> = {};
+    if (!e.iban && ['1002', '1003', '1005', '1006', '1009'].includes(e.number)) Object.assign(patch, { iban: demoIban(n), bank: 'Banco de demonstração' });
+    if (!e.inssNumber && ['1002', '1003', '1005', '1006', '1009'].includes(e.number)) patch.inssNumber = `9${String(n).padStart(8, '0')}`;
+    if (Object.keys(patch).length) await db.update(employees).set(patch).where(eq(employees.id, e.id));
+  }
+}
+
 // Hierarquia, documentos e um aumento no histórico (só preenche o que faltar).
 const byNumber = Object.fromEntries((await db.select().from(employees).where(eq(employees.companyId, company.id))).map((e) => [e.number, e]));
 for (const [number, manager] of [['1003', '1002'], ['1006', '1005'], ['1009', '1002']] as const) {

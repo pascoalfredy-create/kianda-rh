@@ -202,6 +202,22 @@ export const payrollRuns = pgTable('payroll_runs', {
   createdAt: createdAt(),
 }, (t) => [uniqueIndex('payroll_runs_company_period').on(t.companyId, t.period)]);
 
+export const obligationKindEnum = pgEnum('obligation_kind', ['salaries', 'inss', 'irt']);
+
+/** Pagamentos das obrigações de um processamento (salários, INSS, IRT), com o lançamento PGC gerado. */
+export const payrollPayments = pgTable('payroll_payments', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  runId: text('run_id').notNull().references(() => payrollRuns.id),
+  kind: obligationKindEnum('kind').notNull(),
+  paidOn: date('paid_on').notNull(),
+  amountMinor: money('amount_minor'),
+  reference: text('reference'),
+  journalEntryId: text('journal_entry_id'),
+  createdBy: text('created_by').notNull(),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex('payroll_payments_run_kind').on(t.runId, t.kind)]);
+
 /** Variáveis do mês: prémios, outros abonos, adiantamentos e outros descontos. */
 export const payrollVariables = pgTable('payroll_variables', {
   id: id(),
@@ -228,6 +244,9 @@ export const payrollLines = pgTable('payroll_lines', {
   bonusMinor: money('bonus_minor'),
   advancesMinor: money('advances_minor'),
   grossMinor: money('gross_minor'),
+  /** Base de incidência do INSS e matéria colectável do IRT (para os mapas oficiais). */
+  inssBaseMinor: money('inss_base_minor'),
+  irtTaxableMinor: money('irt_taxable_minor'),
   inssEmployeeMinor: money('inss_employee_minor'),
   irtMinor: money('irt_minor'),
   netMinor: money('net_minor'),

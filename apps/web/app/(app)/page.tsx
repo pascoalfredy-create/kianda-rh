@@ -23,6 +23,11 @@ export default async function Home() {
     api<BalanceRow[]>(`/v1/leave/balances?year=${year}`).catch(() => []),
   ]);
   const mine = balances.find((b) => b.employee.id === me.user.employeeId);
+  const obligations = ['owner', 'payroll', 'finance', 'hr_admin'].includes(me.user.role)
+    ? (await api<{ obligations: { status: string; amountMinor: number }[] }[]>('/v1/obligations').catch(() => [])).flatMap((r) => r.obligations)
+    : [];
+  const late = obligations.filter((o) => o.status === 'overdue');
+  const soon = obligations.filter((o) => o.status === 'due_soon');
   const staff = me.user.role !== 'employee';
 
   return (
@@ -42,6 +47,12 @@ export default async function Home() {
         {awaiting.length > 0 && (
           <Link href="/ausencias" className="card kpi" style={{ borderColor: '#f3d9a6' }}>
             <div className="l">Pedidos à espera da sua decisão</div><div className="v" style={{ color: 'var(--amber)' }}>{awaiting.length}</div>
+          </Link>
+        )}
+        {(late.length > 0 || soon.length > 0) && (
+          <Link href="/obrigacoes" className="card kpi" style={{ borderColor: late.length ? '#f1c9c1' : '#f3d9a6' }}>
+            <div className="l">Obrigações {late.length ? 'em atraso' : 'a vencer'}</div>
+            <div className="v" style={{ color: late.length ? 'var(--red)' : 'var(--amber)' }}>{late.length || soon.length}</div>
           </Link>
         )}
         {mine && (

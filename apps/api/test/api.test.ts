@@ -449,6 +449,83 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
   });
 
+  describe('obrigações e pagamentos (entrega 6)', () => {
+    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
+    let oct = '';
+    let dec = '';
+    let nov = '';
+    const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
+
+    beforeAll(async () => {
+      oct = (await get(payrollUser, '/v1/payroll-runs?period=2026-10')).json()[0].id;
+      dec = (await get(payrollUser, '/v1/payroll-runs?period=2026-12')).json()[0].id;
+      nov = (await get(payrollUser, '/v1/payroll-runs?period=2026-11')).json()[0].id;
+    });
+
+    it('obrigações dos processamentos fechados com prazos legais', async () => {
+      expect((await get(employeeUser, '/v1/obligations')).statusCode).toBe(403);
+      const list = (await get(financeUser, '/v1/obligations')).json();
+      expect(list.map((r: { period: string }) => r.period)).toEqual(['2026-12', '2026-10']);
+      const o = list[1].obligations;
+      expect(o.map((x: { kind: string; dueDate: string }) => [x.kind, x.dueDate])).toEqual([['salaries', '2026-10-31'], ['inss', '2026-11-10'], ['irt', '2026-11-30']]);
+      const run = (await get(financeUser, `/v1/payroll-runs/${oct}`)).json();
+      const inss = run.lines.reduce((s: number, l: { inssEmployeeMinor: number; inssEmployerMinor: number }) => s + l.inssEmployeeMinor + l.inssEmployerMinor, 0);
+      expect(o[1].amountMinor).toBe(inss);
+    });
+
+    it('pagamento pelas Finanças gera o lançamento PGC e não se repete', async () => {
+      expect((await post(payrollUser, `/v1/payroll-runs/${oct}/payments`, { kind: 'salaries', paidOn: '2026-10-30' })).statusCode).toBe(403);
+      expect((await post(financeUser, `/v1/payroll-runs/${oct}/payments`, { kind: 'salaries', paidOn: '2099-01-01' })).json().error).toBe('data_futura');
+      const r = await post(financeUser, `/v1/payroll-runs/${oct}/payments`, { kind: 'salaries', paidOn: today, reference: 'TRF BFA 0099' });
+      expect(r.statusCode).toBe(201);
+      expect(r.json().journalReference).toBe('PG-SAL-202610');
+      const je = (await get(financeUser, '/v1/journal')).json().find((j: { reference: string }) => j.reference === 'PG-SAL-202610');
+      expect(je.lines.map((l: { account: string }) => l.account)).toEqual(['36.1.2', '43.1']);
+      expect(je.lines[0].debitMinor).toBe(je.lines[1].creditMinor);
+      expect((await post(financeUser, `/v1/payroll-runs/${oct}/payments`, { kind: 'salaries', paidOn: today })).json().error).toBe('ja_pago');
+      const o = (await get(financeUser, '/v1/obligations')).json()[1].obligations[0];
+      expect(o).toMatchObject({ status: 'paid', paidAt: today, reference: 'TRF BFA 0099' });
+    });
+
+    it('estorno com motivo: lançamento inverso, obrigação volta a estar por pagar', async () => {
+      expect((await post(financeUser, `/v1/payroll-runs/${oct}/payments/salaries/reverse`, {})).statusCode).toBe(400);
+      const r = await post(financeUser, `/v1/payroll-runs/${oct}/payments/salaries/reverse`, { note: 'Transferência devolvida pelo banco' });
+      expect(r.json().journalReference).toMatch(/^ES-SAL-202610-/);
+      const es = (await get(financeUser, '/v1/journal')).json().find((j: { reference: string }) => j.reference === r.json().journalReference);
+      expect(es.lines.map((l: { account: string; debitMinor: number }) => [l.account, l.debitMinor > 0])).toEqual([['36.1.2', false], ['43.1', true]]);
+      expect((await get(financeUser, '/v1/obligations')).json()[1].obligations[0].paidAt).toBeNull();
+    });
+
+    it('mapa de IRT em CSV para Excel e em JSON', async () => {
+      const csv = await get(financeUser, `/v1/payroll-runs/${dec}/maps/irt?format=csv`);
+      expect(csv.body.replace(/^\uFEFF/, '').startsWith('N.º;Nome;NIF/BI;Rendimento ilíquido')).toBe(true);
+      expect(csv.body).toContain('Joana Teste');
+      expect(csv.body).toMatch(/;TOTAL;/);
+      const json = (await get(financeUser, `/v1/payroll-runs/${dec}/maps/irt`)).json();
+      const run = (await get(financeUser, `/v1/payroll-runs/${dec}`)).json();
+      expect(json.totalIrt).toBe(run.lines.reduce((s: number, l: { irtMinor: number }) => s + l.irtMinor, 0));
+      expect(json.rows.find((r: { name: string }) => r.name === 'Joana Teste').taxable).toBeGreaterThan(0);
+      expect((await get(financeUser, `/v1/payroll-runs/${nov}/maps/irt`)).json().error).toBe('processamento_aberto');
+    });
+
+    it('folha do INSS assinala colaboradores sem n.º de segurança social', async () => {
+      const j = (await get(payrollUser, `/v1/payroll-runs/${dec}/maps/inss`)).json();
+      expect(j.missingInssNumber).toContain('Joana Teste');
+      const joana = j.rows.find((r: { name: string }) => r.name === 'Joana Teste');
+      expect(joana.employee).toBe(Math.round(joana.base * 0.03));
+    });
+
+    it('ficheiro de transferência: só IBAN válido; os restantes são listados', async () => {
+      const info = (await get(financeUser, `/v1/payroll-runs/${dec}/bank-file?format=json`)).json();
+      expect(info.excluded.map((x: { name: string; reason: string }) => [x.name, x.reason])).toEqual(expect.arrayContaining([['Chefe Teste', 'sem IBAN']]));
+      const csv = (await get(financeUser, `/v1/payroll-runs/${dec}/bank-file`)).body;
+      expect(csv).toContain('AO06004000005521889010155;Joana Teste;');
+      expect(csv).toContain('SALARIO 12/2026');
+      expect(csv).not.toContain('Chefe Teste');
+    });
+  });
+
   it('logout limpa o cookie', async () => {
     const r = await app.inject({ method: 'POST', url: '/v1/auth/logout', headers: as(owner) });
     expect(r.cookies.find((c) => c.name === 'kianda_session')?.value).toBe('');
