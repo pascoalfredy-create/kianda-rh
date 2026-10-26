@@ -1,12 +1,12 @@
 import { closeDb } from '@kianda/db';
-import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
+import { testClient, type InjectResponse } from './inject.js';
 
-const app = await buildApp({ rateLimit: false });
+const app = testClient(buildApp({ rateLimit: false }));
 afterAll(async () => { await app.close(); if (process.env.DATABASE_URL) await closeDb(); });
 
-const cookieOf = (r: LightMyRequestResponse) => {
+const cookieOf = (r: InjectResponse) => {
   const c = r.cookies.find((x) => x.name === 'kianda_session');
   if (!c) throw new Error('sem cookie de sessão');
   return `kianda_session=${c.value}`;

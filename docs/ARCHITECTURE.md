@@ -12,7 +12,8 @@
 ## Camadas
 
 ```
-apps/web (Next.js) ──HTTP──► apps/api (Fastify) ──► packages/db (Drizzle) ──► PostgreSQL
+apps/web (Next.js) ──/api/* ─► apps/api (Hono) ──► packages/db (Drizzle) ──► PostgreSQL
+   (produção: Worker web ──service binding──► Worker API ──Hyperdrive──► Supabase)
         │                           │
         └──────────► packages/core ◄┘   (mesmo motor nos dois lados)
 ```
@@ -33,5 +34,6 @@ apps/web (Next.js) ──HTTP──► apps/api (Fastify) ──► packages/db 
 ## Decisões
 
 - **Drizzle ORM** em vez de Prisma: JavaScript puro, sem binários de motor, migrações SQL legíveis e o mesmo ORM do Enterprise Performance.
-- **Fastify + Zod** na API: validação declarativa e erros devolvidos em português com o campo afectado.
+- **Hono + Zod** na API: corre igual em Node e em Cloudflare Workers (o Fastify foi abandonado porque gera código em tempo de execução, proibido nos Workers); validação declarativa e erros em português com o campo afectado.
+- **Sem middleware Next** (`proxy.ts`): a protecção das páginas está no layout do grupo `(app)`, porque o proxy do Next 16 só corre em Node e é experimental no Cloudflare.
 - **Subsídio de férias fora da base do INSS** por defeito (DP 227/18), configurável no pacote — a validar com consultor.

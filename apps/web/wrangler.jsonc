@@ -1,0 +1,14 @@
+{
+  // Worker web (Next.js via OpenNext). É o único endereço público do Kianda.
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "kianda-web",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  // A API só é alcançável por aqui (sem endereço público).
+  "services": [{ "binding": "API", "service": "kianda-api" }],
+  "observability": { "enabled": true },
+  // O domínio (ex.: rh.seudominio.com) é acrescentado no deploy a partir da variável KIANDA_HOSTNAME.
+  "workers_dev": true
+}

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { calculatePayroll, compensationAt, getPack, lastDayOfMonth, payrollJournal, type PayrollResult, type PayrollTotals } from '@kianda/core';
 import { auditLogs, compensationChanges, contracts, departments, employees, journalEntries, journalLines, payrollLines, payrollRuns, type Db } from '@kianda/db';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from '@kianda/db';
 
 export class DomainError extends Error {
   constructor(public readonly code: string, message: string, public readonly status = 409) { super(message); }

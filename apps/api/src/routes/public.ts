@@ -1,6 +1,7 @@
 import { AO_2026, calculatePayroll, getPack, kz, listPacks, PackNotFoundError, solveBaseForNet } from '@kianda/core';
-import type { FastifyInstance } from 'fastify';
+import { Hono } from 'hono';
 import { z } from 'zod';
+import { body, type AppEnv } from '../plugins/tenant.js';
 
 const simulateBody = z.object({
   period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
@@ -15,25 +16,28 @@ const simulateBody = z.object({
 }).refine((b) => b.base !== undefined || b.targetNet !== undefined, { message: 'Indique base ou targetNet' });
 
 /** Rotas sem empresa: saúde, regras publicadas e simulador salarial. */
-export async function publicRoutes(app: FastifyInstance) {
-  app.get('/health', async () => ({ status: 'ok', packs: listPacks() }));
+export function publicRoutes() {
+  const app = new Hono<AppEnv>();
 
-  app.get('/v1/packs/AO/:year', async (req, reply) => {
-    const { year } = z.object({ year: z.coerce.number().int() }).parse(req.params);
+  app.get('/health', (c) => c.json({ status: 'ok', packs: listPacks() }));
+
+  app.get('/v1/packs/AO/:year', (c) => {
+    const { year } = z.object({ year: z.coerce.number().int() }).parse(c.req.param());
     try {
       const p = getPack('AO', year);
-      return { version: p.version, irtBrackets: p.irt.brackets.length, minimumWage: p.minimumWage, labour: p.labour, holidays: p.holidays, toValidate: p.toValidate, sources: p.sources };
+      return c.json({ version: p.version, irtBrackets: p.irt.brackets.length, minimumWage: p.minimumWage, labour: p.labour, holidays: p.holidays, toValidate: p.toValidate, sources: p.sources });
     } catch (e) {
-      if (e instanceof PackNotFoundError) return reply.code(404).send({ error: 'pacote_inexistente', message: e.message });
+      if (e instanceof PackNotFoundError) return c.json({ error: 'pacote_inexistente', message: e.message }, 404);
       throw e;
     }
   });
 
-  app.post('/v1/payroll/simulate', async (req) => {
-    const b = simulateBody.parse(req.body);
+  app.post('/v1/payroll/simulate', async (c) => {
+    const b = simulateBody.parse(await body(c));
     const rest = { period: b.period, mealMinor: kz(b.meal), transportMinor: kz(b.transport), overtimeHours: b.overtimeHours, holidaySubsidy: b.holidaySubsidy, christmasSubsidy: b.christmasSubsidy };
-    return b.base !== undefined ? calculatePayroll({ ...rest, baseMinor: kz(b.base) }) : solveBaseForNet(kz(b.targetNet!), rest);
+    return c.json(b.base !== undefined ? calculatePayroll({ ...rest, baseMinor: kz(b.base) }) : solveBaseForNet(kz(b.targetNet!), rest));
   });
 
-  app.get('/v1/packs', async () => ({ available: listPacks(), current: AO_2026.version }));
+  app.get('/v1/packs', (c) => c.json({ available: listPacks(), current: AO_2026.version }));
+  return app;
 }

@@ -1,7 +1,6 @@
 import 'server-only';
 import { cookies } from 'next/headers';
-
-const API_URL = process.env.API_URL ?? 'http://localhost:4000';
+import { upstream } from './upstream';
 export const SESSION_COOKIE = 'kianda_session';
 
 export class ApiError extends Error {
@@ -11,7 +10,7 @@ export class ApiError extends Error {
 /** Chamada à API a partir de componentes de servidor, reenviando o cookie de sessão do utilizador. */
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const session = (await cookies()).get(SESSION_COOKIE)?.value;
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await upstream(path, {
     ...init,
     headers: { 'content-type': 'application/json', ...(session ? { cookie: `${SESSION_COOKIE}=${session}` } : {}), ...init.headers },
     cache: 'no-store',

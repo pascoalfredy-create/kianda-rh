@@ -11,3 +11,7 @@ packages/db/src/generated/
 .DS_Store
 .turbo/
 *.tsbuildinfo
+.dev.vars
+.open-next
+.wrangler
+wrangler.deploy.json

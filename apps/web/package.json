@@ -8,10 +8,14 @@
     "build": "next build",
     "start": "next start -p 3000",
     "typecheck": "tsc --noEmit",
-    "test": "echo \"(testes de interface na próxima fase)\""
+    "test": "echo \"(testes de interface na próxima fase)\"",
+    "cf:build": "opennextjs-cloudflare build",
+    "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "cf:deploy": "opennextjs-cloudflare deploy"
   },
   "dependencies": {
     "@kianda/core": "workspace:*",
+    "@opennextjs/cloudflare": "1.20.13",
     "next": "16.4.3",
     "react": "19.3.1",
     "react-dom": "19.3.1",

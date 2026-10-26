@@ -1,12 +1,18 @@
-name: CI
+name: CI e publicação
 
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch: {}
+
+concurrency:
+  group: kianda-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   test:
+    name: Verificar e testar
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -33,4 +39,66 @@ jobs:
       - run: pnpm db:migrate
       - run: pnpm typecheck
       - run: pnpm test
-      - run: pnpm --filter @kianda/web build
+      - name: Build Cloudflare (OpenNext)
+        run: pnpm --filter @kianda/web cf:build
+
+  deploy:
+    name: Publicar no Cloudflare
+    needs: test
+    # Só em main e depois de configurado (variável de repositório KIANDA_DEPLOY = true). Ver docs/DEPLOY.md.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.KIANDA_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @kianda/core build
+      - run: pnpm --filter @kianda/db build
+
+      - name: Migrações na base de dados de produção (Supabase)
+        run: pnpm db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.KIANDA_DATABASE_URL }}
+          DATABASE_CA_CERT: ${{ secrets.KIANDA_DATABASE_CA_CERT }}
+
+      - name: Dados de demonstração (opcional, idempotente)
+        if: vars.KIANDA_SEED_DEMO == 'true'
+        run: pnpm db:seed
+        env:
+          DATABASE_URL: ${{ secrets.KIANDA_DATABASE_URL }}
+          DATABASE_CA_CERT: ${{ secrets.KIANDA_DATABASE_CA_CERT }}
+          SEED_OWNER_PASSWORD: ${{ secrets.KIANDA_SEED_OWNER_PASSWORD }}
+
+      - name: Preparar configuração de produção
+        run: node scripts/cf-prepare.mjs
+        env:
+          KIANDA_HYPERDRIVE_ID: ${{ secrets.KIANDA_HYPERDRIVE_ID }}
+          KIANDA_HOSTNAME: ${{ vars.KIANDA_HOSTNAME }}
+
+      - name: Publicar API (kianda-api, sem endereço público)
+        working-directory: apps/api
+        run: |
+          npx wrangler deploy --config wrangler.deploy.json
+          printf '{"API_JWT_SECRET":"%s"}' "$API_JWT_SECRET" | npx wrangler secret bulk --config wrangler.deploy.json
+        env:
+          API_JWT_SECRET: ${{ secrets.KIANDA_JWT_SECRET }}
+
+      - name: Publicar web (kianda-web)
+        working-directory: apps/web
+        run: |
+          pnpm cf:build
+          npx wrangler deploy --config wrangler.deploy.json
+
+      - name: Verificar
+        if: vars.KIANDA_HOSTNAME != ''
+        run: |
+          sleep 10
+          curl -fsS "https://${{ vars.KIANDA_HOSTNAME }}/api/health"

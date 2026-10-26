@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "description": "Kianda RH — gestão de pessoas, payroll e finanças de pessoal para empresas angolanas",
   "packageManager": "pnpm@10.12.1",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "pnpm -r --parallel --filter ./apps/* dev",
     "build": "pnpm -r build",
@@ -16,7 +18,8 @@
     "db:seed": "pnpm --filter @kianda/db seed"
   },
   "devDependencies": {
+    "@types/node": "22.19.19",
     "typescript": "5.9.3",
-    "@types/node": "22.19.19"
+    "wrangler": "4.152.0"
   }
 }

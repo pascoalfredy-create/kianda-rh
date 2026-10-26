@@ -1,11 +1,8 @@
-import cookie from '@fastify/cookie';
-import cors from '@fastify/cors';
-import jwt from '@fastify/jwt';
-import rateLimit from '@fastify/rate-limit';
 import { PackNotFoundError } from '@kianda/core';
-import Fastify from 'fastify';
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { ZodError } from 'zod';
-import { SESSION_COOKIE } from './plugins/tenant.js';
+import { setRateLimitEnabled, type AppEnv } from './plugins/tenant.js';
 import { absenceRoutes } from './routes/absences.js';
 import { authRoutes } from './routes/auth.js';
 import { employeeRoutes } from './routes/employees.js';
@@ -13,35 +10,40 @@ import { payrollRoutes } from './routes/payroll.js';
 import { publicRoutes } from './routes/public.js';
 import { DomainError } from './services/payroll.js';
 
-function jwtSecret(): string {
-  const s = process.env.API_JWT_SECRET;
-  if (s && s.length >= 32) return s;
-  if (process.env.NODE_ENV === 'production') throw new Error('API_JWT_SECRET em falta ou com menos de 32 caracteres');
-  return 'segredo-de-desenvolvimento-nao-usar-em-producao-0123456789';
-}
+/**
+ * API Hono — corre igual em Node (servidor local, testes) e em Cloudflare Workers (produção).
+ * Sem geração de código em tempo de execução (proibida nos Workers).
+ */
+export function buildApp(opts: { logger?: boolean; rateLimit?: boolean } = {}) {
+  setRateLimitEnabled(opts.rateLimit !== false);
+  const app = new Hono<AppEnv>();
 
-export async function buildApp(opts: { logger?: boolean; rateLimit?: boolean } = {}) {
-  const app = Fastify({ logger: opts.logger ?? false, trustProxy: true });
-  await app.register(cors, { origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000', credentials: true });
-  await app.register(cookie);
-  await app.register(jwt, { secret: jwtSecret(), cookie: { cookieName: SESSION_COOKIE, signed: false } });
-  await app.register(rateLimit, { global: false, max: opts.rateLimit === false ? 10_000 : undefined });
+  app.use('*', cors({ origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000', credentials: true }));
+  if (opts.logger) {
+    app.use('*', async (c, next) => {
+      const t = Date.now();
+      await next();
+      console.log(`${c.req.method} ${c.req.path} ${c.res.status} ${Date.now() - t}ms`);
+    });
+  }
 
-  app.setErrorHandler((err, _req, reply) => {
-    if (err instanceof ZodError) return reply.code(400).send({ error: 'dados_invalidos', issues: err.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) });
-    if (err instanceof DomainError) return reply.code(err.status).send({ error: err.code, message: err.message });
-    if (err instanceof PackNotFoundError) return reply.code(422).send({ error: 'pacote_inexistente', message: err.message });
-    const e = err as { code?: string; statusCode?: number; message?: string; cause?: { code?: string } };
-    if (e.code === '23505' || e.cause?.code === '23505') return reply.code(409).send({ error: 'duplicado', message: 'Registo duplicado' });
-    if (e.statusCode === 429) return reply.code(429).send({ error: 'demasiados_pedidos', message: 'Demasiadas tentativas. Aguarde e tente novamente.' });
-    app.log.error(err);
-    return reply.code(500).send({ error: 'erro_interno' });
+  app.onError((err, c) => {
+    if (err instanceof ZodError) return c.json({ error: 'dados_invalidos', issues: err.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) }, 400);
+    if (err instanceof DomainError) return c.json({ error: err.code, message: err.message }, err.status as 400);
+    if (err instanceof PackNotFoundError) return c.json({ error: 'pacote_inexistente', message: err.message }, 422);
+    const e = err as { code?: string; cause?: { code?: string } };
+    if (e.code === '23505' || e.cause?.code === '23505') return c.json({ error: 'duplicado', message: 'Registo duplicado' }, 409);
+    console.error(err);
+    return c.json({ error: 'erro_interno', message: 'Erro interno. Tente novamente.' }, 500);
   });
+  app.notFound((c) => c.json({ error: 'nao_encontrado', message: 'Rota inexistente' }, 404));
 
-  await app.register(publicRoutes);
-  await app.register(authRoutes);
-  await app.register(employeeRoutes);
-  await app.register(absenceRoutes);
-  await app.register(payrollRoutes);
+  app.route('/', publicRoutes());
+  app.route('/', authRoutes());
+  app.route('/', employeeRoutes());
+  app.route('/', absenceRoutes());
+  app.route('/', payrollRoutes());
   return app;
 }
+
+export type App = ReturnType<typeof buildApp>;

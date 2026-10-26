@@ -9,7 +9,7 @@ Produto independente da plataforma Enterprise Performance (Integra). Ao contrár
 ```
 kianda-rh/
 ├── apps/
-│   ├── api/        API REST (Node.js + Fastify + Zod)
+│   ├── api/        API REST (Hono + Zod) — Node em local, Cloudflare Workers em produção
 │   └── web/        Aplicação web (Next.js 16 + React 19)
 ├── packages/
 │   ├── core/       Motor de cálculo puro: payroll Angola, calendário laboral, cessação, PGC, conciliação
@@ -64,3 +64,7 @@ Entre em http://localhost:3000 com `admin@kwanzalog.co.ao` e a palavra-passe de 
 ## Estado
 
 Primeira estrutura funcional. Ver [docs/ROADMAP.md](docs/ROADMAP.md) para o que falta, a começar pela autenticação.
+
+## Publicação
+
+Cada push para `main` testa e publica no Cloudflare (Workers + Hyperdrive + Supabase). Configuração única em [docs/DEPLOY.md](docs/DEPLOY.md).

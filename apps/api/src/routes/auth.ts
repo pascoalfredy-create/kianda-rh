@@ -1,86 +1,95 @@
 import { isValidCompanyNif } from '@kianda/core';
 import { auditLogs, companies, employees, getDb, hashPassword, passwordProblems, users, verifyPassword } from '@kianda/db';
-import { and, eq } from 'drizzle-orm';
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import { and, eq } from '@kianda/db';
+import { Hono } from 'hono';
+import { deleteCookie, setCookie } from 'hono/cookie';
+import { sign } from 'hono/jwt';
 import { z } from 'zod';
-
-import { requireCompany, requireRole, SESSION_COOKIE, type Role, type SessionClaims } from '../plugins/tenant.js';
+import { body, jwtSecret, rateLimit, requireCompany, requireRole, SESSION_COOKIE, type AppEnv, type Ctx, type Role, type SessionClaims } from '../plugins/tenant.js';
 
 const SESSION_HOURS = 12;
 const password = z.string().superRefine((v, ctx) => { const p = passwordProblems(v); if (p) ctx.addIssue({ code: 'custom', message: p }); });
 
-async function startSession(app: FastifyInstance, reply: FastifyReply, claims: SessionClaims) {
-  const token = await reply.jwtSign(claims, { expiresIn: `${SESSION_HOURS}h` });
-  reply.setCookie(SESSION_COOKIE, token, {
-    path: '/', httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: SESSION_HOURS * 3600,
+async function startSession(c: Ctx, claims: SessionClaims) {
+  const exp = Math.floor(Date.now() / 1000) + SESSION_HOURS * 3600;
+  const token = await sign({ ...claims, exp }, jwtSecret(), 'HS256');
+  setCookie(c, SESSION_COOKIE, token, {
+    path: '/', httpOnly: true, sameSite: 'Lax', secure: process.env.NODE_ENV === 'production', maxAge: SESSION_HOURS * 3600,
   });
   return token;
 }
 
-export async function authRoutes(app: FastifyInstance) {
+export function authRoutes() {
+  const app = new Hono<AppEnv>();
+
   /** Registo de uma nova empresa com o seu utilizador proprietário. */
-  app.post('/v1/auth/register', { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } }, async (req, reply) => {
+  app.post('/v1/auth/register', rateLimit('register', 5, 3_600_000), async (c) => {
     const b = z.object({
       company: z.object({ name: z.string().min(2), nif: z.string().refine(isValidCompanyNif, 'NIF de empresa deve ter 10 dígitos') }),
       name: z.string().min(2),
       email: z.email(),
       password,
-    }).parse(req.body);
+    }).parse(await body(c));
     const db = getDb();
+    const passwordHash = await hashPassword(b.password);
     const result = await db.transaction(async (tx) => {
-      const [c] = await tx.insert(companies).values({ name: b.company.name, nif: b.company.nif }).returning();
-      const [u] = await tx.insert(users).values({ companyId: c!.id, email: b.email.toLowerCase(), name: b.name, passwordHash: await hashPassword(b.password), role: 'owner' }).returning();
-      await tx.insert(auditLogs).values({ companyId: c!.id, actorId: u!.id, action: 'register', entity: 'company', entityId: c!.id, after: { company: c, owner: { id: u!.id, email: u!.email } } });
-      return { company: c!, user: u! };
+      const [co] = await tx.insert(companies).values({ name: b.company.name, nif: b.company.nif }).returning();
+      const [u] = await tx.insert(users).values({ companyId: co!.id, email: b.email.toLowerCase(), name: b.name, passwordHash, role: 'owner' }).returning();
+      await tx.insert(auditLogs).values({ companyId: co!.id, actorId: u!.id, action: 'register', entity: 'company', entityId: co!.id, after: { company: co, owner: { id: u!.id, email: u!.email } } });
+      return { company: co!, user: u! };
     });
-    const token = await startSession(app, reply, { sub: result.user.id, companyId: result.company.id, role: 'owner', employeeId: null, name: result.user.name });
-    return reply.code(201).send({ company: result.company, user: { id: result.user.id, name: result.user.name, email: result.user.email, role: 'owner' }, token });
+    const token = await startSession(c, { sub: result.user.id, companyId: result.company.id, role: 'owner', employeeId: null, name: result.user.name });
+    return c.json({ company: result.company, user: { id: result.user.id, name: result.user.name, email: result.user.email, role: 'owner' }, token }, 201);
   });
 
-  app.post('/v1/auth/login', { config: { rateLimit: { max: 10, timeWindow: '15 minutes' } } }, async (req, reply) => {
-    const b = z.object({ email: z.email(), password: z.string().min(1), companyNif: z.string().optional() }).parse(req.body);
+  app.post('/v1/auth/login', rateLimit('login', 10, 900_000), async (c) => {
+    const b = z.object({ email: z.email(), password: z.string().min(1), companyNif: z.string().optional() }).parse(await body(c));
     const db = getDb();
-    const rows = await db.select({ u: users, c: companies }).from(users).innerJoin(companies, eq(companies.id, users.companyId))
+    const rows = await db.select({ u: users, co: companies }).from(users).innerJoin(companies, eq(companies.id, users.companyId))
       .where(b.companyNif ? and(eq(users.email, b.email.toLowerCase()), eq(companies.nif, b.companyNif)) : eq(users.email, b.email.toLowerCase()));
-    if (rows.length > 1) return reply.code(409).send({ error: 'varias_empresas', message: 'Este email existe em várias empresas. Indique o NIF da empresa.' });
+    if (rows.length > 1) return c.json({ error: 'varias_empresas', message: 'Este email existe em várias empresas. Indique o NIF da empresa.' }, 409);
     const row = rows[0];
     // Mesma resposta para email inexistente e palavra-passe errada (não revela contas).
-    if (!row || !(await verifyPassword(b.password, row.u.passwordHash))) return reply.code(401).send({ error: 'credenciais_invalidas', message: 'Email ou palavra-passe incorrectos.' });
-    const token = await startSession(app, reply, { sub: row.u.id, companyId: row.c.id, role: row.u.role, employeeId: row.u.employeeId, name: row.u.name });
-    await db.insert(auditLogs).values({ companyId: row.c.id, actorId: row.u.id, action: 'login', entity: 'user', entityId: row.u.id });
-    return { user: { id: row.u.id, name: row.u.name, email: row.u.email, role: row.u.role }, company: { id: row.c.id, name: row.c.name }, token };
+    if (!row || !(await verifyPassword(b.password, row.u.passwordHash))) return c.json({ error: 'credenciais_invalidas', message: 'Email ou palavra-passe incorrectos.' }, 401);
+    const token = await startSession(c, { sub: row.u.id, companyId: row.co.id, role: row.u.role, employeeId: row.u.employeeId, name: row.u.name });
+    await db.insert(auditLogs).values({ companyId: row.co.id, actorId: row.u.id, action: 'login', entity: 'user', entityId: row.u.id });
+    return c.json({ user: { id: row.u.id, name: row.u.name, email: row.u.email, role: row.u.role }, company: { id: row.co.id, name: row.co.name }, token });
   });
 
-  app.post('/v1/auth/logout', async (_req, reply) => {
-    reply.clearCookie(SESSION_COOKIE, { path: '/' });
-    return { ok: true };
+  app.post('/v1/auth/logout', (c) => {
+    deleteCookie(c, SESSION_COOKIE, { path: '/' });
+    return c.json({ ok: true });
   });
 
-  app.get('/v1/auth/me', { preHandler: requireCompany }, async (req) => {
-    const db = getDb();
-    const [c] = await db.select().from(companies).where(eq(companies.id, req.companyId));
-    return { user: req.user, company: c ? { id: c.id, name: c.name, nif: c.nif } : null };
+  app.get('/v1/auth/me', requireCompany, async (c) => {
+    const { companyId, session } = c.get('actor');
+    const [co] = await getDb().select().from(companies).where(eq(companies.id, companyId));
+    const { exp: _exp, ...user } = session as SessionClaims & { exp?: number };
+    return c.json({ user, company: co ? { id: co.id, name: co.name, nif: co.nif } : null });
   });
 
   /** Gestão de utilizadores da empresa (proprietário e administração de RH). */
-  app.get('/v1/users', { preHandler: [requireCompany, requireRole('hr_admin')] }, async (req) => {
-    return getDb().select({ id: users.id, name: users.name, email: users.email, role: users.role, employeeId: users.employeeId, createdAt: users.createdAt }).from(users).where(eq(users.companyId, req.companyId));
+  app.get('/v1/users', requireCompany, requireRole('hr_admin'), async (c) => {
+    return c.json(await getDb().select({ id: users.id, name: users.name, email: users.email, role: users.role, employeeId: users.employeeId, createdAt: users.createdAt }).from(users).where(eq(users.companyId, c.get('actor').companyId)));
   });
 
-  app.post('/v1/users', { preHandler: [requireCompany, requireRole('hr_admin')] }, async (req, reply) => {
+  app.post('/v1/users', requireCompany, requireRole('hr_admin'), async (c) => {
+    const actor = c.get('actor');
     const b = z.object({
       name: z.string().min(2), email: z.email(), password,
       role: z.enum(['hr_admin', 'payroll', 'finance', 'manager', 'employee']),
       employeeId: z.string().optional(),
-    }).parse(req.body);
-    if (b.role === 'hr_admin' && req.role !== 'owner') return reply.code(403).send({ error: 'sem_permissao', message: 'Só o proprietário pode criar administradores de RH.' });
+    }).parse(await body(c));
+    if (b.role === 'hr_admin' && actor.role !== 'owner') return c.json({ error: 'sem_permissao', message: 'Só o proprietário pode criar administradores de RH.' }, 403);
     const db = getDb();
     if (b.employeeId) {
-      const [e] = await db.select().from(employees).where(and(eq(employees.id, b.employeeId), eq(employees.companyId, req.companyId)));
-      if (!e) return reply.code(404).send({ error: 'colaborador_inexistente' });
+      const [e] = await db.select().from(employees).where(and(eq(employees.id, b.employeeId), eq(employees.companyId, actor.companyId)));
+      if (!e) return c.json({ error: 'colaborador_inexistente', message: 'Colaborador inexistente' }, 404);
     }
-    const [u] = await db.insert(users).values({ companyId: req.companyId, name: b.name, email: b.email.toLowerCase(), passwordHash: await hashPassword(b.password), role: b.role as Role, employeeId: b.employeeId }).returning();
-    await db.insert(auditLogs).values({ companyId: req.companyId, actorId: req.actorId, action: 'create', entity: 'user', entityId: u!.id, after: { email: u!.email, role: u!.role } });
-    return reply.code(201).send({ id: u!.id, name: u!.name, email: u!.email, role: u!.role, employeeId: u!.employeeId });
+    const [u] = await db.insert(users).values({ companyId: actor.companyId, name: b.name, email: b.email.toLowerCase(), passwordHash: await hashPassword(b.password), role: b.role as Role, employeeId: b.employeeId }).returning();
+    await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'create', entity: 'user', entityId: u!.id, after: { email: u!.email, role: u!.role } });
+    return c.json({ id: u!.id, name: u!.name, email: u!.email, role: u!.role, employeeId: u!.employeeId }, 201);
   });
+
+  return app;
 }

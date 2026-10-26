@@ -1,34 +1,39 @@
 import { getDb, journalEntries, payrollLines, payrollRuns } from '@kianda/db';
-import { and, eq } from 'drizzle-orm';
-import type { FastifyInstance } from 'fastify';
+import { and, eq } from '@kianda/db';
+import { Hono } from 'hono';
 import { z } from 'zod';
-import { requireCompany, requireRole } from '../plugins/tenant.js';
+import { body, requireCompany, requireRole, type AppEnv } from '../plugins/tenant.js';
 import { closePayroll, draftPayroll } from '../services/payroll.js';
 
-export async function payrollRoutes(app: FastifyInstance) {
-  app.addHook('preHandler', requireCompany);
+export function payrollRoutes() {
+  const app = new Hono<AppEnv>();
+  app.use('/v1/payroll-runs/*', requireCompany);
+  app.use('/v1/payroll-runs', requireCompany);
+  app.use('/v1/journal', requireCompany);
 
-  app.post('/v1/payroll-runs', { preHandler: requireRole('payroll') }, async (req, reply) => {
-    const { period } = z.object({ period: z.string() }).parse(req.body);
-    return reply.code(201).send(await draftPayroll(getDb(), req.companyId, period, req.actorId));
+  app.post('/v1/payroll-runs', requireRole('payroll'), async (c) => {
+    const { companyId, actorId } = c.get('actor');
+    const { period } = z.object({ period: z.string() }).parse(await body(c));
+    return c.json(await draftPayroll(getDb(), companyId, period, actorId), 201);
   });
 
-  app.get('/v1/payroll-runs/:id', { preHandler: requireRole('payroll', 'finance') }, async (req, reply) => {
-    const { id } = z.object({ id: z.string() }).parse(req.params);
+  app.get('/v1/payroll-runs/:id', requireRole('payroll', 'finance'), async (c) => {
+    const { id } = c.req.param();
     const db = getDb();
-    const [run] = await db.select().from(payrollRuns).where(and(eq(payrollRuns.id, id), eq(payrollRuns.companyId, req.companyId)));
-    if (!run) return reply.code(404).send({ error: 'nao_encontrado' });
+    const [run] = await db.select().from(payrollRuns).where(and(eq(payrollRuns.id, id), eq(payrollRuns.companyId, c.get('actor').companyId)));
+    if (!run) return c.json({ error: 'nao_encontrado', message: 'Processamento inexistente' }, 404);
     const lines = await db.select().from(payrollLines).where(eq(payrollLines.runId, id));
-    return { ...run, lines };
+    return c.json({ ...run, lines });
   });
 
-  app.post('/v1/payroll-runs/:id/close', { preHandler: requireRole('finance') }, async (req) => {
-    const { id } = z.object({ id: z.string() }).parse(req.params);
-    return closePayroll(getDb(), req.companyId, id, req.actorId, req.role);
+  app.post('/v1/payroll-runs/:id/close', requireRole('finance'), async (c) => {
+    const { companyId, actorId, role } = c.get('actor');
+    return c.json(await closePayroll(getDb(), companyId, c.req.param('id'), actorId, role));
   });
 
-  app.get('/v1/journal', { preHandler: requireRole('finance', 'payroll') }, async (req) => {
-    const db = getDb();
-    return db.query.journalEntries.findMany({ where: eq(journalEntries.companyId, req.companyId), with: { lines: true }, orderBy: (j, { desc }) => [desc(j.date)] });
+  app.get('/v1/journal', requireRole('finance', 'payroll'), async (c) => {
+    return c.json(await getDb().query.journalEntries.findMany({ where: eq(journalEntries.companyId, c.get('actor').companyId), with: { lines: true }, orderBy: (j, { desc }) => [desc(j.date)] }));
   });
+
+  return app;
 }

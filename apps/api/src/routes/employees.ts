@@ -5,10 +5,10 @@ import {
 import {
   auditLogs, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, payrollRuns, users, type Db,
 } from '@kianda/db';
-import { and, asc, desc, eq, gte, inArray, or, sql } from 'drizzle-orm';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { and, asc, desc, eq, gte, inArray, or, sql } from '@kianda/db';
+import { Hono } from 'hono';
 import { z } from 'zod';
-import { requireCompany, requireRole } from '../plugins/tenant.js';
+import { body, requireCompany, requireRole, type Actor, type AppEnv } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
 
 const STAFF = ['hr_admin', 'payroll', 'finance', 'manager'] as const;
@@ -111,31 +111,36 @@ async function assertPeriodOpen(db: Db, companyId: string, effectiveDate: string
   if (closed) throw new DomainError('periodo_fechado', `O processamento de ${closed.period} já está fechado. Use uma data de efeito posterior e registe o retroactivo como acerto.`);
 }
 
-async function loadEmployee(db: Db, req: FastifyRequest, id: string) {
+async function loadEmployee(db: Db, req: Actor, id: string) {
   const [e] = await db.select().from(employees).where(and(eq(employees.id, id), eq(employees.companyId, req.companyId)));
   if (!e) throw new DomainError('nao_encontrado', 'Colaborador inexistente', 404);
   return e;
 }
 
-const audit = (db: Db, req: FastifyRequest, action: string, entity: string, entityId: string, before: unknown, after: unknown) =>
+const audit = (db: Db, req: Actor, action: string, entity: string, entityId: string, before: unknown, after: unknown) =>
   db.insert(auditLogs).values({ companyId: req.companyId, actorId: req.actorId, action, entity, entityId, before: before as object, after: after as object });
 
 // ───────────────────────── Rotas ─────────────────────────
 
-export async function employeeRoutes(app: FastifyInstance) {
-  app.addHook('preHandler', requireCompany);
+export function employeeRoutes() {
+  const app = new Hono<AppEnv>();
+  for (const path of ['/v1/departments', '/v1/employees', '/v1/employees/*', '/v1/org-chart']) app.use(path, requireCompany);
 
-  app.get('/v1/departments', { preHandler: requireRole(...STAFF) }, async (req) =>
-    getDb().select().from(departments).where(eq(departments.companyId, req.companyId)).orderBy(asc(departments.name)));
-
-  app.post('/v1/departments', { preHandler: requireRole('hr_admin') }, async (req, reply) => {
-    const b = z.object({ name: z.string().trim().min(2), costCenter: z.string().trim().min(2).toUpperCase() }).parse(req.body);
-    const [d] = await getDb().insert(departments).values({ companyId: req.companyId, ...b }).returning();
-    await audit(getDb(), req, 'create', 'department', d!.id, null, d);
-    return reply.code(201).send(d);
+  app.get('/v1/departments', requireRole(...STAFF), async (ctx) => {
+    const req = ctx.get('actor');
+    return ctx.json(await getDb().select().from(departments).where(eq(departments.companyId, req.companyId)).orderBy(asc(departments.name)));
   });
 
-  app.get('/v1/employees', { preHandler: requireRole(...STAFF) }, async (req) => {
+  app.post('/v1/departments', requireRole('hr_admin'), async (ctx) => {
+    const req = ctx.get('actor');
+    const b = z.object({ name: z.string().trim().min(2), costCenter: z.string().trim().min(2).toUpperCase() }).parse(await body(ctx));
+    const [d] = await getDb().insert(departments).values({ companyId: req.companyId, ...b }).returning();
+    await audit(getDb(), req, 'create', 'department', d!.id, null, d);
+    return ctx.json(d, 201);
+  });
+
+  app.get('/v1/employees', requireRole(...STAFF), async (ctx) => {
+    const req = ctx.get('actor');
     const db = getDb();
     const rows = await db.select({ e: employees, c: contracts, dept: departments.name }).from(employees)
       .leftJoin(contracts, eq(contracts.employeeId, employees.id))
@@ -147,7 +152,7 @@ export async function employeeRoutes(app: FastifyInstance) {
     const t = today();
     const pack = packFor(t);
     const seen = new Set<string>();
-    return rows.filter((r) => !seen.has(r.e.id) && seen.add(r.e.id)).map(({ e, c, dept }) => {
+    return ctx.json(rows.filter((r) => !seen.has(r.e.id) && seen.add(r.e.id)).map(({ e, c, dept }) => {
       const current = compensationAt(comp.filter((x) => x.employeeId === e.id), t);
       const baseMinor = current?.baseMinor ?? c?.baseMinor ?? 0;
       return {
@@ -162,11 +167,12 @@ export async function employeeRoutes(app: FastifyInstance) {
             ]
           : ['Sem contrato registado'],
       };
-    });
+    }));
   });
 
-  app.post('/v1/employees', { preHandler: requireRole('hr_admin') }, async (req, reply) => {
-    const b = createBody.parse(req.body);
+  app.post('/v1/employees', requireRole('hr_admin'), async (ctx) => {
+    const req = ctx.get('actor');
+    const b = createBody.parse(await body(ctx));
     const db = getDb();
     await assertDepartment(db, req.companyId, b.departmentId);
     await assertManager(db, req.companyId, null, b.managerId);
@@ -185,20 +191,21 @@ export async function employeeRoutes(app: FastifyInstance) {
       await tx.insert(auditLogs).values({ companyId: req.companyId, actorId: req.actorId, action: 'create', entity: 'employee', entityId: e!.id, after: { employee: e, contract: c } });
       return { ...e!, contract: c };
     });
-    return reply.code(201).send(result);
+    return ctx.json(result, 201);
   });
 
   /** Ficha completa. O próprio colaborador vê a sua; os perfis de gestão vêem todas. */
-  app.get('/v1/employees/:id', async (req, reply) => {
-    const { id } = z.object({ id: z.string() }).parse(req.params);
+  app.get('/v1/employees/:id', async (ctx) => {
+    const req = ctx.get('actor');
+    const { id } = z.object({ id: z.string() }).parse(ctx.req.param());
     const privileged = ['owner', ...STAFF].includes(req.role);
-    if (!privileged && req.employeeId !== id) return reply.code(403).send({ error: 'sem_permissao', message: 'Só pode consultar a sua própria ficha.' });
+    if (!privileged && req.employeeId !== id) return ctx.json({ error: 'sem_permissao', message: 'Só pode consultar a sua própria ficha.' }, 403);
     const db = getDb();
     const e = await db.query.employees.findFirst({
       where: and(eq(employees.id, id), eq(employees.companyId, req.companyId)),
       with: { department: true, contracts: { orderBy: desc(contracts.startDate) }, compensation: true, documents: { orderBy: asc(employeeDocuments.type) } },
     });
-    if (!e) return reply.code(404).send({ error: 'nao_encontrado', message: 'Colaborador inexistente' });
+    if (!e) return ctx.json({ error: 'nao_encontrado', message: 'Colaborador inexistente' }, 404);
     const [manager] = e.managerId
       ? await db.select({ id: employees.id, name: employees.name, jobTitle: employees.jobTitle }).from(employees).where(and(eq(employees.id, e.managerId), eq(employees.companyId, req.companyId)))
       : [];
@@ -210,7 +217,7 @@ export async function employeeRoutes(app: FastifyInstance) {
     const current = compensationAt(e.compensation, t);
     const contract = e.contracts[0] ?? null;
     const { compensation, documents, contracts: allContracts, ...rest } = e;
-    return {
+    return ctx.json({
       ...rest,
       manager: manager ?? null,
       reports,
@@ -227,28 +234,30 @@ export async function employeeRoutes(app: FastifyInstance) {
         ...(!e.iban ? ['Sem IBAN: o salário não pode ser incluído no ficheiro de transferência'] : []),
         ...(!e.inssNumber ? ['Sem número de segurança social (INSS)'] : []),
       ],
-    };
+    });
   });
 
-  app.patch('/v1/employees/:id', { preHandler: requireRole('hr_admin') }, async (req) => {
-    const { id } = z.object({ id: z.string() }).parse(req.params);
-    const b = patchBody.parse(req.body);
+  app.patch('/v1/employees/:id', requireRole('hr_admin'), async (ctx) => {
+    const req = ctx.get('actor');
+    const { id } = z.object({ id: z.string() }).parse(ctx.req.param());
+    const b = patchBody.parse(await body(ctx));
     const db = getDb();
     const before = await loadEmployee(db, req, id);
     if (before.status === 'terminated') throw new DomainError('colaborador_cessado', 'A ficha de um colaborador cessado não pode ser alterada');
     if ('departmentId' in b) await assertDepartment(db, req.companyId, b.departmentId);
     if ('managerId' in b) await assertManager(db, req.companyId, id, b.managerId);
     const changes = Object.fromEntries(Object.entries(b).filter(([k, v]) => v !== undefined && (before as Record<string, unknown>)[k] !== v));
-    if (!Object.keys(changes).length) return before;
+    if (!Object.keys(changes).length) return ctx.json(before);
     const [after] = await db.update(employees).set({ ...changes, updatedAt: new Date() }).where(eq(employees.id, id)).returning();
     await audit(db, req, 'update', 'employee', id, Object.fromEntries(Object.keys(changes).map((k) => [k, (before as Record<string, unknown>)[k]])), changes);
-    return after;
+    return ctx.json(after);
   });
 
   /** Novo contrato (renovação, conversão a indeterminado, promoção com novo vínculo). Encerra o anterior na véspera. */
-  app.post('/v1/employees/:id/contracts', { preHandler: requireRole('hr_admin') }, async (req, reply) => {
-    const { id } = z.object({ id: z.string() }).parse(req.params);
-    const b = contractBody.parse(req.body);
+  app.post('/v1/employees/:id/contracts', requireRole('hr_admin'), async (ctx) => {
+    const req = ctx.get('actor');
+    const { id } = z.object({ id: z.string() }).parse(ctx.req.param());
+    const b = contractBody.parse(await body(ctx));
     const db = getDb();
     const e = await loadEmployee(db, req, id);
     if (e.status === 'terminated') throw new DomainError('colaborador_cessado', 'Colaborador cessado: readmita-o com uma nova ficha');
@@ -272,13 +281,14 @@ export async function employeeRoutes(app: FastifyInstance) {
       await tx.insert(auditLogs).values({ companyId: req.companyId, actorId: req.actorId, action: 'create', entity: 'contract', entityId: c!.id, before: prev ?? null, after: c });
       return c;
     });
-    return reply.code(201).send(result);
+    return ctx.json(result, 201);
   });
 
   /** Alteração salarial com data de efeito (actualização anual, promoção, correcção). */
-  app.post('/v1/employees/:id/compensation', { preHandler: requireRole('hr_admin') }, async (req, reply) => {
-    const { id } = z.object({ id: z.string() }).parse(req.params);
-    const b = compensationBody.parse(req.body);
+  app.post('/v1/employees/:id/compensation', requireRole('hr_admin'), async (ctx) => {
+    const req = ctx.get('actor');
+    const { id } = z.object({ id: z.string() }).parse(ctx.req.param());
+    const b = compensationBody.parse(await body(ctx));
     const db = getDb();
     const e = await loadEmployee(db, req, id);
     if (e.status === 'terminated') throw new DomainError('colaborador_cessado', 'Colaborador cessado');
@@ -295,32 +305,35 @@ export async function employeeRoutes(app: FastifyInstance) {
       baseMinor: kz(b.base), mealMinor: kz(b.meal), transportMinor: kz(b.transport), reason: b.reason, createdBy: req.actorId,
     }).returning();
     await audit(db, req, 'create', 'compensation', row!.id, compensationAt(history, b.effectiveDate), row);
-    return reply.code(201).send(row);
+    return ctx.json(row, 201);
   });
 
-  app.post('/v1/employees/:id/documents', { preHandler: requireRole('hr_admin') }, async (req, reply) => {
-    const { id } = z.object({ id: z.string() }).parse(req.params);
-    const b = documentBody.parse(req.body);
+  app.post('/v1/employees/:id/documents', requireRole('hr_admin'), async (ctx) => {
+    const req = ctx.get('actor');
+    const { id } = z.object({ id: z.string() }).parse(ctx.req.param());
+    const b = documentBody.parse(await body(ctx));
     const db = getDb();
     await loadEmployee(db, req, id);
     const [d] = await db.insert(employeeDocuments).values({ companyId: req.companyId, employeeId: id, ...b }).returning();
     if (b.type === 'bi') await db.update(employees).set({ biNumber: b.number, updatedAt: new Date() }).where(eq(employees.id, id));
     await audit(db, req, 'create', 'employee_document', d!.id, null, d);
-    return reply.code(201).send(d);
+    return ctx.json(d, 201);
   });
 
-  app.delete('/v1/employees/:id/documents/:docId', { preHandler: requireRole('hr_admin') }, async (req, reply) => {
-    const { id, docId } = z.object({ id: z.string(), docId: z.string() }).parse(req.params);
+  app.delete('/v1/employees/:id/documents/:docId', requireRole('hr_admin'), async (ctx) => {
+    const req = ctx.get('actor');
+    const { id, docId } = z.object({ id: z.string(), docId: z.string() }).parse(ctx.req.param());
     const db = getDb();
     const [d] = await db.delete(employeeDocuments).where(and(eq(employeeDocuments.id, docId), eq(employeeDocuments.employeeId, id), eq(employeeDocuments.companyId, req.companyId))).returning();
-    if (!d) return reply.code(404).send({ error: 'nao_encontrado', message: 'Documento inexistente' });
+    if (!d) return ctx.json({ error: 'nao_encontrado', message: 'Documento inexistente' }, 404);
     await audit(db, req, 'delete', 'employee_document', d.id, d, null);
-    return reply.code(204).send();
+    return ctx.body(null, 204);
   });
 
   /** Histórico de alterações da ficha (auditoria): quem mudou o quê e quando. */
-  app.get('/v1/employees/:id/history', { preHandler: requireRole('hr_admin') }, async (req) => {
-    const { id } = z.object({ id: z.string() }).parse(req.params);
+  app.get('/v1/employees/:id/history', requireRole('hr_admin'), async (ctx) => {
+    const req = ctx.get('actor');
+    const { id } = z.object({ id: z.string() }).parse(ctx.req.param());
     const db = getDb();
     await loadEmployee(db, req, id);
     // Inclui registos de entidades já apagadas (ex.: documentos) através do employeeId guardado no antes/depois.
@@ -331,13 +344,16 @@ export async function employeeRoutes(app: FastifyInstance) {
         sql`${auditLogs.before}->>'employeeId' = ${id}`,
       )))
       .orderBy(desc(auditLogs.at)).limit(200);
-    return all.map(({ l, actor }) => ({ ...l, actorName: actor ?? 'Sistema' }));
+    return ctx.json(all.map(({ l, actor }) => ({ ...l, actorName: actor ?? 'Sistema' })));
   });
 
-  app.get('/v1/org-chart', { preHandler: requireRole(...STAFF) }, async (req) => {
+  app.get('/v1/org-chart', requireRole(...STAFF), async (ctx) => {
+    const req = ctx.get('actor');
     const rows = await getDb().select({ id: employees.id, managerId: employees.managerId, name: employees.name, jobTitle: employees.jobTitle, number: employees.number, department: departments.name })
       .from(employees).leftJoin(departments, eq(departments.id, employees.departmentId))
       .where(and(eq(employees.companyId, req.companyId), inArray(employees.status, ['active', 'suspended'])));
-    return buildOrgTree(rows, (n) => n.name);
+    return ctx.json(buildOrgTree(rows, (n) => n.name));
   });
+
+  return app;
 }
