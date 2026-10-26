@@ -22,3 +22,4 @@ export async function closeDb(): Promise<void> {
   await instance?.pool.end();
   instance = undefined;
 }
+export * from './password.js';

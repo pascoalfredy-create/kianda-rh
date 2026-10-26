@@ -18,6 +18,8 @@ export async function absenceRoutes(app: FastifyInstance) {
 
   app.post('/v1/absences', async (req, reply) => {
     const b = body.parse(req.body);
+    const canManage = ['owner', 'hr_admin', 'manager'].includes(req.role);
+    if (!canManage && req.employeeId !== b.employeeId) return reply.code(403).send({ error: 'sem_permissao', message: 'Só pode registar ausências próprias.' });
     const db = getDb();
     const [emp] = await db.select().from(employees).where(and(eq(employees.id, b.employeeId), eq(employees.companyId, req.companyId)));
     if (!emp) return reply.code(404).send({ error: 'colaborador_inexistente' });
@@ -31,5 +33,9 @@ export async function absenceRoutes(app: FastifyInstance) {
     return reply.code(201).send(a);
   });
 
-  app.get('/v1/absences', async (req) => getDb().select().from(absences).where(eq(absences.companyId, req.companyId)));
+  app.get('/v1/absences', async (req) => {
+    const own = !['owner', 'hr_admin', 'manager', 'payroll'].includes(req.role);
+    const where = own ? and(eq(absences.companyId, req.companyId), eq(absences.employeeId, req.employeeId ?? '-')) : eq(absences.companyId, req.companyId);
+    return getDb().select().from(absences).where(where);
+  });
 }

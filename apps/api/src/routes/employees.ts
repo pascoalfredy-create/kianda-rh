@@ -3,7 +3,7 @@ import { auditLogs, contracts, departments, employees, getDb } from '@kianda/db'
 import { and, desc, eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { requireCompany } from '../plugins/tenant.js';
+import { requireCompany, requireRole } from '../plugins/tenant.js';
 
 const createBody = z.object({
   number: z.string().min(1),
@@ -30,7 +30,7 @@ const createBody = z.object({
 export async function employeeRoutes(app: FastifyInstance) {
   app.addHook('preHandler', requireCompany);
 
-  app.get('/v1/employees', async (req) => {
+  app.get('/v1/employees', { preHandler: requireRole('hr_admin', 'payroll', 'finance', 'manager') }, async (req) => {
     const db = getDb();
     const rows = await db
       .select({ e: employees, c: contracts, dept: departments.name })
@@ -55,7 +55,7 @@ export async function employeeRoutes(app: FastifyInstance) {
     }));
   });
 
-  app.post('/v1/employees', async (req, reply) => {
+  app.post('/v1/employees', { preHandler: requireRole('hr_admin') }, async (req, reply) => {
     const b = createBody.parse(req.body);
     const db = getDb();
     const result = await db.transaction(async (tx) => {
@@ -75,6 +75,8 @@ export async function employeeRoutes(app: FastifyInstance) {
 
   app.get('/v1/employees/:id', async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
+    const privileged = ['owner', 'hr_admin', 'payroll', 'finance', 'manager'].includes(req.role);
+    if (!privileged && req.employeeId !== id) return reply.code(403).send({ error: 'sem_permissao', message: 'Só pode consultar a sua própria ficha.' });
     const db = getDb();
     const e = await db.query.employees.findFirst({ where: and(eq(employees.id, id), eq(employees.companyId, req.companyId)), with: { contracts: true, absences: true, department: true } });
     if (!e) return reply.code(404).send({ error: 'nao_encontrado' });

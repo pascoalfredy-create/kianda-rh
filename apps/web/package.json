@@ -14,7 +14,12 @@
     "@kianda/core": "workspace:*",
     "next": "16.4.3",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "server-only": "^0.0.1"
   },
-  "devDependencies": { "@types/react": "19.2.14", "@types/react-dom": "19.2.3", "typescript": "5.9.3" }
+  "devDependencies": {
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "typescript": "5.9.3"
+  }
 }

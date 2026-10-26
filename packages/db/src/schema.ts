@@ -113,6 +113,7 @@ export const payrollRuns = pgTable('payroll_runs', {
   period: text('period').notNull(),
   status: payrollStatusEnum('status').notNull().default('draft'),
   packVersion: text('pack_version').notNull(),
+  preparedBy: text('prepared_by'),
   closedAt: timestamp('closed_at', { withTimezone: true }),
   closedBy: text('closed_by'),
   paidSalariesAt: date('paid_salaries_at'),

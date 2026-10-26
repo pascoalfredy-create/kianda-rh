@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { DEFAULT_PGC_ACCOUNTS, kz } from '@kianda/core';
 import { and, eq } from 'drizzle-orm';
-import { accountMappings, closeDb, companies, contracts, departments, employees, getDb } from '../src/index.js';
+import { accountMappings, closeDb, companies, contracts, departments, employees, getDb, hashPassword, users } from '../src/index.js';
 
 /** Dados de demonstração: uma empresa fictícia com três departamentos e cinco colaboradores. Idempotente. */
 const db = getDb();
@@ -38,5 +38,11 @@ for (const [role, account] of Object.entries(DEFAULT_PGC_ACCOUNTS)) {
   await db.insert(accountMappings).values({ companyId: company.id, role, account, label: role }).onConflictDoNothing();
 }
 
+const OWNER_EMAIL = 'admin@kwanzalog.co.ao';
+const ownerPassword = process.env.SEED_OWNER_PASSWORD ?? 'Kianda2026demo';
+const [owner] = await db.select().from(users).where(and(eq(users.companyId, company.id), eq(users.email, OWNER_EMAIL)));
+if (!owner) await db.insert(users).values({ companyId: company.id, email: OWNER_EMAIL, name: 'Teresa Mbala', role: 'owner', passwordHash: await hashPassword(ownerPassword) });
+
 console.log(`Empresa de demonstração pronta: ${company.name} (${company.id})`);
+console.log(`Acesso: ${OWNER_EMAIL} / ${owner ? '(palavra-passe já definida)' : ownerPassword}`);
 await closeDb();

@@ -32,10 +32,17 @@ cp .env.example .env                 # ajuste DATABASE_URL se necessário
 pnpm db:up                           # PostgreSQL em Docker (opcional)
 pnpm --filter @kianda/core build
 pnpm db:migrate                      # aplica packages/db/migrations
-pnpm db:seed                         # empresa de demonstração; imprime o id da empresa
-echo "NEXT_PUBLIC_DEMO_COMPANY_ID=<id>" > apps/web/.env.local
+pnpm db:seed                         # empresa de demonstração e utilizador proprietário
 pnpm dev                             # API em :4000 e web em :3000
 ```
+
+Entre em http://localhost:3000 com `admin@kwanzalog.co.ao` e a palavra-passe de `SEED_OWNER_PASSWORD` (por omissão `Kianda2026demo`). Novas empresas registam-se via `POST /v1/auth/register`.
+
+### Sessões e perfis
+
+- A API emite um JWT num cookie `kianda_session` (httpOnly, SameSite=Lax, 8 h). A empresa vem do token assinado — nunca de um cabeçalho do cliente.
+- O browser só fala com o Next; `/api/*` é reencaminhado para a API, por isso o cookie é sempre do mesmo domínio.
+- Perfis: `owner`, `hr_admin`, `payroll`, `finance`, `manager`, `employee`. Segregação de funções: quem prepara o processamento não o pode fechar (excepto o proprietário).
 
 ## Comandos
 

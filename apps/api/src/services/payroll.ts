@@ -16,7 +16,8 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
   return db.transaction(async (tx) => {
     let [run] = await tx.select().from(payrollRuns).where(and(eq(payrollRuns.companyId, companyId), eq(payrollRuns.period, period)));
     if (run?.status === 'closed') throw new DomainError('processamento_fechado', 'O processamento deste período já está fechado');
-    run ??= (await tx.insert(payrollRuns).values({ companyId, period, packVersion: pack.version }).returning())[0]!;
+    run ??= (await tx.insert(payrollRuns).values({ companyId, period, packVersion: pack.version, preparedBy: actorId }).returning())[0]!;
+    if (run.preparedBy !== actorId) [run] = await tx.update(payrollRuns).set({ preparedBy: actorId }).where(eq(payrollRuns.id, run.id)).returning() as [typeof run];
 
     const staff = await tx.select({ e: employees, c: contracts }).from(employees)
       .innerJoin(contracts, eq(contracts.employeeId, employees.id))
@@ -45,11 +46,13 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
 }
 
 /** Fecha o processamento: bloqueia alterações e gera o lançamento PGC (classe 7 contra 34/36). */
-export async function closePayroll(db: Db, companyId: string, runId: string, actorId: string) {
+export async function closePayroll(db: Db, companyId: string, runId: string, actorId: string, role = 'owner') {
   return db.transaction(async (tx) => {
     const [run] = await tx.select().from(payrollRuns).where(and(eq(payrollRuns.id, runId), eq(payrollRuns.companyId, companyId)));
     if (!run) throw new DomainError('nao_encontrado', 'Processamento inexistente', 404);
     if (run.status === 'closed') throw new DomainError('processamento_fechado', 'Já está fechado');
+    // Segregação de funções: quem prepara não fecha (excepto o proprietário, em empresas pequenas).
+    if (run.preparedBy === actorId && role !== 'owner') throw new DomainError('segregacao_funcoes', 'O processamento tem de ser fechado por uma pessoa diferente de quem o preparou', 403);
     const lines = await tx.select({ l: payrollLines, cc: departments.costCenter }).from(payrollLines)
       .innerJoin(employees, eq(employees.id, payrollLines.employeeId))
       .leftJoin(departments, eq(departments.id, employees.departmentId))
