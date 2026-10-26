@@ -1,0 +1,13 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: kianda
+      POSTGRES_PASSWORD: kianda
+      POSTGRES_DB: kianda
+    ports:
+      - "5432:5432"
+    volumes:
+      - kianda-pg:/var/lib/postgresql/data
+volumes:
+  kianda-pg:

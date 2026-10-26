@@ -1,0 +1,22 @@
+{
+  "name": "kianda-rh",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Kianda RH — gestão de pessoas, payroll e finanças de pessoal para empresas angolanas",
+  "packageManager": "pnpm@10.12.1",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter ./apps/* dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "db:up": "docker compose up -d postgres",
+    "db:generate": "pnpm --filter @kianda/db generate",
+    "db:migrate": "pnpm --filter @kianda/db migrate",
+    "db:seed": "pnpm --filter @kianda/db seed"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "@types/node": "22.19.19"
+  }
+}
