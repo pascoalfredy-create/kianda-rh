@@ -15,6 +15,13 @@
       "when": 1792978818296,
       "tag": "0001_payroll_prepared_by",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792980322956,
+      "tag": "0002_ficha_colaborador",
+      "breakpoints": true
     }
   ]
 }

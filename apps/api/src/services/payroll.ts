@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { calculatePayroll, getPack, payrollJournal, type PayrollResult, type PayrollTotals } from '@kianda/core';
-import { auditLogs, contracts, departments, employees, journalEntries, journalLines, payrollLines, payrollRuns, type Db } from '@kianda/db';
+import { calculatePayroll, compensationAt, getPack, lastDayOfMonth, payrollJournal, type PayrollResult, type PayrollTotals } from '@kianda/core';
+import { auditLogs, compensationChanges, contracts, departments, employees, journalEntries, journalLines, payrollLines, payrollRuns, type Db } from '@kianda/db';
 import { and, desc, eq } from 'drizzle-orm';
 
 export class DomainError extends Error {
@@ -23,14 +23,21 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       .innerJoin(contracts, eq(contracts.employeeId, employees.id))
       .where(and(eq(employees.companyId, companyId), eq(employees.status, 'active')))
       .orderBy(employees.number, desc(contracts.startDate));
+    const comp = await tx.select().from(compensationChanges).where(eq(compensationChanges.companyId, companyId));
+    const periodStart = `${period}-01`;
+    const periodEnd = lastDayOfMonth(period);
     const seen = new Set<string>();
     const results: { employeeId: string; r: PayrollResult }[] = [];
     for (const { e, c } of staff) {
       if (seen.has(e.id)) continue;
+      if (c.startDate > periodEnd) continue; // contrato futuro: usa o contrato anterior (se existir)
       seen.add(e.id);
-      if (c.startDate > `${period}-31`) continue;
-      const r = calculatePayroll({ period, pack, baseMinor: c.baseMinor, mealMinor: c.mealMinor, transportMinor: c.transportMinor, christmasSubsidy: period.endsWith('-12') });
-      const hash = createHash('sha256').update(JSON.stringify({ period, packVersion: r.packVersion, contract: c.id, lines: r.lines })).digest('hex');
+      const ended = c.terminatedAt ?? c.endDate;
+      if (ended && ended < periodStart) continue; // contrato já terminado
+      // Remuneração em vigor no último dia do mês (histórico com data de efeito); sem histórico, valores do contrato.
+      const pay = compensationAt(comp.filter((x) => x.employeeId === e.id), periodEnd) ?? c;
+      const r = calculatePayroll({ period, pack, baseMinor: pay.baseMinor, mealMinor: pay.mealMinor, transportMinor: pay.transportMinor, christmasSubsidy: period.endsWith('-12') });
+      const hash = createHash('sha256').update(JSON.stringify({ period, packVersion: r.packVersion, contract: c.id, pay: { base: pay.baseMinor, meal: pay.mealMinor, transport: pay.transportMinor }, lines: r.lines })).digest('hex');
       await tx.insert(payrollLines).values({
         runId: run.id, employeeId: e.id, grossMinor: r.grossMinor, inssEmployeeMinor: r.inssEmployeeMinor, irtMinor: r.irtMinor, netMinor: r.netMinor,
         inssEmployerMinor: r.inssEmployerMinor, irtBracket: r.irtBracket, breakdown: r.lines, calculationHash: hash,

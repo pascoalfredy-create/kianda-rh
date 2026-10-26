@@ -18,6 +18,7 @@ export const absenceTypeEnum = pgEnum('absence_type', ['vacation', 'sick', 'just
 export const requestStatusEnum = pgEnum('request_status', ['pending', 'approved', 'rejected', 'cancelled']);
 export const payrollStatusEnum = pgEnum('payroll_status', ['draft', 'closed']);
 export const expenseStatusEnum = pgEnum('expense_status', ['pending', 'approved', 'rejected', 'paid']);
+export const documentTypeEnum = pgEnum('document_type', ['bi', 'passport', 'residence_card', 'work_visa', 'driving_licence', 'professional_card', 'other']);
 export const bankLineStatusEnum = pgEnum('bank_line_status', ['pending', 'suggested', 'matched', 'out_of_scope']);
 
 export const companies = pgTable('companies', {
@@ -65,6 +66,10 @@ export const employees = pgTable('employees', {
   email: text('email'),
   phone: text('phone'),
   address: text('address'),
+  nationality: text('nationality'),
+  maritalStatus: text('marital_status'),
+  emergencyContactName: text('emergency_contact_name'),
+  emergencyContactPhone: text('emergency_contact_phone'),
   jobTitle: text('job_title').notNull(),
   departmentId: text('department_id').references(() => departments.id),
   province: text('province'),
@@ -91,6 +96,35 @@ export const contracts = pgTable('contracts', {
   terminationReason: text('termination_reason'),
   createdAt: createdAt(),
 }, (t) => [index('contracts_employee_start').on(t.employeeId, t.startDate)]);
+
+/** Histórico de remuneração: cada alteração tem data de efeito; o processamento usa a que estiver em vigor no fim do mês. */
+export const compensationChanges = pgTable('compensation_changes', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  employeeId: text('employee_id').notNull().references(() => employees.id),
+  contractId: text('contract_id').references(() => contracts.id),
+  effectiveDate: date('effective_date').notNull(),
+  baseMinor: money('base_minor'),
+  mealMinor: money('meal_minor'),
+  transportMinor: money('transport_minor'),
+  reason: text('reason').notNull(),
+  createdBy: text('created_by'),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex('compensation_changes_employee_date').on(t.employeeId, t.effectiveDate)]);
+
+/** Documentos de identificação e habilitação (metadados; o ficheiro digitalizado entra com o armazenamento de ficheiros). */
+export const employeeDocuments = pgTable('employee_documents', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  employeeId: text('employee_id').notNull().references(() => employees.id),
+  type: documentTypeEnum('type').notNull(),
+  number: text('number').notNull(),
+  issueDate: date('issue_date'),
+  expiryDate: date('expiry_date'),
+  issuer: text('issuer'),
+  notes: text('notes'),
+  createdAt: createdAt(),
+}, (t) => [index('employee_documents_employee').on(t.employeeId), uniqueIndex('employee_documents_company_type_number').on(t.companyId, t.type, t.number)]);
 
 export const absences = pgTable('absences', {
   id: id(),
@@ -234,6 +268,14 @@ export const employeesRelations = relations(employees, ({ one, many }) => ({
   department: one(departments, { fields: [employees.departmentId], references: [departments.id] }),
   contracts: many(contracts),
   absences: many(absences),
+  compensation: many(compensationChanges),
+  documents: many(employeeDocuments),
+}));
+export const compensationChangesRelations = relations(compensationChanges, ({ one }) => ({
+  employee: one(employees, { fields: [compensationChanges.employeeId], references: [employees.id] }),
+}));
+export const employeeDocumentsRelations = relations(employeeDocuments, ({ one }) => ({
+  employee: one(employees, { fields: [employeeDocuments.employeeId], references: [employees.id] }),
 }));
 export const contractsRelations = relations(contracts, ({ one }) => ({
   employee: one(employees, { fields: [contracts.employeeId], references: [employees.id] }),

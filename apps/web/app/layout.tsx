@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { currentUser } from '@/lib/api';
+import { ROLE_LABEL } from '@/lib/types';
 import { LogoutButton } from './logout-button';
 import './globals.css';
 
@@ -9,9 +10,6 @@ export const metadata: Metadata = {
   description: 'Gestão de pessoas, payroll e finanças de pessoal para empresas angolanas',
 };
 
-const ROLE_LABEL: Record<string, string> = {
-  owner: 'Proprietário', hr_admin: 'Administração de RH', payroll: 'Processamento salarial', finance: 'Finanças', manager: 'Chefia', employee: 'Colaborador',
-};
 const STAFF = ['owner', 'hr_admin', 'payroll', 'finance', 'manager'];
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -39,6 +37,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <nav>
               <Link href="/">Início</Link>
               {staff && <Link href="/colaboradores">Colaboradores</Link>}
+              {staff && <Link href="/organograma">Organograma</Link>}
+              {!staff && me.user.employeeId && <Link href={`/colaboradores/${me.user.employeeId}`}>A minha ficha</Link>}
               <Link href="/simulador">Simulador salarial</Link>
             </nav>
             <div className="who">

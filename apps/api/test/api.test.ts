@@ -123,6 +123,100 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     expect((await app.inject({ method: 'POST', url: '/v1/payroll-runs', headers: as(payrollUser), payload: { period: '2026-10' } })).statusCode).toBe(409);
   });
 
+  describe('ficha do colaborador (entrega 2)', () => {
+    let chiefId = '';
+    let deptId = '';
+    const patch = (cookie: string, id: string, payload: object) => app.inject({ method: 'PATCH', url: `/v1/employees/${id}`, headers: as(cookie), payload });
+
+    it('departamentos, chefia e protecção contra ciclos', async () => {
+      const d = await app.inject({ method: 'POST', url: '/v1/departments', headers: as(owner), payload: { name: 'Operações', costCenter: 'cc-ops' } });
+      expect(d.json().costCenter).toBe('CC-OPS');
+      deptId = d.json().id;
+      const c = await app.inject({ method: 'POST', url: '/v1/employees', headers: as(owner), payload: {
+        number: '11', name: 'Chefe Teste', jobTitle: 'Directora', departmentId: deptId,
+        contract: { type: 'indefinite', startDate: '2025-01-06', base: 1200000 },
+      } });
+      expect(c.statusCode).toBe(201);
+      chiefId = c.json().id;
+      const r = await patch(owner, empId, { managerId: chiefId, departmentId: deptId, phone: '923 000 111', nationality: 'Angolana' });
+      expect(r.statusCode).toBe(200);
+      expect(r.json()).toMatchObject({ managerId: chiefId, departmentId: deptId, phone: '923 000 111' });
+      const cycle = await patch(owner, chiefId, { managerId: empId });
+      expect(cycle.statusCode).toBe(400);
+      expect(cycle.json().error).toBe('ciclo_hierarquia');
+      expect((await patch(owner, empId, { managerId: empId })).json().error).toBe('ciclo_hierarquia');
+    });
+
+    it('só RH edita, e nunca fichas de outra empresa', async () => {
+      expect((await patch(employeeUser, empId, { phone: '1' })).statusCode).toBe(403);
+      expect((await patch(payrollUser, empId, { phone: '1' })).statusCode).toBe(403);
+      expect((await patch(ownerB, empId, { phone: '1' })).statusCode).toBe(404);
+      const fakeDept = await patch(ownerB, empId, { departmentId: deptId });
+      expect(fakeDept.statusCode).toBe(404);
+      const otherCo = await app.inject({ method: 'POST', url: '/v1/employees', headers: as(ownerB), payload: { number: '1', name: 'Fulano B', jobTitle: 'Técnico', managerId: chiefId, contract: { type: 'indefinite', startDate: '2026-01-05', base: 200000 } } });
+      expect(otherCo.json().error).toBe('chefia_invalida');
+      expect((await patch(owner, empId, { iban: 'AO06 1234' })).statusCode).toBe(400);
+    });
+
+    it('alteração salarial: salário mínimo, meses fechados e duplicados', async () => {
+      const post = (payload: object) => app.inject({ method: 'POST', url: `/v1/employees/${empId}/compensation`, headers: as(owner), payload });
+      expect((await post({ effectiveDate: '2026-11-01', base: 90000, reason: 'teste' })).json().error).toBe('abaixo_salario_minimo');
+      const closed = await post({ effectiveDate: '2026-10-15', base: 460000, meal: 30000, transport: 25000, reason: 'Actualização' });
+      expect(closed.statusCode).toBe(409);
+      expect(closed.json().error).toBe('periodo_fechado');
+      const ok = await post({ effectiveDate: '2026-11-01', base: 460000, meal: 30000, transport: 25000, reason: 'Actualização anual' });
+      expect(ok.statusCode).toBe(201);
+      expect((await post({ effectiveDate: '2026-11-01', base: 470000, reason: 'Repetida' })).statusCode).toBe(409);
+    });
+
+    it('o processamento usa a remuneração em vigor no fim do mês', async () => {
+      const draft = await app.inject({ method: 'POST', url: '/v1/payroll-runs', headers: as(payrollUser), payload: { period: '2026-11' } });
+      const run = (await app.inject({ method: 'GET', url: `/v1/payroll-runs/${draft.json().run.id}`, headers: as(payrollUser) })).json();
+      const line = run.lines.find((l: { employeeId: string }) => l.employeeId === empId);
+      const base = line.breakdown.find((b: { code: string }) => b.code === 'BASE');
+      expect(base.amountMinor).toBe(46_000_000);
+    });
+
+    it('novo contrato encerra o anterior na véspera', async () => {
+      const post = (payload: object) => app.inject({ method: 'POST', url: `/v1/employees/${empId}/contracts`, headers: as(owner), payload });
+      expect((await post({ type: 'indefinite', startDate: '2025-12-01', base: 500000 })).statusCode).toBe(400);
+      expect((await post({ type: 'fixed_term', startDate: '2026-12-01', endDate: '2027-11-30', base: 500000 })).statusCode).toBe(400);
+      const ok = await post({ type: 'indefinite', startDate: '2026-12-01', base: 500000, meal: 30000, transport: 25000 });
+      expect(ok.statusCode).toBe(201);
+      const ficha = (await app.inject({ method: 'GET', url: `/v1/employees/${empId}`, headers: as(owner) })).json();
+      expect(ficha.contracts).toHaveLength(2);
+      expect(ficha.contracts[1]).toMatchObject({ terminatedAt: '2026-11-30', terminationReason: 'Substituído por novo contrato' });
+      expect(ficha.compensation.upcoming.map((c: { effectiveDate: string }) => c.effectiveDate)).toEqual(['2026-11-01', '2026-12-01']);
+      expect(ficha.manager).toMatchObject({ id: chiefId, name: 'Chefe Teste' });
+    });
+
+    it('documentos com validade geram alertas e ficam no histórico', async () => {
+      const post = (payload: object) => app.inject({ method: 'POST', url: `/v1/employees/${empId}/documents`, headers: as(owner), payload });
+      expect((await post({ type: 'bi', number: '12345' })).statusCode).toBe(400);
+      const soon = new Date(Date.now() + 20 * 86_400_000).toISOString().slice(0, 10);
+      const d = await post({ type: 'driving_licence', number: 'lu-0099812', issueDate: '2021-03-01', expiryDate: soon, issuer: 'DNVT' });
+      expect(d.statusCode).toBe(201);
+      expect(d.json().number).toBe('LU-0099812');
+      let ficha = (await app.inject({ method: 'GET', url: `/v1/employees/${empId}`, headers: as(owner) })).json();
+      expect(ficha.alerts.some((a: string) => a.startsWith('Carta de Condução: caduca em'))).toBe(true);
+      expect((await app.inject({ method: 'DELETE', url: `/v1/employees/${empId}/documents/${d.json().id}`, headers: as(employeeUser) })).statusCode).toBe(403);
+      expect((await app.inject({ method: 'DELETE', url: `/v1/employees/${empId}/documents/${d.json().id}`, headers: as(owner) })).statusCode).toBe(204);
+      ficha = (await app.inject({ method: 'GET', url: `/v1/employees/${empId}`, headers: as(owner) })).json();
+      expect(ficha.documents).toHaveLength(0);
+      const hist = (await app.inject({ method: 'GET', url: `/v1/employees/${empId}/history`, headers: as(owner) })).json();
+      const kinds = hist.map((h: { action: string; entity: string }) => `${h.action}:${h.entity}`);
+      expect(kinds).toEqual(expect.arrayContaining(['delete:employee_document', 'create:employee_document', 'create:contract', 'create:compensation', 'update:employee', 'create:employee']));
+      expect(hist[0].actorName).toBe('Dona A');
+    });
+
+    it('organograma em árvore', async () => {
+      const tree = (await app.inject({ method: 'GET', url: '/v1/org-chart', headers: as(financeUser) })).json();
+      const chief = tree.find((n: { id: string }) => n.id === chiefId);
+      expect(chief.reports.map((r: { id: string }) => r.id)).toEqual([empId]);
+      expect((await app.inject({ method: 'GET', url: '/v1/org-chart', headers: as(employeeUser) })).statusCode).toBe(403);
+    });
+  });
+
   it('logout limpa o cookie', async () => {
     const r = await app.inject({ method: 'POST', url: '/v1/auth/logout', headers: as(owner) });
     expect(r.cookies.find((c) => c.name === 'kianda_session')?.value).toBe('');

@@ -6,3 +6,4 @@ export * from './validation.js';
 export * from './termination.js';
 export * from './pgc.js';
 export * from './reconciliation.js';
+export * from './people.js';
