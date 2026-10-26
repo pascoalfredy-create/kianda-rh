@@ -269,6 +269,40 @@ export const payrollLines = pgTable('payroll_lines', {
   calculationHash: text('calculation_hash'),
 }, (t) => [uniqueIndex('payroll_lines_run_employee').on(t.runId, t.employeeId)]);
 
+/** Modelos de documentos adaptados pela empresa: cada gravação é uma nova versão (a última activa substitui o modelo do Kianda). */
+export const documentTemplates = pgTable('document_templates', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  key: text('key').notNull(),
+  version: integer('version').notNull(),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  /** Versão do pacote/modelo do Kianda de que partiu. */
+  basedOn: text('based_on'),
+  active: boolean('active').notNull().default(true),
+  createdBy: text('created_by').notNull(),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex('document_templates_company_key_version').on(t.companyId, t.key, t.version)]);
+
+/** Documentos emitidos: texto final congelado, numeração anual e código de verificação público. */
+export const issuedDocuments = pgTable('issued_documents', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  employeeId: text('employee_id').notNull().references(() => employees.id),
+  number: text('number').notNull(),
+  templateKey: text('template_key').notNull(),
+  templateVersion: text('template_version').notNull(),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  inputs: jsonb('inputs').notNull().default({}),
+  verificationCode: text('verification_code').notNull(),
+  issuedBy: text('issued_by').notNull(),
+  issuedAt: createdAt(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  revokedBy: text('revoked_by'),
+  revokeNote: text('revoke_note'),
+}, (t) => [uniqueIndex('issued_documents_company_number').on(t.companyId, t.number), uniqueIndex('issued_documents_code').on(t.verificationCode), index('issued_documents_employee').on(t.employeeId)]);
+
 /** Cessação do contrato: motivo, aviso prévio, fecho de contas proposto/ajustado e confirmação. */
 export const terminations = pgTable('terminations', {
   id: id(),

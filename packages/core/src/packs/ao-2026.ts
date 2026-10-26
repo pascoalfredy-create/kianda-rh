@@ -33,6 +33,7 @@ export const AO_2026: CountryPack = {
     vacationWorkingDays: 22,
     weeklyHours: 44,
     probationDaysIndefinite: 60,
+    probationDaysFixedTerm: 30,
     overtime: { tier1MaxHoursPerMonth: 30, tier1Bps: 5000, tier2Bps: 7500 },
     holidaySubsidyBps: 5000,
     christmasSubsidyBps: 5000,
@@ -66,6 +67,7 @@ export const AO_2026: CountryPack = {
     { title: 'Decreto Presidencial n.º 227/18 — regime de contribuições INSS' },
   ],
   toValidate: [
+    'Modelos de documentos (contratos, declarações, certificado, comunicações): revisão por jurista antes do uso; período experimental até 30 dias nos contratos a termo (art. 18.º, n.º 3)',
     'Cessação (Lei n.º 12/23): aviso prévio de 30 dias na denúncia pelo trabalhador (art. 305.º) e no despedimento por causas objectivas (art. 286.º), 60 dias no colectivo (art. 293.º); compensação de 1 salário base por ano até 5 anos e 50% por ano adicional (arts. 289.º e 295.º); rescisão com justa causa: salário base × anos (arts. 307.º–310.º); antiguidade em anos completos (art. 311.º)',
     'Cessação: falta de aviso prévio pelo trabalhador descontada no fecho de contas (dias em falta × base/30); falta de aviso pelo empregador paga como compensação',
     'Cessação: férias vencidas e não gozadas, férias e subsídio de férias proporcionais ao tempo de serviço no ano da cessação (2 dias por mês completo), subsídio de Natal proporcional',

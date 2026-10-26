@@ -24,6 +24,8 @@ export interface CountryPack {
     vacationWorkingDays: number;
     weeklyHours: number;
     probationDaysIndefinite: number;
+    /** Período experimental máximo nos contratos por tempo determinado (por acordo escrito). */
+    probationDaysFixedTerm: number;
     overtime: { tier1MaxHoursPerMonth: number; tier1Bps: number; tier2Bps: number };
     holidaySubsidyBps: number;
     christmasSubsidyBps: number;

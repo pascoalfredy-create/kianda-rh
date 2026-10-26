@@ -817,6 +817,56 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
   });
 
+  describe('documentos (entrega 11)', () => {
+    const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
+    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    let docId = '';
+    let code = '';
+
+    it('modelos do Kianda versionados com o pacote; pré-visualização com campos preenchidos e em falta', async () => {
+      expect((await get(employeeUser, '/v1/document-templates')).statusCode).toBe(403);
+      const t = (await get(owner, '/v1/document-templates')).json();
+      expect(t.templates.find((x: { key: string }) => x.key === 'declaracao_servico')).toMatchObject({ source: 'kianda', version: expect.stringMatching(/^AO-2026/) });
+      const p = (await post(owner, '/v1/documents/preview', { employeeId: empId, templateKey: 'declaracao_rendimentos', inputs: {} })).json();
+      expect(p.text).toContain('Joana Teste');
+      expect(p.text).toMatch(/kwanzas/);
+      expect(p.missingLabels).toEqual(['Finalidade']);
+      expect((await post(owner, '/v1/documents', { employeeId: empId, templateKey: 'declaracao_rendimentos', inputs: {} })).json().error).toBe('campos_em_falta');
+    });
+
+    it('emite com número anual e código; o colaborador vê os seus; verificação pública sem conteúdo; anulação', async () => {
+      const r = await post(owner, '/v1/documents', { employeeId: empId, templateKey: 'declaracao_servico', inputs: { 'pedido.finalidade': 'abertura de conta bancária' } });
+      expect(r.statusCode).toBe(201);
+      docId = r.json().id;
+      code = r.json().verificationCode;
+      expect(r.json().number).toMatch(/^DOC-\d{4}-0001$/);
+      expect(r.json().body).toContain('abertura de conta bancária');
+      expect((await get(employeeUser, '/v1/documents')).json().map((d: { id: string }) => d.id)).toEqual([docId]);
+      expect((await get(employeeUser, `/v1/documents/${docId}`)).statusCode).toBe(200);
+      expect((await get(ownerB, `/v1/documents/${docId}`)).statusCode).toBe(404);
+      const v = (await app.inject({ method: 'GET', url: `/v1/public/documents/${code.toLowerCase().replace(/-/g, '')}` })).json();
+      expect(v).toMatchObject({ valid: true, title: 'Declaração de serviço', employee: 'Joana Teste' });
+      expect(v.body).toBeUndefined();
+      expect((await post(employeeUser, `/v1/documents/${docId}/revoke`, { note: 'x' })).statusCode).toBe(403);
+      expect((await post(owner, `/v1/documents/${docId}/revoke`, { note: 'Dados desactualizados' })).statusCode).toBe(200);
+      expect((await app.inject({ method: 'GET', url: `/v1/public/documents/${code}` })).json()).toMatchObject({ valid: false, revoked: true });
+    });
+
+    it('a empresa adapta um modelo (nova versão, campos validados) e pode voltar ao do Kianda', async () => {
+      const bad = await app.inject({ method: 'PUT', url: '/v1/document-templates/declaracao_servico', headers: as(owner), payload: { title: 'Declaração', body: 'Texto com {{colaborador.salario}} que não existe no Kianda.' } });
+      expect(bad.json().error).toBe('campos_desconhecidos');
+      const ok = await app.inject({ method: 'PUT', url: '/v1/document-templates/declaracao_servico', headers: as(owner), payload: { title: 'Declaração de vínculo', body: '# Declaração de vínculo\n\n{{colaborador.nome}} trabalha connosco desde {{contrato.admissao}} ({{pedido.finalidade}}).' } });
+      expect(ok.json().version).toBe(1);
+      const t = (await get(owner, '/v1/document-templates')).json().templates.find((x: { key: string }) => x.key === 'declaracao_servico');
+      expect(t).toMatchObject({ source: 'empresa', version: 'Empresa v1', title: 'Declaração de vínculo' });
+      const d = (await post(owner, '/v1/documents', { employeeId: empId, templateKey: 'declaracao_servico', inputs: { 'pedido.finalidade': 'visto' } })).json();
+      expect(d).toMatchObject({ templateVersion: 'Empresa v1', title: 'Declaração de vínculo' });
+      await post(owner, '/v1/document-templates/declaracao_servico/reset');
+      expect((await get(owner, '/v1/document-templates')).json().templates.find((x: { key: string }) => x.key === 'declaracao_servico').source).toBe('kianda');
+      expect((await get(owner, `/v1/documents/${d.id}`)).json().body).toContain('trabalha connosco');
+    });
+  });
+
   it('logout limpa o cookie', async () => {
     const r = await app.inject({ method: 'POST', url: '/v1/auth/logout', headers: as(owner) });
     expect(r.cookies.find((c) => c.name === 'kianda_session')?.value).toBe('');
