@@ -29,6 +29,13 @@
       "when": 1793005895262,
       "tag": "0003_ausencias_aprovacao",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793024580300,
+      "tag": "0004_assiduidade",
+      "breakpoints": true
     }
   ]
 }

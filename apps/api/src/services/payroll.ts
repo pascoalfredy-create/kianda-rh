@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { calculatePayroll, compensationAt, getPack, lastDayOfMonth, payrollJournal, type PayrollResult, type PayrollTotals } from '@kianda/core';
-import { auditLogs, compensationChanges, contracts, departments, employees, journalEntries, journalLines, payrollLines, payrollRuns, type Db } from '@kianda/db';
+import { businessDays, calculatePayroll, compensationAt, getPack, labourRules, lastDayOfMonth, overtimeHoursFromMinutes, payrollJournal, type PayrollResult, type PayrollTotals } from '@kianda/core';
+import { absences, attendanceEntries, attendanceMonths, auditLogs, compensationChanges, contracts, gte, lte, departments, employees, journalEntries, journalLines, payrollLines, payrollRuns, type Db } from '@kianda/db';
 import { and, desc, eq } from '@kianda/db';
 
 export class DomainError extends Error {
@@ -24,6 +24,15 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       .where(and(eq(employees.companyId, companyId), eq(employees.status, 'active')))
       .orderBy(employees.number, desc(contracts.startDate));
     const comp = await tx.select().from(compensationChanges).where(eq(compensationChanges.companyId, companyId));
+    // Assiduidade aprovada (horas extra) e faltas injustificadas aprovadas do período.
+    const approvedMonths = await tx.select().from(attendanceMonths).where(and(eq(attendanceMonths.companyId, companyId), eq(attendanceMonths.period, period)));
+    const unjustified = await tx.select().from(absences).where(and(
+      eq(absences.companyId, companyId), eq(absences.type, 'unjustified'), eq(absences.status, 'approved'),
+      lte(absences.startDate, lastDayOfMonth(period)), gte(absences.endDate, `${period}-01`),
+    ));
+    const withPunches = new Set((await tx.select({ id: attendanceEntries.employeeId }).from(attendanceEntries)
+      .where(and(eq(attendanceEntries.companyId, companyId), gte(attendanceEntries.workDate, `${period}-01`), lte(attendanceEntries.workDate, lastDayOfMonth(period))))).map((r) => r.id));
+    const warnings: { employeeId: string; message: string }[] = [];
     const periodStart = `${period}-01`;
     const periodEnd = lastDayOfMonth(period);
     const seen = new Set<string>();
@@ -36,19 +45,27 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       if (ended && ended < periodStart) continue; // contrato já terminado
       // Remuneração em vigor no último dia do mês (histórico com data de efeito); sem histórico, valores do contrato.
       const pay = compensationAt(comp.filter((x) => x.employeeId === e.id), periodEnd) ?? c;
-      const r = calculatePayroll({ period, pack, baseMinor: pay.baseMinor, mealMinor: pay.mealMinor, transportMinor: pay.transportMinor, christmasSubsidy: period.endsWith('-12') });
-      const hash = createHash('sha256').update(JSON.stringify({ period, packVersion: r.packVersion, contract: c.id, pay: { base: pay.baseMinor, meal: pay.mealMinor, transport: pay.transportMinor }, lines: r.lines })).digest('hex');
+      const month = approvedMonths.find((m) => m.employeeId === e.id);
+      if (!month && withPunches.has(e.id)) warnings.push({ employeeId: e.id, message: `${e.name}: assiduidade de ${period} por aprovar — horas extra não incluídas` });
+      const overtimeHours = month ? overtimeHoursFromMinutes(month.approvedOvertimeMinutes) : 0;
+      const absenceDays = unjustified.filter((a) => a.employeeId === e.id).reduce((s, a) => {
+        const from = a.startDate < `${period}-01` ? `${period}-01` : a.startDate;
+        const to = a.endDate > periodEnd ? periodEnd : a.endDate;
+        return s + businessDays(from, to, [labourRules('AO', Number(period.slice(0, 4)))]);
+      }, 0);
+      const r = calculatePayroll({ period, pack, baseMinor: pay.baseMinor, mealMinor: pay.mealMinor, transportMinor: pay.transportMinor, overtimeHours, absenceDays, christmasSubsidy: period.endsWith('-12') });
+      const hash = createHash('sha256').update(JSON.stringify({ period, packVersion: r.packVersion, contract: c.id, pay: { base: pay.baseMinor, meal: pay.mealMinor, transport: pay.transportMinor }, overtimeHours, absenceDays, lines: r.lines })).digest('hex');
       await tx.insert(payrollLines).values({
-        runId: run.id, employeeId: e.id, grossMinor: r.grossMinor, inssEmployeeMinor: r.inssEmployeeMinor, irtMinor: r.irtMinor, netMinor: r.netMinor,
+        runId: run.id, employeeId: e.id, overtimeHours: String(overtimeHours), absenceDays, grossMinor: r.grossMinor, inssEmployeeMinor: r.inssEmployeeMinor, irtMinor: r.irtMinor, netMinor: r.netMinor,
         inssEmployerMinor: r.inssEmployerMinor, irtBracket: r.irtBracket, breakdown: r.lines, calculationHash: hash,
       }).onConflictDoUpdate({
         target: [payrollLines.runId, payrollLines.employeeId],
-        set: { grossMinor: r.grossMinor, inssEmployeeMinor: r.inssEmployeeMinor, irtMinor: r.irtMinor, netMinor: r.netMinor, inssEmployerMinor: r.inssEmployerMinor, irtBracket: r.irtBracket, breakdown: r.lines, calculationHash: hash },
+        set: { overtimeHours: String(overtimeHours), absenceDays, grossMinor: r.grossMinor, inssEmployeeMinor: r.inssEmployeeMinor, irtMinor: r.irtMinor, netMinor: r.netMinor, inssEmployerMinor: r.inssEmployerMinor, irtBracket: r.irtBracket, breakdown: r.lines, calculationHash: hash },
       });
       results.push({ employeeId: e.id, r });
     }
     await tx.insert(auditLogs).values({ companyId, actorId, action: 'draft', entity: 'payroll_run', entityId: run.id, after: { period, employees: results.length } });
-    return { run, lines: results.length };
+    return { run, lines: results.length, warnings };
   });
 }
 

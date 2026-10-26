@@ -63,5 +63,6 @@ export const AO_2026: CountryPack = {
     'Férias no ano de admissão: 2 dias úteis por mês completo, gozo só após 6 meses de serviço',
     'Faltas justificadas: casamento 10 dias úteis; luto até 8 dias úteis (cônjuge, pais, filhos; 4 para outros familiares)',
     'Licença de paternidade de 7 dias úteis não remunerada e licença de maternidade de 90 dias (Lei n.º 12/23)',
+    'Trabalho em dia de descanso semanal e em feriado: acréscimo próprio e descanso compensatório (hoje pago como hora extra normal e assinalado ao RH)',
   ],
 };

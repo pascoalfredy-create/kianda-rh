@@ -26,6 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {staff && <Link href="/colaboradores">Colaboradores</Link>}
           {staff && <Link href="/organograma">Organograma</Link>}
           {!staff && me.user.employeeId && <Link href={`/colaboradores/${me.user.employeeId}`}>A minha ficha</Link>}
+          <Link href="/assiduidade">Assiduidade</Link>
           <Link href="/ausencias">Ausências e férias</Link>
           <Link href="/simulador">Simulador salarial</Link>
         </nav>
@@ -36,6 +37,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
       <main className="content">{children}</main>
+      {/* Telemóvel: barra inferior com as acções do dia-a-dia */}
+      <nav className="mobile-nav">
+        <Link href="/">Início</Link>
+        <Link href="/assiduidade">Ponto</Link>
+        <Link href="/ausencias">Ausências</Link>
+        {staff ? <Link href="/colaboradores">Equipa</Link> : me.user.employeeId ? <Link href={`/colaboradores/${me.user.employeeId}`}>Ficha</Link> : null}
+        <LogoutButton label="Sair" />
+      </nav>
     </div>
   );
 }

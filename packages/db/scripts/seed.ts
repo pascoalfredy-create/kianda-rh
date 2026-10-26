@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { DEFAULT_PGC_ACCOUNTS, kz } from '@kianda/core';
 import { and, eq } from 'drizzle-orm';
-import { absences, accountMappings, closeDb, companies, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, hashPassword, users, verifyPassword } from '../src/index.js';
+import { absences, accountMappings, attendanceEntries, closeDb, companies, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, hashPassword, users, verifyPassword } from '../src/index.js';
 
 /** Dados de demonstração: empresa fictícia com três departamentos, cinco colaboradores, hierarquia e documentos. Idempotente. */
 const db = getDb();
@@ -104,6 +104,38 @@ if (!anyAbsence) {
     const e = byNumber[number];
     if (e) await db.insert(absences).values({ companyId: company.id, employeeId: e.id, type, startDate, endDate, workingDays, status, reason, decidedAt: status === 'approved' ? new Date() : null });
   }
+}
+
+// Registos de ponto de exemplo (Outubro de 2026, dias úteis até ontem), só se a empresa ainda não tiver nenhum.
+const [anyPunch] = await db.select({ id: attendanceEntries.id }).from(attendanceEntries).where(eq(attendanceEntries.companyId, company.id)).limit(1);
+if (!anyPunch) {
+  const at = (date: string, hhmm: string) => new Date(Date.parse(`${date}T${hhmm}:00Z`) - 3_600_000); // hora de Luanda → UTC
+  const yesterday = new Date(Date.now() + 3_600_000 - 86_400_000).toISOString().slice(0, 10);
+  let seq = 7;
+  const rnd = () => { seq = (seq * 9301 + 49297) % 233280; return seq / 233280; }; // determinístico
+  const rows: (typeof attendanceEntries.$inferInsert)[] = [];
+  for (let d = 1; d <= 31; d++) {
+    const date = `2026-10-${String(d).padStart(2, '0')}`;
+    if (date > yesterday) break;
+    const wd = new Date(`${date}T00:00:00Z`).getUTCDay();
+    for (const number of ['1002', '1003', '1005', '1006', '1009']) {
+      const e = byNumber[number];
+      if (!e) continue;
+      const saturdayShift = number === '1009' && wd === 6 && d % 2 === 0; // motorista: sábados alternados
+      if ((wd === 0 || wd === 6) && !saturdayShift) continue;
+      const inMin = 7 * 60 + 45 + Math.floor(rnd() * 30);
+      const outMin = saturdayShift ? 12 * 60 + 30 : 17 * 60 + Math.floor(rnd() * (number === '1002' ? 120 : 40));
+      const hm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+      const forgot = number === '1006' && d === 14; // saída esquecida: pendência para a chefia corrigir
+      if (saturdayShift) {
+        rows.push({ companyId: company.id, employeeId: e.id, workDate: date, clockIn: at(date, hm(inMin)), clockOut: at(date, hm(outMin)), source: 'web', createdBy: 'seed' });
+      } else {
+        rows.push({ companyId: company.id, employeeId: e.id, workDate: date, clockIn: at(date, hm(inMin)), clockOut: at(date, '12:30'), source: 'web', createdBy: 'seed' });
+        rows.push({ companyId: company.id, employeeId: e.id, workDate: date, clockIn: at(date, '13:30'), clockOut: forgot ? null : at(date, hm(outMin)), source: 'web', createdBy: 'seed' });
+      }
+    }
+  }
+  if (rows.length) await db.insert(attendanceEntries).values(rows);
 }
 
 console.log(`Empresa de demonstração pronta: ${company.name} (${company.id})`);

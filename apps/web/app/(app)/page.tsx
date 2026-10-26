@@ -1,5 +1,6 @@
 import { ABSENCE_POLICIES, formatKz, labourRules, listPacks, getPack, payrollDeadlines, type AbsenceType } from '@kianda/core';
 import Link from 'next/link';
+import { ClockCard } from '@/components/clock-card';
 import { api, currentUser } from '@/lib/api';
 import type { AbsenceRow, BalanceRow } from '@/lib/types';
 
@@ -28,6 +29,8 @@ export default async function Home() {
     <>
       <h1>Olá, {me.user.name.split(' ')[0]}</h1>
       <p className="sub">{me.company?.name} · {new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Africa/Luanda' })}</p>
+
+      {me.user.employeeId && <ClockCard compact />}
 
       {staff && !fiscal && (
         <div className="alert">

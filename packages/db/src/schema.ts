@@ -19,6 +19,7 @@ export const requestStatusEnum = pgEnum('request_status', ['pending', 'approved'
 export const payrollStatusEnum = pgEnum('payroll_status', ['draft', 'closed']);
 export const expenseStatusEnum = pgEnum('expense_status', ['pending', 'approved', 'rejected', 'paid']);
 export const documentTypeEnum = pgEnum('document_type', ['bi', 'passport', 'residence_card', 'work_visa', 'driving_licence', 'professional_card', 'other']);
+export const punchSourceEnum = pgEnum('punch_source', ['web', 'manual']);
 export const bankLineStatusEnum = pgEnum('bank_line_status', ['pending', 'suggested', 'matched', 'out_of_scope']);
 
 export const companies = pgTable('companies', {
@@ -30,6 +31,8 @@ export const companies = pgTable('companies', {
   caeCode: text('cae_code'),
   microOrStartup: boolean('micro_or_startup').notNull().default(false),
   bankAccountIban: text('bank_account_iban'),
+  /** Jornada diária prevista (minutos), de segunda a sexta. */
+  workdayMinutes: integer('workday_minutes').notNull().default(480),
   createdAt: createdAt(),
 });
 
@@ -142,6 +145,38 @@ export const absences = pgTable('absences', {
   decisionNote: text('decision_note'),
   createdAt: createdAt(),
 }, (t) => [index('absences_company_status').on(t.companyId, t.status), index('absences_employee_dates').on(t.employeeId, t.startDate)]);
+
+/** Registos de ponto: cada linha é um intervalo entrada → saída (vários por dia, ex.: manhã e tarde). Horas do servidor. */
+export const attendanceEntries = pgTable('attendance_entries', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  employeeId: text('employee_id').notNull().references(() => employees.id),
+  /** Data civil em Luanda a que o registo pertence. */
+  workDate: date('work_date').notNull(),
+  clockIn: timestamp('clock_in', { withTimezone: true }).notNull(),
+  clockOut: timestamp('clock_out', { withTimezone: true }),
+  source: punchSourceEnum('source').notNull().default('web'),
+  note: text('note'),
+  createdBy: text('created_by').notNull(),
+  updatedBy: text('updated_by'),
+  createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+}, (t) => [index('attendance_entries_employee_date').on(t.employeeId, t.workDate), index('attendance_entries_company_date').on(t.companyId, t.workDate)]);
+
+/** Folha de assiduidade mensal aprovada: fecha o mês e fixa as horas extra que seguem para o processamento. */
+export const attendanceMonths = pgTable('attendance_months', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  employeeId: text('employee_id').notNull().references(() => employees.id),
+  period: text('period').notNull(),
+  workedMinutes: integer('worked_minutes').notNull(),
+  expectedMinutes: integer('expected_minutes').notNull(),
+  overtimeMinutes: integer('overtime_minutes').notNull(),
+  approvedOvertimeMinutes: integer('approved_overtime_minutes').notNull(),
+  note: text('note'),
+  approvedBy: text('approved_by').notNull(),
+  approvedAt: timestamp('approved_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex('attendance_months_employee_period').on(t.employeeId, t.period)]);
 
 export const payrollRuns = pgTable('payroll_runs', {
   id: id(),

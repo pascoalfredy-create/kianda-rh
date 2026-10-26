@@ -7,9 +7,9 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { body as readBody, requireCompany, type Actor, type AppEnv } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
+import { canDecideFor, visibleEmployeeIds } from '../services/scope.js';
 
 const TYPES = ['vacation', 'sick', 'justified', 'unjustified', 'maternity', 'paternity', 'marriage', 'bereavement', 'training'] as const;
-const ALL_SCOPE = ['owner', 'hr_admin', 'payroll', 'finance'];
 const today = () => new Date().toISOString().slice(0, 10);
 const pt = (d: string) => d.split('-').reverse().join('/');
 
@@ -28,28 +28,13 @@ type Employee = typeof employees.$inferSelect;
 
 // ───────────────────────── Regras ─────────────────────────
 
-/** Pode decidir (aprovar/recusar) ou registar já aprovado? Nunca o próprio pedido, excepto o proprietário. */
-function canDecide(actor: Actor, emp: Pick<Employee, 'id' | 'managerId'>): boolean {
-  if (actor.role === 'owner') return true;
-  if (actor.employeeId && actor.employeeId === emp.id) return false;
-  if (actor.role === 'hr_admin') return true;
-  return actor.role === 'manager' && !!actor.employeeId && emp.managerId === actor.employeeId;
-}
+const canDecide = canDecideFor;
 
 /** Pode registar ausências para este colaborador? */
 function canRegisterFor(actor: Actor, emp: Employee): boolean {
   if (actor.employeeId === emp.id) return true;
   if (actor.role === 'owner' || actor.role === 'hr_admin') return true;
   return actor.role === 'manager' && !!actor.employeeId && emp.managerId === actor.employeeId;
-}
-
-/** Colaboradores visíveis para o actor (null = todos da empresa). */
-async function visibleEmployeeIds(db: Db, actor: Actor): Promise<string[] | null> {
-  if (ALL_SCOPE.includes(actor.role)) return null;
-  const own = actor.employeeId ? [actor.employeeId] : [];
-  if (actor.role !== 'manager' || !actor.employeeId) return own;
-  const team = await db.select({ id: employees.id }).from(employees).where(and(eq(employees.companyId, actor.companyId), eq(employees.managerId, actor.employeeId)));
-  return [...own, ...team.map((t) => t.id)];
 }
 
 async function hireDate(db: Db, employeeId: string): Promise<string | null> {

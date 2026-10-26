@@ -4,6 +4,7 @@ import { cors } from 'hono/cors';
 import { ZodError } from 'zod';
 import { setRateLimitEnabled, type AppEnv } from './plugins/tenant.js';
 import { absenceRoutes } from './routes/absences.js';
+import { attendanceRoutes } from './routes/attendance.js';
 import { authRoutes } from './routes/auth.js';
 import { employeeRoutes } from './routes/employees.js';
 import { payrollRoutes } from './routes/payroll.js';
@@ -42,6 +43,7 @@ export function buildApp(opts: { logger?: boolean; rateLimit?: boolean } = {}) {
   app.route('/', authRoutes());
   app.route('/', employeeRoutes());
   app.route('/', absenceRoutes());
+  app.route('/', attendanceRoutes());
   app.route('/', payrollRoutes());
   return app;
 }

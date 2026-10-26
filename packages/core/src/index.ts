@@ -9,3 +9,4 @@ export * from './reconciliation.js';
 export * from './people.js';
 export * from './leave.js';
 export * from './holidays.js';
+export * from './attendance.js';

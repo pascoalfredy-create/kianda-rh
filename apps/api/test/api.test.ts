@@ -296,6 +296,79 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
   });
 
+  describe('assiduidade (entrega 4)', () => {
+    let manager = '';
+    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
+    let openId = '';
+
+    beforeAll(async () => { manager = await login(`chefe+${stamp}@a.ao`); });
+
+    it('ponto com a hora do servidor: entrada, entrada repetida, saída imediata', async () => {
+      const a = await post(employeeUser, '/v1/attendance/clock', { action: 'in' });
+      expect(a.statusCode).toBe(201);
+      expect((await post(employeeUser, '/v1/attendance/clock', { action: 'in' })).json().error).toBe('entrada_aberta');
+      expect((await post(employeeUser, '/v1/attendance/clock', { action: 'out' })).json().error).toBe('demasiado_cedo');
+      const me = (await get(employeeUser, '/v1/attendance/me')).json();
+      expect(me.open).toBe(true);
+      expect((await post(owner, '/v1/attendance/clock', { action: 'in' })).json().error).toBe('sem_ficha');
+      const current = new Date(Date.now() + 3_600_000).toISOString().slice(0, 7);
+      expect((await post(manager, '/v1/attendance/approve', { employeeId: empId, period: current })).json().error).toBe('mes_em_curso');
+    });
+
+    it('o colaborador não corrige os próprios registos; a chefia sim', async () => {
+      const own = await post(employeeUser, '/v1/attendance/entries', { employeeId: empId, date: '2026-09-01', start: '08:00', end: '17:00', note: 'esqueci' });
+      expect(own.statusCode).toBe(403);
+      const mk = (date: string, start: string, end: string | null) => post(manager, '/v1/attendance/entries', { employeeId: empId, date, start, end, note: 'Registo em papel' });
+      expect((await mk('2026-09-01', '08:00', '12:00')).statusCode).toBe(201);
+      expect((await mk('2026-09-01', '13:00', '18:00')).statusCode).toBe(201);
+      expect((await mk('2026-09-05', '09:00', '12:00')).statusCode).toBe(201);
+      const open = await mk('2026-09-02', '08:00', null);
+      openId = open.json().id;
+      expect((await mk('2026-09-03', '10:00', '09:00')).json().error).toBe('horas_invalidas');
+    });
+
+    it('folha do mês: extra em dia útil e em dia de descanso, saídas em falta', async () => {
+      const s = (await get(manager, `/v1/attendance/sheet?period=2026-09&employeeId=${empId}`)).json();
+      expect(s.summary).toMatchObject({ workedMinutes: 720, overtimeMinutes: 240, restOrHolidayOvertimeMinutes: 180, openDays: 1 });
+      expect(s.summary.days.find((d: { date: string }) => d.date === '2026-09-05').flags).toContain('rest_day_work');
+      expect(s.canApprove).toBe(true);
+      expect((await get(ownerB, `/v1/attendance/sheet?period=2026-09&employeeId=${empId}`)).statusCode).toBe(404);
+    });
+
+    it('aprovação: exige saídas completas e motivo para cortar horas; depois bloqueia correcções', async () => {
+      expect((await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09' })).json().error).toBe('saidas_em_falta');
+      const fix = await app.inject({ method: 'PATCH', url: `/v1/attendance/entries/${openId}`, headers: as(manager), payload: { end: '17:00', note: 'Saída confirmada pela chefia' } });
+      expect(fix.json().out).toBe('17:00');
+      expect((await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09', approvedOvertimeMinutes: 60 })).json().error).toBe('motivo_obrigatorio');
+      expect((await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09', approvedOvertimeMinutes: 9999, note: 'x' })).json().error).toBe('extra_acima');
+      const ok = await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09', approvedOvertimeMinutes: 60, note: 'Sábado não autorizado previamente' });
+      expect(ok.statusCode).toBe(201);
+      expect(ok.json()).toMatchObject({ overtimeMinutes: 300, approvedOvertimeMinutes: 60 });
+      const again = await app.inject({ method: 'PATCH', url: `/v1/attendance/entries/${openId}`, headers: as(manager), payload: { end: '18:00', note: 'tentativa' } });
+      expect(again.json().error).toBe('mes_aprovado');
+    });
+
+    it('processamento: horas extra aprovadas e faltas injustificadas entram no salário', async () => {
+      const draft = await post(payrollUser, '/v1/payroll-runs', { period: '2026-09' });
+      const run = (await get(payrollUser, `/v1/payroll-runs/${draft.json().run.id}`)).json();
+      const line = run.lines.find((l: { employeeId: string }) => l.employeeId === empId);
+      expect(Number(line.overtimeHours)).toBe(1);
+      expect(line.breakdown.some((b: { code: string }) => b.code === 'HE')).toBe(true);
+      const nov = await post(payrollUser, '/v1/payroll-runs', { period: '2026-11' });
+      const novRun = (await get(payrollUser, `/v1/payroll-runs/${nov.json().run.id}`)).json();
+      const novLine = novRun.lines.find((l: { employeeId: string }) => l.employeeId === empId);
+      expect(novLine.absenceDays).toBe(1);
+      expect(novLine.breakdown.some((b: { code: string }) => b.code === 'FALTAS')).toBe(true);
+    });
+
+    it('reabrir: só RH, e nunca com o processamento fechado', async () => {
+      expect((await post(manager, '/v1/attendance/reopen', { employeeId: empId, period: '2026-09', note: 'corrigir' })).statusCode).toBe(403);
+      expect((await post(owner, '/v1/attendance/reopen', { employeeId: empId, period: '2026-10', note: 'corrigir' })).json().error).toBe('periodo_fechado');
+      expect((await post(owner, '/v1/attendance/reopen', { employeeId: empId, period: '2026-09', note: 'Rever sábado' })).json()).toEqual({ ok: true });
+    });
+  });
+
   it('logout limpa o cookie', async () => {
     const r = await app.inject({ method: 'POST', url: '/v1/auth/logout', headers: as(owner) });
     expect(r.cookies.find((c) => c.name === 'kianda_session')?.value).toBe('');

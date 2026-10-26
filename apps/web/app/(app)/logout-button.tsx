@@ -1,6 +1,6 @@
 'use client';
 
-export function LogoutButton() {
+export function LogoutButton({ label = 'Terminar sessão' }: { label?: string }) {
   return (
     <button
       className="link"
@@ -9,7 +9,7 @@ export function LogoutButton() {
         window.location.assign('/login');
       }}
     >
-      Terminar sessão
+      {label}
     </button>
   );
 }
