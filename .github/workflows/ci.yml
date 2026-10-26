@@ -59,6 +59,21 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - name: Validar secrets (uma linha, sem espaços)
+        run: |
+          bad=0
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID KIANDA_HYPERDRIVE_ID KIANDA_DATABASE_URL KIANDA_JWT_SECRET; do
+            v="${!name}"
+            if [ -z "$v" ]; then echo "::error title=Secret em falta::$name não está definido"; bad=1;
+            elif printf '%s' "$v" | grep -q '[[:space:]]'; then echo "::error title=Secret inválido::$name tem espaços ou várias linhas — volte a colá-lo só com o valor, numa linha"; bad=1; fi
+          done
+          [ ${#KIANDA_JWT_SECRET} -ge 32 ] || { echo "::error title=Secret inválido::KIANDA_JWT_SECRET precisa de pelo menos 32 caracteres"; bad=1; }
+          exit $bad
+        env:
+          KIANDA_HYPERDRIVE_ID: ${{ secrets.KIANDA_HYPERDRIVE_ID }}
+          KIANDA_DATABASE_URL: ${{ secrets.KIANDA_DATABASE_URL }}
+          KIANDA_JWT_SECRET: ${{ secrets.KIANDA_JWT_SECRET }}
+
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @kianda/core build
       - run: pnpm --filter @kianda/db build
