@@ -13,8 +13,12 @@ export function testClient(app: App) {
   return {
     async inject(o: { method: string; url: string; headers?: Record<string, string>; payload?: unknown }): Promise<InjectResponse> {
       const headers: Record<string, string> = { ...(o.headers ?? {}) };
-      let body: string | undefined;
-      if (o.payload !== undefined) {
+      let body: string | Uint8Array | undefined;
+      if (o.payload instanceof Uint8Array) {
+        // Ficheiros: corpo em bruto.
+        body = o.payload;
+        headers['content-type'] ??= 'application/octet-stream';
+      } else if (o.payload !== undefined) {
         // Texto passa tal como está (ex.: corpo assinado de um webhook); objectos vão em JSON.
         body = typeof o.payload === 'string' ? o.payload : JSON.stringify(o.payload);
         headers['content-type'] ??= 'application/json';

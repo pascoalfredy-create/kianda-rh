@@ -12,7 +12,7 @@ export function MinimizeEmployee({ id, number }: { id: string; number: string })
   if (!open) return <button className="btn danger" onClick={() => setOpen(true)}>Eliminar dados pessoais (Lei 22/11)</button>;
   return (
     <div className="warn" style={{ display: 'grid', gap: 8 }}>
-      <div><b>Eliminação irreversível</b> dos contactos, morada, IBAN, contacto de emergência, data de nascimento, documentos registados, pedidos do portal e do acesso. Ficam o nome, n.º, BI, NIF, n.º INSS, contratos, recibos e lançamentos — obrigatórios para a AGT, o INSS e a contabilidade.</div>
+      <div><b>Eliminação irreversível</b> dos contactos, morada, IBAN, contacto de emergência, data de nascimento, documentos registados e respectivas cópias digitalizadas, justificativos de ausências, pedidos do portal e do acesso. Ficam o nome, n.º, BI, NIF, n.º INSS, contratos, recibos e lançamentos — obrigatórios para a AGT, o INSS e a contabilidade.</div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <input value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={`Escreva ${number} para confirmar`} style={{ width: 230 }} />
         <button className="btn danger" disabled={busy || confirm !== number} onClick={() => run(`/v1/privacy/employees/${id}/minimize`, 'POST', { confirm })}>Eliminar</button>

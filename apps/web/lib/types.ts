@@ -116,6 +116,8 @@ export const ROLE_LABEL: Record<string, string> = {
 export type AbsenceStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 export interface AbsenceRow {
   id: string;
+  fileCount?: number;
+  canAttach?: boolean;
   employeeId: string;
   type: string;
   startDate: string;

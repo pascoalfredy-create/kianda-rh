@@ -1,3 +1,4 @@
+import { Attachments } from '@/components/attachments';
 import { formatKz } from '@kianda/core';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -7,7 +8,7 @@ import {
   ABSENCE_STATUS_LABEL, type AbsenceRow, type BalanceRow, type Department, type EmployeeRow, type HistoryEntry, type PersonRef, type Profile,
 } from '@/lib/types';
 import { ABSENCE_POLICIES, type AbsenceType } from '@kianda/core';
-import { AbsenceActions } from '../../ausencias/actions';
+import { AbsenceActions, AbsenceFiles } from '../../ausencias/actions';
 import { CompensationForm, ContractForm, DeleteDocument, DocumentForm, PersonalForm } from './forms';
 import { AllowanceActions, AssignAllowance, RegimeForm } from './regime';
 import { MinimizeEmployee } from '@/components/privacy-actions';
@@ -213,7 +214,7 @@ function DocumentsTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
       {canEdit && <div style={{ marginBottom: 14 }}><DocumentForm employeeId={p.id} /></div>}
       <div className="card">
         <table>
-          <thead><tr><th>Documento</th><th>Número</th><th>Emissão</th><th>Validade</th><th>Entidade emissora</th>{canEdit && <th />}</tr></thead>
+          <thead><tr><th>Documento</th><th>Número</th><th>Emissão</th><th>Validade</th><th>Entidade emissora</th><th>Cópia digitalizada</th>{canEdit && <th />}</tr></thead>
           <tbody>
             {p.documents.map((d) => (
               <tr key={d.id}>
@@ -226,6 +227,7 @@ function DocumentsTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
                   {d.expiryDate && d.expiryDate >= t && d.expiryDate <= soon && <span className="pill">A caducar</span>}
                 </td>
                 <td>{val(d.issuer)}</td>
+                <td><Attachments entity="employee_document" entityId={d.id} compact /></td>
                 {canEdit && <td className="num"><DeleteDocument employeeId={p.id} doc={d} /></td>}
               </tr>
             ))}
@@ -233,7 +235,11 @@ function DocumentsTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
         </table>
         {!p.documents.length && <div className="empty">Nenhum documento registado</div>}
       </div>
-      <p className="muted" style={{ marginTop: 10 }}>O carregamento das cópias digitalizadas chega com o módulo de documentos (entrega 11).</p>
+      <div className="card" style={{ marginTop: 14, padding: 16 }}>
+        <h2 style={{ fontSize: 14, marginTop: 0 }}>Outros ficheiros do processo individual</h2>
+        <p className="muted" style={{ marginTop: 0 }}>Contrato assinado, certificados de habilitações, declarações entregues… Visíveis só para o RH e para o próprio colaborador.</p>
+        <Attachments entity="employee" entityId={p.id} />
+      </div>
     </>
   );
 }
@@ -309,7 +315,7 @@ async function AbsencesTab({ p }: { p: Profile }) {
           <tbody>
             {list.map((a) => (
               <tr key={a.id}>
-                <td><span className="dot" style={{ background: ABSENCE_POLICIES[a.type as AbsenceType]?.color }} />{ABSENCE_POLICIES[a.type as AbsenceType]?.label ?? a.type}{a.reason && <div className="muted">{a.reason}</div>}</td>
+                <td><span className="dot" style={{ background: ABSENCE_POLICIES[a.type as AbsenceType]?.color }} />{ABSENCE_POLICIES[a.type as AbsenceType]?.label ?? a.type}{a.reason && <div className="muted">{a.reason}</div>}<AbsenceFiles id={a.id} count={a.fileCount ?? 0} canAttach={!!a.canAttach} /></td>
                 <td>{fmtDate(a.startDate)}{a.endDate !== a.startDate ? ` – ${fmtDate(a.endDate)}` : ''}</td>
                 <td className="num">{a.workingDays}</td>
                 <td><span className={`st ${a.status}`}>{ABSENCE_STATUS_LABEL[a.status]}</span>{a.decisionNote && <div className="muted">{a.decisionNote}</div>}</td>

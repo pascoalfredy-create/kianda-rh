@@ -1,7 +1,8 @@
 import { luandaDate } from '@kianda/core';
 import {
-  accessLinks, and, auditLogs, candidateEvents, candidates, documentRequests, employeeDocuments, employees, eq, getDb, profileChangeRequests, users,
+  accessLinks, and, files, inArray, auditLogs, candidateEvents, candidates, documentRequests, employeeDocuments, employees, eq, getDb, profileChangeRequests, users,
 } from '@kianda/db';
+import { removeFiles } from '../services/storage.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { body, requireCompany, requireRole, type AppEnv } from '../plugins/tenant.js';
@@ -46,6 +47,9 @@ export function privacyRoutes() {
       email: null, phone: null, address: null, iban: null, bank: null, birthDate: null, maritalStatus: null, gender: null, nationality: null,
       emergencyContactName: null, emergencyContactPhone: null, dataMinimizedAt: now, updatedAt: now,
     }).where(eq(employees.id, e.id));
+    // Ficheiros pessoais (cópias de documentos, justificativos de ausências). Os comprovativos de despesas ficam: são documentos contabilísticos.
+    const personal = await db.select().from(files).where(and(eq(files.companyId, actor.companyId), eq(files.employeeId, e.id), inArray(files.entity, ['employee', 'employee_document', 'absence'])));
+    const filesDeleted = await removeFiles(db, personal);
     const docs = await db.delete(employeeDocuments).where(eq(employeeDocuments.employeeId, e.id)).returning({ id: employeeDocuments.id });
     await db.delete(profileChangeRequests).where(eq(profileChangeRequests.employeeId, e.id));
     await db.delete(documentRequests).where(eq(documentRequests.employeeId, e.id));
@@ -53,7 +57,7 @@ export function privacyRoutes() {
     // O utilizador fica como registo histórico (autor de acções), sem forma de entrar nem contactos.
     await db.update(users).set({ email: null, phone: null, pinHash: null, passwordHash: '!', totpSecret: null, totpEnabledAt: null, disabledAt: now })
       .where(and(eq(users.companyId, actor.companyId), eq(users.employeeId, e.id)));
-    await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'minimize_personal_data', entity: 'employee', entityId: e.id, after: { documentsDeleted: docs.length } });
+    await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'minimize_personal_data', entity: 'employee', entityId: e.id, after: { documentsDeleted: docs.length, filesDeleted } });
     return c.json({ ok: true, kept: ['nome', 'n.º', 'BI', 'NIF', 'n.º INSS', 'contratos', 'processamentos', 'lançamentos'] });
   });
 

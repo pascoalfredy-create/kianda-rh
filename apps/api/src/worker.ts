@@ -8,6 +8,7 @@ import { getDb, withRequestDb } from '@kianda/db';
 import { buildApp, type App } from './app.js';
 import { syncGatewayPayments } from './services/billing.js';
 import { dailyReminders } from './services/jobs.js';
+import { r2Store, setObjectStore, type R2BucketLike } from './services/storage.js';
 
 interface Env {
   /** Hyperdrive (produção): pool de ligações do Cloudflare à base de dados PostgreSQL (Neon). */
@@ -15,6 +16,8 @@ interface Env {
   /** Alternativa sem Hyperdrive (ex.: wrangler dev). */
   DATABASE_URL?: string;
   API_JWT_SECRET: string;
+  /** R2 (opcional): conteúdo dos ficheiros anexados. Sem ele, os ficheiros ficam na base de dados. */
+  FILES?: R2BucketLike;
   [key: string]: unknown;
 }
 
@@ -24,6 +27,7 @@ const SETTINGS = [
   'PROXYPAY_API_KEY', 'PROXYPAY_ENV', 'PROXYPAY_ENTITY', 'RESEND_API_KEY', 'MAIL_FROM', 'VENDUS_API_KEY', 'VENDUS_MODE',
 ];
 function loadEnv(env: Env) {
+  setObjectStore(env.FILES ? r2Store(env.FILES) : null);
   for (const k of SETTINGS) if (typeof env[k] === 'string' && env[k]) process.env[k] ??= env[k] as string;
 }
 

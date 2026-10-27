@@ -34,6 +34,8 @@ function need(name) {
 
 const api = parseJsonc(readFileSync('apps/api/wrangler.jsonc', 'utf8'));
 api.hyperdrive = api.hyperdrive.map((h) => ({ binding: h.binding, id: need('KIANDA_HYPERDRIVE_ID') }));
+// Ficheiros anexados no R2 quando o bucket existe (passo anterior do CI); sem ele, ficam na base de dados.
+if (process.env.KIANDA_R2 === '1') api.r2_buckets = [{ binding: 'FILES', bucket_name: 'kianda-files' }];
 writeFileSync('apps/api/wrangler.deploy.json', JSON.stringify(api, null, 2));
 
 const web = parseJsonc(readFileSync('apps/web/wrangler.jsonc', 'utf8'));
@@ -45,4 +47,4 @@ if (hostnames.length) {
 }
 writeFileSync('apps/web/wrangler.deploy.json', JSON.stringify(web, null, 2));
 
-console.log(`API → Hyperdrive configurado; Web → ${hostname ? `https://${hostname}` : 'workers.dev'}`);
+console.log(`API → Hyperdrive configurado${api.r2_buckets ? ', R2 kianda-files' : ', ficheiros na base de dados'}; Web → ${hostname ? `https://${hostname}` : 'workers.dev'}`);

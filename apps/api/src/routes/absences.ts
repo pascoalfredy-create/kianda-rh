@@ -2,7 +2,7 @@ import {
   ABSENCE_POLICIES, businessDays, checkAbsenceLimit, labourRules, vacationBalance, vacationEligibleFrom, vacationEntitlement, workingDaysByYear,
   type AbsenceType,
 } from '@kianda/core';
-import { absences, and, asc, auditLogs, contracts, departments, eq, getDb, gte, inArray, lte, employees, users, type Db } from '@kianda/db';
+import { absences, and, asc, auditLogs, contracts, departments, eq, files, getDb, gte, inArray, lte, employees, sql, users, type Db } from '@kianda/db';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { body as readBody, requireCompany, type Actor, type AppEnv } from '../plugins/tenant.js';
@@ -156,11 +156,19 @@ export function absenceRoutes() {
       .leftJoin(users, eq(users.id, absences.requestedBy))
       .where(and(...conds)).orderBy(asc(absences.startDate));
     const hr = actor.role === 'owner' || actor.role === 'hr_admin';
+    // Justificativos anexados (contagem; os ficheiros abrem-se a pedido).
+    const counts = new Map<string, number>();
+    if (rows.length) {
+      const fc = await db.select({ id: files.entityId, n: sql<number>`count(*)::int` }).from(files)
+        .where(and(eq(files.companyId, actor.companyId), eq(files.entity, 'absence'), inArray(files.entityId, rows.map((r) => r.a.id)))).groupBy(files.entityId);
+      for (const f of fc) counts.set(f.id, f.n);
+    }
     const out = rows.map(({ a, name, number, managerId, department, requester }) => {
       const decider = canDecide(actor, { id: a.employeeId, managerId });
       const open = a.status === 'pending' || a.status === 'approved';
       return {
-        ...a, employee: { id: a.employeeId, name, number, department }, requesterName: requester,
+        ...a, employee: { id: a.employeeId, name, number, department }, requesterName: requester, fileCount: counts.get(a.id) ?? 0,
+        canAttach: a.status !== 'cancelled' && (hr || actor.employeeId === a.employeeId || (actor.role === 'manager' && !!actor.employeeId && managerId === actor.employeeId)),
         canDecide: a.status === 'pending' && decider,
         canCancel: open && (hr || ((actor.employeeId === a.employeeId || decider) && (a.status === 'pending' || a.startDate > today()))),
       };

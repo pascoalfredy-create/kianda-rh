@@ -1,5 +1,6 @@
 'use client';
 
+import { Attachments } from '@/components/attachments';
 import { ABSENCE_POLICIES, checkAbsenceLimit, labourRules, workingDaysByYear, type AbsenceType } from '@kianda/core';
 import { useMemo, useState } from 'react';
 import { formObject, useMutation } from '@/lib/client';
@@ -122,4 +123,12 @@ export function AbsenceActions({ id, canDecide, canCancel }: { id: string; canDe
       {canCancel && !canDecide && <button className="btn ghost sm" disabled={busy} onClick={() => run(`/v1/absences/${id}/cancel`, 'POST')}>Cancelar</button>}
     </span>
   );
+}
+
+/** Justificativo da ausência (atestado, convocatória…): abre a lista e o envio só quando se clica. */
+export function AbsenceFiles({ id, count, canAttach }: { id: string; count: number; canAttach: boolean }) {
+  const [open, setOpen] = useState(false);
+  if (open) return <div style={{ marginTop: 4 }}><Attachments entity="absence" entityId={id} compact /></div>;
+  if (!count && !canAttach) return null;
+  return <button type="button" className="btn ghost sm" style={{ marginTop: 4 }} onClick={() => setOpen(true)}>{count ? `📎 ${count} ficheiro(s)` : '📎 Anexar justificativo'}</button>;
 }

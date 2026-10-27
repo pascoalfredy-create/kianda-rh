@@ -41,6 +41,7 @@ Pode reutilizar o token do Enterprise **se** tiver estas permissões; senão cri
 | Account · Hyperdrive | Edit |
 | Zone (o seu domínio) · Workers Routes | Edit |
 | Zone (o seu domínio) · DNS | Edit (necessário para o custom domain) |
+| Account · Workers R2 Storage | Edit (opcional — ficheiros anexados no R2; sem ela ficam na base de dados) |
 
 ### 4. GitHub — secrets e variáveis
 
@@ -125,3 +126,14 @@ O workflow **Cópia de segurança** (`.github/workflows/backup.yml`) corre todos
 ## Segurança por empresa (RLS)
 
 A migração `0019` cria o papel `kianda_app` (sem login, sem `BYPASSRLS`) e as políticas `empresa`. Os pedidos de uma empresa correm em `withTenant` (transacção com `SET LOCAL ROLE kianda_app` e `app.company_id`). O utilizador da ligação (Hyperdrive) continua a ser o dono das tabelas — não é preciso mudar a ligação. Tarefas de sistema, registo, login, webhook e consola da plataforma correm sem papel restrito.
+
+## Ficheiros anexados (entrega 20)
+
+Cópias de documentos, justificativos de ausências e comprovativos de despesas. Em cada publicação o CI tenta usar o bucket R2 `kianda-files` (cria-o se não existir):
+
+- **Com R2** (recomendado): active o R2 na conta Cloudflare (**R2 → Enable**, sem custo até 10 GB) e dê ao token a permissão *Workers R2 Storage: Edit*. O passo "Armazenamento de ficheiros" do CI mostra `R2: bucket kianda-files ligado`.
+- **Sem R2**: o CI mostra um aviso e os ficheiros ficam na base de dados (Neon), com limite de 250 MB por empresa. Os dois modos convivem: quando o R2 for activado, os ficheiros novos vão para lá e os antigos continuam legíveis.
+
+A consola da plataforma mostra o modo em uso, o número de ficheiros e o espaço ocupado. A cópia de segurança diária da base de dados inclui os ficheiros guardados na base de dados, mas não o R2 (o R2 tem a sua própria durabilidade).
+
+A recuperação de palavra-passe por email (`/recuperar`) só funciona com o Resend configurado (secção Integrações); sem ele, a página indica que se peça a ligação ao RH.

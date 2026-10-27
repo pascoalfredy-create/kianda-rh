@@ -6,11 +6,12 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { body, rateLimit, requireCompany, requireRole, type Actor, type AppEnv, type Role } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
-import { appBaseUrl } from '../services/integrations.js';
+import { appBaseUrl, mailConfig } from '../services/integrations.js';
 import { sendMail } from '../services/mail.js';
 import { completeLogin, isLocked, LOCKED, registerFailure } from './auth.js';
 
 const LINK_DAYS = 7;
+const SELF_RESET_MINUTES = 60;
 const ROLES = ['hr_admin', 'payroll', 'finance', 'manager', 'employee'] as const;
 const ROLE_LABEL: Record<string, string> = { owner: 'Proprietário', hr_admin: 'Administração de RH', payroll: 'Processamento salarial', finance: 'Finanças', manager: 'Chefia', employee: 'Colaborador' };
 
@@ -102,6 +103,53 @@ export function accessRoutes() {
     return completeLogin(c, db, u, co, 'pin');
   });
 
+  // ——— Esqueci a palavra-passe (autosserviço por email) ———
+  /**
+   * Resposta sempre igual, exista ou não o email (não revela contas). Ligação de uso único válida 1 hora.
+   * Ao contrário da recuperação pelo RH, esta NÃO retira a verificação em dois passos: quem só controla o email
+   * não passa o segundo passo.
+   */
+  app.post('/v1/auth/forgot', rateLimit('forgot', 5, 3_600_000), async (c) => {
+    const b = z.object({ email: z.email('Email inválido') }).parse(await body(c));
+    const base = appBaseUrl();
+    const enabled = Boolean(mailConfig() && base);
+    const reply = {
+      ok: true, emailEnabled: enabled,
+      message: enabled
+        ? `Se este email tiver acesso ao Kianda RH, vai receber em poucos minutos uma ligação para definir uma nova palavra-passe (válida durante ${SELF_RESET_MINUTES} minutos).`
+        : 'A recuperação por email ainda não está activa. Peça aos Recursos Humanos uma ligação de recuperação.',
+    };
+    if (!enabled) return c.json(reply);
+    const db = getDb();
+    const rows = await db.select({ u: users, company: companies.name }).from(users).innerJoin(companies, eq(companies.id, users.companyId))
+      .where(and(eq(users.email, b.email.toLowerCase()), isNull(users.disabledAt), sql`${users.passwordHash} <> '!'`));
+    for (const { u, company } of rows) {
+      // No máximo um pedido a cada 2 minutos por conta (evita encher a caixa de correio de alguém).
+      const [recent] = await db.select({ id: accessLinks.id }).from(accessLinks)
+        .where(and(eq(accessLinks.userId, u.id), eq(accessLinks.kind, 'self_reset'), sql`${accessLinks.createdAt} > now() - interval '2 minutes'`));
+      if (recent) continue;
+      const token = randomToken();
+      await db.update(accessLinks).set({ revokedAt: new Date() }).where(and(eq(accessLinks.userId, u.id), eq(accessLinks.kind, 'self_reset'), isNull(accessLinks.usedAt), isNull(accessLinks.revokedAt)));
+      const [l] = await db.insert(accessLinks).values({
+        companyId: u.companyId, kind: 'self_reset', userId: u.id, role: u.role, email: u.email, tokenHash: await sha256Hex(token),
+        expiresAt: new Date(Date.now() + SELF_RESET_MINUTES * 60_000), createdBy: u.id,
+      }).returning();
+      await db.insert(auditLogs).values({ companyId: u.companyId, actorId: u.id, action: 'password_reset_requested', entity: 'access_link', entityId: l!.id });
+      await sendMail(db, {
+        to: u.email, companyId: u.companyId, kind: 'recuperacao',
+        subject: 'Kianda RH — definir nova palavra-passe',
+        title: 'Definir nova palavra-passe',
+        paragraphs: [
+          `Recebemos um pedido para definir uma nova palavra-passe do seu acesso à ${company}.`,
+          `A ligação só pode ser usada uma vez e é válida durante ${SELF_RESET_MINUTES} minutos. A verificação em dois passos mantém-se.`,
+          'Se não fez este pedido, ignore este email — a palavra-passe actual continua válida.',
+        ],
+        button: { label: 'Definir nova palavra-passe', url: `${base}/acesso/${token}` },
+      });
+    }
+    return c.json(reply);
+  });
+
   // ——— Ligações de acesso (públicas: aceitar convite / recuperar) ———
   app.get('/v1/public/access/:token', async (c) => {
     const db = getDb();
@@ -112,7 +160,7 @@ export function accessRoutes() {
       kind: l.kind, company, companyCode: code, role: l.role, roleLabel: ROLE_LABEL[l.role] ?? l.role, name: u?.name ?? emp?.name ?? l.name,
       number: emp?.number ?? null, email: u?.email ?? l.email ?? emp?.email ?? null, phone: l.phone ?? emp?.phone ?? null, hasPin: Boolean(u?.pin), expiresAt: l.expiresAt,
       // Perfis de gestão entram sempre com email e palavra-passe (o PIN é para colaboradores).
-      pinAllowed: l.role === 'employee' || l.role === 'manager',
+      pinAllowed: l.kind !== 'self_reset' && (l.role === 'employee' || l.role === 'manager'),
     });
   });
 
@@ -120,6 +168,7 @@ export function accessRoutes() {
     const db = getDb();
     const { l } = await linkByToken(db, c.req.param('token'));
     const b = credentials.parse(await body(c));
+    if (l.kind === 'self_reset' && b.method !== 'password') throw new DomainError('metodo_invalido', 'Esta ligação serve para definir uma nova palavra-passe', 400);
     if (b.method === 'pin' && !(l.role === 'employee' || l.role === 'manager')) throw new DomainError('metodo_invalido', 'Este perfil entra com email e palavra-passe', 400);
     const creds = await credentialValues(b);
     if ('email' in creds && creds.email) {
@@ -136,16 +185,20 @@ export function accessRoutes() {
           email: ('email' in creds && creds.email) || null, pinHash: ('pinHash' in creds && creds.pinHash) || null,
         }).returning();
         id = u!.id;
+      } else if (l.kind === 'self_reset') {
+        // Autosserviço: só a palavra-passe; o email não muda e a verificação em dois passos fica.
+        await tx.update(users).set({ passwordHash: (creds as { passwordHash: string }).passwordHash, failedAttempts: 0, lockedUntil: null }).where(eq(users.id, l.userId!));
       } else {
         // Recuperação: redefine a credencial escolhida, desbloqueia e retira a verificação em dois passos (telemóvel perdido).
         await tx.update(users).set({ ...creds, failedAttempts: 0, lockedUntil: null, totpSecret: null, totpEnabledAt: null }).where(eq(users.id, l.userId!));
       }
       await tx.update(accessLinks).set({ usedAt: new Date() }).where(eq(accessLinks.id, l.id));
-      await tx.insert(auditLogs).values({ companyId: l.companyId, actorId: id!, action: l.kind === 'invite' ? 'accept_invite' : 'access_recovered', entity: 'user', entityId: id!, after: { method: b.method } });
+      await tx.insert(auditLogs).values({ companyId: l.companyId, actorId: id!, action: l.kind === 'invite' ? 'accept_invite' : l.kind === 'self_reset' ? 'password_reset' : 'access_recovered', entity: 'user', entityId: id!, after: { method: b.method } });
       return id!;
     });
     const [row] = await db.select({ u: users, co: companies }).from(users).innerJoin(companies, eq(companies.id, users.companyId)).where(eq(users.id, userId));
-    return completeLogin(c, db, row!.u, row!.co, `link_${b.method}`, true);
+    // Com a verificação em dois passos activa, o autosserviço ainda pede o código da aplicação.
+    return completeLogin(c, db, row!.u, row!.co, `link_${b.method}`, l.kind !== 'self_reset');
   });
 
   // ——— Gestão de acessos (RH) ———

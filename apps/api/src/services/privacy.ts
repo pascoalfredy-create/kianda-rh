@@ -1,3 +1,4 @@
+import { deleteObjects, r2KeysOf } from './storage.js';
 import { sql, type Db } from '@kianda/db';
 
 /**
@@ -24,6 +25,7 @@ export const COMPANY_TABLES_PURGE_ORDER: Scope[] = [
   { table: 'employee_allowances' }, { table: 'allowance_types' }, { table: 'work_schedules' },
   { table: 'compensation_changes' },
   { table: 'contracts', via: { column: 'employee_id', parent: 'employees' } },
+  { table: 'file_blobs' }, { table: 'files' },
   { table: 'employee_documents' }, { table: 'documents' }, { table: 'absences' }, { table: 'attendance_entries' }, { table: 'attendance_months' },
   { table: 'salary_advances' }, { table: 'access_links' }, { table: 'users' }, { table: 'employees' }, { table: 'departments' },
   { table: 'bank_accounts' }, { table: 'account_mappings' },
@@ -37,7 +39,8 @@ const SECRET_COLUMNS: Record<string, string[]> = {
   access_links: ['token_hash'],
 };
 /** Fora da exportação: registos técnicos da plataforma. */
-const NOT_EXPORTED = new Set(['gateway_events', 'outbound_emails']);
+/** O conteúdo dos ficheiros não segue na exportação (só os metadados em files). */
+const NOT_EXPORTED = new Set(['gateway_events', 'outbound_emails', 'file_blobs']);
 
 const where = (s: Scope, companyId: string) =>
   s.via
@@ -62,7 +65,8 @@ export async function exportCompany(db: Db, companyId: string) {
 
 /** Elimina todos os dados da empresa (irreversível). Corre numa transacção: ou sai tudo, ou nada. */
 export async function purgeCompany(db: Db, companyId: string) {
-  return db.transaction(async (tx) => {
+  const keys = await r2KeysOf(db, companyId);
+  const deleted = await db.transaction(async (tx) => {
     const deleted: Record<string, number> = {};
     for (const s of COMPANY_TABLES_PURGE_ORDER) {
       const r = await tx.execute(sql`delete from ${sql.identifier(s.table)} where ${where(s, companyId)}`);
@@ -72,4 +76,7 @@ export async function purgeCompany(db: Db, companyId: string) {
     deleted.companies = r.rowCount ?? 0;
     return deleted;
   });
+  // Conteúdos no R2: só depois de a transacção confirmar (se falhar, nada foi apagado).
+  await deleteObjects(keys);
+  return deleted;
 }

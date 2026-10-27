@@ -3,9 +3,10 @@ import {
   angolanIbanProblem, isValidAngolanBI, kz, normalizeIban, packOrLatest, PackNotFoundError, type CountryPack, type DocumentType,
 } from '@kianda/core';
 import {
-  candidates, candidateEvents, auditLogs, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, payrollRuns, users, type Db,
+  candidates, candidateEvents, auditLogs, compensationChanges, contracts, departments, employeeDocuments, employees, files, getDb, payrollRuns, users, type Db,
 } from '@kianda/db';
 import { and, asc, desc, eq, gte, inArray, or, sql } from '@kianda/db';
+import { removeFiles } from '../services/storage.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { body, requireCompany, requireRole, type Actor, type AppEnv } from '../plugins/tenant.js';
@@ -341,6 +342,7 @@ export function employeeRoutes() {
     const db = getDb();
     const [d] = await db.delete(employeeDocuments).where(and(eq(employeeDocuments.id, docId), eq(employeeDocuments.employeeId, id), eq(employeeDocuments.companyId, req.companyId))).returning();
     if (!d) return ctx.json({ error: 'nao_encontrado', message: 'Documento inexistente' }, 404);
+    await removeFiles(db, await db.select().from(files).where(and(eq(files.companyId, req.companyId), eq(files.entity, 'employee_document'), eq(files.entityId, d.id))));
     await audit(db, req, 'delete', 'employee_document', d.id, d, null);
     return ctx.body(null, 204);
   });

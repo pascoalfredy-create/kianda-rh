@@ -1,5 +1,6 @@
 import { candidates, closeDb, employees as employeesTable, getDb, jobOpenings, platformAdmins, platformSettings, sql, withTenant } from '@kianda/db';
 import { COMPANY_TABLES_PURGE_ORDER } from '../src/services/privacy.js';
+import { setObjectStore, type ObjectStore } from '../src/services/storage.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { totp } from '@kianda/core';
 import { buildApp } from '../src/app.js';
@@ -1542,6 +1543,157 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect((await post(ownerQ, `/v1/advances/${advId}/cancel`)).json().error).toBe('estado_invalido');
       expect((await get(employeeUser, '/v1/advances')).json()).toEqual([]);
       expect((await post(employeeUser, `/v1/advances/${advId}/decide`, { approve: true })).statusCode).toBe(403);
+    });
+  });
+
+  describe('ficheiros e recuperação por email (entrega 20)', () => {
+    const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
+    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const upload = (cookie: string, entity: string, entityId: string, data: Uint8Array, name = 'scan.pdf') =>
+      app.inject({ method: 'POST', url: `/v1/files?entity=${entity}&entityId=${entityId}&name=${encodeURIComponent(name)}`, headers: as(cookie), payload: data });
+    const pdf = (extra = '') => new TextEncoder().encode(`%PDF-1.4\n% teste ${extra}\n%%EOF`);
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+    let absenceId = '';
+    let docId = '';
+
+    beforeAll(async () => {
+      const a = await post(owner, '/v1/absences', { employeeId: empId, type: 'justified', startDate: '2026-09-14', endDate: '2026-09-14', reason: 'Consulta' });
+      expect(a.statusCode).toBe(201);
+      absenceId = a.json().id;
+      const d = await post(owner, `/v1/employees/${empId}/documents`, { type: 'passport', number: `N${stamp.slice(-7)}`, expiryDate: '2031-01-01' });
+      expect(d.statusCode).toBe(201);
+      docId = d.json().id;
+    });
+
+    it('o colaborador anexa o justificativo à sua ausência; o RH vê e descarrega', async () => {
+      const r = await upload(employeeUser, 'absence', absenceId, pdf('ausencia'), '../../etc/Atestado médico.PDF');
+      expect(r.statusCode).toBe(201);
+      expect(r.json()).toMatchObject({ name: 'Atestado médico.pdf', mime: 'application/pdf' });
+      const list = (await get(owner, `/v1/files?entity=absence&entityId=${absenceId}`)).json();
+      expect(list).toMatchObject({ canUpload: true, files: [{ id: r.json().id }] });
+      const dl = await get(owner, `/v1/files/${r.json().id}?download=1`);
+      expect(dl.statusCode).toBe(200);
+      expect(dl.headers['content-type']).toBe('application/pdf');
+      expect(dl.headers['content-disposition']).toMatch(/^attachment; .*filename\*=UTF-8''Atestado%20m%C3%A9dico\.pdf/);
+      expect(dl.headers['x-content-type-options']).toBe('nosniff');
+      expect(dl.body).toContain('ausencia');
+    });
+
+    it('tipo pelo conteúdo, limite de 5 MB e ficheiro vazio', async () => {
+      expect((await upload(owner, 'absence', absenceId, new TextEncoder().encode('<script>alert(1)</script>'), 'x.pdf')).statusCode).toBe(415);
+      expect((await upload(owner, 'absence', absenceId, new Uint8Array(0))).statusCode).toBe(400);
+      const big = new Uint8Array(5 * 1024 * 1024 + 1); big.set(pdf());
+      expect((await upload(owner, 'absence', absenceId, big)).statusCode).toBe(413);
+      const p = await upload(owner, 'absence', absenceId, png, 'foto.jpeg');
+      expect(p.json()).toMatchObject({ name: 'foto.png', mime: 'image/png' });
+    });
+
+    it('cópias de documentos: só o RH anexa; o próprio vê; Finanças e outra empresa não', async () => {
+      expect((await upload(employeeUser, 'employee_document', docId, pdf())).statusCode).toBe(403);
+      const f = await upload(owner, 'employee_document', docId, pdf('passaporte'), 'Passaporte.pdf');
+      expect(f.statusCode).toBe(201);
+      expect((await get(employeeUser, `/v1/files/${f.json().id}`)).statusCode).toBe(200);
+      expect((await get(financeUser, `/v1/files?entity=employee_document&entityId=${docId}`)).statusCode).toBe(403);
+      expect((await get(financeUser, `/v1/files/${f.json().id}`)).statusCode).toBe(404);
+      expect((await get(ownerB, `/v1/files/${f.json().id}`)).statusCode).toBe(404);
+      expect((await upload(ownerB, 'employee_document', docId, pdf())).statusCode).toBe(404);
+      // Apagar o documento da ficha apaga as cópias.
+      expect((await app.inject({ method: 'DELETE', url: `/v1/employees/${empId}/documents/${docId}`, headers: as(owner) })).statusCode).toBeLessThan(300);
+      expect((await get(owner, `/v1/files/${f.json().id}`)).statusCode).toBe(404);
+      const [n] = (await getDb().execute(sql`select count(*)::int as n from file_blobs where file_id = ${f.json().id}`)).rows;
+      expect(n!.n).toBe(0);
+    });
+
+    it('notas de despesas: comprovativos só enquanto a nota está em rascunho ou recusada', async () => {
+      const claim = await post(employeeUser, '/v1/expenses', { title: 'Deslocação a Viana', lines: [{ kind: 'expense', date: '2026-10-05', description: 'Táxi', category: 'transport', documentRef: 'R-1', amount: 5000 }] });
+      expect(claim.statusCode).toBe(201);
+      const id = claim.json().id;
+      expect((await upload(employeeUser, 'expense_claim', id, pdf('recibo'))).statusCode).toBe(201);
+      expect((await post(employeeUser, `/v1/expenses/${id}/submit`)).statusCode).toBe(200);
+      expect((await upload(employeeUser, 'expense_claim', id, pdf())).statusCode).toBe(403);
+      expect((await get(financeUser, `/v1/files?entity=expense_claim&entityId=${id}`)).json()).toMatchObject({ canUpload: false, files: [{}] });
+    });
+
+    it('com R2: conteúdo no armazenamento de objectos, apagado com o registo', async () => {
+      const objects = new Map<string, Uint8Array>();
+      const fake: ObjectStore = {
+        async put(k, d) { objects.set(k, d); }, async get(k) { return objects.get(k) ?? null; }, async delete(ks) { for (const k of ks) objects.delete(k); },
+      };
+      setObjectStore(fake);
+      try {
+        const f = await upload(owner, 'employee', empId, pdf('r2'), 'Contrato assinado.pdf');
+        expect(f.statusCode).toBe(201);
+        expect(objects.size).toBe(1);
+        const [n] = (await getDb().execute(sql`select count(*)::int as n from file_blobs where file_id = ${f.json().id}`)).rows;
+        expect(n!.n).toBe(0);
+        expect((await get(owner, `/v1/files/${f.json().id}`)).body).toContain('r2');
+        expect((await app.inject({ method: 'DELETE', url: `/v1/files/${f.json().id}`, headers: as(owner) })).statusCode).toBe(200);
+        expect(objects.size).toBe(0);
+      } finally {
+        setObjectStore(null);
+      }
+    });
+
+    describe('esqueci a palavra-passe', () => {
+      const ENV = { RESEND_API_KEY: 're_teste', MAIL_FROM: 'Kianda RH <noreply@kianda.test>', APP_BASE_URL: 'https://kianda.test' };
+      const realFetch = globalThis.fetch;
+      const emails: { to: string[]; subject: string; text: string }[] = [];
+      const email = `rec+${stamp}@a.ao`;
+      const pub = (method: string, url: string, payload?: object) => app.inject({ method, url, payload });
+      const tokenOf = (t: string) => /\/acesso\/([A-Za-z0-9_-]+)/.exec(t)![1]!;
+
+      beforeAll(async () => {
+        expect((await post(owner, '/v1/users', { name: 'Recuperação', email, password: pw, role: 'finance' })).statusCode).toBe(201);
+        globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+          if (String(input) === 'https://api.resend.com/emails') { emails.push(JSON.parse(String(init!.body))); return new Response(JSON.stringify({ id: 'em' }), { status: 200 }); }
+          return realFetch(input, init);
+        }) as typeof fetch;
+      });
+      afterAll(() => { globalThis.fetch = realFetch; for (const k of Object.keys(ENV)) delete process.env[k]; });
+
+      it('sem email configurado: manda pedir ao RH', async () => {
+        const r = (await pub('POST', '/v1/auth/forgot', { email })).json();
+        expect(r).toMatchObject({ ok: true, emailEnabled: false });
+        expect(emails).toHaveLength(0);
+      });
+
+      it('mesma resposta para email inexistente; ligação de 1 hora; não repete em 2 minutos', async () => {
+        Object.assign(process.env, ENV);
+        const a = (await pub('POST', '/v1/auth/forgot', { email: 'ninguem@nada.ao' })).json();
+        const b = (await pub('POST', '/v1/auth/forgot', { email: email.toUpperCase() })).json();
+        expect(a).toEqual(b);
+        expect(emails).toHaveLength(1);
+        expect(emails[0]!.to).toEqual([email]);
+        await pub('POST', '/v1/auth/forgot', { email });
+        expect(emails).toHaveLength(1);
+        const info = (await pub('GET', `/v1/public/access/${tokenOf(emails[0]!.text)}`)).json();
+        expect(info).toMatchObject({ kind: 'self_reset', pinAllowed: false, email });
+        expect(new Date(info.expiresAt).getTime() - Date.now()).toBeLessThanOrEqual(3_600_000);
+      });
+
+      it('define a nova palavra-passe; a antiga deixa de servir; a ligação é de uso único', async () => {
+        const token = tokenOf(emails[0]!.text);
+        expect((await pub('POST', `/v1/public/access/${token}`, { method: 'pin', pin: '493817' })).json().error).toBe('metodo_invalido');
+        const r = await pub('POST', `/v1/public/access/${token}`, { method: 'password', email, password: 'NovaSegura2026x' });
+        expect(r.statusCode).toBe(200);
+        expect(r.cookies.find((c) => c.name === 'kianda_session')?.value).toBeTruthy();
+        expect((await pub('POST', '/v1/auth/login', { email, password: pw, companyNif: nifA })).statusCode).toBe(401);
+        expect((await pub('POST', '/v1/auth/login', { email, password: 'NovaSegura2026x', companyNif: nifA })).statusCode).toBe(200);
+        expect((await pub('POST', `/v1/public/access/${token}`, { method: 'password', email, password: 'OutraSegura2026y' })).json().error).toBe('ligacao_usada');
+      });
+
+      it('com verificação em dois passos: mantém-se e é pedida depois da recuperação', async () => {
+        const s = cookieOf(await pub('POST', '/v1/auth/login', { email, password: 'NovaSegura2026x', companyNif: nifA }));
+        const secret = (await post(s, '/v1/auth/2fa/setup')).json().secret.replace(/\s/g, '');
+        expect((await post(s, '/v1/auth/2fa/enable', { code: await totp(secret) })).statusCode).toBe(200);
+        await getDb().execute(sql`update access_links set created_at = now() - interval '5 minutes' where kind = 'self_reset' and email = ${email}`);
+        await pub('POST', '/v1/auth/forgot', { email });
+        expect(emails).toHaveLength(2);
+        const r = (await pub('POST', `/v1/public/access/${tokenOf(emails[1]!.text)}`, { method: 'password', email, password: 'Terceira2026zz' })).json();
+        expect(r).toMatchObject({ twoFactor: true });
+        const ok = await pub('POST', '/v1/auth/login/2fa', { ticket: r.ticket, code: await totp(secret) });
+        expect(ok.statusCode).toBe(200);
+      });
     });
   });
 

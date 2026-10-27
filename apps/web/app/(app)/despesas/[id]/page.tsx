@@ -1,5 +1,6 @@
 import { EXPENSE_CATEGORIES, formatKz, luandaDate, PER_DIEM_ZONE } from '@kianda/core';
 import Link from 'next/link';
+import { Attachments } from '@/components/attachments';
 import { api, currentUser } from '@/lib/api';
 import { CLAIM_STATUS } from '../status';
 import { ClaimActions, ClaimForm } from '../form';
@@ -79,6 +80,10 @@ export default async function Nota({ params }: { params: Promise<{ id: string }>
           </div>
         </div>
       )}
+      <div className="card" style={{ padding: 16, marginTop: 14 }}>
+        <h2 style={{ fontSize: 14, marginTop: 0 }}>Comprovativos (facturas e recibos)</h2>
+        <Attachments entity="expense_claim" entityId={d.id} hint="Fotografia ou PDF de cada factura/recibo — só se alteram em rascunho ou depois de recusada" />
+      </div>
       {me.user.employeeId === d.employeeId && d.status === 'submitted' && <p className="muted">A nota está com a sua chefia para aprovação.</p>}
     </>
   );

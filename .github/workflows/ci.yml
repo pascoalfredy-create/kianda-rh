@@ -107,6 +107,16 @@ jobs:
         env:
           KIANDA_HOSTNAME: ${{ vars.KIANDA_HOSTNAME }}
 
+      - name: Armazenamento de ficheiros (R2, opcional)
+        working-directory: apps/api
+        run: |
+          # Sem R2 activo na conta (ou sem permissão no token), os ficheiros ficam na base de dados — a publicação continua.
+          if npx wrangler r2 bucket list 2>/dev/null | grep -q 'kianda-files'; then ok=1
+          elif out=$(npx wrangler r2 bucket create kianda-files 2>&1); then ok=1
+          else ok=0; echo "::warning title=R2 indisponível::os ficheiros anexados ficam na base de dados (limite de 250 MB por empresa). Active o R2 na conta Cloudflare e dê ao token a permissão 'Workers R2 Storage: Edit'. $(echo "$out" | tail -2 | tr '\n' ' ')"; fi
+          [ "$ok" = 1 ] && echo "KIANDA_R2=1" >> "$GITHUB_ENV" && echo "R2: bucket kianda-files ligado"
+          true
+
       - name: Preparar configuração de produção
         run: node scripts/cf-prepare.mjs
         env:

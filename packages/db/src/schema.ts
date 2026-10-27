@@ -4,7 +4,7 @@
  */
 import { relations, sql } from 'drizzle-orm';
 import {
-  bigint, boolean, date, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex,
+  bigint, boolean, customType, date, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
 const money = (name: string) => bigint(name, { mode: 'number' }).notNull().default(0);
@@ -237,6 +237,35 @@ export const employeeDocuments = pgTable('employee_documents', {
   notes: text('notes'),
   createdAt: createdAt(),
 }, (t) => [index('employee_documents_employee').on(t.employeeId), uniqueIndex('employee_documents_company_type_number').on(t.companyId, t.type, t.number)]);
+
+const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({ dataType: () => 'bytea' });
+
+/**
+ * Ficheiros anexados (cópias digitalizadas de documentos, justificativos de ausências, comprovativos de despesas).
+ * O conteúdo fica no R2 (storage = 'r2') ou, sem R2 configurado, na própria base de dados (storage = 'db', em file_blobs).
+ */
+export const files = pgTable('files', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  /** employee | employee_document | absence | expense_claim */
+  entity: text('entity').notNull(),
+  entityId: text('entity_id').notNull(),
+  /** Colaborador a quem o ficheiro diz respeito (permissões e minimização de dados). */
+  employeeId: text('employee_id'),
+  name: text('name').notNull(),
+  mime: text('mime').notNull(),
+  sizeBytes: integer('size_bytes').notNull(),
+  sha256: text('sha256').notNull(),
+  storage: text('storage').notNull(),
+  uploadedBy: text('uploaded_by').notNull(),
+  createdAt: createdAt(),
+}, (t) => [index('files_entity').on(t.companyId, t.entity, t.entityId), index('files_employee').on(t.employeeId)]);
+
+export const fileBlobs = pgTable('file_blobs', {
+  fileId: text('file_id').primaryKey().references(() => files.id, { onDelete: 'cascade' }),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  data: bytea('data').notNull(),
+});
 
 export const absences = pgTable('absences', {
   id: id(),

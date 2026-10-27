@@ -2,7 +2,7 @@ import { ABSENCE_POLICIES, labourRules, type AbsenceType } from '@kianda/core';
 import Link from 'next/link';
 import { api, currentUser } from '@/lib/api';
 import { ABSENCE_STATUS_LABEL, type AbsenceRow, type BalanceRow } from '@/lib/types';
-import { AbsenceActions, NewAbsenceForm } from './actions';
+import { AbsenceActions, AbsenceFiles, NewAbsenceForm } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -87,7 +87,7 @@ function AbsenceTable({ rows, highlight }: { rows: AbsenceRow[]; highlight?: boo
         {rows.map((a) => (
           <tr key={a.id} style={highlight ? { background: '#fffdf6' } : undefined}>
             <td><Link href={`/colaboradores/${a.employee.id}?s=ausencias`}><b>{a.employee.name}</b></Link><div className="muted">{a.employee.department ?? '—'}</div></td>
-            <td><span className="dot" style={{ background: policy(a.type)?.color }} />{policy(a.type)?.label ?? a.type}{a.reason && <div className="muted">{a.reason}</div>}</td>
+            <td><span className="dot" style={{ background: policy(a.type)?.color }} />{policy(a.type)?.label ?? a.type}{a.reason && <div className="muted">{a.reason}</div>}<AbsenceFiles id={a.id} count={a.fileCount ?? 0} canAttach={!!a.canAttach} /></td>
             <td>{pt(a.startDate)}{a.endDate !== a.startDate ? ` – ${pt(a.endDate)}` : ''}</td>
             <td className="num">{a.workingDays}</td>
             <td>

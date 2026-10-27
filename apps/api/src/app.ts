@@ -19,6 +19,7 @@ import { accessRoutes } from './routes/access.js';
 import { sectorRoutes } from './routes/sector.js';
 import { privacyRoutes } from './routes/privacy.js';
 import { advanceRoutes } from './routes/advances.js';
+import { fileRoutes } from './routes/files.js';
 import { authRoutes } from './routes/auth.js';
 import { employeeRoutes } from './routes/employees.js';
 import { payrollRoutes } from './routes/payroll.js';
@@ -56,6 +57,7 @@ export function buildApp(opts: { logger?: boolean; rateLimit?: boolean } = {}) {
   app.route('/', publicRoutes());
   app.route('/', authRoutes());
   app.route('/', employeeRoutes());
+  app.route('/', fileRoutes());
   app.route('/', absenceRoutes());
   app.route('/', attendanceRoutes());
   app.route('/', payrollRoutes());

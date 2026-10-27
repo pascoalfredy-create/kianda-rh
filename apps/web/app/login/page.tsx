@@ -87,7 +87,7 @@ function LoginForm() {
       )}
       {error && <div className="alert" role="alert">{error}</div>}
       <button className="btn" disabled={busy} style={{ width: '100%' }}>{busy ? 'A entrar…' : ticket ? 'Confirmar' : 'Entrar'}</button>
-      {!ticket && <p className="muted" style={{ textAlign: 'center', marginTop: 12, fontSize: 12.5 }}>Esqueceu-se do acesso? Peça aos Recursos Humanos uma ligação de recuperação.</p>}
+      {!ticket && <p className="muted" style={{ textAlign: 'center', marginTop: 12, fontSize: 12.5 }}>{mode === 'email' ? <><a href="/recuperar">Esqueceu-se da palavra-passe?</a></> : 'Esqueceu-se do PIN? Peça aos Recursos Humanos uma ligação de recuperação.'}</p>}
       {!ticket && <p className="muted" style={{ textAlign: 'center', marginTop: 4 }}>Empresa nova? <a href="/registo">Criar conta — 7 dias grátis</a></p>}
     </form>
   );

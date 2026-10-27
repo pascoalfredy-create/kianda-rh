@@ -1,6 +1,7 @@
+import { storageMode } from '../services/storage.js';
 import { CYCLES, cyclePrice, DEFAULT_TIERS, luandaDate, periodEnd, SECTORS, type BillingCycle } from '@kianda/core';
 import {
-  and, auditLogs, companies, desc, employees, eq, gatewayEvents, getDb, like, outboundEmails, paymentRequests, platformAdmins, platformSettings, sql, subscriptions, users, type Db,
+  and, auditLogs, companies, desc, employees, eq, files, gatewayEvents, getDb, like, outboundEmails, paymentRequests, platformAdmins, platformSettings, sql, subscriptions, users, type Db,
 } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -222,7 +223,8 @@ export function platformRoutes() {
     const invoiceIssues = await db.select({ id: paymentRequests.id, number: paymentRequests.number, error: paymentRequests.invoiceError, company: companies.name })
       .from(paymentRequests).innerJoin(companies, eq(companies.id, paymentRequests.companyId))
       .where(and(eq(paymentRequests.status, 'paid'), sql`${paymentRequests.invoiceRef} is null`)).orderBy(desc(paymentRequests.paidAt)).limit(50);
-    return c.json({ status: integrationStatus(), invoicing: await invoiceSettingsGet(db), events, emails, invoiceIssues });
+    const [used] = await db.select({ n: sql<number>`count(*)::int`, bytes: sql<number>`coalesce(sum(${files.sizeBytes}), 0)::bigint` }).from(files);
+    return c.json({ status: { ...integrationStatus(), files: { mode: storageMode(), count: used?.n ?? 0, bytes: Number(used?.bytes ?? 0) } }, invoicing: await invoiceSettingsGet(db), events, emails, invoiceIssues });
   });
 
   app.put('/v1/platform/invoicing', async (c) => {
