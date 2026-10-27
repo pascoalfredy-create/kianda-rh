@@ -44,3 +44,35 @@ Cada gravação/importação é auditada. `revision` impede que uma gravação c
 ## Validação
 
 Testes de core para adesão explícita, tolerância, suspensão, cancelamento, experimental e classificação de rotas. Testes de API com PostgreSQL para autorização, isolamento, revisões, importação, preservação da cópia, câmbio, separação de licenças e protecção dos direitos no banco. Os testes de banco são omitidos se `DATABASE_URL` não estiver definida; o CI do repositório disponibiliza PostgreSQL e aplica as migrações antes de os executar.
+
+## Modelo comercial aprovado — projectos e acessos
+
+Modelagem tem preço próprio, independente do número de funcionários e dos escalões RH. Os montantes comerciais ainda não foram definidos: nenhum preço foi inventado, nenhum cliente foi cobrado e nenhum plano pago foi activado nesta alteração.
+
+- `projectLimit`: número de projectos activos contratados, configurado pela plataforma. O valor técnico por omissão é 1 e pode ser ajustado por empresa; não constitui uma tabela comercial aprovada.
+- Até **5 utilizadores autorizados no Integra**, incluindo o proprietário da empresa cliente. Cinco acessos não significam cinco empregados no RH. O proprietário gere os participantes e as permissões `editor`/`viewer`; uma pessoa sem ficha de funcionário também pode participar.
+- `extraUsers`: acessos adicionais contratados explicitamente para equipas maiores. Só a plataforma os altera. O valor unitário por participante e a periodicidade de cobrança ficam por definir.
+- Um projecto corresponde ao registo `financial_models`. Alterar pressupostos não consome outro projecto. Versões/cenários futuros devem pertencer ao mesmo projecto, sem consumir quotas adicionais.
+- Arquivar liberta quota de projectos e mantém histórico e consulta. Projectos arquivados não podem ser editados nem receber importações. Restaurar exige vaga. Criação/restauro e admissão de utilizadores são serializados por empresa para impedir ultrapassagem por pedidos concorrentes.
+- O número de utilizadores autorizados conta os membros com `enabled=true`. Desactivar o acesso no Integra liberta lugar. A suspensão do utilizador no RH não altera automaticamente o contrato de acessos Integra.
+- Os participantes desta entrega têm acesso aos projectos da própria empresa segundo a permissão global Integra; atribuição restrita a projectos individuais é uma evolução pendente.
+
+### Rotas adicionais
+
+| Método e rota | Função |
+| --- | --- |
+| GET `/v1/modeling/usage` | Consumo e limites de projectos e utilizadores |
+| GET `/v1/modeling/members` | Participantes; reservado ao proprietário cliente |
+| PUT `/v1/modeling/members/:userId` | Conceder/retirar acesso a um utilizador da mesma empresa; `enabled`, `permission` |
+| POST `/v1/modeling/models/:id/archive` | Arquivar/restaurar com `{archived, revision}` |
+| GET `/v1/modeling/export-options` | Política de formatos da conta autenticada |
+
+A rota administrativa dos direitos aceita agora `projectLimit` e `extraUsers` na Modelagem. Omiti-los numa renovação conserva os valores anteriores. Reduções abaixo do consumo actual são recusadas. O módulo RH continua sem cobrança por projectos.
+
+### PDF para clientes; Excel exclusivo do proprietário da plataforma
+
+A política de exportação da Modelagem permite PDF aos clientes. Excel (`xlsx`) exige a combinação de: identificador exactamente igual a `KIANDA_MODELING_OWNER_USER_ID`, conta autenticada e estatuto de administrador da plataforma. Ser `owner` de uma empresa cliente ou outro administrador da plataforma não concede Excel. Sem configuração do identificador exclusivo, Excel fica recusado para todos. CSV e outros formatos editáveis não fazem parte do produto cliente.
+
+Configuração de produção: definir a variável de repositório `KIANDA_MODELING_OWNER_USER_ID` com o ID da conta do proprietário do produto. O CI transmite essa configuração ao Worker. Não se infere identidade pelo nome, nem se concede a todos os administradores.
+
+**Os exportadores financeiros ainda não existem nesta entrega.** A política e o endpoint de capacidades estão preparados; quando os exportadores forem implementados, a rota de download deve usar `canExportModeling` no servidor e validar também acesso ao projecto. Nenhum Excel pode ser publicado em URL estática/pública. A exportação JSON de portabilidade dos dados da empresa continua separada dos relatórios comerciais e das fórmulas/modelos Excel do produto. As exportações RH existentes não são alteradas por esta regra do Integra.

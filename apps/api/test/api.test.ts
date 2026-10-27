@@ -1876,9 +1876,9 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: módulos e importação opc
   });
   it('não concede Modelagem através da licença RH e protege a consola', async () => {
     expect((await request('GET', '/v1/modeling/models')).statusCode).toBe(403);
-    expect((await request('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31' })).statusCode).toBe(403);
+    expect((await request('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 })).statusCode).toBe(403);
     await getDb().insert(platformAdmins).values({ email: `${stamp}0@integra.ao` });
-    expect((await request('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31' })).statusCode).toBe(200);
+    expect((await request('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 })).statusCode).toBe(200);
     expect((await request('GET', '/v1/modules')).json().modeling.canWrite).toBe(true);
   });
   it('cria modelo com pressupostos manuais e impede sobrescrita concorrente', async () => {
@@ -1889,7 +1889,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: módulos e importação opc
     expect((await request('PUT', `/v1/modeling/models/${modelId}`, { ...values, revision: 1 })).statusCode).toBe(409);
   });
   it('isola modelos entre empresas, incluindo a pesquisa por identificador', async () => {
-    await request('PUT', `/v1/platform/companies/${(await request('GET', '/v1/auth/me', undefined, other)).json().company.id}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31' });
+    await request('PUT', `/v1/platform/companies/${(await request('GET', '/v1/auth/me', undefined, other)).json().company.id}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 });
     expect((await request('GET', `/v1/modeling/models/${modelId}`, undefined, other)).statusCode).toBe(404);
     expect((await request('GET', '/v1/modeling/models', undefined, other)).json()).toEqual([]);
   });
@@ -1934,5 +1934,71 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: módulos e importação opc
     expect((await request('GET', `/v1/modeling/models/${modelId}`)).statusCode).toBe(200);
     expect((await request('POST', '/v1/modeling/models', {})).statusCode).toBe(402);
     await expect(withTenant(companyId, () => getDb().execute(sql`update company_modules set enabled=true where company_id=${companyId}`))).rejects.toThrow();
+  });
+});
+
+describe.skipIf(!process.env.DATABASE_URL)('Integra: projectos, cinco acessos e exportações', () => {
+  const stamp = String(Date.now()) + 'plans';
+  let cookie = '', companyId = '', ownerId = '', first = '', second = '';
+  const memberIds: string[] = [];
+  const req = (method: string, url: string, payload?: unknown, session = cookie) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
+  const grant = (extraUsers = 0, projectLimit = 2) => req('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit, extraUsers });
+  const model = { name: 'Projecto', sector: 'servicos', currency: 'Kz', assumptions: { pessoal: 100 } };
+  beforeAll(async () => {
+    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Projectos Integra', nif: String(Date.now() + 700).slice(-10) }, name: 'Gestor', email: `${stamp}@plans.ao`, password: 'Projectos2026Seguros' } });
+    expect(r.statusCode).toBe(201); cookie = cookieOf(r);
+    const me = (await req('GET', '/v1/auth/me')).json();
+    companyId = me.company.id; ownerId = me.user.id;
+    await getDb().insert(platformAdmins).values({ email: `${stamp}@plans.ao` });
+    expect((await grant()).statusCode).toBe(200);
+  });
+  it('serializa criações concorrentes e não permite ultrapassar a quota', async () => {
+    const responses = await Promise.all([req('POST', '/v1/modeling/models', model), req('POST', '/v1/modeling/models', model), req('POST', '/v1/modeling/models', model)]);
+    expect(responses.map((r) => r.statusCode).sort()).toEqual([201, 201, 409]);
+    const created = responses.filter((r) => r.statusCode === 201);
+    first = created[0]!.json().id; second = created[1]!.json().id;
+    expect((await req('GET', '/v1/modeling/usage')).json()).toMatchObject({ activeProjects: 2, enabledUsers: 1, userLimit: 5, projectLimit: 2 });
+  });
+  it('arquiva sem apagar histórico e sujeita o restauro à quota', async () => {
+    expect((await req('POST', `/v1/modeling/models/${first}/archive`, { archived: true, revision: 1 })).statusCode).toBe(200);
+    expect((await req('GET', `/v1/modeling/models/${first}`)).statusCode).toBe(200);
+    expect((await req('PUT', `/v1/modeling/models/${first}`, { ...model, revision: 2 })).json().error).toBe('projecto_arquivado');
+    const created = await req('POST', '/v1/modeling/models', model);
+    expect(created.statusCode).toBe(201);
+    expect((await req('POST', `/v1/modeling/models/${first}/archive`, { archived: false, revision: 2 })).json().error).toBe('limite_projectos');
+    expect((await req('POST', `/v1/modeling/models/${second}/archive`, { archived: true, revision: 1 })).statusCode).toBe(200);
+    expect((await req('POST', `/v1/modeling/models/${first}/archive`, { archived: false, revision: 2 })).statusCode).toBe(200);
+  });
+  it('inclui o proprietário nos cinco acessos e não limita o número de funcionários RH', async () => {
+    for (let i = 0; i < 5; i++) {
+      const r = await req('POST', '/v1/users', { name: `Participante ${i}`, email: `${stamp}${i}@plans.ao`, password: 'Projectos2026Seguros', role: 'finance' });
+      expect(r.statusCode).toBe(201); memberIds.push(r.json().id);
+    }
+    const responses = await Promise.all(memberIds.map((id) => req('PUT', `/v1/modeling/members/${id}`, { enabled: true, permission: 'editor' })));
+    expect(responses.map((r) => r.statusCode).sort()).toEqual([200, 200, 200, 200, 409]);
+    const deniedIndex = responses.findIndex((r) => r.statusCode === 409);
+    const deniedId = memberIds[deniedIndex]!;
+    const user = (await getDb().execute(sql`select email from users where id=${deniedId}`)).rows[0] as { email: string };
+    const login = await app.inject({ method: 'POST', url: '/v1/auth/login', payload: { email: user.email, password: 'Projectos2026Seguros' } });
+    expect((await req('GET', '/v1/modeling/models', undefined, cookieOf(login))).statusCode).toBe(403);
+    expect((await grant(1)).statusCode).toBe(200);
+    expect((await req('PUT', `/v1/modeling/members/${deniedId}`, { enabled: true, permission: 'viewer' })).statusCode).toBe(200);
+    expect((await req('GET', '/v1/modeling/models', undefined, cookieOf(login))).statusCode).toBe(200);
+    expect((await req('POST', '/v1/modeling/models', model, cookieOf(login))).statusCode).toBe(403);
+    expect((await req('GET', '/v1/modeling/usage')).json().userLimit).toBe(6);
+    expect((await grant(0)).json().error).toBe('limite_inferior_uso');
+  });
+  it('não concede Excel a um proprietário cliente ou administrador sem configuração exclusiva', async () => {
+    const previous = process.env.KIANDA_MODELING_OWNER_USER_ID;
+    try {
+      delete process.env.KIANDA_MODELING_OWNER_USER_ID;
+      expect((await req('GET', '/v1/modeling/export-options')).json()).toEqual({ pdf: true, xlsx: false, csv: false });
+      process.env.KIANDA_MODELING_OWNER_USER_ID = ownerId;
+      expect((await req('GET', '/v1/modeling/export-options')).json().xlsx).toBe(true);
+      process.env.KIANDA_MODELING_OWNER_USER_ID = 'outro-utilizador';
+      expect((await req('GET', '/v1/modeling/export-options')).json().xlsx).toBe(false);
+    } finally {
+      if (previous === undefined) delete process.env.KIANDA_MODELING_OWNER_USER_ID; else process.env.KIANDA_MODELING_OWNER_USER_ID = previous;
+    }
   });
 });

@@ -954,6 +954,9 @@ export const absencesRelations = relations(absences, ({ one }) => ({
 /** Direitos por módulo. Sem linha RH, preserva-se a subscrição histórica; Modelagem exige adesão explícita. */
 export const companyModules = pgTable('company_modules', {
   id: id(),
+  /** Projectos activos contratados; preço é definido separadamente do RH. */
+  projectLimit: integer('project_limit').notNull().default(1),
+  extraUsers: integer('extra_users').notNull().default(0),
   companyId: text('company_id').notNull().references(() => companies.id),
   module: text('module').notNull(),
   enabled: boolean('enabled').notNull().default(false),
@@ -966,6 +969,7 @@ export const companyModules = pgTable('company_modules', {
 /** Rascunho independente do RH. Moeda explícita; pressupostos no formato versionado do Integra. */
 export const financialModels = pgTable('financial_models', {
   id: id(),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
   companyId: text('company_id').notNull().references(() => companies.id),
   name: text('name').notNull(),
   sector: text('sector').notNull(),
@@ -990,3 +994,14 @@ export const financialPersonnelImports = pgTable('financial_personnel_imports', 
   importedBy: text('imported_by').notNull(),
   importedAt: createdAt(),
 }, (t) => [index('financial_personnel_imports_model').on(t.modelId)]);
+
+/** Utilizadores autorizados no Integra; o proprietário da empresa ocupa um dos cinco acessos. */
+export const modelingMembers = pgTable('modeling_members', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  userId: text('user_id').notNull().references(() => users.id),
+  enabled: boolean('enabled').notNull().default(true),
+  permission: text('permission').notNull().default('editor'),
+  addedBy: text('added_by').notNull(),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex('modeling_members_company_user').on(t.companyId, t.userId)]);

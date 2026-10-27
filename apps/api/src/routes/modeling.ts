@@ -1,7 +1,8 @@
+import { modelingExportOptions, modelingUsage, lockModelingCompany, requireProjectCapacity } from '../services/modeling-policy.js';
 import { moduleLicence } from '../services/modules.js';
 import { DomainError } from '../services/payroll.js';
 import { body, requireCompany, requireRole, type AppEnv } from '../plugins/tenant.js';
-import { and, auditLogs, desc, eq, financialModels, financialPersonnelImports, getDb, gte, inArray, lte, payrollLines, payrollRuns, personnelBudgetLines, personnelBudgets } from '@kianda/db';
+import { and, auditLogs, desc, eq, financialModels, financialPersonnelImports, getDb, gte, inArray, lte, payrollLines, payrollRuns, personnelBudgetLines, personnelBudgets, modelingMembers, users } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
@@ -17,14 +18,64 @@ export function modelingRoutes() {
   const app = new Hono<AppEnv>();
   app.use('/v1/modeling', requireCompany);
   app.use('/v1/modeling/*', requireCompany);
-  app.use('/v1/modeling/*', requireRole('finance'));
+  app.use('/v1/modeling/*', async (c, next) => {
+    const a = c.get('actor'), db = getDb();
+    let [member] = await db.select().from(modelingMembers).where(and(eq(modelingMembers.companyId, a.companyId), eq(modelingMembers.userId, a.actorId)));
+    if (!member && a.role === 'owner') {
+      await lockModelingCompany(db, a.companyId);
+      // Relê depois do bloqueio para que dois primeiros pedidos não consumam dois lugares.
+      [member] = await db.select().from(modelingMembers).where(and(eq(modelingMembers.companyId, a.companyId), eq(modelingMembers.userId, a.actorId)));
+      if (!member) {
+        if (!(await modelingUsage(db, a.companyId)).canAddUser) throw new DomainError('limite_utilizadores', 'Atingiu o limite de utilizadores da Modelagem.', 409);
+        [member] = await db.insert(modelingMembers).values({ companyId: a.companyId, userId: a.actorId, addedBy: a.actorId }).returning();
+        await db.insert(auditLogs).values({ companyId: a.companyId, actorId: a.actorId, action: 'activate', entity: 'modeling_member', entityId: member!.id });
+      }
+    }
+    if (!member?.enabled) return c.json({ error: 'sem_permissao', message: 'Solicite ao proprietário acesso à Modelagem.' }, 403);
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && member.permission !== 'editor') return c.json({ error: 'sem_permissao', message: 'O seu acesso permite apenas consulta.' }, 403);
+    await next();
+  });
+
+  app.get('/v1/modeling/usage', async (c) => c.json(await modelingUsage(getDb(), c.get('actor').companyId)));
+  app.get('/v1/modeling/export-options', async (c) => c.json(await modelingExportOptions(getDb(), c.get('actor').actorId)));
+  app.get('/v1/modeling/members', requireRole(), async (c) => {
+    return c.json(await getDb().select({ userId: modelingMembers.userId, permission: modelingMembers.permission, enabled: modelingMembers.enabled, name: users.name }).from(modelingMembers).innerJoin(users, eq(users.id, modelingMembers.userId)).where(eq(modelingMembers.companyId, c.get('actor').companyId)));
+  });
+  app.put('/v1/modeling/members/:userId', requireRole(), async (c) => {
+    const a = c.get('actor'), db = getDb();
+    const input = z.object({ enabled: z.boolean(), permission: z.enum(['editor', 'viewer']).default('editor') }).parse(await body(c));
+    const userId = c.req.param('userId');
+    if (userId === a.actorId && (!input.enabled || input.permission !== 'editor')) throw new DomainError('proprio_acesso', 'Não pode retirar o seu próprio acesso de gestão.', 409);
+    await lockModelingCompany(db, a.companyId);
+    const [user] = await db.select().from(users).where(and(eq(users.id, userId), eq(users.companyId, a.companyId)));
+    if (!user || user.disabledAt) throw new DomainError('nao_encontrado', 'Utilizador activo inexistente nesta empresa.', 404);
+    const [before] = await db.select().from(modelingMembers).where(and(eq(modelingMembers.companyId, a.companyId), eq(modelingMembers.userId, userId)));
+    if (input.enabled && !before?.enabled && !(await modelingUsage(db, a.companyId)).canAddUser) throw new DomainError('limite_utilizadores', 'O plano inclui cinco utilizadores. Contacte a plataforma para contratar acessos adicionais.', 409);
+    const [member] = await db.insert(modelingMembers).values({ ...input, userId, companyId: a.companyId, addedBy: a.actorId }).onConflictDoUpdate({ target: [modelingMembers.companyId, modelingMembers.userId], set: input }).returning();
+    await db.insert(auditLogs).values({ companyId: a.companyId, actorId: a.actorId, action: 'change_access', entity: 'modeling_member', entityId: member!.id, before: before ?? null, after: member });
+    return c.json(member);
+  });
+
 
   app.get('/v1/modeling/models', async (c) => c.json(await getDb().select().from(financialModels).where(eq(financialModels.companyId, c.get('actor').companyId)).orderBy(desc(financialModels.updatedAt))));
   app.post('/v1/modeling/models', async (c) => {
     const a = c.get('actor'), db = getDb(), input = modelSchema.parse(await body(c));
+    await requireProjectCapacity(db, a.companyId);
     const [model] = await db.insert(financialModels).values({ ...input, companyId: a.companyId, createdBy: a.actorId }).returning();
     await db.insert(auditLogs).values({ companyId: a.companyId, actorId: a.actorId, action: 'create', entity: 'financial_model', entityId: model!.id, after: { revision: 1 } });
     return c.json(model, 201);
+  });
+  app.post('/v1/modeling/models/:id/archive', async (c) => {
+    const a = c.get('actor'), db = getDb();
+    const input = z.object({ archived: z.boolean(), revision }).parse(await body(c));
+    await lockModelingCompany(db, a.companyId);
+    const [current] = await db.select().from(financialModels).where(and(eq(financialModels.companyId, a.companyId), eq(financialModels.id, c.req.param('id')))).for('update');
+    if (!current) throw new DomainError('nao_encontrado', 'Projecto inexistente', 404);
+    if (current.revision !== input.revision) throw new DomainError('revisao_invalida', 'Projecto alterado. Volte a carregá-lo.', 409);
+    if (!input.archived && current.archivedAt) await requireProjectCapacity(db, a.companyId);
+    const [model] = await db.update(financialModels).set({ archivedAt: input.archived ? new Date() : null, revision: current.revision + 1, updatedAt: new Date() }).where(eq(financialModels.id, current.id)).returning();
+    await db.insert(auditLogs).values({ companyId: a.companyId, actorId: a.actorId, action: input.archived ? 'archive' : 'restore', entity: 'financial_model', entityId: current.id, after: { revision: model!.revision } });
+    return c.json(model);
   });
   app.get('/v1/modeling/models/:id', async (c) => {
     const [model] = await getDb().select().from(financialModels).where(and(eq(financialModels.companyId, c.get('actor').companyId), eq(financialModels.id, c.req.param('id'))));
@@ -35,6 +86,8 @@ export function modelingRoutes() {
   app.put('/v1/modeling/models/:id', async (c) => {
     const a = c.get('actor'), db = getDb(), input = modelSchema.extend({ revision }).parse(await body(c));
     const { revision: expected, ...values } = input;
+    const [current] = await db.select().from(financialModels).where(and(eq(financialModels.companyId, a.companyId), eq(financialModels.id, c.req.param('id')))).for('update');
+    if (current?.archivedAt) throw new DomainError('projecto_arquivado', 'Restaure o projecto antes de o alterar.', 409);
     const [model] = await db.update(financialModels).set({ ...values, revision: expected + 1, updatedAt: new Date() })
       .where(and(eq(financialModels.companyId, a.companyId), eq(financialModels.id, c.req.param('id')), eq(financialModels.revision, expected))).returning();
     if (!model) throw new DomainError('revisao_invalida', 'Modelo inexistente ou alterado por outro utilizador. Volte a carregá-lo.', 409);
@@ -51,8 +104,10 @@ export function modelingRoutes() {
     ]).parse(await body(c));
     const hr = await moduleLicence(db, a.companyId, 'hr');
     if (!hr.canWrite) throw new DomainError('rh_inactivo', 'A importação requer o módulo RH activo. Pode preencher os pressupostos manualmente.', 403);
-    const [model] = await db.select().from(financialModels).where(and(eq(financialModels.companyId, a.companyId), eq(financialModels.id, c.req.param('id'))));
+    await lockModelingCompany(db, a.companyId);
+    const [model] = await db.select().from(financialModels).where(and(eq(financialModels.companyId, a.companyId), eq(financialModels.id, c.req.param('id')))).for('update');
     if (!model) throw new DomainError('nao_encontrado', 'Modelo inexistente', 404);
+    if (model.archivedAt) throw new DomainError('projecto_arquivado', 'Restaure o projecto antes de importar dados.', 409);
     if (model.revision !== input.revision) throw new DomainError('revisao_invalida', 'Modelo alterado. Volte a carregá-lo.', 409);
     if (model.currency !== 'Kz' && !input.exchangeRate) throw new DomainError('cambio_obrigatorio', 'Indique unidades da moeda do modelo por 1 Kz.', 400);
     if (model.currency === 'Kz' && input.exchangeRate !== undefined && input.exchangeRate !== 1) throw new DomainError('cambio_invalido', 'Modelos em Kz usam câmbio 1.', 400);
