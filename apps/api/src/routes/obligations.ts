@@ -1,5 +1,5 @@
 import {
-  AGT_MAP_COLUMNS, AGT_MONEY_COLUMNS, agtMapRow, agtProvince, angolanIbanProblem, bankAmount, bankDescription, bankFromIban, csvMoney, getPack, luandaDate, nbaFromIban, toCsv,
+  AGT_MAP_COLUMNS, AGT_MONEY_COLUMNS, AGT_SIMPLE_COLUMNS, AGT_SIMPLE_MONEY_COLUMNS, agtMapRow, agtMunicipality, agtProvince, agtSimpleRow, angolanIbanProblem, applyBps, inssSheetRow, bankAmount, bankDescription, bankFromIban, csvMoney, getPack, luandaDate, nbaFromIban, toCsv,
 } from '@kianda/core';
 import { xlsx, xlsxResponse } from '../lib/xlsx.js';
 import {
@@ -106,66 +106,109 @@ export function obligationRoutes() {
 
 
   /**
-   * Mapa Mensal de Remunerações (AGT, Portal do Contribuinte → IRT → Mapa de Remunerações → Upload de Ficheiro).
-   * 31 colunas pela ordem do template; inclui todos os trabalhadores do processamento. ?format=xlsx|csv|json.
+   * Mapa Mensal de Remunerações (AGT) nos templates oficiais: completo "IRT A2.1" (32 colunas, por omissão) ou simplificado
+   * (?template=simple, 15 colunas). NIF do contribuinte em C1, período em C2, cabeçalho nas linhas 3–4, dados a partir da 5;
+   * todos os trabalhadores do processamento. ?format=xlsx|csv|json.
    */
   app.get('/v1/payroll-runs/:id/maps/agt', requireRole(...READERS), async (c) => {
     const actor = c.get('actor');
     const db = getDb();
     const run = await closedRun(db, actor.companyId, c.req.param('id'));
     const [co] = await db.select().from(companies).where(eq(companies.id, actor.companyId));
+    const pack = getPack('AO', Number(run.period.slice(0, 4)));
     const rows = await db.select({ l: payrollLines, e: employees }).from(payrollLines).innerJoin(employees, eq(employees.id, payrollLines.employeeId)).where(eq(payrollLines.runId, run.id)).orderBy(asc(employees.number));
     const issues: { employee: string; problem: string }[] = [];
-    const data = rows.map(({ l, e }) => {
+    const full = rows.map(({ l, e }) => {
       const provName = e.province ?? co?.province ?? null;
       const prov = agtProvince(provName);
-      const municipality = e.municipality ?? (e.province && e.province !== co?.province ? null : co?.municipality) ?? '';
+      const rawMunicipality = e.municipality ?? (e.province && e.province !== co?.province ? null : co?.municipality) ?? null;
+      const municipality = prov ? agtMunicipality(prov.code, rawMunicipality) : null;
       const nif = (e.nif ?? e.biNumber ?? '').replace(/\s/g, '').toUpperCase();
       if (!e.nif && !e.biNumber) issues.push({ employee: e.name, problem: 'sem NIF (nem n.º do BI)' });
       else if (!e.nif) issues.push({ employee: e.name, problem: 'sem NIF — usado o n.º do BI (o NIF das pessoas singulares angolanas é o n.º do BI; estrangeiros precisam de NIF próprio)' });
       if (!e.inssNumber) issues.push({ employee: e.name, problem: 'sem n.º de Segurança Social' });
       if (!prov) issues.push({ employee: e.name, problem: provName ? `província "${provName}" sem sigla AGT` : 'sem província (nem na ficha nem na sede da empresa)' });
-      else if (prov.provisional) issues.push({ employee: e.name, problem: `província ${provName}: sigla ${prov.code} provisória (nova divisão administrativa) — confirme no portal` });
-      if (!municipality) issues.push({ employee: e.name, problem: 'sem município' });
+      else if (prov.provisional) issues.push({ employee: e.name, problem: `província ${provName}: o template da AGT ainda usa as 18 províncias — vai como ${prov.code}` });
+      if (prov && !municipality) issues.push({ employee: e.name, problem: rawMunicipality ? `município "${rawMunicipality}" não consta da lista da AGT para ${prov.code}` : 'sem município' });
       return agtMapRow({
-        nif, name: e.name, inssNumber: e.inssNumber ?? '', province: prov?.code ?? '', municipality,
+        nif, name: e.name, inssNumber: e.inssNumber ?? '', province: prov?.code ?? '', municipality: municipality ?? (rawMunicipality ?? '').toUpperCase(),
         breakdown: l.breakdown as { code: string; kind: string; amountMinor: number }[], grossMinor: l.grossMinor, inssBaseMinor: l.inssBaseMinor,
         inssEmployeeMinor: l.inssEmployeeMinor, irtMinor: l.irtMinor, irtTaxableMinor: taxableFromBreakdown(l, run.period),
+        allowanceExemptionMinor: pack.irt.allowanceExemptionMinor,
       });
     });
-    const irtCol = AGT_MAP_COLUMNS.indexOf('IRT Apurado');
-    const totalIrt = data.reduce((s, r) => s + Number(r[irtCol]), 0);
+    const simple = c.req.query('template') === 'simple';
+    const columns: readonly string[] = simple ? AGT_SIMPLE_COLUMNS : AGT_MAP_COLUMNS;
+    const money = simple ? AGT_SIMPLE_MONEY_COLUMNS : AGT_MONEY_COLUMNS;
+    const data = simple ? full.map(agtSimpleRow) : full;
+    const totalIrt = full.reduce((s, r) => s + Number(r[AGT_MAP_COLUMNS.indexOf('IRT Apurado')]), 0);
     const format = c.req.query('format') ?? 'json';
-    const file = `mapa-remuneracoes-agt-${co?.nif ?? ''}-${run.period}`;
+    const file = `mapa-remuneracoes-${simple ? 'simplificado' : 'A2.1'}-${co?.nif ?? ''}-${run.period}`;
     if (format === 'xlsx') {
-      const sheetRows = [[...AGT_MAP_COLUMNS], ...data.map((r) => r.map((v, i) => (AGT_MONEY_COLUMNS.has(i) ? Number(v) / 100 : v)))];
-      return xlsxResponse(xlsx([{ name: 'Mapa de Remunerações', rows: sheetRows, header: true, widths: AGT_MAP_COLUMNS.map((c, i) => (i === 1 ? 32 : Math.max(12, Math.min(22, c.length)))) }]), `${file}.xlsx`);
+      const width = columns.length;
+      const blank = () => Array<string | number>(width).fill('');
+      const r1 = blank(); r1[1] = 'NIF do Contribuinte'; r1[2] = co?.nif ?? '';
+      const r2 = blank(); r2[1] = 'Período (AAAA-MM)'; r2[2] = run.period;
+      const r3 = blank();
+      const r4 = blank();
+      let merges: string[];
+      if (simple) {
+        columns.forEach((h, i) => { r3[i] = h; });
+        merges = columns.map((_, i) => { const l = colLetter(i); return `${l}3:${l}4`; });
+      } else {
+        AGT_MAP_COLUMNS.forEach((h, i) => { const top = i >= 12 && i <= 13 || i >= 24; (top ? r3 : r4)[i] = h; });
+        r3[7] = 'Subsídios Não Sujeitos a IRT (Art. 2º do CIRT)';
+        r3[14] = 'Subsídios Sujeitos a IRT';
+        merges = ['M3:M4', 'N3:N4', 'O3:X3', ...['Y', 'Z', 'AA', 'AB', 'AC', 'AD', 'AE', 'AF'].map((l) => `${l}3:${l}4`)];
+      }
+      const body = data.map((r) => r.map((v, i) => (money.has(i) ? Number(v) / 100 : v)));
+      return xlsxResponse(xlsx([{
+        name: 'Mapa de Remunerações', rows: [r1, r2, r3, r4, ...body], boldRows: [0, 1, 2, 3], freezeRows: 4, merges,
+        widths: columns.map((h, i) => (i === 1 ? 32 : i === 0 || i === 2 ? 19 : Math.max(13, Math.min(20, h.length)))),
+      }]), `${file}.xlsx`);
     }
     if (format === 'csv') {
-      return csvResponse(toCsv([...AGT_MAP_COLUMNS], data.map((r) => r.map((v, i) => (AGT_MONEY_COLUMNS.has(i) ? csvMoney(Number(v)) : v)))), `${file}.csv`);
+      return csvResponse(toCsv([...columns], data.map((r) => r.map((v, i) => (money.has(i) ? csvMoney(Number(v)) : v)))), `${file}.csv`);
     }
-    return c.json({ period: run.period, columns: AGT_MAP_COLUMNS, rows: data, count: data.length, totalIrtMinor: totalIrt, issues });
+    return c.json({ period: run.period, template: simple ? 'simple' : 'A2.1', columns, rows: data, count: data.length, totalIrtMinor: totalIrt, issues });
   });
 
-  /** Folha de remunerações para o INSS. JSON, CSV ou Excel (?format=xlsx). */
+  /**
+   * Folha de Remuneração Normal no formato do INSS Virtual (?format=xlsx): contribuinte (nome, NIS, NIF), trabalhadores
+   * (inscrição, nome, categoria, salário base, remunerações adicionais, total) e totais com as parcelas de 3% e 8%.
+   * JSON e CSV mantêm a lista de controlo por trabalhador.
+   */
   app.get('/v1/payroll-runs/:id/maps/inss', requireRole(...READERS), async (c) => {
     const actor = c.get('actor');
     const db = getDb();
     const run = await closedRun(db, actor.companyId, c.req.param('id'));
     const [co] = await db.select().from(companies).where(eq(companies.id, actor.companyId));
+    const pack = getPack('AO', Number(run.period.slice(0, 4)));
     const rows = await db.select({ l: payrollLines, e: employees }).from(payrollLines).innerJoin(employees, eq(employees.id, payrollLines.employeeId)).where(eq(payrollLines.runId, run.id)).orderBy(asc(employees.number));
-    const data = rows.map(({ l, e }) => ({ number: e.number, name: e.name, inssNumber: e.inssNumber ?? '', base: l.inssBaseMinor, employee: l.inssEmployeeMinor, employer: l.inssEmployerMinor, total: l.inssEmployeeMinor + l.inssEmployerMinor }));
+    const data = rows.map(({ l, e }) => ({ number: e.number, name: e.name, jobTitle: e.jobTitle, inssNumber: e.inssNumber ?? '', base: l.inssBaseMinor, employee: l.inssEmployeeMinor, employer: l.inssEmployerMinor, total: l.inssEmployeeMinor + l.inssEmployerMinor, sheet: inssSheetRow({ breakdown: l.breakdown as { code: string; kind: string; amountMinor: number }[], inssBaseMinor: l.inssBaseMinor }) }));
     const missing = data.filter((d) => !d.inssNumber).map((d) => d.name);
     if (c.req.query('format') === 'xlsx') {
       const kz = (m: number) => m / 100;
-      return xlsxResponse(xlsx([{
-        name: 'Folha de Remunerações', header: true, widths: [8, 32, 18, 18, 16, 20, 14],
-        rows: [
-          ['N.º', 'Nome', 'N.º Segurança Social', 'Base de incidência', 'Trabalhador (3%)', 'Entidade empregadora (8%)', 'Total'],
-          ...data.map((d) => [d.number, d.name, d.inssNumber, kz(d.base), kz(d.employee), kz(d.employer), kz(d.total)]),
-          ['', `TOTAL — contribuinte ${co?.inssNumber ?? '(sem n.º INSS da empresa)'} — ${run.period}`, '', kz(data.reduce((s, d) => s + d.base, 0)), kz(data.reduce((s, d) => s + d.employee, 0)), kz(data.reduce((s, d) => s + d.employer, 0)), kz(data.reduce((s, d) => s + d.total, 0))],
-        ],
-      }]), `folha-inss-${co?.inssNumber ?? ''}-${run.period}.xlsx`);
+      const subject = data.filter((d) => d.sheet.totalMinor > 0);
+      const tBase = subject.reduce((s, d) => s + d.sheet.baseMinor, 0);
+      const tAdd = subject.reduce((s, d) => s + d.sheet.additionalMinor, 0);
+      const part = (bps: number) => [applyBps(tBase, bps), applyBps(tAdd, bps)] as const;
+      const [eb, ea] = part(pack.inss.employeeBps);
+      const [cb, ca] = part(pack.inss.employerBps);
+      const month = new Date(`${run.period}-01T12:00:00Z`).toLocaleDateString('pt-PT', { month: 'long', timeZone: 'UTC' });
+      const sheet = [
+        ['Folha de Remuneração Normal'], [` Mês de referência: ${month}/${run.period.slice(0, 4)}`], [],
+        ['Informações do Contribuinte'], ['Nome:', co?.name ?? ''], ['NIS:', co?.inssNumber ?? ''], ['NIF:', co?.nif ?? ''], [],
+        ['Informações dos Trabalhadores'],
+        ['Inscrição Inss', 'Nome', 'Categoria Profissional', 'Salário Base', 'Remunerações Adicionais', 'Total'],
+        ...subject.map((d) => [d.inssNumber, d.name.toUpperCase(), d.jobTitle.toUpperCase(), kz(d.sheet.baseMinor), kz(d.sheet.additionalMinor), kz(d.sheet.totalMinor)]),
+        [],
+        ['Total de Remunerações', '', '', kz(tBase), kz(tAdd), kz(tBase + tAdd)],
+        [`Total Parcela Segurado ${pack.inss.employeeBps / 100}%`, '', '', kz(eb), kz(ea), kz(eb + ea)],
+        [`Total Parcela Contribuinte ${pack.inss.employerBps / 100}%`, '', '', kz(cb), kz(ca), kz(cb + ca)],
+        ['Total de Contribuições', '', '', '', '', kz(eb + ea + cb + ca)],
+      ];
+      return xlsxResponse(xlsx([{ name: 'Folha', rows: sheet, boldRows: [0, 3, 8, 9], widths: [24, 40, 28, 16, 24, 16], numberFormat: '#,##0.00' }]), `FolhaDeRemuneracao-${run.period.replace('-', '_')}.xlsx`);
     }
     if (c.req.query('format') === 'csv') {
       return csvResponse(toCsv(
@@ -174,12 +217,12 @@ export function obligationRoutes() {
           ['', `TOTAL — contribuinte ${co?.inssNumber ?? '(sem n.º INSS da empresa)'}`, '', csvMoney(data.reduce((s, d) => s + d.base, 0)), csvMoney(data.reduce((s, d) => s + d.employee, 0)), csvMoney(data.reduce((s, d) => s + d.employer, 0)), csvMoney(data.reduce((s, d) => s + d.total, 0))]],
       ), `folha-inss-${run.period}.csv`);
     }
-    return c.json({ period: run.period, companyInssNumber: co?.inssNumber ?? null, rows: data, missingInssNumber: missing });
+    return c.json({ period: run.period, companyInssNumber: co?.inssNumber ?? null, rows: data.map(({ sheet, ...d }) => ({ ...d, salaryMinor: sheet.baseMinor, additionalMinor: sheet.additionalMinor })), missingInssNumber: missing });
   });
 
   /**
    * Ficheiro de transferência dos salários.
-   * profile: generic (CSV: IBAN; Nome; Valor; Descritivo; Referência), bfa (Excel para o Conversor/BFA Net Empresas:
+   * profile: nib (por omissão — Excel NOME, NIB, VALOR, a regra comum dos bancos), generic (CSV: IBAN; Nome; Valor; Descritivo; Referência), bfa (Excel para o Conversor/BFA Net Empresas:
    * Nome do Beneficiário, IBAN, Valor 1250000,00, Descrição até 20 caracteres — sem cabeçalho nem totais),
    * bai (Excel para o Serviço de Pagamento em Massa — PSX interbancário: N.º de ordem, NIB, banco, BIC, cidade, país, valor).
    * Por omissão, o perfil escolhido nas Definições.
@@ -192,7 +235,7 @@ export function obligationRoutes() {
     const rows = await db.select({ l: payrollLines, e: employees }).from(payrollLines).innerJoin(employees, eq(employees.id, payrollLines.employeeId)).where(eq(payrollLines.runId, run.id)).orderBy(asc(employees.number));
     const ok = rows.filter(({ e, l }) => e.iban && !angolanIbanProblem(e.iban) && l.netMinor > 0);
     const excluded = rows.filter((r) => !ok.includes(r)).map(({ e, l }) => ({ name: e.name, netMinor: l.netMinor, reason: !e.iban ? 'sem IBAN' : angolanIbanProblem(e.iban) ? 'IBAN inválido' : 'líquido zero' }));
-    const profile = z.enum(['generic', 'bfa', 'bai']).catch('generic').parse(c.req.query('profile') ?? co?.bankFileProfile ?? 'generic');
+    const profile = z.enum(['nib', 'generic', 'bfa', 'bai']).catch('nib').parse(c.req.query('profile') ?? co?.bankFileProfile ?? 'nib');
     const byBank = new Map<string, number>();
     for (const { e } of ok) { const b = bankFromIban(e.iban)!; byBank.set(b.short, (byBank.get(b.short) ?? 0) + 1); }
     if (c.req.query('format') === 'json') {
@@ -202,6 +245,13 @@ export function obligationRoutes() {
     const yyyy = run.period.slice(0, 4);
     const desc = `SALARIO ${mm}/${yyyy}`;
     const stamp = run.period.replace('-', '');
+    if (profile === 'nib') {
+      // Regra comum dos bancos angolanos: NOME, NIB (21 algarismos), VALOR.
+      return xlsxResponse(xlsx([{
+        name: 'Salarios', header: true, widths: [40, 26, 16],
+        rows: [['NOME', 'NIB', 'VALOR'], ...ok.map(({ e, l }) => [e.name.toUpperCase(), nbaFromIban(e.iban!), l.netMinor / 100])],
+      }]), `salarios-${stamp}.xlsx`);
+    }
     if (profile === 'bfa') {
       // Regras do BFA: sem cabeçalhos/totais; uma só moeda; valor texto com vírgula e 2 decimais.
       return xlsxResponse(xlsx([{ name: 'Lote', widths: [40, 30, 16, 22], rows: ok.map(({ e, l }) => [e.name.slice(0, 40), e.iban!.replace(/\s/g, '').toUpperCase(), bankAmount(l.netMinor), bankDescription(desc)]) }]), `bfa-salarios-${stamp}.xlsx`);
@@ -220,4 +270,10 @@ export function obligationRoutes() {
   });
 
   return app;
+}
+
+function colLetter(i: number) {
+  let s = '';
+  for (let n = i + 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s;
+  return s;
 }

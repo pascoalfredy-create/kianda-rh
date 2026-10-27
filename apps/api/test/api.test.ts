@@ -523,58 +523,67 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     it('ficheiro de transferência: só IBAN válido; os restantes são listados', async () => {
       const info = (await get(financeUser, `/v1/payroll-runs/${dec}/bank-file?format=json`)).json();
       expect(info.excluded.map((x: { name: string; reason: string }) => [x.name, x.reason])).toEqual(expect.arrayContaining([['Chefe Teste', 'sem IBAN']]));
-      const csv = (await get(financeUser, `/v1/payroll-runs/${dec}/bank-file`)).body;
+      const csv = (await get(financeUser, `/v1/payroll-runs/${dec}/bank-file?profile=generic`)).body;
       expect(csv).toContain('AO06004000005521889010155;Joana Teste;');
       expect(csv).toContain('SALARIO 12/2026');
       expect(csv).not.toContain('Chefe Teste');
     });
 
-    it('mapa de remunerações da AGT: 31 colunas, todos os trabalhadores, avisos do que falta (entrega 21)', async () => {
+    it('mapa de remunerações da AGT no template A2.1 (32 colunas) e no simplificado (15) (entrega 21)', async () => {
       let j = (await get(financeUser, `/v1/payroll-runs/${dec}/maps/agt`)).json();
-      expect(j.columns).toHaveLength(31);
-      expect(j.columns.slice(0, 5)).toEqual(['NIF Trabalhador', 'Nome', 'N.º Segurança Social', 'Província', 'Município']);
+      expect(j.template).toBe('A2.1');
+      expect(j.columns).toHaveLength(32);
+      expect(j.columns.slice(0, 5)).toEqual(['NIF Trabalhador', 'Nome', 'Nº Segurança Social', 'Província', 'Município']);
       expect(j.issues.some((x: { problem: string }) => /sem província/.test(x.problem))).toBe(true);
-      const settings = await app.inject({ method: 'PATCH', url: '/v1/company/settings', headers: as(owner), payload: { province: 'Luanda', municipality: 'Belas', bankFileProfile: 'bfa' } });
-      expect(settings.statusCode).toBe(200);
+      expect((await app.inject({ method: 'PATCH', url: '/v1/company/settings', headers: as(owner), payload: { province: 'Luanda', municipality: 'Talatona' } })).statusCode).toBe(200);
+      expect((await get(financeUser, `/v1/payroll-runs/${dec}/maps/agt`)).json().issues.some((x: { problem: string }) => /não consta da lista/.test(x.problem))).toBe(false);
+      await app.inject({ method: 'PATCH', url: '/v1/company/settings', headers: as(owner), payload: { municipality: 'Lubango' } });
+      expect((await get(financeUser, `/v1/payroll-runs/${dec}/maps/agt`)).json().issues.some((x: { problem: string }) => /"Lubango" não consta da lista da AGT para LA/.test(x.problem))).toBe(true);
+      await app.inject({ method: 'PATCH', url: '/v1/company/settings', headers: as(owner), payload: { municipality: 'belas' } });
       j = (await get(financeUser, `/v1/payroll-runs/${dec}/maps/agt`)).json();
-      expect(j.issues.some((x: { problem: string }) => /sem província|sem município/.test(x.problem))).toBe(false);
       const col = (name: string) => j.columns.indexOf(name);
       const joana = j.rows.find((r: (string | number)[]) => r[1] === 'Joana Teste');
       expect(joana[col('NIF Trabalhador')]).toBe('004512398LA041');
-      expect([joana[col('Província')], joana[col('Município')]]).toEqual(['LA', 'Belas']);
+      expect([joana[col('Província')], joana[col('Município')]]).toEqual(['LA', 'BELAS']);
       expect(joana[col('Salário Base')]).toBe(50_000_000);
-      expect(joana[col('Subsídio de Alimentação')]).toBe(3_000_000);
-      expect(joana[col('Não Sujeito a Segurança Social?')]).toBe('N');
-      // Consistência com o processamento: IRT do mapa = IRT do mapa interno; ilíquido = soma das colunas de abonos − descontos.
+      expect(joana[col('Subsídio Alimentação')]).toBe(3_000_000);
+      expect(joana[col('Registo Manual de Contribuição Segurança Social?')]).toBe('N');
       const irt = (await get(financeUser, `/v1/payroll-runs/${dec}/maps/irt`)).json();
       expect(j.totalIrtMinor).toBe(irt.totalIrt);
-      const earningsCols = ['Salário Base', 'Subsídio de Alimentação', 'Subsídio Transporte', 'Abono de Família', 'Reembolso de despesas', 'Outros', 'Abono para Falhas', 'Subsídio Renda de Casa', 'Compensação por rescisão', 'Subsídio de Férias', 'Horas Extras', 'Subsídio de Atavio', 'Prémios', 'Subsídio de Natal', 'Outros Subsídios Sujeitos'];
+      const earningsCols = ['Salário Base', 'Subsídio Alimentação', 'Subsídio Transporte', 'Abono Família', 'Reembolso de Despesas', 'Outros', 'Abono de Falhas', 'Subsídio Renda de Casa', 'Compensação Por Rescisão', 'Subsídio de Férias', 'Horas Extras', 'Subsídio de Atavio', 'Subsídio de Representação', 'Prémios', 'Subsídio de Natal', 'Outros Subsídios Sujeitos'];
       for (const r of j.rows) expect(earningsCols.reduce((s, c) => s + Number(r[col(c)]), 0) - Number(r[col('Descontos por Falta')])).toBe(r[col('Salário Ilíquido')]);
       const x = await get(financeUser, `/v1/payroll-runs/${dec}/maps/agt?format=xlsx`);
       expect(x.headers['content-type']).toContain('spreadsheetml');
       expect(x.body.startsWith('PK')).toBe(true);
-      expect(x.body).toContain('Base Tributável Segurança Social');
-      expect(x.body).toContain('<v>500000</v>');
+      for (const t of ['NIF do Contribuinte', 'Período (AAAA-MM)', '2026-12', 'Subsídios Não Sujeitos a IRT (Art. 2º do CIRT)', '<mergeCell ref="O3:X3"/>', '<c r="A5" t="inlineStr">', '<v>500000</v>']) expect(x.body).toContain(t);
+      const simple = (await get(financeUser, `/v1/payroll-runs/${dec}/maps/agt?template=simple`)).json();
+      expect(simple.columns).toHaveLength(15);
+      for (const r of simple.rows) expect(Number(r[5]) + Number(r[6]) + Number(r[7])).toBe(r[8]);
       const csv = (await get(financeUser, `/v1/payroll-runs/${dec}/maps/agt?format=csv`)).body;
-      expect(csv.replace(/^﻿/, '').split('\r\n')[0]!.split(';')).toHaveLength(31);
+      expect(csv.replace(/^﻿/, '').split('\r\n')[0]!.split(';')).toHaveLength(32);
     });
 
-    it('ficheiro do banco por perfil: BFA (Excel sem cabeçalho, 1250000,00) e BAI (NIB e BIC)', async () => {
+    it('folha do INSS no formato do INSS Virtual: base + adicionais = total; parcelas de 3% e 8%', async () => {
+      const j = (await get(payrollUser, `/v1/payroll-runs/${dec}/maps/inss`)).json();
+      for (const r of j.rows) expect(r.salaryMinor + r.additionalMinor).toBe(r.base);
+      const x = (await get(payrollUser, `/v1/payroll-runs/${dec}/maps/inss?format=xlsx`)).body;
+      for (const t of ['Folha de Remuneração Normal', 'Mês de referência: dezembro/2026', 'Informações do Contribuinte', 'NIS:', 'Inscrição Inss', 'Categoria Profissional', 'Remunerações Adicionais', 'Total Parcela Segurado 3%', 'Total Parcela Contribuinte 8%', 'Total de Contribuições', 'JOANA TESTE']) expect(x).toContain(t);
+    });
+
+    it('ficheiro do banco: NOME, NIB, VALOR por omissão; perfis BFA, BAI e CSV', async () => {
       const info = (await get(financeUser, `/v1/payroll-runs/${dec}/bank-file?format=json`)).json();
-      expect(info.profile).toBe('bfa');
+      expect(info.profile).toBe('nib');
       expect(info.banks).toMatchObject({ BAI: expect.any(Number) });
-      const bfa = await get(financeUser, `/v1/payroll-runs/${dec}/bank-file`);
-      expect(bfa.headers['content-disposition']).toContain('bfa-salarios-202612.xlsx');
-      expect(bfa.body).not.toContain('Nome do Beneficiário');
-      expect(bfa.body).toMatch(/AO06004000005521889010155/);
-      expect(bfa.body).toMatch(/\d+,\d{2}<\/t>/);
-      expect(bfa.body).toContain('SALARIO 12/2026');
+      const nib = await get(financeUser, `/v1/payroll-runs/${dec}/bank-file`);
+      expect(nib.headers['content-disposition']).toContain('salarios-202612.xlsx');
+      for (const t of ['>NOME<', '>NIB<', '>VALOR<', 'JOANA TESTE', '004000005521889010155']) expect(nib.body).toContain(t);
+      expect(nib.body).not.toContain('AO06');
+      const bfa = (await get(financeUser, `/v1/payroll-runs/${dec}/bank-file?profile=bfa`)).body;
+      expect(bfa).not.toContain('Nome do Beneficiário');
+      expect(bfa).toMatch(/\d+,\d{2}<\/t>/);
       const bai = (await get(financeUser, `/v1/payroll-runs/${dec}/bank-file?profile=bai`)).body;
-      expect(bai).toContain('NIB do Beneficiário');
-      expect(bai).toContain('004000005521889010155');
       expect(bai).toContain('BAIPAOLU');
       expect((await get(financeUser, `/v1/payroll-runs/${dec}/bank-file?profile=generic`)).body).toContain('AO06004000005521889010155;Joana Teste;');
-      expect((await get(payrollUser, `/v1/payroll-runs/${dec}/maps/inss?format=xlsx`)).body).toContain('Folha de Remunerações');
     });
   });
 

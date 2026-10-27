@@ -183,7 +183,7 @@ export function payrollRoutes() {
       allowancesOnVacation: z.boolean().optional(),
       province: z.string().trim().max(40).nullable().optional(),
       municipality: z.string().trim().max(60).nullable().optional(),
-      bankFileProfile: z.enum(['generic', 'bfa', 'bai']).optional(),
+      bankFileProfile: z.enum(['nib', 'generic', 'bfa', 'bai']).optional(),
     }).parse(await body(c));
     const db = getDb();
     const [before] = await db.select().from(companies).where(eq(companies.id, actor.companyId));

@@ -99,9 +99,8 @@ export const AO_2026: CountryPack = {
     'Modelos de documentos (contratos, declarações, certificado, comunicações): revisão por jurista antes do uso',
     'Contas PGC sugeridas (72.x, 75.2, 34.3, 34.9.1, 36.1.2, 36.3, 36.9, 63) — confirmar com o plano de contas de cada empresa',
     'Calendário de feriados: confirmar pontes e tolerâncias de ponto publicadas (art. 198.º)',
-    'Mapa Mensal de Remunerações da AGT (Excel/CSV com as 31 colunas do template): comparar com o "Template do ficheiro" do Portal do Contribuinte; "Base Tributável IRT" enviada antes da contribuição do trabalhador; siglas provisórias para Cuando, Cubango, Icolo e Bengo e Moxico Leste',
-    'Folha do INSS: o INSS Virtual não publica o formato de importação — o Kianda gera um modelo próprio (n.º de segurança social, base, 3% + 8%); alinhar com o template do portal',
-    'Ficheiros do banco: Excel do BFA (sem cabeçalho, valor 1250000,00, descrição até 20 caracteres) e do BAI (PSX: n.º de ordem, NIB, banco, BIC, cidade, país, valor) — confirmar com o gestor de conta; PS2/PSX directos não gerados (especificação pública incompleta)',
+    'Mapa Mensal de Remunerações da AGT: estrutura igual aos templates oficiais (A2.1 com 32 colunas e simplificado com 15), validada contra os ficheiros do portal; "Base Tributável IRT" enviada antes da contribuição do trabalhador (o portal recalcula o IRT — confirmar na primeira submissão); províncias de 2024 pela de origem (o template ainda tem 18)',
+    'Folha do INSS: formato da Folha de Remuneração Normal do INSS Virtual (salário base + remunerações adicionais = base de incidência); totais de 3%/8% sobre os totais de coluna, como no portal',
   ],
   /** Regras confirmadas no texto da Lei n.º 12/23 (LGT) — revisão de 27/10/2026. */
   confirmed: [

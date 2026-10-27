@@ -4,7 +4,15 @@
  */
 
 export type Cell = string | number | null | undefined;
-export interface Sheet { name: string; rows: Cell[][]; header?: boolean; widths?: number[]; numberFormat?: '0' | '0.00' | '#,##0.00' }
+export interface Sheet {
+  name: string; rows: Cell[][]; widths?: number[]; numberFormat?: '0' | '0.00' | '#,##0.00';
+  /** Primeira linha a negrito e fixa (atalho para boldRows [0] + freezeRows 1). */
+  header?: boolean;
+  /** Linhas a negrito (índice a partir de 0) e número de linhas fixas no topo. */
+  boldRows?: number[]; freezeRows?: number;
+  /** Células fundidas, ex.: "M3:M4". */
+  merges?: string[];
+}
 
 const enc = new TextEncoder();
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '');
@@ -16,19 +24,22 @@ function colName(i: number) {
 }
 
 function sheetXml(sh: Sheet) {
+  const bolds = new Set(sh.boldRows ?? (sh.header ? [0] : []));
+  const freeze = sh.freezeRows ?? (sh.header ? 1 : 0);
   const cols = sh.widths?.length ? `<cols>${sh.widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols>` : '';
   const rows = sh.rows.map((r, ri) => {
     const cells = r.map((v, ci) => {
       if (v === null || v === undefined || v === '') return '';
       const ref = `${colName(ci)}${ri + 1}`;
-      const bold = sh.header && ri === 0 ? ' s="1"' : '';
+      const bold = bolds.has(ri) ? ' s="1"' : '';
       if (typeof v === 'number' && Number.isFinite(v)) return `<c r="${ref}"${bold || ' s="2"'}><v>${v}</v></c>`;
       return `<c r="${ref}" t="inlineStr"${bold}><is><t xml:space="preserve">${esc(String(v))}</t></is></c>`;
     }).join('');
     return `<row r="${ri + 1}">${cells}</row>`;
   }).join('');
-  const pane = sh.header ? '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' : '';
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${pane}${cols}<sheetData>${rows}</sheetData></worksheet>`;
+  const pane = freeze ? `<sheetViews><sheetView workbookViewId="0"><pane ySplit="${freeze}" topLeftCell="A${freeze + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>` : '';
+  const merges = sh.merges?.length ? `<mergeCells count="${sh.merges.length}">${sh.merges.map((m) => `<mergeCell ref="${m}"/>`).join('')}</mergeCells>` : '';
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${pane}${cols}<sheetData>${rows}</sheetData>${merges}</worksheet>`;
 }
 
 export function xlsx(sheets: Sheet[]): Uint8Array {

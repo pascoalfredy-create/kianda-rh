@@ -33,8 +33,8 @@ export const companies = pgTable('companies', {
   /** Sede (mapa de remunerações da AGT): usados quando a ficha do colaborador não indica outro local de trabalho. */
   province: text('province'),
   municipality: text('municipality'),
-  /** Banco do ficheiro de transferências dos salários (bfa, bai ou generic). */
-  bankFileProfile: text('bank_file_profile').notNull().default('generic'),
+  /** Ficheiro de transferências dos salários: nib (NOME, NIB, VALOR — regra comum), generic (CSV com IBAN), bfa ou bai. */
+  bankFileProfile: text('bank_file_profile').notNull().default('nib'),
   caeCode: text('cae_code'),
   microOrStartup: boolean('micro_or_startup').notNull().default(false),
   bankAccountIban: text('bank_account_iban'),

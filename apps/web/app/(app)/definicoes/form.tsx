@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useMutation } from '@/lib/client';
 import { PROVINCES } from '@/lib/types';
+import { AGT_MUNICIPALITIES } from '@kianda/core';
 
 const kzField = (v: FormDataEntryValue | null) => { const t = String(v ?? '').trim().replace(/\s/g, '').replace(/\./g, '').replace(',', '.'); return t ? Math.round(Number(t) * 100) : null; };
 const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -30,7 +31,7 @@ export function SettingsForm({ s }: { s: { inssNumber: string | null; address: s
           allowancesOnVacation: f.get('allowancesOnVacation') === 'on',
           province: String(f.get('province') || '') || null,
           municipality: String(f.get('municipality') || '').trim() || null,
-          bankFileProfile: String(f.get('bankFileProfile') || 'generic'),
+          bankFileProfile: String(f.get('bankFileProfile') || 'nib'),
         });
         if (done) setOk('Definições gravadas.');
       }}
@@ -41,15 +42,16 @@ export function SettingsForm({ s }: { s: { inssNumber: string | null; address: s
       <label>Província da sede
         <select name="province" defaultValue={s.province ?? ''}><option value="">—</option>{PROVINCES.map((x) => <option key={x}>{x}</option>)}</select>
       </label>
-      <label>Município da sede<input name="municipality" defaultValue={s.municipality ?? ''} placeholder="Ex.: Belas" /></label>
+      <label>Município da sede<input name="municipality" list="agt-municipios" defaultValue={s.municipality ?? ''} placeholder="Ex.: Belas" /><datalist id="agt-municipios">{Object.values(AGT_MUNICIPALITIES).flat().map((m) => <option key={m} value={m} />)}</datalist></label>
       <label className="span2">Banco dos salários (ficheiro de transferências)
         <select name="bankFileProfile" defaultValue={s.bankFileProfile}>
-          <option value="generic">Genérico (CSV: IBAN; nome; valor)</option>
+          <option value="nib">Excel NOME, NIB, VALOR (regra comum dos bancos)</option>
+          <option value="generic">CSV com IBAN (IBAN; nome; valor; descritivo)</option>
           <option value="bfa">BFA — Excel para o BFA Net Empresas</option>
           <option value="bai">BAI — Excel para o Pagamento em Massa (PSX)</option>
         </select>
       </label>
-      <p className="muted wide">A província e o município da sede entram no mapa de remunerações da AGT para quem não tem outro local de trabalho na ficha.</p>
+      <p className="muted wide">A província e o município da sede entram no mapa de remunerações da AGT para quem não tem outro local de trabalho na ficha. O município tem de constar da lista do template da AGT.</p>
       <label>Jornada diária (horas)<input name="workdayHours" inputMode="decimal" defaultValue={String(s.workdayMinutes / 60).replace('.', ',')} /></label>
       <h3>Subsídios</h3>
       <label className="span2">Subsídio de Natal pago em

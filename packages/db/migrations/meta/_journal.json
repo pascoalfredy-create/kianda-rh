@@ -176,6 +176,13 @@
       "when": 1793128371392,
       "tag": "0024_formatos_oficiais",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793137932672,
+      "tag": "0025_banco_nib",
+      "breakpoints": true
     }
   ]
 }

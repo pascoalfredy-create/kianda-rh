@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 
 interface Ob { kind: 'salaries' | 'inss' | 'irt'; label: string; amountMinor: number; dueDate: string; paidAt: string | null; status: 'paid' | 'overdue' | 'due_soon' | 'open'; daysLeft: number; reference: string | null; reconciled: boolean | null }
 interface Row { runId: string; period: string; obligations: Ob[] }
-interface BankInfo { profile: 'generic' | 'bfa' | 'bai'; banks: Record<string, number>; count: number; totalMinor: number; excluded: { name: string; netMinor: number; reason: string }[] }
+interface BankInfo { profile: 'nib' | 'generic' | 'bfa' | 'bai'; banks: Record<string, number>; count: number; totalMinor: number; excluded: { name: string; netMinor: number; reason: string }[] }
 
 const pt = (d: string) => d.split('-').reverse().join('/');
 const STATUS: Record<Ob['status'], [string, string]> = { paid: ['Pago', 'approved'], overdue: ['Em atraso', 'rejected'], due_soon: ['A vencer', 'pending'], open: ['Por pagar', 'cancelled'] };
@@ -39,14 +39,14 @@ export default async function Obrigacoes() {
       {await Promise.all(rows.map(async (r) => {
         const bank = canBankFile ? await api<BankInfo>(`/v1/payroll-runs/${r.runId}/bank-file?format=json`).catch(() => null) : null;
         const agt = await api<{ issues: { employee: string; problem: string }[] }>(`/v1/payroll-runs/${r.runId}/maps/agt`).catch(() => null);
-        const bankLabel = bank?.profile === 'bfa' ? 'Ficheiro BFA (Excel)' : bank?.profile === 'bai' ? 'Ficheiro BAI (Excel)' : 'Ficheiro de transferências (CSV)';
+        const bankLabel = bank?.profile === 'nib' ? 'Ficheiro do banco (NOME, NIB, VALOR)' : bank?.profile === 'bfa' ? 'Ficheiro BFA (Excel)' : bank?.profile === 'bai' ? 'Ficheiro BAI (Excel)' : 'Ficheiro de transferências (CSV)';
         return (
           <div className="card section" key={r.runId}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px 0', gap: 10, flexWrap: 'wrap' }}>
               <h2 className="h2-inline" style={{ fontSize: 14 }}><Link href={`/processamento?mes=${r.period}`}>{monthLabel(r.period)}</Link></h2>
               <div className="actions">
-                <a className="btn sm" href={`/api/v1/payroll-runs/${r.runId}/maps/agt?format=xlsx`} title="Portal do Contribuinte → Declarações → IRT → Entregar → Mapa de Remunerações → Upload de Ficheiro">Mapa de remunerações AGT (Excel)</a>
-                <a className="btn ghost sm" href={`/api/v1/payroll-runs/${r.runId}/maps/agt?format=csv`}>AGT (CSV)</a>
+                <a className="btn sm" href={`/api/v1/payroll-runs/${r.runId}/maps/agt?format=xlsx`} title="Template IRT A2.1 — Portal do Contribuinte → Declarações → IRT → Entregar → Mapa de Remunerações → Upload de Ficheiro">Mapa AGT A2.1 (Excel)</a>
+                <a className="btn ghost sm" href={`/api/v1/payroll-runs/${r.runId}/maps/agt?format=xlsx&template=simple`} title="Novo Template Simplificado IRT">AGT simplificado</a>
                 <a className="btn ghost sm" href={`/api/v1/payroll-runs/${r.runId}/maps/inss?format=xlsx`}>Folha do INSS (Excel)</a>
                 <a className="btn ghost sm" href={`/api/v1/payroll-runs/${r.runId}/maps/irt?format=csv`}>Resumo IRT (CSV)</a>
                 {canBankFile && <a className="btn ghost sm" href={`/api/v1/payroll-runs/${r.runId}/bank-file`}>{bankLabel}</a>}
@@ -73,7 +73,7 @@ export default async function Obrigacoes() {
                 {agt.issues.length > 12 && <div className="muted">… e mais {agt.issues.length - 12}.</div>}
               </div>
             )}
-            {bank && bank.profile !== 'generic' && Object.keys(bank.banks).length > 1 && (
+            {bank && Object.keys(bank.banks).length > 1 && (
               <div className="muted" style={{ margin: '0 16px 10px' }}>Beneficiários por banco: {Object.entries(bank.banks).map(([k, n]) => `${k} ${n}`).join(' · ')} — as transferências para outros bancos seguem pelo STC/SPTR (comissões do preçário).</div>
             )}
             {bank && bank.excluded.length > 0 && (
@@ -84,7 +84,7 @@ export default async function Obrigacoes() {
           </div>
         );
       }))}
-      <p className="muted">Prazos: salários até ao último dia do mês processado; INSS até ao dia 10 do mês seguinte; IRT até ao fim do mês seguinte (pacote AO-2026). O mapa da AGT segue as 31 colunas do template do Portal do Contribuinte e inclui todos os trabalhadores do mês. A folha do INSS segue o modelo do Kianda (o INSS Virtual não publica o formato de importação). Escolha o banco dos salários nas Definições.</p>
+      <p className="muted">Prazos: salários até ao último dia do mês processado; INSS até ao dia 10 do mês seguinte; IRT até ao fim do mês seguinte (pacote AO-2026). O mapa da AGT segue os templates oficiais do Portal do Contribuinte (A2.1 com 32 colunas, ou o simplificado) e inclui todos os trabalhadores do mês. A folha do INSS segue a Folha de Remuneração Normal do INSS Virtual. O ficheiro do banco sai em NOME, NIB, VALOR (outros formatos nas Definições).</p>
     </>
   );
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import { AGT_MUNICIPALITIES } from '@kianda/core';
 import { useState } from 'react';
 import { IbanField } from '@/components/iban-field';
 import { formObject, useMutation } from '@/lib/client';
@@ -56,7 +57,8 @@ export function PersonalForm({ p, departments, people }: { p: Profile; departmen
         </select>
       </label>
       <label>Município de trabalho
-        <input name="municipality" defaultValue={v(p.municipality)} placeholder="Vazio = o da sede" />
+        <input name="municipality" list="agt-municipios" defaultValue={v(p.municipality)} placeholder="Vazio = o da sede" />
+        <datalist id="agt-municipios">{Object.values(AGT_MUNICIPALITIES).flat().map((m) => <option key={m} value={m} />)}</datalist>
       </label>
       <label>Dias de férias transitados
         <input name="vacationCarryOver" type="number" min={0} max={44} defaultValue={p.vacationCarryOver ?? 0} />
