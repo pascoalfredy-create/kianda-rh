@@ -30,7 +30,7 @@ export function billingRoutes() {
     return c.json({
       status: l.status, statusLabel: l.statusLabel, canWrite: l.canWrite, tier: l.tier, cycle: l.cycle, limit: l.limit, activeEmployees: l.activeEmployees,
       trialEndsAt: l.sub?.trialEndsAt ?? null, paidUntil: l.sub?.paidUntil ?? null, extraSeats: l.sub?.extraSeats ?? 0,
-      prices: priceTable(), cycles: CYCLES, extraSeatMinor: settings.extraSeatMinor, bank: settings.bank, supportContact: settings.supportContact, requests,
+      prices: priceTable(), cycles: CYCLES, extraSeatMinor: settings.extraSeatMinor, bank: settings.bank, supportEmail: settings.supportEmail, supportPhone: settings.supportPhone, requests,
     });
   });
 
@@ -209,7 +209,8 @@ export function platformRoutes() {
     const b = z.object({
       extraSeatMinor: z.number().int().min(0).nullable(),
       bank: z.object({ holder: z.string().trim().min(2), bankName: z.string().trim().min(2), iban: z.string().trim().min(10) }).nullable(),
-      supportContact: z.string().trim().max(200).nullable(),
+      supportEmail: z.email('Email de suporte inválido').nullable().or(z.literal('').transform(() => null)),
+      supportPhone: z.string().trim().max(30).nullable().or(z.literal('').transform(() => null)),
     }).parse(await body(c)) satisfies PlatformSettings;
     await getDb().insert(platformSettings).values({ key: 'commercial', value: b }).onConflictDoUpdate({ target: platformSettings.key, set: { value: b, updatedAt: new Date() } });
     return c.json(b);

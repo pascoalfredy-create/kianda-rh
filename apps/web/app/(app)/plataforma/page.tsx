@@ -16,7 +16,7 @@ export default async function Plataforma() {
   const [{ companies, summary }, pays, settings] = await Promise.all([
     api<{ companies: Co[]; summary: { total: number; trial: number; active: number; pastDue: number; suspended: number; mrrMinor: number } }>('/v1/platform/companies'),
     api<Pay[]>('/v1/platform/payment-requests'),
-    api<{ extraSeatMinor: number | null; bank: { holder: string; bankName: string; iban: string } | null; supportContact: string | null; admins: string[] }>('/v1/platform/settings'),
+    api<{ extraSeatMinor: number | null; bank: { holder: string; bankName: string; iban: string } | null; supportEmail: string | null; supportPhone: string | null; admins: string[] }>('/v1/platform/settings'),
   ]);
   return (
     <>

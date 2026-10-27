@@ -56,13 +56,22 @@ export const companies = pgTable('companies', {
 export const users = pgTable('users', {
   id: id(),
   companyId: text('company_id').notNull().references(() => companies.id),
-  email: text('email').notNull(),
+  /** Opcional: colaboradores sem email entram com código da empresa + n.º/telefone + PIN. */
+  email: text('email'),
   name: text('name').notNull(),
   passwordHash: text('password_hash').notNull(),
   role: roleEnum('role').notNull().default('employee'),
   employeeId: text('employee_id'),
   /** Acesso desactivado (ex.: colaborador cessado). */
   disabledAt: timestamp('disabled_at', { withTimezone: true }),
+  phone: text('phone'),
+  pinHash: text('pin_hash'),
+  /** Verificação em dois passos (TOTP): segredo e data de activação (sem data = configuração por concluir). */
+  totpSecret: text('totp_secret'),
+  totpEnabledAt: timestamp('totp_enabled_at', { withTimezone: true }),
+  failedAttempts: integer('failed_attempts').notNull().default(0),
+  lockedUntil: timestamp('locked_until', { withTimezone: true }),
+  lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
   createdAt: createdAt(),
 }, (t) => [uniqueIndex('users_company_email').on(t.companyId, t.email)]);
 
@@ -276,6 +285,26 @@ export const payrollLines = pgTable('payroll_lines', {
   breakdown: jsonb('breakdown').notNull().default([]),
   calculationHash: text('calculation_hash'),
 }, (t) => [uniqueIndex('payroll_lines_run_employee').on(t.runId, t.employeeId)]);
+
+/** Ligações de acesso: convite (cria o utilizador) ou recuperação (redefine palavra-passe/PIN). Só o hash do token é guardado. */
+export const accessLinks = pgTable('access_links', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  /** invite | reset */
+  kind: text('kind').notNull(),
+  userId: text('user_id'),
+  employeeId: text('employee_id'),
+  name: text('name'),
+  role: text('role').notNull().default('employee'),
+  email: text('email'),
+  phone: text('phone'),
+  tokenHash: text('token_hash').notNull().unique(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  usedAt: timestamp('used_at', { withTimezone: true }),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  createdBy: text('created_by').notNull(),
+  createdAt: createdAt(),
+}, (t) => [index('access_links_company').on(t.companyId)]);
 
 /** Licença da empresa (uma por empresa). */
 export const subscriptions = pgTable('subscriptions', {

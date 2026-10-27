@@ -1,9 +1,9 @@
-import { isValidCompanyNif, luandaDate, SECTORS, tierFor, TRIAL_DAYS } from '@kianda/core';
-import { auditLogs, companies, employees, getDb, hashPassword, passwordProblems, subscriptions, users, verifyPassword } from '@kianda/db';
+import { isValidCompanyNif, luandaDate, SECTORS, tierFor, TRIAL_DAYS, verifyTotp } from '@kianda/core';
+import { auditLogs, companies, employees, getDb, hashPassword, passwordProblems, subscriptions, users, verifyPassword, type Db } from '@kianda/db';
 import { and, eq } from '@kianda/db';
 import { Hono } from 'hono';
 import { deleteCookie, setCookie } from 'hono/cookie';
-import { sign } from 'hono/jwt';
+import { sign, verify } from 'hono/jwt';
 import { z } from 'zod';
 import { isPlatformAdmin, licenceOf } from '../services/licence.js';
 import { body, jwtSecret, rateLimit, requireCompany, requireRole, SESSION_COOKIE, type AppEnv, type Ctx, type Role, type SessionClaims } from '../plugins/tenant.js';
@@ -11,7 +11,31 @@ import { body, jwtSecret, rateLimit, requireCompany, requireRole, SESSION_COOKIE
 const SESSION_HOURS = 12;
 const password = z.string().superRefine((v, ctx) => { const p = passwordProblems(v); if (p) ctx.addIssue({ code: 'custom', message: p }); });
 
-async function startSession(c: Ctx, claims: SessionClaims) {
+const MAX_FAILURES = 5;
+const LOCK_MINUTES = 15;
+export const LOCKED = { error: 'conta_bloqueada', message: `Demasiadas tentativas falhadas. Tente de novo dentro de ${LOCK_MINUTES} minutos ou peça ao RH uma ligação de recuperação.` };
+export const isLocked = (u: { lockedUntil: Date | null }) => Boolean(u.lockedUntil && u.lockedUntil > new Date());
+
+/** Conta falhas por utilizador: à 5.ª, bloqueia 15 minutos (protege PINs de 6 dígitos contra tentativas). */
+export async function registerFailure(db: Db, u: { id: string; failedAttempts: number }) {
+  const n = u.failedAttempts + 1;
+  await db.update(users).set(n >= MAX_FAILURES ? { failedAttempts: 0, lockedUntil: new Date(Date.now() + LOCK_MINUTES * 60_000) } : { failedAttempts: n }).where(eq(users.id, u.id));
+}
+
+/** Fim do login: verificação em dois passos (se activa), sessão, auditoria. */
+export async function completeLogin(c: Ctx, db: Db, u: typeof users.$inferSelect, co: typeof companies.$inferSelect, method: string, secondFactorDone = false) {
+  if (u.disabledAt) return c.json({ error: 'acesso_desactivado', message: 'O seu acesso foi desactivado. Contacte os Recursos Humanos.' }, 403);
+  if (u.totpEnabledAt && !secondFactorDone) {
+    const ticket = await sign({ sub: u.id, purpose: '2fa', exp: Math.floor(Date.now() / 1000) + 300 }, jwtSecret(), 'HS256');
+    return c.json({ twoFactor: true, ticket });
+  }
+  const token = await startSession(c, { sub: u.id, companyId: co.id, role: u.role, employeeId: u.employeeId, name: u.name });
+  await db.update(users).set({ failedAttempts: 0, lockedUntil: null, lastLoginAt: new Date() }).where(eq(users.id, u.id));
+  await db.insert(auditLogs).values({ companyId: co.id, actorId: u.id, action: 'login', entity: 'user', entityId: u.id, after: { method } });
+  return c.json({ user: { id: u.id, name: u.name, email: u.email, role: u.role }, company: { id: co.id, name: co.name }, token });
+}
+
+export async function startSession(c: Ctx, claims: SessionClaims) {
   const exp = Math.floor(Date.now() / 1000) + SESSION_HOURS * 3600;
   const token = await sign({ ...claims, exp }, jwtSecret(), 'HS256');
   setCookie(c, SESSION_COOKIE, token, {
@@ -64,12 +88,34 @@ export function authRoutes() {
       .where(b.companyNif ? and(eq(users.email, b.email.toLowerCase()), eq(companies.nif, b.companyNif)) : eq(users.email, b.email.toLowerCase()));
     if (rows.length > 1) return c.json({ error: 'varias_empresas', message: 'Este email existe em várias empresas. Indique o NIF da empresa.' }, 409);
     const row = rows[0];
+    if (row && isLocked(row.u)) return c.json(LOCKED, 429);
     // Mesma resposta para email inexistente e palavra-passe errada (não revela contas).
-    if (!row || !(await verifyPassword(b.password, row.u.passwordHash))) return c.json({ error: 'credenciais_invalidas', message: 'Email ou palavra-passe incorrectos.' }, 401);
-    if (row.u.disabledAt) return c.json({ error: 'acesso_desactivado', message: 'O seu acesso foi desactivado. Contacte os Recursos Humanos.' }, 403);
-    const token = await startSession(c, { sub: row.u.id, companyId: row.co.id, role: row.u.role, employeeId: row.u.employeeId, name: row.u.name });
-    await db.insert(auditLogs).values({ companyId: row.co.id, actorId: row.u.id, action: 'login', entity: 'user', entityId: row.u.id });
-    return c.json({ user: { id: row.u.id, name: row.u.name, email: row.u.email, role: row.u.role }, company: { id: row.co.id, name: row.co.name }, token });
+    if (!row || !(await verifyPassword(b.password, row.u.passwordHash))) {
+      if (row) await registerFailure(db, row.u);
+      return c.json({ error: 'credenciais_invalidas', message: 'Email ou palavra-passe incorrectos.' }, 401);
+    }
+    return completeLogin(c, db, row.u, row.co, 'password');
+  });
+
+  /** Segundo passo: código da aplicação autenticadora (bilhete de 5 minutos emitido no primeiro passo). */
+  app.post('/v1/auth/login/2fa', rateLimit('login2fa', 10, 900_000), async (c) => {
+    const b = z.object({ ticket: z.string(), code: z.string().trim() }).parse(await body(c));
+    let claims: { sub: string; purpose: string };
+    try {
+      claims = (await verify(b.ticket, jwtSecret(), 'HS256')) as unknown as { sub: string; purpose: string };
+      if (claims.purpose !== '2fa') throw new Error('bilhete');
+    } catch {
+      return c.json({ error: 'bilhete_expirado', message: 'O pedido expirou. Volte a iniciar sessão.' }, 401);
+    }
+    const db = getDb();
+    const [row] = await db.select({ u: users, co: companies }).from(users).innerJoin(companies, eq(companies.id, users.companyId)).where(eq(users.id, claims.sub));
+    if (!row || !row.u.totpSecret || !row.u.totpEnabledAt) return c.json({ error: 'bilhete_expirado', message: 'Volte a iniciar sessão.' }, 401);
+    if (isLocked(row.u)) return c.json(LOCKED, 429);
+    if (!(await verifyTotp(row.u.totpSecret, b.code))) {
+      await registerFailure(db, row.u);
+      return c.json({ error: 'codigo_invalido', message: 'Código incorrecto. Confirme a hora do telemóvel e use o código mais recente.' }, 401);
+    }
+    return completeLogin(c, db, row.u, row.co, '2fa', true);
   });
 
   /** Alterar a própria palavra-passe (confirma a actual). */

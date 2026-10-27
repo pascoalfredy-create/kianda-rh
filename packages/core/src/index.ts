@@ -17,3 +17,4 @@ export * from './expenses.js';
 export * from './documents.js';
 export * from './talent.js';
 export * from './licensing.js';
+export * from './access.js';

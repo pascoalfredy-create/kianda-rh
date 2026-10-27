@@ -143,7 +143,7 @@ function ContractTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
           <Link className="btn danger" href={`/cessacoes/nova?colaborador=${p.id}`}>Cessar contrato…</Link>
         </div>
       )}
-      {canEdit && <div className="actions" style={{ justifyContent: 'flex-start', marginBottom: 12 }}><Link className="btn ghost" href={`/documentos?v=emitir&colaborador=${p.id}`}>Emitir contrato ou declaração</Link></div>}
+      {canEdit && <div className="actions" style={{ justifyContent: 'flex-start', marginBottom: 12 }}><Link className="btn ghost" href={`/documentos?v=emitir&colaborador=${p.id}`}>Emitir contrato ou declaração</Link><Link className="btn ghost" href="/acessos">Acesso à plataforma</Link></div>}
       {p.status === 'terminated' && <div className="warn">Contrato cessado. <Link href="/cessacoes">Ver o fecho de contas e os documentos de cessação</Link>.</div>}
       {canEdit && p.status !== 'terminated' && (
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16, alignItems: 'flex-start' }}>

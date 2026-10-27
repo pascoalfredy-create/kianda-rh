@@ -1,5 +1,6 @@
 import { closeDb, getDb, platformAdmins, platformSettings } from '@kianda/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { totp } from '@kianda/core';
 import { buildApp } from '../src/app.js';
 import { testClient, type InjectResponse } from './inject.js';
 
@@ -1037,7 +1038,7 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(ok.json().status).toBe('paid');
       const b = (await get(financeUser, '/v1/billing')).json();
       expect(b).toMatchObject({ status: 'active', cycle: 'annual', paidUntil: pending.periodEnd });
-      await app.inject({ method: 'PUT', url: '/v1/platform/settings', headers: as(owner), payload: { extraSeatMinor: 500_000, bank: { holder: 'Kianda RH, Lda.', bankName: 'BAI', iban: 'AO06004000005521889010252' }, supportContact: 'suporte@kianda.ao' } });
+      await app.inject({ method: 'PUT', url: '/v1/platform/settings', headers: as(owner), payload: { extraSeatMinor: 500_000, bank: { holder: 'Kianda RH, Lda.', bankName: 'BAI', iban: 'AO06004000005521889010252' }, supportEmail: 'suporte@kianda.ao', supportPhone: '+244 923 000 000' } });
       const extra = await post(financeUser, '/v1/billing/requests', { kind: 'extra_seats', seats: 10 });
       expect(extra.json()).toMatchObject({ amountMinor: 5_000_000 });
       await post(owner, `/v1/platform/payment-requests/${extra.json().id}/confirm`, {});
@@ -1064,6 +1065,87 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
       expect((await app.inject({ method: 'PUT', url: '/v1/company/logo', headers: as(owner), payload: { dataUrl: png } })).statusCode).toBe(200);
       expect((await get(employeeUser, '/v1/company/branding')).json().logo).toBe(png);
+    });
+  });
+
+  describe('contas dos colaboradores (entrega 15)', () => {
+    const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
+    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const pub = (method: 'GET' | 'POST', url: string, payload?: object) => app.inject({ method, url, payload });
+    let pinEmpId = '';
+    let code = '';
+
+    beforeAll(async () => {
+      const e = await post(owner, '/v1/employees', { number: '55', name: 'Vigilante Sem Email', jobTitle: 'Vigilante', phone: '+244 923 555 111', contract: { type: 'indefinite', startDate: '2026-01-05', base: 120000 } });
+      pinEmpId = e.json().id;
+      code = (await get(owner, '/v1/auth/me')).json().company.code;
+    });
+
+    it('convite por ligação: o colaborador sem email escolhe um PIN e entra com código da empresa + n.º ou telefone', async () => {
+      expect((await post(employeeUser, '/v1/access/invites', { employeeId: pinEmpId })).statusCode).toBe(403);
+      const inv = await post(owner, '/v1/access/invites', { employeeId: pinEmpId });
+      expect(inv.statusCode).toBe(201);
+      const token = inv.json().path.split('/').pop();
+      const info = (await pub('GET', `/v1/public/access/${token}`)).json();
+      expect(info).toMatchObject({ kind: 'invite', name: 'Vigilante Sem Email', companyCode: code, pinAllowed: true, number: '55' });
+      expect((await pub('POST', `/v1/public/access/${token}`, { method: 'pin', pin: '123456' })).json().error).toBe('pin_fraco');
+      const ok = await pub('POST', `/v1/public/access/${token}`, { method: 'pin', pin: '730418' });
+      expect(ok.statusCode).toBe(200);
+      expect((await pub('POST', `/v1/public/access/${token}`, { method: 'pin', pin: '730418' })).json().error).toBe('ligacao_usada');
+      expect((await pub('POST', '/v1/auth/login-pin', { companyCode: code.toLowerCase(), identifier: '55', pin: '730418' })).statusCode).toBe(200);
+      expect((await pub('POST', '/v1/auth/login-pin', { companyCode: code, identifier: '923 555 111', pin: '730418' })).statusCode).toBe(200);
+      expect((await pub('POST', '/v1/auth/login-pin', { companyCode: code, identifier: '55', pin: '000001' })).json().error).toBe('credenciais_invalidas');
+      expect((await post(owner, '/v1/access/invites', { employeeId: pinEmpId })).json().error).toBe('ja_tem_acesso');
+    });
+
+    it('5 PINs errados bloqueiam a conta; a recuperação pelo RH desbloqueia e define um PIN novo', async () => {
+      for (let i = 0; i < 4; i++) await pub('POST', '/v1/auth/login-pin', { companyCode: code, identifier: '55', pin: '000002' });
+      await pub('POST', '/v1/auth/login-pin', { companyCode: code, identifier: '55', pin: '000003' });
+      expect((await pub('POST', '/v1/auth/login-pin', { companyCode: code, identifier: '55', pin: '730418' })).json().error).toBe('conta_bloqueada');
+      const list = (await get(owner, '/v1/access')).json();
+      const row = list.employees.find((e: { id: string }) => e.id === pinEmpId);
+      expect(row.user).toMatchObject({ hasPin: true, locked: true, hasPassword: false });
+      const rec = await post(owner, `/v1/users/${row.user.id}/recovery`);
+      const token = rec.json().path.split('/').pop();
+      expect((await pub('GET', `/v1/public/access/${token}`)).json().kind).toBe('reset');
+      expect((await pub('POST', `/v1/public/access/${token}`, { method: 'pin', pin: '582947' })).statusCode).toBe(200);
+      expect((await pub('POST', '/v1/auth/login-pin', { companyCode: code, identifier: '55', pin: '582947' })).statusCode).toBe(200);
+    });
+
+    it('utilizador de gestão sem ficha: só email e palavra-passe; só o proprietário convida administração de RH', async () => {
+      const bad = await post(owner, '/v1/access/invites', { name: 'Contabilista Externo', role: 'finance' });
+      expect(bad.json().error).toBe('dados_em_falta');
+      const inv = await post(owner, '/v1/access/invites', { name: 'Contabilista Externo', email: `cont+${stamp}@x.ao`, role: 'finance' });
+      const token = inv.json().path.split('/').pop();
+      expect((await pub('POST', `/v1/public/access/${token}`, { method: 'pin', pin: '582947' })).json().error).toBe('metodo_invalido');
+      expect((await pub('POST', `/v1/public/access/${token}`, { method: 'password', email: `cont+${stamp}@x.ao`, password: 'Contas2026segura' })).statusCode).toBe(200);
+      const hr = await login(`payroll+${stamp}@a.ao`);
+      expect((await post(hr, '/v1/access/invites', { name: 'X', email: 'x@x.ao', role: 'hr_admin' })).statusCode).toBe(403);
+    });
+
+    it('verificação em dois passos: activar com código; o login passa a pedir o segundo passo', async () => {
+      const fin = await login(`finance+${stamp}@a.ao`);
+      const setup = (await post(fin, '/v1/auth/2fa/setup')).json();
+      const secret = setup.secret.replace(/\s/g, '');
+      expect(setup.uri).toMatch(/^otpauth:\/\/totp\//);
+      expect((await post(fin, '/v1/auth/2fa/enable', { code: '000000' })).json().error).toBe('codigo_invalido');
+      expect((await post(fin, '/v1/auth/2fa/enable', { code: await totp(secret) })).statusCode).toBe(200);
+      const first = (await app.inject({ method: 'POST', url: '/v1/auth/login', payload: { email: `finance+${stamp}@a.ao`, password: pw, companyNif: nifA } })).json();
+      expect(first).toMatchObject({ twoFactor: true });
+      expect((await pub('POST', '/v1/auth/login/2fa', { ticket: first.ticket, code: '111111' })).json().error).toBe('codigo_invalido');
+      const second = await pub('POST', '/v1/auth/login/2fa', { ticket: first.ticket, code: await totp(secret) });
+      expect(second.statusCode).toBe(200);
+      expect(second.cookies.find((c) => c.name === 'kianda_session')?.value).toBeTruthy();
+      expect((await post(cookieOf(second), '/v1/auth/2fa/disable', { password: pw, code: await totp(secret) })).statusCode).toBe(200);
+    });
+
+    it('desactivar o acesso impede a entrada; não se mexe no próprio acesso', async () => {
+      const list = (await get(owner, '/v1/access')).json();
+      const u = list.employees.find((e: { id: string }) => e.id === pinEmpId).user;
+      expect((await app.inject({ method: 'PATCH', url: `/v1/users/${u.id}`, headers: as(owner), payload: { disabled: true } })).json().disabled).toBe(true);
+      expect((await pub('POST', '/v1/auth/login-pin', { companyCode: code, identifier: '55', pin: '582947' })).json().error).toBe('acesso_desactivado');
+      const me = list.staff.find((s: { self: boolean }) => s.self);
+      expect((await app.inject({ method: 'PATCH', url: `/v1/users/${me.id}`, headers: as(owner), payload: { disabled: true } })).json().error).toBe('proprio');
     });
   });
 

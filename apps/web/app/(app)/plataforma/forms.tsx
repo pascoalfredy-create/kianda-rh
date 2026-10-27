@@ -43,7 +43,7 @@ export function EditSubscription({ c, tiers }: { c: Sub; tiers: { key: string; l
   );
 }
 
-export function SettingsForm({ s }: { s: { extraSeatMinor: number | null; bank: { holder: string; bankName: string; iban: string } | null; supportContact: string | null } }) {
+export function SettingsForm({ s }: { s: { extraSeatMinor: number | null; bank: { holder: string; bankName: string; iban: string } | null; supportEmail: string | null; supportPhone: string | null } }) {
   const { busy, error, run } = useMutation();
   const [ok, setOk] = useState('');
   return (
@@ -52,13 +52,14 @@ export function SettingsForm({ s }: { s: { extraSeatMinor: number | null; bank: 
       const f = new FormData(e.currentTarget);
       const extra = String(f.get('extra') ?? '').trim().replace(/\s/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.');
       const bank = f.get('iban') ? { holder: f.get('holder'), bankName: f.get('bankName'), iban: String(f.get('iban')).replace(/\s/g, '') } : null;
-      if (await run('/v1/platform/settings', 'PUT', { extraSeatMinor: extra ? Math.round(Number(extra) * 100) : null, bank, supportContact: f.get('support') || null })) setOk('Gravado.');
+      if (await run('/v1/platform/settings', 'PUT', { extraSeatMinor: extra ? Math.round(Number(extra) * 100) : null, bank, supportEmail: f.get('supportEmail') || null, supportPhone: f.get('supportPhone') || null })) setOk('Gravado.');
     }}>
       <label>Preço por colaborador extra (Kz, pagamento único)<input name="extra" inputMode="decimal" defaultValue={s.extraSeatMinor ? String(s.extraSeatMinor / 100) : ''} placeholder="por definir" /></label>
       <label>Titular da conta<input name="holder" defaultValue={s.bank?.holder ?? ''} /></label>
       <label>Banco<input name="bankName" defaultValue={s.bank?.bankName ?? ''} /></label>
       <label className="span2">IBAN para transferências<input name="iban" defaultValue={s.bank?.iban ?? ''} /></label>
-      <label className="span2">Contacto de suporte<input name="support" defaultValue={s.supportContact ?? ''} placeholder="email / telefone / WhatsApp" /></label>
+      <label>Email de suporte<input name="supportEmail" type="email" defaultValue={s.supportEmail ?? ''} placeholder="suporte@…" /></label>
+      <label>Telefone / WhatsApp de suporte<input name="supportPhone" type="tel" defaultValue={s.supportPhone ?? ''} placeholder="+244 9…" /></label>
       <div className="form-actions wide">{error ? <span className="err">{error}</span> : ok ? <span className="ok">{ok}</span> : null}<button className="btn" disabled={busy}>Gravar</button></div>
     </form>
   );

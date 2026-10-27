@@ -9,7 +9,7 @@ interface Req { id: string; number: string; kind: string; tierKey: string | null
 interface Billing {
   status: string; statusLabel: string; canWrite: boolean; tier: { key: string; label: string }; cycle: string; limit: number | null; activeEmployees: number;
   trialEndsAt: string | null; paidUntil: string | null; extraSeats: number; prices: { key: string; label: string; maxEmployees: number | null; prices: Record<string, { totalMinor: number; discountMinor: number } | null> }[];
-  cycles: Record<string, { label: string }>; extraSeatMinor: number | null; bank: { holder: string; bankName: string; iban: string } | null; supportContact: string | null; requests: Req[];
+  cycles: Record<string, { label: string }>; extraSeatMinor: number | null; bank: { holder: string; bankName: string; iban: string } | null; supportEmail: string | null; supportPhone: string | null; requests: Req[];
 }
 const pt = (d: string) => d.split('-').reverse().join('/');
 const ST: Record<string, string> = { trial: 'st pending', active: 'st approved', past_due: 'st pending', suspended: 'st rejected', cancelled: 'tag' };
@@ -24,6 +24,7 @@ export default async function Licenca() {
   return (
     <>
       <h1>Licença</h1>
+      {(b.supportEmail || b.supportPhone) && <p className="muted" style={{ float: 'right', marginTop: 4 }}>Suporte: {b.supportEmail && <a href={`mailto:${b.supportEmail}`}>{b.supportEmail}</a>}{b.supportEmail && b.supportPhone ? ' · ' : ''}{b.supportPhone && <a href={`tel:${b.supportPhone.replace(/\s/g, '')}`}>{b.supportPhone}</a>}</p>}
       <p className="sub">Escalão, pagamentos e colaboradores incluídos · código da empresa <b>{me.company?.code ?? '—'}</b></p>
       {!b.canWrite && <div className="alert">A conta está em <b>modo de consulta</b>: pode ver e exportar tudo, mas não gravar alterações até a licença ser regularizada.</div>}
       <div className="grid">
@@ -39,7 +40,7 @@ export default async function Licenca() {
           {pending.map((r) => (
             <div key={r.id} style={{ padding: '6px 16px 14px', display: 'grid', gap: 8 }}>
               <div><b>{r.number}</b> · {r.kind === 'subscription' ? `${b.prices.find((x) => x.key === r.tierKey)?.label} · ${b.cycles[r.cycle!]?.label} · ${pt(r.periodStart!)} a ${pt(r.periodEnd!)}` : `${r.seats} colaborador(es) extra`} · <b>{formatKz(r.amountMinor)}</b></div>
-              {b.bank ? <div className="warn" style={{ margin: 0 }}>Transfira para <b>{b.bank.holder}</b> · {b.bank.bankName} · IBAN <b>{b.bank.iban.replace(/(.{4})/g, '$1 ')}</b> com o descritivo <b>{r.number}</b>. A activação é feita assim que a Kianda confirmar a recepção.</div> : <div className="warn" style={{ margin: 0 }}>Os dados bancários são enviados pelo suporte Kianda{b.supportContact ? ` (${b.supportContact})` : ''}.</div>}
+              {b.bank ? <div className="warn" style={{ margin: 0 }}>Transfira para <b>{b.bank.holder}</b> · {b.bank.bankName} · IBAN <b>{b.bank.iban.replace(/(.{4})/g, '$1 ')}</b> com o descritivo <b>{r.number}</b>. A activação é feita assim que a Kianda confirmar a recepção.</div> : <div className="warn" style={{ margin: 0 }}>Os dados bancários são enviados pelo suporte Kianda{[b.supportEmail, b.supportPhone].filter(Boolean).length ? ` (${[b.supportEmail, b.supportPhone].filter(Boolean).join(' · ')})` : ''}.</div>}
               {r.payerReference ? <div className="muted">Referência indicada: {r.payerReference} — a aguardar confirmação.</div> : <ReferenceForm id={r.id} />}
             </div>
           ))}

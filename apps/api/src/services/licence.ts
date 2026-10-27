@@ -4,13 +4,17 @@ import {
 } from '@kianda/core';
 import { and, eq, employees, platformAdmins, platformSettings, sql, subscriptions, users, type Db } from '@kianda/db';
 
-export interface PlatformSettings { extraSeatMinor: number | null; bank: { holder: string; bankName: string; iban: string } | null; supportContact: string | null }
+export interface PlatformSettings { extraSeatMinor: number | null; bank: { holder: string; bankName: string; iban: string } | null; supportEmail: string | null; supportPhone: string | null }
 /** Colaborador acima do limite do escalão: 3 000 Kz, pagamento único (alterável na consola). */
-const DEFAULT_SETTINGS: PlatformSettings = { extraSeatMinor: 300_000, bank: null, supportContact: null };
+const DEFAULT_SETTINGS: PlatformSettings = { extraSeatMinor: 300_000, bank: null, supportEmail: null, supportPhone: null };
 
 export async function platformSettingsGet(db: Db): Promise<PlatformSettings> {
   const [row] = await db.select().from(platformSettings).where(eq(platformSettings.key, 'commercial'));
-  return { ...DEFAULT_SETTINGS, ...((row?.value as Partial<PlatformSettings>) ?? {}) };
+  const v = (row?.value as Partial<PlatformSettings> & { supportContact?: string | null }) ?? {};
+  const { supportContact, ...rest } = v;
+  // Compatibilidade: o antigo campo único passa para o email (se tiver @) ou para o telefone.
+  const legacy = supportContact ? (supportContact.includes('@') ? { supportEmail: supportContact } : { supportPhone: supportContact }) : {};
+  return { ...DEFAULT_SETTINGS, ...legacy, ...rest };
 }
 
 /** Escalão efectivo (o "à medida" usa o limite e o preço negociados). */
@@ -57,7 +61,7 @@ export async function licenceBlocks(db: Db, companyId: string, method: string, p
 
 export async function isPlatformAdmin(db: Db, userId: string): Promise<boolean> {
   const [u] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId));
-  if (!u) return false;
+  if (!u?.email) return false;
   const [a] = await db.select().from(platformAdmins).where(eq(platformAdmins.email, u.email.toLowerCase()));
   return Boolean(a);
 }
