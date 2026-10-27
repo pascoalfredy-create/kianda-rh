@@ -158,7 +158,7 @@ jobs:
           printf '{"email":"admin@kwanzalog.co.ao","password":"%s"}' "$PW" > /tmp/login.json
           curl -sS --fail-with-body -c /tmp/jar -o /dev/null -X POST -H 'content-type: application/json' --data @/tmp/login.json "https://$PRIMARY_HOST/api/v1/auth/login"
           scripts/ci-run.sh "Pedido com RLS (/v1/employees)" curl -sS --fail-with-body -b /tmp/jar -o /tmp/emp.out "https://$PRIMARY_HOST/api/v1/employees"
-          n=$(grep -o '"companyId"' /tmp/emp.out | wc -l); [ "$n" -gt 0 ] || { echo "::error title=RLS::A lista de colaboradores veio vazia"; exit 1; }
+          n=$(grep -o '"number"' /tmp/emp.out | wc -l); [ "$n" -gt 0 ] || { echo "::error title=RLS::A lista de colaboradores veio vazia"; exit 1; }
           echo "RLS OK: $n colaborador(es) visíveis"
           rm -f /tmp/login.json /tmp/jar /tmp/emp.out
           rm -f /tmp/login.json /tmp/login.out
