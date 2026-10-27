@@ -1948,7 +1948,8 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: projectos, cinco acessos e 
     const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Projectos Integra', nif: String(Date.now() + 700).slice(-10) }, name: 'Gestor', email: `${stamp}@plans.ao`, password: 'Projectos2026Seguros' } });
     expect(r.statusCode).toBe(201); cookie = cookieOf(r);
     const me = (await req('GET', '/v1/auth/me')).json();
-    companyId = me.company.id; ownerId = me.user.id;
+    companyId = me.company.id; ownerId = me.user.sub;
+    expect(ownerId).toBeTypeOf('string');
     await getDb().insert(platformAdmins).values({ email: `${stamp}@plans.ao` });
     expect((await grant()).statusCode).toBe(200);
   });
