@@ -72,6 +72,19 @@ export function authRoutes() {
     return c.json({ user: { id: row.u.id, name: row.u.name, email: row.u.email, role: row.u.role }, company: { id: row.co.id, name: row.co.name }, token });
   });
 
+  /** Alterar a própria palavra-passe (confirma a actual). */
+  app.post('/v1/auth/password', requireCompany, rateLimit('password', 10, 900_000), async (c) => {
+    const actor = c.get('actor');
+    const b = z.object({ current: z.string().min(1, 'Indique a palavra-passe actual'), next: password }).parse(await body(c));
+    const db = getDb();
+    const [u] = await db.select().from(users).where(eq(users.id, actor.actorId));
+    if (!u || !(await verifyPassword(b.current, u.passwordHash))) return c.json({ error: 'credenciais_invalidas', message: 'A palavra-passe actual está errada.' }, 400);
+    if (b.current === b.next) return c.json({ error: 'igual', message: 'A nova palavra-passe tem de ser diferente da actual.' }, 400);
+    await db.update(users).set({ passwordHash: await hashPassword(b.next) }).where(eq(users.id, u.id));
+    await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'change_password', entity: 'user', entityId: u.id });
+    return c.json({ ok: true });
+  });
+
   app.post('/v1/auth/logout', (c) => {
     deleteCookie(c, SESSION_COOKIE, { path: '/' });
     return c.json({ ok: true });

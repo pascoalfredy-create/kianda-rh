@@ -125,7 +125,7 @@ export function platformRoutes() {
 
   app.get('/v1/platform/companies', async (c) => {
     const db = getDb();
-    const cos = await db.select().from(companies).orderBy(desc(companies.createdAt));
+    const cos = (await db.select().from(companies).orderBy(desc(companies.createdAt))).filter((co) => co.nif !== 'PLATAFORMA');
     const subs = await db.select().from(subscriptions);
     const counts = await db.select({ companyId: employees.companyId, n: sql<number>`count(*)::int` }).from(employees).where(eq(employees.status, 'active')).groupBy(employees.companyId);
     const owners = await db.select({ companyId: users.companyId, email: users.email, name: users.name }).from(users).where(eq(users.role, 'owner'));

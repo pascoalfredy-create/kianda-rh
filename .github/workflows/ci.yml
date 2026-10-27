@@ -90,6 +90,7 @@ jobs:
           DATABASE_URL: ${{ secrets.KIANDA_DATABASE_URL }}
           DATABASE_CA_CERT: ${{ secrets.KIANDA_DATABASE_CA_CERT }}
           KIANDA_PLATFORM_ADMINS: ${{ vars.KIANDA_PLATFORM_ADMINS }}
+          SEED_OWNER_PASSWORD: ${{ secrets.KIANDA_SEED_OWNER_PASSWORD }}
 
       - name: Dados de demonstração (opcional, idempotente)
         if: vars.KIANDA_SEED_DEMO == 'true'

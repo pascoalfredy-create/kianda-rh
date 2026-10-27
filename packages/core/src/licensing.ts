@@ -23,7 +23,7 @@ export const CYCLES: Record<BillingCycle, { label: string; months: number; disco
   annual: { label: 'Anual (−20%)', months: 12, discountBps: 2000 },
 };
 
-export const TRIAL_DAYS = 30;
+export const TRIAL_DAYS = 7;
 
 export function tierFor(employees: number, tiers: Tier[] = DEFAULT_TIERS): Tier {
   return tiers.find((t) => employees >= t.minEmployees && (t.maxEmployees === null || employees <= t.maxEmployees)) ?? tiers[tiers.length - 1]!;
