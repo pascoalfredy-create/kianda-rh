@@ -67,6 +67,9 @@ export const AO_2026: CountryPack = {
     { title: 'Decreto Presidencial n.º 227/18 — regime de contribuições INSS' },
   ],
   toValidate: [
+    'Sectores: regimes de turnos de 12 h e rotações (28/28, 21/21, 14/14) — enquadramento no regime de adaptabilidade/turnos da LGT e média de 44 h semanais ao longo do ciclo; dias de viagem nas rotações',
+    'Sectores: subsídios sugeridos (turno, nocturno, risco, isolamento, campo, offshore, alojamento, deslocação, falhas) com valores indicativos e incidência de INSS/IRT pela regra geral — confirmar com o contabilista e o contrato colectivo do sector',
+    'Sectores: documentos obrigatórios (cartão profissional de vigilante, carta de condução, cédula profissional) e avisos de conformidade (seguro de acidentes de trabalho, angolanização no sector petrolífero, vistos de trabalho)',
     'Modelos de documentos (contratos, declarações, certificado, comunicações): revisão por jurista antes do uso; período experimental até 30 dias nos contratos a termo (art. 18.º, n.º 3)',
     'Cessação (Lei n.º 12/23): aviso prévio de 30 dias na denúncia pelo trabalhador (art. 305.º) e no despedimento por causas objectivas (art. 286.º), 60 dias no colectivo (art. 293.º); compensação de 1 salário base por ano até 5 anos e 50% por ano adicional (arts. 289.º e 295.º); rescisão com justa causa: salário base × anos (arts. 307.º–310.º); antiguidade em anos completos (art. 311.º)',
     'Cessação: falta de aviso prévio pelo trabalhador descontada no fecho de contas (dias em falta × base/30); falta de aviso pelo empregador paga como compensação',

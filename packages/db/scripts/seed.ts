@@ -1,7 +1,7 @@
 import 'dotenv/config';
-import { DEFAULT_ACCOUNT_MAPPINGS, DEFAULT_COMPETENCIES, kz } from '@kianda/core';
+import { ALLOWANCE_PRESETS, DEFAULT_ACCOUNT_MAPPINGS, DEFAULT_COMPETENCIES, kz, SCHEDULE_PRESETS, sectorProfile } from '@kianda/core';
 import { and, eq } from 'drizzle-orm';
-import { absences, accountMappings, bankAccounts, subscriptions, candidateEvents, candidates, expenseClaims, expenseLines, jobOpenings, reviewCycles, reviews, attendanceEntries, closeDb, companies, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, hashPassword, users, verifyPassword } from '../src/index.js';
+import { allowanceTypes, workSchedules, absences, accountMappings, bankAccounts, subscriptions, candidateEvents, candidates, expenseClaims, expenseLines, jobOpenings, reviewCycles, reviews, attendanceEntries, closeDb, companies, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, hashPassword, users, verifyPassword } from '../src/index.js';
 
 /** Dados de demonstração: empresa fictícia com três departamentos, cinco colaboradores, hierarquia e documentos. Idempotente. */
 const db = getDb();
@@ -89,6 +89,18 @@ if (joana) {
 // Licença da empresa de demonstração (sem expiração) e código da empresa.
 await db.insert(subscriptions).values({ companyId: company.id, status: 'active', tierKey: 't1', cycle: 'annual', paidUntil: '2099-12-31', notes: 'Empresa de demonstração' }).onConflictDoNothing();
 if (!company.code) await db.update(companies).set({ code: 'KWANZA' }).where(eq(companies.id, company.id));
+
+// Sector (transportes e logística) e a sua pré-configuração: regimes de horário e subsídios sugeridos.
+if (!company.sector) await db.update(companies).set({ sector: 'transport' }).where(eq(companies.id, company.id));
+const profile = sectorProfile(company.sector ?? 'transport');
+for (const k of profile.schedules) {
+  const s = SCHEDULE_PRESETS[k]!;
+  await db.insert(workSchedules).values({ companyId: company.id, name: s.name, kind: s.kind, pattern: s.pattern, note: s.note ?? null, presetKey: s.key, anchorDate: s.kind === 'cycle' ? '2026-01-05' : null }).onConflictDoNothing();
+}
+for (const k of profile.allowances) {
+  const a = ALLOWANCE_PRESETS[k]!;
+  await db.insert(allowanceTypes).values({ companyId: company.id, code: a.code, label: a.label, calc: a.calc, valueMinor: a.valueMinor ?? null, bps: a.bps ?? null, inInss: a.inInss, inIrt: a.inIrt, note: a.note ?? null, presetKey: a.key }).onConflictDoNothing();
+}
 
 // Conta bancária de salários (IBAN fictício do banco 0000).
 const [hasBank] = await db.select({ id: bankAccounts.id }).from(bankAccounts).where(eq(bankAccounts.companyId, company.id));

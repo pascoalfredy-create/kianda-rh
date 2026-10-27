@@ -77,10 +77,15 @@ export function summarizeDay(input: {
   inactive?: boolean;
   /** Horas extra contadas em blocos completos (minutos). Por omissão 15: 0h12 → 0; 0h38 → 0h30. */
   overtimeBlockMinutes?: number;
+  /** Regime de horário do colaborador: minutos previstos neste dia (0 = descanso). Sem regime: dias úteis × jornada. */
+  scheduledMinutes?: number;
 }): DaySummary {
-  const { date, punches, dailyMinutes, holiday, absence, today, inactive } = input;
+  const { date, punches, holiday, absence, today, inactive } = input;
+  const scheduled = input.scheduledMinutes;
+  const dailyMinutes = scheduled !== undefined ? scheduled : input.dailyMinutes;
+  const restDay = scheduled !== undefined ? scheduled === 0 : isWeekend(date);
   const block = input.overtimeBlockMinutes ?? 15;
-  const kind: DaySummary['kind'] = inactive ? 'inactive' : holiday ? 'holiday' : isWeekend(date) ? 'rest' : absence ? 'absence' : 'workday';
+  const kind: DaySummary['kind'] = inactive ? 'inactive' : holiday ? 'holiday' : restDay ? 'rest' : absence ? 'absence' : 'workday';
   const closed = punches.filter((p) => p.clockOut);
   const worked = closed.reduce((s, p) => s + minutesBetween(p.clockIn, p.clockOut!), 0);
   const expected = kind === 'workday' && date <= today ? dailyMinutes : 0;
@@ -122,6 +127,8 @@ export function summarizeMonth(input: {
   employedFrom?: string | null;
   employedUntil?: string | null;
   overtimeBlockMinutes?: number;
+  /** Regime de horário: minutos previstos por data (0 = descanso). */
+  schedule?: (date: string) => number;
 }): MonthSummary {
   const [y, m] = input.period.split('-').map(Number) as [number, number];
   const n = new Date(Date.UTC(y, m, 0)).getUTCDate();
@@ -133,6 +140,7 @@ export function summarizeMonth(input: {
       date, punches: input.punches.filter((p) => p.workDate === date), dailyMinutes: input.dailyMinutes,
       holiday: hol.get(date), absence: input.absences[date], today: input.today,
       overtimeBlockMinutes: input.overtimeBlockMinutes,
+      scheduledMinutes: input.schedule?.(date),
       inactive: (!!input.employedFrom && date < input.employedFrom) || (!!input.employedUntil && date > input.employedUntil),
     }));
   }

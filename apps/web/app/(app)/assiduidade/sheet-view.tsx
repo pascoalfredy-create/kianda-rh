@@ -14,6 +14,7 @@ export function SheetView({ sheet, period }: { sheet: Sheet; period: string }) {
   const days = s.days.filter((d) => d.date <= today || byDate.has(d.date));
   return (
     <>
+      {sheet.schedule && <p className="muted" style={{ margin: '-6px 0 12px' }}>Regime: <b>{sheet.schedule.name}</b> · {sheet.schedule.description}</p>}
       <div className="grid">
         <div className="card kpi"><div className="l">Horas trabalhadas</div><div className="v">{formatMinutes(s.workedMinutes)}</div></div>
         <div className="card kpi"><div className="l">Horas previstas</div><div className="v">{formatMinutes(s.expectedMinutes)}</div></div>

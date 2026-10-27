@@ -7,6 +7,7 @@ import { sign, verify } from 'hono/jwt';
 import { z } from 'zod';
 import { isPlatformAdmin, licenceOf } from '../services/licence.js';
 import { body, jwtSecret, rateLimit, requireCompany, requireRole, SESSION_COOKIE, type AppEnv, type Ctx, type Role, type SessionClaims } from '../plugins/tenant.js';
+import { applySectorPreset } from '../services/sector.js';
 
 const SESSION_HOURS = 12;
 const password = z.string().superRefine((v, ctx) => { const p = passwordProblems(v); if (p) ctx.addIssue({ code: 'custom', message: p }); });
@@ -74,6 +75,8 @@ export function authRoutes() {
       const trialEnd = new Date(Date.parse(luandaDate(new Date())) + TRIAL_DAYS * 86_400_000).toISOString().slice(0, 10);
       await tx.insert(subscriptions).values({ companyId: co!.id, status: 'trial', tierKey: tierFor(b.company.employeesEstimate ?? 1).key, cycle: 'monthly', trialEndsAt: trialEnd });
       const [u] = await tx.insert(users).values({ companyId: co!.id, email: b.email.toLowerCase(), name: b.name, passwordHash, role: 'owner' }).returning();
+      // Pré-configuração do sector: regimes de horário e subsídios sugeridos (a empresa ajusta depois).
+      await applySectorPreset(tx, co!.id, co!.sector, u!.id);
       await tx.insert(auditLogs).values({ companyId: co!.id, actorId: u!.id, action: 'register', entity: 'company', entityId: co!.id, after: { company: co, owner: { id: u!.id, email: u!.email } } });
       return { company: co!, user: u! };
     });

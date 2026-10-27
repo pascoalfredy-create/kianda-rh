@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import {
-  businessDays, calculatePayroll, compensationAt, DEFAULT_PGC_ACCOUNTS, getPack, labourRules, lastDayOfMonth, NegativeNetError, overtimeHoursFromMinutes,
+  allowanceAmount, businessDays, calculatePayroll, scheduledDays, type Schedule, compensationAt, DEFAULT_PGC_ACCOUNTS, getPack, labourRules, lastDayOfMonth, NegativeNetError, overtimeHoursFromMinutes,
   payrollJournal, vacationEntitlement, yearServiceFraction, type EarningInput, type PayrollResult, type PayrollTotals, type PgcAccountMap,
 } from '@kianda/core';
 import {
-  absences, accountMappings, and, asc, attendanceEntries, attendanceMonths, auditLogs, companies, compensationChanges, contracts, departments, desc, employees, eq,
+  absences, accountMappings, allowanceTypes, and, asc, employeeAllowances, isNull, or, workSchedules, attendanceEntries, attendanceMonths, auditLogs, companies, compensationChanges, contracts, departments, desc, employees, eq,
   gte, inArray, journalEntries, journalLines, lte, ne, payrollLines, payrollRuns, payrollVariables, type Db,
 } from '@kianda/db';
 
@@ -62,6 +62,15 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
     const withPunches = new Set((await tx.select({ id: attendanceEntries.employeeId }).from(attendanceEntries)
       .where(and(eq(attendanceEntries.companyId, companyId), gte(attendanceEntries.workDate, periodStart), lte(attendanceEntries.workDate, periodEnd)))).map((r) => r.id));
     const variables = await tx.select().from(payrollVariables).where(and(eq(payrollVariables.companyId, companyId), eq(payrollVariables.period, period)));
+    // Regimes de horário e subsídios recorrentes em vigor no mês.
+    const schedules = new Map((await tx.select().from(workSchedules).where(eq(workSchedules.companyId, companyId))).map((s) => [s.id, s]));
+    const assigned = await tx.select({ a: employeeAllowances, t: allowanceTypes }).from(employeeAllowances)
+      .innerJoin(allowanceTypes, eq(allowanceTypes.id, employeeAllowances.typeId))
+      .where(and(eq(employeeAllowances.companyId, companyId), lte(employeeAllowances.startDate, periodEnd), or(isNull(employeeAllowances.endDate), gte(employeeAllowances.endDate, periodStart))))
+      .orderBy(asc(allowanceTypes.code));
+    const holidaySet = new Set(labourRules('AO', year).holidays.map((h) => h.date));
+    const companyWeek: Schedule = { kind: 'weekly', pattern: [...Array(5).fill(company?.workdayMinutes ?? 480), 0, 0] };
+    const dayDiff = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000) + 1;
     // Subsídios já pagos noutros processamentos FECHADOS do mesmo ano.
     const paidThisYear = await tx.select({ employeeId: payrollLines.employeeId, breakdown: payrollLines.breakdown }).from(payrollLines)
       .innerJoin(payrollRuns, eq(payrollRuns.id, payrollLines.runId))
@@ -85,15 +94,18 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       const att = approvedMonths.find((m) => m.employeeId === e.id);
       if (!att && withPunches.has(e.id)) warnings.push({ employeeId: e.id, message: `${e.name}: assiduidade de ${period} por aprovar — horas extra não incluídas` });
       const overtimeHours = att ? overtimeHoursFromMinutes(att.approvedOvertimeMinutes) : 0;
-      const absenceDays = unjustified.filter((a) => a.employeeId === e.id).reduce((s, a) => {
-        const from = a.startDate < periodStart ? periodStart : a.startDate;
-        const to = a.endDate > periodEnd ? periodEnd : a.endDate;
-        return s + businessDays(from, to, [labourRules('AO', year)]);
-      }, 0);
+      // Regime do colaborador (turnos/rotação) ou o horário normal da empresa.
+      const sched = e.scheduleId ? schedules.get(e.scheduleId) : undefined;
+      const regime: Schedule = sched ? { kind: sched.kind as Schedule['kind'], pattern: sched.pattern, anchorDate: sched.anchorDate } : companyWeek;
+      const anchor = e.scheduleAnchor ?? sched?.anchorDate ?? null;
+      if (sched?.kind === 'cycle' && !anchor) warnings.push({ employeeId: e.id, message: `${e.name}: regime "${sched.name}" sem data de início do ciclo — faltas e subsídios por dia não calculados` });
+      // Faltas injustificadas: dias de trabalho previstos (regime) dentro da falta, sem feriados.
+      const myAbsences = unjustified.filter((a) => a.employeeId === e.id).map((a) => ({ from: a.startDate < periodStart ? periodStart : a.startDate, to: a.endDate > periodEnd ? periodEnd : a.endDate }));
+      const absenceDays = myAbsences.reduce((s, a) => s + (sched ? scheduledDays(regime, a.from, a.to, anchor, holidaySet) : businessDays(a.from, a.to, [labourRules('AO', year)])), 0);
 
       // Variáveis do mês
       const mine = variables.filter((v) => v.employeeId === e.id);
-      const otherEarnings: EarningInput[] = mine.filter((v) => v.kind === 'bonus' || v.kind === 'other_earning').map((v) => ({
+      const variableEarnings: EarningInput[] = mine.filter((v) => v.kind === 'bonus' || v.kind === 'other_earning').map((v) => ({
         code: v.code ?? (v.kind === 'bonus' ? 'BONUS' : 'OUTABON'), name: v.label, amountMinor: v.amountMinor, inInss: v.inInss, inIrt: v.inIrt,
       }));
       const advancesMinor = mine.filter((v) => v.kind === 'advance').reduce((s, v) => s + v.amountMinor, 0);
@@ -105,6 +117,30 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       const from = hire > periodStart ? hire : periodStart;
       const to = ended && ended < periodEnd ? ended : periodEnd;
       const workedDays = from === periodStart && to === periodEnd ? undefined : Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1);
+
+      // Subsídios recorrentes: vigência ∩ contrato no mês; por dia = dias de escala menos faltas injustificadas.
+      const allowanceEarnings: EarningInput[] = [];
+      for (const { a, t } of assigned.filter((x) => x.a.employeeId === e.id)) {
+        const aFrom = a.startDate > from ? a.startDate : from;
+        const aTo = a.endDate && a.endDate < to ? a.endDate : to;
+        if (aFrom > aTo) continue;
+        const full = aFrom === periodStart && aTo === periodEnd;
+        let days = 0;
+        if (t.calc === 'per_day') {
+          days = scheduledDays(regime, aFrom, aTo, anchor);
+          for (const ab of myAbsences) {
+            const f = ab.from > aFrom ? ab.from : aFrom;
+            const l = ab.to < aTo ? ab.to : aTo;
+            if (f <= l) days -= scheduledDays(regime, f, l, anchor, holidaySet);
+          }
+        }
+        const amount = allowanceAmount({
+          calc: t.calc as 'fixed' | 'base_pct' | 'per_day', valueMinor: a.valueMinor ?? t.valueMinor, bps: a.bps ?? t.bps, baseMinor: pay.baseMinor,
+          activeDays: full ? undefined : dayDiff(aFrom, aTo), scheduledDays: Math.max(0, days), dailyRateDivisor: pack.labour.dailyRateDivisor,
+        });
+        if (amount > 0) allowanceEarnings.push({ code: t.code, name: t.calc === 'per_day' ? `${t.label} (${days} dia(s))` : t.label, amountMinor: amount, inInss: t.inInss, inIrt: t.inIrt });
+      }
+      const otherEarnings = [...allowanceEarnings, ...variableEarnings];
 
       // Subsídio de férias: mês fixo da empresa, ou mês em que começam as primeiras férias aprovadas do ano (Dezembro como último recurso)
       const ov = overrides[e.id] ?? {};
@@ -147,7 +183,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
         pay: { base: pay.baseMinor, meal: pay.mealMinor, transport: pay.transportMinor }, lines: r.lines, net: r.netMinor,
       })).digest('hex');
       const values = {
-        overtimeHours: String(overtimeHours), absenceDays, bonusMinor: otherEarnings.reduce((s, x) => s + x.amountMinor, 0), advancesMinor,
+        overtimeHours: String(overtimeHours), absenceDays, bonusMinor: variableEarnings.reduce((s, x) => s + x.amountMinor, 0), advancesMinor,
         grossMinor: r.grossMinor, inssBaseMinor: r.inssBaseMinor, irtTaxableMinor: r.irtTaxableMinor, inssEmployeeMinor: r.inssEmployeeMinor, irtMinor: r.irtMinor, netMinor: r.netMinor,
         inssEmployerMinor: r.inssEmployerMinor, irtBracket: r.irtBracket, breakdown: r.lines, calculationHash: hash,
       };

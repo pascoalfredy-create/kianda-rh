@@ -1149,6 +1149,106 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
   });
 
+  describe('sectores, regimes e subsídios (entrega 16)', () => {
+    const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
+    const send = (method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', cookie: string, url: string, payload: object = {}) => app.inject({ method, url, headers: as(cookie), payload });
+    const nifM = String(Number(nifA) + 7).padStart(10, '0').slice(-10);
+    let mine = '';
+    let minerId = '';
+    let expatId = '';
+    let rotationId = '';
+    const type = (sector: { allowanceTypes: { id: string; code: string }[] }, code: string) => sector.allowanceTypes.find((t) => t.code === code)!.id;
+
+    beforeAll(async () => {
+      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Mineira do Cuango', nif: nifM, sector: 'mining' }, name: 'Dono M', email: `dono+${stamp}@m.ao`, password: pw } });
+      expect(r.statusCode).toBe(201);
+      mine = cookieOf(r);
+      minerId = (await send('POST', mine, '/v1/employees', { number: '1', name: 'Mineiro Rotação', jobTitle: 'Operador de máquinas', contract: { type: 'indefinite', startDate: '2026-01-05', base: 300000 } })).json().id;
+      expatId = (await send('POST', mine, '/v1/employees', { number: '2', name: 'Expat Geólogo', jobTitle: 'Geólogo', nationality: 'Sul-africana', contract: { type: 'indefinite', startDate: '2026-01-05', base: 900000 } })).json().id;
+    });
+
+    it('o registo aplica a pré-configuração do sector (rotações e subsídios da mineração)', async () => {
+      const s = (await get(mine, '/v1/sector')).json();
+      expect(s.sector).toBe('mining');
+      expect(s.schedules.map((x: { name: string }) => x.name)).toContain('Rotação 28/28 (12 h no local)');
+      expect(s.allowanceTypes.map((x: { code: string }) => x.code).sort()).toEqual(['SUBALOJ', 'SUBCAMPO', 'SUBISOL', 'SUBRISCO']);
+      expect(s.profile.schedules.every((x: { applied: boolean }) => x.applied)).toBe(true);
+      const rot = s.schedules.find((x: { presetKey: string }) => x.presetKey === 'rotation_28');
+      expect(rot.stats).toMatchObject({ avgWeeklyMinutes: 2520, problems: [] });
+      rotationId = rot.id;
+      // Aplicar outra vez não duplica nada.
+      expect((await send('POST', mine, '/v1/sector/apply')).json()).toEqual({ schedules: 0, allowances: 0 });
+      expect((await send('POST', mine, '/v1/sector/apply', { schedules: ['rotation_14'] })).json()).toEqual({ schedules: 1, allowances: 0 });
+    });
+
+    it('catálogo: códigos reservados e código fixo depois de criado', async () => {
+      expect((await send('POST', mine, '/v1/allowance-types', { code: 'BASE', label: 'Teste', calc: 'fixed', value: 1000 })).json().error).toBe('codigo_reservado');
+      const t = await send('POST', mine, '/v1/allowance-types', { code: 'SUBPO', label: 'Subsídio de poeiras', calc: 'base_pct', pct: 5 });
+      expect(t.statusCode).toBe(201);
+      expect(t.json()).toMatchObject({ bps: 500, valueMinor: null });
+      expect((await send('PATCH', mine, `/v1/allowance-types/${t.json().id}`, { code: 'SUBPO2', label: 'Poeiras', calc: 'base_pct', pct: 5 })).json().error).toBe('codigo_fixo');
+      expect((await send('POST', employeeUser, '/v1/allowance-types', { code: 'SUBXX', label: 'X', calc: 'fixed', value: 1 })).statusCode).toBe(403);
+    });
+
+    it('rotação 28/28: exige início do ciclo; o ponto prevê 28 dias de 12 h e o 29.º é descanso', async () => {
+      expect((await send('PUT', mine, `/v1/work-regime/${minerId}`, { scheduleId: rotationId })).json().error).toBe('sem_inicio_ciclo');
+      expect((await send('PUT', mine, `/v1/work-regime/${minerId}`, { scheduleId: rotationId, scheduleAnchor: '2026-08-01' })).statusCode).toBe(200);
+      const sheet = (await get(mine, `/v1/attendance/sheet?period=2026-08&employeeId=${minerId}`)).json();
+      expect(sheet.schedule).toMatchObject({ name: 'Rotação 28/28 (12 h no local)', anchor: '2026-08-01' });
+      expect(sheet.summary.expectedMinutes).toBe(28 * 720);
+      expect(sheet.summary.days.find((d: { date: string }) => d.date === '2026-08-29').kind).toBe('rest');
+      expect(sheet.summary.days.find((d: { date: string }) => d.date === '2026-08-01').kind).toBe('workday'); // sábado na mina
+    });
+
+    it('subsídios recorrentes entram no processamento: isolamento por dia de escala e risco proporcional', async () => {
+      const s = (await get(mine, '/v1/sector')).json();
+      const isol = await send('POST', mine, `/v1/work-regime/${minerId}/allowances`, { typeId: type(s, 'SUBISOL'), startDate: '2026-08-01' });
+      expect(isol.statusCode).toBe(201);
+      expect((await send('POST', mine, `/v1/work-regime/${minerId}/allowances`, { typeId: type(s, 'SUBISOL'), startDate: '2026-09-01' })).json().error).toBe('sobreposicao');
+      expect((await send('POST', mine, `/v1/work-regime/${minerId}/allowances`, { typeId: type(s, 'SUBRISCO'), startDate: '2026-08-16' })).statusCode).toBe(201);
+      const draft = (await send('POST', mine, '/v1/payroll-runs', { period: '2026-08' })).json();
+      const run = (await get(mine, `/v1/payroll-runs/${draft.run.id}`)).json();
+      const line = run.lines.find((l: { employeeId: string }) => l.employeeId === minerId);
+      const by = Object.fromEntries(line.breakdown.map((x: { code: string; amountMinor: number; name: string }) => [x.code, x]));
+      expect(by.SUBISOL).toMatchObject({ amountMinor: 28 * 500_000, name: 'Subsídio de isolamento (28 dia(s))' });
+      expect(by.SUBRISCO.amountMinor).toBe(1_600_000); // 10% de 300 000 × 16/30
+      expect(line.grossMinor).toBe(30_000_000 + 14_000_000 + 1_600_000);
+      expect(line.bonusMinor).toBe(0);
+      // Fechado o mês, a atribuição não se apaga nem termina dentro dele.
+      expect((await send('POST', mine, `/v1/payroll-runs/${draft.run.id}/close`)).statusCode).toBe(200);
+      expect((await send('DELETE', mine, `/v1/employee-allowances/${isol.json().id}`)).json().error).toBe('periodo_fechado');
+      expect((await send('PATCH', mine, `/v1/employee-allowances/${isol.json().id}`, { endDate: '2026-08-20' })).json().error).toBe('periodo_fechado');
+      expect((await send('PATCH', mine, `/v1/employee-allowances/${isol.json().id}`, { endDate: '2026-08-31' })).statusCode).toBe(200);
+      const regime = (await get(mine, `/v1/work-regime/${minerId}`)).json();
+      expect(regime.allowances.map((a: { type: { code: string }; endDate: string | null }) => [a.type.code, a.endDate])).toEqual([['SUBISOL', '2026-08-31'], ['SUBRISCO', null]]);
+    });
+
+    it('acordo de regime de horário com o regime e os subsídios do colaborador', async () => {
+      const p = (await send('POST', mine, '/v1/documents/preview', { employeeId: minerId, templateKey: 'acordo_regime_horario', inputs: { 'pedido.local_trabalho': 'Mina do Cuango, Lunda Norte' } })).json();
+      expect(p.missing).toEqual(['colaborador.bi']); // a ficha de teste não tem BI
+      expect(p.text).toContain('Rotação 28/28 (12 h no local)');
+      expect(p.text).toContain('Ciclo de 56 dias: 28 de trabalho (12h00), 28 de descanso');
+      expect(p.text).toContain('42 horas por semana');
+      expect(p.text).toMatch(/subsídio de risco de 10% do salário base/);
+      expect(p.text).not.toMatch(/isolamento/); // terminou em Agosto
+    });
+
+    it('conformidade: estrangeiro sem visto; vigilantes sem cartão quando o sector é segurança', async () => {
+      let c = (await get(mine, '/v1/compliance')).json();
+      expect(c.checks.find((x: { code: string }) => x.code === 'foreign_visa').employees.map((e: { id: string }) => e.id)).toEqual([expatId]);
+      expect(c.notes.join(' ')).toMatch(/acidentes de trabalho/);
+      expect((await send('POST', mine, `/v1/employees/${expatId}/documents`, { type: 'work_visa', number: 'VT-2026-001', expiryDate: '2027-12-31' })).statusCode).toBe(201);
+      c = (await get(mine, '/v1/compliance')).json();
+      expect(c.checks.some((x: { code: string }) => x.code === 'foreign_visa')).toBe(false);
+      expect((await send('PUT', mine, '/v1/sector', { sector: 'security' })).statusCode).toBe(200);
+      const guard = (await send('POST', mine, '/v1/employees', { number: '3', name: 'Vigilante Nocturno', jobTitle: 'Vigilante', contract: { type: 'indefinite', startDate: '2026-01-05', base: 120000 } })).json().id;
+      c = (await get(mine, '/v1/compliance')).json();
+      // Só a função de vigilante exige o cartão — o operador de máquinas e o geólogo não.
+      expect(c.checks.find((x: { code: string }) => x.code === 'doc_professional_card').employees.map((e: { id: string }) => e.id)).toEqual([guard]);
+      expect((await send('PUT', mine, '/v1/sector', { sector: 'mining' })).statusCode).toBe(200);
+    });
+  });
+
   it('logout limpa o cookie', async () => {
     const r = await app.inject({ method: 'POST', url: '/v1/auth/logout', headers: as(owner) });
     expect(r.cookies.find((c) => c.name === 'kianda_session')?.value).toBe('');

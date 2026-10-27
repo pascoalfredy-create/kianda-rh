@@ -75,6 +75,54 @@ export const users = pgTable('users', {
   createdAt: createdAt(),
 }, (t) => [uniqueIndex('users_company_email').on(t.companyId, t.email)]);
 
+/** Regimes de horário da empresa: semanal (7 dias) ou ciclo de turnos/rotação (minutos previstos por dia). */
+export const workSchedules = pgTable('work_schedules', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  name: text('name').notNull(),
+  kind: text('kind').notNull(),
+  pattern: jsonb('pattern').$type<number[]>().notNull(),
+  /** Início do ciclo por omissão (cada colaborador pode ter o seu). */
+  anchorDate: date('anchor_date'),
+  note: text('note'),
+  /** Pré-configuração de origem (sector). */
+  presetKey: text('preset_key'),
+  active: boolean('active').notNull().default(true),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex('work_schedules_company_name').on(t.companyId, t.name)]);
+
+/** Catálogo de subsídios recorrentes da empresa (turno, risco, isolamento…). */
+export const allowanceTypes = pgTable('allowance_types', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  code: text('code').notNull(),
+  label: text('label').notNull(),
+  calc: text('calc').notNull(),
+  valueMinor: bigint('value_minor', { mode: 'number' }),
+  bps: integer('bps'),
+  inInss: boolean('in_inss').notNull().default(true),
+  inIrt: boolean('in_irt').notNull().default(true),
+  note: text('note'),
+  presetKey: text('preset_key'),
+  active: boolean('active').notNull().default(true),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex('allowance_types_company_code').on(t.companyId, t.code)]);
+
+/** Subsídios atribuídos a cada colaborador, com vigência e valor próprio opcional. */
+export const employeeAllowances = pgTable('employee_allowances', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  employeeId: text('employee_id').notNull().references(() => employees.id),
+  typeId: text('type_id').notNull().references(() => allowanceTypes.id),
+  /** Vazio = valor do catálogo. */
+  valueMinor: bigint('value_minor', { mode: 'number' }),
+  bps: integer('bps'),
+  startDate: date('start_date').notNull(),
+  endDate: date('end_date'),
+  createdBy: text('created_by').notNull(),
+  createdAt: createdAt(),
+}, (t) => [index('employee_allowances_employee').on(t.employeeId), index('employee_allowances_company').on(t.companyId)]);
+
 export const departments = pgTable('departments', {
   id: id(),
   companyId: text('company_id').notNull().references(() => companies.id),
@@ -107,6 +155,9 @@ export const employees = pgTable('employees', {
   managerId: text('manager_id'),
   status: employeeStatusEnum('status').notNull().default('active'),
   vacationCarryOver: integer('vacation_carry_over').notNull().default(0),
+  /** Regime de horário (vazio = horário normal da empresa, segunda a sexta) e início do ciclo próprio (turnos/rotação por equipa). */
+  scheduleId: text('schedule_id'),
+  scheduleAnchor: date('schedule_anchor'),
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex('employees_company_number').on(t.companyId, t.number), index('employees_company_status').on(t.companyId, t.status)]);

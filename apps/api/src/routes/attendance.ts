@@ -1,8 +1,8 @@
 import {
-  ABSENCE_POLICIES, fromLuanda, labourRules, luandaDate, luandaTime, summarizeMonth, type AbsenceType,
+  ABSENCE_POLICIES, describeSchedule, fromLuanda, labourRules, luandaDate, luandaTime, scheduledMinutes, summarizeMonth, type AbsenceType,
 } from '@kianda/core';
 import {
-  absences, and, asc, attendanceEntries, attendanceMonths, auditLogs, companies, contracts, departments, desc, eq, employees, getDb, gte, inArray, isNull, lte, payrollRuns, users,
+  absences, and, asc, attendanceEntries, workSchedules, attendanceMonths, auditLogs, companies, contracts, departments, desc, eq, employees, getDb, gte, inArray, isNull, lte, payrollRuns, users,
   type Db,
 } from '@kianda/db';
 import { Hono } from 'hono';
@@ -48,14 +48,19 @@ export async function monthSheet(db: Db, companyId: string, emp: Employee, perio
     .where(and(eq(attendanceMonths.employeeId, emp.id), eq(attendanceMonths.period, period)));
   const [first] = await db.select({ d: contracts.startDate }).from(contracts).where(eq(contracts.employeeId, emp.id)).orderBy(asc(contracts.startDate)).limit(1);
   const [last] = await db.select({ t: contracts.terminatedAt, e: contracts.endDate }).from(contracts).where(eq(contracts.employeeId, emp.id)).orderBy(desc(contracts.startDate)).limit(1);
+  const [sched] = emp.scheduleId ? await db.select().from(workSchedules).where(eq(workSchedules.id, emp.scheduleId)) : [];
+  const regime = sched ? { kind: sched.kind as 'weekly' | 'cycle', pattern: sched.pattern, anchorDate: sched.anchorDate } : null;
+  const anchor = emp.scheduleAnchor ?? sched?.anchorDate ?? null;
   const summary = summarizeMonth({
+    schedule: regime ? (d) => scheduledMinutes(regime, d, anchor) : undefined,
     employedFrom: first?.d ?? null,
     employedUntil: emp.status === 'terminated' ? (last?.t ?? last?.e ?? null) : null,
     period, dailyMinutes: company?.workdayMinutes ?? 480, holidays: labourRules('AO', Number(period.slice(0, 4))).holidays,
     absences: absenceByDate, today: luandaDate(new Date()),
     punches: entries.map((e) => ({ workDate: e.workDate, clockIn: e.clockIn, clockOut: e.clockOut })),
   });
-  return { summary, entries, approval: approval ? { ...approval.m, approvedByName: approval.by } : null };
+  const schedule = sched ? { id: sched.id, name: sched.name, description: describeSchedule(regime!), anchor } : null;
+  return { summary, entries, schedule, approval: approval ? { ...approval.m, approvedByName: approval.by } : null };
 }
 
 function nextDay(d: string): string {

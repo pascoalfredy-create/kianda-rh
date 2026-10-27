@@ -1,8 +1,8 @@
 import {
-  BUILTIN_TEMPLATES, compensationAt, DOCUMENT_FIELDS, formatKz, kzInWords, longDatePt, luandaDate, packOrLatest, renderTemplate, unknownFields,
+  BUILTIN_TEMPLATES, compensationAt, describeSchedule, DOCUMENT_FIELDS, formatKz, scheduleStats, kzInWords, longDatePt, luandaDate, packOrLatest, renderTemplate, unknownFields,
 } from '@kianda/core';
 import {
-  and, asc, auditLogs, companies, compensationChanges, contracts, departments, desc, documentTemplates, employees, eq, getDb, issuedDocuments, like,
+  allowanceTypes, and, asc, auditLogs, companies, employeeAllowances, workSchedules, compensationChanges, contracts, departments, desc, documentTemplates, employees, eq, getDb, issuedDocuments, like,
   payrollLines, payrollRuns, sql, type Db,
 } from '@kianda/db';
 import { Hono } from 'hono';
@@ -46,6 +46,17 @@ async function fieldData(db: Db, companyId: string, employeeId: string) {
   const city = co?.address?.split(',').map((x) => x.trim()).filter(Boolean).at(-1) ?? 'Luanda';
   const total = pay ? pay.baseMinor + pay.mealMinor + pay.transportMinor : 0;
   const d = (v?: string | null) => (v ? longDatePt(v) : null);
+  // Regime de horário e subsídios recorrentes em vigor hoje.
+  const [sched] = e.scheduleId ? await db.select().from(workSchedules).where(eq(workSchedules.id, e.scheduleId)) : [];
+  const regime = sched ? { kind: sched.kind as 'weekly' | 'cycle', pattern: sched.pattern, anchorDate: sched.anchorDate } : null;
+  const allowances = await db.select({ a: employeeAllowances, t: allowanceTypes }).from(employeeAllowances).innerJoin(allowanceTypes, eq(allowanceTypes.id, employeeAllowances.typeId))
+    .where(eq(employeeAllowances.employeeId, e.id));
+  const activeAllowances = allowances.filter(({ a }) => a.startDate <= today && (!a.endDate || a.endDate >= today)).map(({ a, t }) => {
+    const v = a.valueMinor ?? t.valueMinor;
+    const b = a.bps ?? t.bps;
+    const how = t.calc === 'base_pct' ? `${String((b ?? 0) / 100).replace('.', ',')}% do salário base` : t.calc === 'per_day' ? `${formatKz(v ?? 0)} por dia de escala` : `${formatKz(v ?? 0)} por mês`;
+    return `${t.label.toLowerCase()} de ${how}`;
+  });
   const data: Record<string, string | null> = {
     'empresa.nome': co?.name ?? null, 'empresa.nif': co?.nif ?? null, 'empresa.morada': co?.address ?? null, 'empresa.cidade': city,
     'empresa.jornada_horas': co ? String(co.workdayMinutes / 60).replace('.', ',') : null,
@@ -62,6 +73,10 @@ async function fieldData(db: Db, companyId: string, employeeId: string) {
     'rendimentos.meses': lines.length ? lines.map((l) => `${l.period.slice(5)}/${l.period.slice(0, 4)}`).reverse().join(', ') : null,
     'pacote.periodo_experimental': String(pack.labour.probationDaysIndefinite), 'pacote.periodo_experimental_termo': String(pack.labour.probationDaysFixedTerm),
     'pacote.dias_ferias': String(pack.labour.vacationWorkingDays), 'pacote.horas_semanais': String(pack.labour.weeklyHours), 'pacote.versao': pack.version,
+    'horario.nome': sched?.name ?? null, 'horario.descricao': regime ? describeSchedule(regime) : null,
+    'horario.media_semanal': regime ? String(Math.round(scheduleStats(regime, pack.labour.weeklyHours).avgWeeklyMinutes / 6) / 10).replace('.', ',') : null,
+    'horario.inicio_ciclo': sched?.kind === 'cycle' ? d(e.scheduleAnchor ?? sched.anchorDate) : null,
+    'subsidios.lista': activeAllowances.length ? activeAllowances.join('; ') : null,
     'data.hoje': longDatePt(today),
   };
   return { data, employee: e };

@@ -57,6 +57,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Link href="/simulador">Simulador salarial</Link>
           {(me.user.role === 'owner' || me.user.role === 'hr_admin') && <Link href="/acessos">Utilizadores e acessos</Link>}
           {(me.user.role === 'owner' || me.user.role === 'hr_admin') && <Link href="/pedidos">Pedidos do portal</Link>}
+          {['owner', 'hr_admin', 'payroll', 'finance'].includes(me.user.role) && <Link href="/sector">Sector e regimes</Link>}
+          {['owner', 'hr_admin', 'payroll', 'finance'].includes(me.user.role) && <Link href="/conformidade">Conformidade</Link>}
           {(me.user.role === 'owner' || me.user.role === 'hr_admin') && <Link href="/definicoes">Definições</Link>}
           {['owner', 'finance'].includes(me.user.role) && <Link href="/licenca">Licença</Link>}
           {me.platformAdmin && <Link href="/plataforma">Plataforma Kianda</Link>}

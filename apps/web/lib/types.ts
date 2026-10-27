@@ -169,6 +169,7 @@ export interface Sheet {
   summary: MonthTotals & { days: DayRow[] };
   entries: EntryRow[];
   approval: Approval | null;
+  schedule?: { id: string; name: string; description: string; anchor: string | null } | null;
   canEdit: boolean;
   canApprove: boolean;
   canReopen: boolean;

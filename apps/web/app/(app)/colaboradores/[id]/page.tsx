@@ -9,6 +9,7 @@ import {
 import { ABSENCE_POLICIES, type AbsenceType } from '@kianda/core';
 import { AbsenceActions } from '../../ausencias/actions';
 import { CompensationForm, ContractForm, DeleteDocument, DocumentForm, PersonalForm } from './forms';
+import { AllowanceActions, AssignAllowance, RegimeForm } from './regime';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,7 @@ const TABS = [
   ['dados', 'Dados'],
   ['contrato', 'Contrato e remuneração'],
   ['documentos', 'Documentos'],
+  ['regime', 'Horário e subsídios'],
   ['ausencias', 'Ausências'],
   ['equipa', 'Hierarquia'],
   ['historico', 'Histórico'],
@@ -45,7 +47,8 @@ export default async function Ficha({ params, searchParams }: { params: Promise<
     if (e instanceof ApiError && (e.status === 404 || e.status === 403)) notFound();
     throw e;
   }
-  const tabs = TABS.filter(([k]) => k !== 'historico' || canEdit);
+  const regimeRoles = ['owner', 'hr_admin', 'payroll', 'finance'];
+  const tabs = TABS.filter(([k]) => (k !== 'historico' || canEdit) && (k !== 'regime' || regimeRoles.includes(me?.user.role ?? '')));
   const firstStart = p.contracts.at(-1)?.startDate;
 
   return (
@@ -78,6 +81,7 @@ export default async function Ficha({ params, searchParams }: { params: Promise<
       {tab === 'dados' && <DataTab p={p} canEdit={canEdit} />}
       {tab === 'contrato' && <ContractTab p={p} canEdit={canEdit} />}
       {tab === 'documentos' && <DocumentsTab p={p} canEdit={canEdit} />}
+      {tab === 'regime' && regimeRoles.includes(me?.user.role ?? '') && <RegimeTab id={p.id} canEdit={['owner', 'hr_admin', 'payroll'].includes(me?.user.role ?? '')} />}
       {tab === 'ausencias' && <AbsencesTab p={p} />}
       {tab === 'equipa' && <TeamTab p={p} />}
       {tab === 'historico' && canEdit && <HistoryTab id={p.id} />}
@@ -225,6 +229,53 @@ function DocumentsTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
         {!p.documents.length && <div className="empty">Nenhum documento registado</div>}
       </div>
       <p className="muted" style={{ marginTop: 10 }}>O carregamento das cópias digitalizadas chega com o módulo de documentos (entrega 11).</p>
+    </>
+  );
+}
+
+interface Regime {
+  scheduleId: string | null; scheduleAnchor: string | null; schedule: { name: string; kind: string; description: string; anchorDate: string | null } | null;
+  schedules: { id: string; name: string; kind: 'weekly' | 'cycle'; anchorDate: string | null; description: string }[];
+  types: { id: string; code: string; label: string; calc: 'fixed' | 'base_pct' | 'per_day'; valueMinor: number | null; bps: number | null }[];
+  allowances: { id: string; startDate: string; endDate: string | null; valueMinor: number | null; bps: number | null; type: { code: string; label: string; calc: string; valueMinor: number | null; bps: number | null } | null }[];
+}
+const allowanceValue = (calc: string | undefined, v: number | null, b: number | null) =>
+  calc === 'base_pct' ? `${String((b ?? 0) / 100).replace('.', ',')}% do base` : `${formatKz(v ?? 0)}${calc === 'per_day' ? ' por dia de escala' : ' por mês'}`;
+
+async function RegimeTab({ id, canEdit }: { id: string; canEdit: boolean }) {
+  const r = await api<Regime>(`/v1/work-regime/${id}`);
+  const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
+  return (
+    <>
+      <div className="card section">
+        <h2>Regime de horário</h2>
+        <dl className="dl">
+          <div><dt>Regime</dt><dd>{r.schedule?.name ?? 'Horário normal da empresa (segunda a sexta)'}</dd></div>
+          <div><dt>Dias e horas</dt><dd>{r.schedule?.description ?? '—'}</dd></div>
+          {r.schedule?.kind === 'cycle' && <div><dt>Início do ciclo</dt><dd>{fmtDate(r.scheduleAnchor ?? r.schedule.anchorDate)}{!r.scheduleAnchor && r.schedule.anchorDate ? ' (do regime)' : ''}</dd></div>}
+        </dl>
+        {canEdit && <RegimeForm employeeId={id} scheduleId={r.scheduleId} anchor={r.scheduleAnchor} schedules={r.schedules} />}
+      </div>
+      <div className="card section">
+        <h2>Subsídios recorrentes</h2>
+        {r.allowances.length ? (
+          <table>
+            <thead><tr><th>Subsídio</th><th>Valor</th><th>Desde</th><th>Até</th><th /></tr></thead>
+            <tbody>{r.allowances.map((a) => {
+              const ended = !!a.endDate && a.endDate < today;
+              return (
+                <tr key={a.id} style={ended ? { color: 'var(--ink3)' } : undefined}>
+                  <td><span className="tag">{a.type?.code}</span> {a.type?.label}</td>
+                  <td>{allowanceValue(a.type?.calc, a.valueMinor ?? a.type?.valueMinor ?? null, a.bps ?? a.type?.bps ?? null)}{(a.valueMinor !== null || a.bps !== null) && <span className="muted"> (valor próprio)</span>}</td>
+                  <td>{fmtDate(a.startDate)}</td><td>{a.endDate ? fmtDate(a.endDate) : 'em vigor'}</td>
+                  <td className="num">{canEdit && !ended && <AllowanceActions id={a.id} />}</td>
+                </tr>
+              );
+            })}</tbody>
+          </table>
+        ) : <div className="empty">Sem subsídios recorrentes atribuídos.</div>}
+        {canEdit && (r.types.length ? <AssignAllowance employeeId={id} types={r.types} /> : <p className="muted" style={{ padding: '0 16px 14px' }}>Crie os subsídios em <Link href="/sector" style={{ color: 'var(--brand)' }}>Sector e regimes</Link>.</p>)}
+      </div>
     </>
   );
 }

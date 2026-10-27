@@ -16,6 +16,7 @@ import { performanceRoutes } from './routes/performance.js';
 import { portalRoutes } from './routes/portal.js';
 import { billingRoutes, platformRoutes } from './routes/billing.js';
 import { accessRoutes } from './routes/access.js';
+import { sectorRoutes } from './routes/sector.js';
 import { authRoutes } from './routes/auth.js';
 import { employeeRoutes } from './routes/employees.js';
 import { payrollRoutes } from './routes/payroll.js';
@@ -70,6 +71,7 @@ export function buildApp(opts: { logger?: boolean; rateLimit?: boolean } = {}) {
   app.route('/', billingRoutes());
   app.route('/', platformRoutes());
   app.route('/', accessRoutes());
+  app.route('/', sectorRoutes());
   return app;
 }
 

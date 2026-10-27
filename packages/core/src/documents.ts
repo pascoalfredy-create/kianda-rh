@@ -35,6 +35,9 @@ export const DOCUMENT_FIELDS: { key: string; label: string }[] = [
   { key: 'rendimentos.liquido_medio_3m', label: 'Líquido médio dos últimos 3 recibos' }, { key: 'rendimentos.meses', label: 'Meses considerados' },
   { key: 'pacote.periodo_experimental', label: 'Período experimental (indeterminado)' }, { key: 'pacote.periodo_experimental_termo', label: 'Período experimental (a termo)' },
   { key: 'pacote.dias_ferias', label: 'Dias úteis de férias' }, { key: 'pacote.horas_semanais', label: 'Horas semanais' }, { key: 'pacote.versao', label: 'Versão do pacote de regras' },
+  { key: 'horario.nome', label: 'Regime de horário' }, { key: 'horario.descricao', label: 'Descrição do regime (dias e horas)' },
+  { key: 'horario.media_semanal', label: 'Média semanal do regime (horas)' }, { key: 'horario.inicio_ciclo', label: 'Início do ciclo (turnos/rotação)' },
+  { key: 'subsidios.lista', label: 'Subsídios recorrentes atribuídos' },
   { key: 'data.hoje', label: 'Data de hoje (por extenso)' },
 ];
 
@@ -178,6 +181,33 @@ Com os melhores cumprimentos,
 {{empresa.cidade}}, {{data.hoje}}
 
 ${ASSINATURAS('A Direcção / Recursos Humanos', 'Tomei conhecimento')}`,
+  },
+  {
+    key: 'acordo_regime_horario', title: 'Acordo de regime de horário (turnos/rotação)', category: 'contract',
+    description: 'Formaliza por escrito o regime de turnos ou de rotação atribuído ao trabalhador e os subsídios associados.',
+    inputs: [
+      { key: 'pedido.local_trabalho', label: 'Local de trabalho', placeholder: 'Ex.: Mina do Cafunfo, Lunda Norte', required: true },
+      { key: 'pedido.viagens', label: 'Regime das viagens base ↔ local', placeholder: 'Ex.: dias de viagem por conta da empresa, fora do tempo de trabalho', required: false },
+    ],
+    body: `# Acordo de regime de horário
+
+Entre **{{empresa.nome}}**, contribuinte n.º {{empresa.nif}}, adiante designada por Empregador, e **{{colaborador.nome}}**, portador(a) do Bilhete de Identidade n.º {{colaborador.bi}}, com a função de {{colaborador.funcao}}, adiante designado(a) por Trabalhador, é celebrado o presente acordo, complementar ao contrato de trabalho, nos termos da Lei Geral do Trabalho (Lei n.º 12/23, de 27 de Dezembro):
+
+**1.ª (Regime)** — O Trabalhador presta o seu trabalho em regime de **{{horario.nome}}** ({{horario.descricao}}){{#se horario.inicio_ciclo}}, com início do ciclo em {{horario.inicio_ciclo}}{{/se}}.
+
+**2.ª (Duração média)** — A duração média do trabalho, apurada ao longo do ciclo, é de {{horario.media_semanal}} horas por semana. O trabalho prestado para além do previsto na escala é trabalho extraordinário, remunerado nos termos legais.
+
+**3.ª (Local)** — O trabalho é prestado em {{pedido.local_trabalho}}.{{#se pedido.viagens}} As deslocações entre a base e o local de trabalho regem-se pelo seguinte: {{pedido.viagens}}.{{/se}}
+
+**4.ª (Descanso)** — Os dias de descanso previstos no ciclo substituem o descanso semanal, garantindo-se a média de descanso legalmente exigida.
+
+{{#se subsidios.lista}}**5.ª (Subsídios)** — Em razão do regime, o Trabalhador aufere: {{subsidios.lista}}, sujeitos aos descontos legais aplicáveis.
+
+{{/se}}**Disposição final** — Em tudo o que não estiver previsto neste acordo aplica-se o contrato de trabalho e a legislação laboral em vigor. Feito em dois exemplares, ficando um com cada parte.
+
+{{empresa.cidade}}, {{data.hoje}}
+
+${ASSINATURAS('O Empregador', 'O Trabalhador')}`,
   },
 ];
 
