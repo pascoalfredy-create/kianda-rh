@@ -5,7 +5,8 @@ import {
 import { and, eq, employees, platformAdmins, platformSettings, sql, subscriptions, users, type Db } from '@kianda/db';
 
 export interface PlatformSettings { extraSeatMinor: number | null; bank: { holder: string; bankName: string; iban: string } | null; supportContact: string | null }
-const DEFAULT_SETTINGS: PlatformSettings = { extraSeatMinor: null, bank: null, supportContact: null };
+/** Colaborador acima do limite do escalão: 3 000 Kz, pagamento único (alterável na consola). */
+const DEFAULT_SETTINGS: PlatformSettings = { extraSeatMinor: 300_000, bank: null, supportContact: null };
 
 export async function platformSettingsGet(db: Db): Promise<PlatformSettings> {
   const [row] = await db.select().from(platformSettings).where(eq(platformSettings.key, 'commercial'));

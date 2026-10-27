@@ -1022,7 +1022,7 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(r.json()).toMatchObject({ amountMinor: 95_999_000, discountMinor: 23_999_800, status: 'pending', number: expect.stringMatching(/^PF-/) });
       const me = (await get(owner, '/v1/auth/me')).json();
       expect(r.json().periodStart > me.licence.trialEndsAt).toBe(true); // começa depois do experimental
-      expect((await post(financeUser, '/v1/billing/requests', { kind: 'extra_seats', seats: 10 })).json().error).toBe('preco_por_definir');
+      expect((await get(financeUser, '/v1/billing')).json().extraSeatMinor).toBe(300_000); // 3 000 Kz por omissão
       expect((await post(financeUser, `/v1/billing/requests/${r.json().id}/reference`, { payerReference: 'TRF BAI 778899' })).json().payerReference).toBe('TRF BAI 778899');
     });
 
