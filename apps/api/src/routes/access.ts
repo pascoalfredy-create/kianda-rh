@@ -6,6 +6,8 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { body, rateLimit, requireCompany, requireRole, type Actor, type AppEnv, type Role } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
+import { appBaseUrl } from '../services/integrations.js';
+import { sendMail } from '../services/mail.js';
 import { completeLogin, isLocked, LOCKED, registerFailure } from './auth.js';
 
 const LINK_DAYS = 7;
@@ -38,7 +40,23 @@ async function createLink(db: Db, actor: Actor, v: { kind: 'invite' | 'reset'; u
     expiresAt: new Date(Date.now() + LINK_DAYS * 86_400_000), createdBy: actor.actorId,
   }).returning();
   await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: v.kind === 'invite' ? 'invite' : 'access_reset', entity: 'access_link', entityId: l!.id, after: { role: v.role, employeeId: v.employeeId, userId: v.userId } });
-  return { id: l!.id, token, path: `/acesso/${token}`, expiresAt: l!.expiresAt };
+  // Com email configurado e endereço conhecido, a ligação segue também por email (a partilha manual continua possível).
+  let emailed = false;
+  const base = appBaseUrl();
+  if (v.email && base) {
+    const [co] = await db.select({ name: companies.name }).from(companies).where(eq(companies.id, actor.companyId));
+    const invite = v.kind === 'invite';
+    emailed = (await sendMail(db, {
+      to: v.email, companyId: actor.companyId, kind: invite ? 'convite' : 'recuperacao',
+      subject: invite ? `Convite para o Kianda RH — ${co?.name ?? ''}` : `Kianda RH — recuperação de acesso`,
+      title: invite ? `Bem-vindo(a) ao Kianda RH${v.name ? `, ${v.name.split(' ')[0]}` : ''}` : 'Recuperação de acesso',
+      paragraphs: invite
+        ? [`${co?.name ?? 'A sua empresa'} convidou-o(a) a aceder ao Kianda RH: recibos, férias, ponto e documentos num só lugar.`, `A ligação é pessoal, só pode ser usada uma vez e é válida durante ${LINK_DAYS} dias.`]
+        : ['Os Recursos Humanos geraram uma ligação para definir uma nova palavra-passe ou PIN.', `A ligação só pode ser usada uma vez e é válida durante ${LINK_DAYS} dias. Se não pediu esta recuperação, avise os Recursos Humanos.`],
+      button: { label: invite ? 'Criar o meu acesso' : 'Definir novo acesso', url: `${base}/acesso/${token}` },
+    })) === 'sent';
+  }
+  return { id: l!.id, token, path: `/acesso/${token}`, expiresAt: l!.expiresAt, emailed };
 }
 
 const credentials = z.object({

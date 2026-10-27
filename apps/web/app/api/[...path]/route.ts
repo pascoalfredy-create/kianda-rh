@@ -8,7 +8,7 @@ async function forward(req: Request, { params }: { params: Promise<{ path: strin
   const { path } = await params;
   const url = new URL(req.url);
   const headers = new Headers();
-  for (const h of ['content-type', 'cookie', 'authorization', 'accept']) {
+  for (const h of ['content-type', 'cookie', 'authorization', 'accept', 'x-signature']) {
     const v = req.headers.get(h);
     if (v) headers.set(h, v);
   }

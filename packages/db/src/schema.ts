@@ -357,6 +357,37 @@ export const accessLinks = pgTable('access_links', {
   createdAt: createdAt(),
 }, (t) => [index('access_links_company').on(t.companyId)]);
 
+/** Notificações de pagamento recebidas do gateway (idempotência e auditoria). */
+export const gatewayEvents = pgTable('gateway_events', {
+  id: id(),
+  provider: text('provider').notNull(),
+  externalId: text('external_id').notNull(),
+  reference: text('reference'),
+  amountMinor: bigint('amount_minor', { mode: 'number' }),
+  payload: jsonb('payload').notNull(),
+  /** applied | duplicate | unmatched | amount_mismatch | not_pending */
+  outcome: text('outcome').notNull(),
+  paymentRequestId: text('payment_request_id'),
+  message: text('message'),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex('gateway_events_provider_external').on(t.provider, t.externalId)]);
+
+/** Emails enviados (ou não enviados por falta de configuração), com chave para não repetir avisos. */
+export const outboundEmails = pgTable('outbound_emails', {
+  id: id(),
+  companyId: text('company_id'),
+  toAddress: text('to_address').notNull(),
+  subject: text('subject').notNull(),
+  kind: text('kind').notNull(),
+  dedupeKey: text('dedupe_key').unique(),
+  /** sent | skipped | failed */
+  status: text('status').notNull(),
+  provider: text('provider'),
+  providerId: text('provider_id'),
+  error: text('error'),
+  createdAt: createdAt(),
+}, (t) => [index('outbound_emails_created').on(t.createdAt)]);
+
 /** Licença da empresa (uma por empresa). */
 export const subscriptions = pgTable('subscriptions', {
   companyId: text('company_id').primaryKey().references(() => companies.id),
@@ -396,6 +427,19 @@ export const paymentRequests = pgTable('payment_requests', {
   paidAt: timestamp('paid_at', { withTimezone: true }),
   confirmedBy: text('confirmed_by'),
   invoiceRef: text('invoice_ref'),
+  /** Multicaixa (gateway): entidade e referência a pagar, validade e último erro do gateway. */
+  gateway: text('gateway'),
+  gatewayEntity: text('gateway_entity'),
+  gatewayReference: text('gateway_reference'),
+  gatewayExpiresAt: date('gateway_expires_at'),
+  gatewayError: text('gateway_error'),
+  /** Como foi confirmado: manual | gateway. */
+  confirmedVia: text('confirmed_via'),
+  /** Factura certificada emitida no software de facturação (ex.: Vendus): id externo, data e erro. */
+  invoiceProvider: text('invoice_provider'),
+  invoiceExternalId: text('invoice_external_id'),
+  invoiceIssuedAt: timestamp('invoice_issued_at', { withTimezone: true }),
+  invoiceError: text('invoice_error'),
   createdBy: text('created_by').notNull(),
   createdAt: createdAt(),
 }, (t) => [index('payment_requests_company').on(t.companyId), index('payment_requests_status').on(t.status)]);

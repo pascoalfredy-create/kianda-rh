@@ -110,11 +110,20 @@ jobs:
         working-directory: apps/api
         run: |
           ../../scripts/ci-run.sh "wrangler deploy (API)" npx wrangler deploy --config wrangler.deploy.json
-          printf '{"API_JWT_SECRET":"%s"}' "$API_JWT_SECRET" > /tmp/secrets.json
+          # Só seguem as integrações configuradas (secret/variável vazia = integração desligada).
+          node -e 'const k=["API_JWT_SECRET","PROXYPAY_API_KEY","PROXYPAY_ENV","PROXYPAY_ENTITY","RESEND_API_KEY","MAIL_FROM","VENDUS_API_KEY","VENDUS_MODE","APP_BASE_URL"];const o={};for(const n of k){const v=(process.env[n]||"").trim();if(v)o[n]=v}require("fs").writeFileSync("/tmp/secrets.json",JSON.stringify(o));console.log("Configuração do Worker:",Object.keys(o).join(", "))'
           ../../scripts/ci-run.sh "wrangler secret bulk (API)" npx wrangler secret bulk /tmp/secrets.json --config wrangler.deploy.json
           rm -f /tmp/secrets.json
         env:
           API_JWT_SECRET: ${{ secrets.KIANDA_JWT_SECRET }}
+          PROXYPAY_API_KEY: ${{ secrets.KIANDA_PROXYPAY_API_KEY }}
+          PROXYPAY_ENV: ${{ vars.KIANDA_PROXYPAY_ENV }}
+          PROXYPAY_ENTITY: ${{ vars.KIANDA_PROXYPAY_ENTITY }}
+          RESEND_API_KEY: ${{ secrets.KIANDA_RESEND_API_KEY }}
+          MAIL_FROM: ${{ vars.KIANDA_MAIL_FROM }}
+          VENDUS_API_KEY: ${{ secrets.KIANDA_VENDUS_API_KEY }}
+          VENDUS_MODE: ${{ vars.KIANDA_VENDUS_MODE }}
+          APP_BASE_URL: ${{ vars.KIANDA_HOSTNAME && format('https://{0}', vars.KIANDA_HOSTNAME) || '' }}
 
       - name: Publicar web (kianda-web)
         working-directory: apps/web

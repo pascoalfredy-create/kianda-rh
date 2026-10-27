@@ -11,6 +11,9 @@
   // Hyperdrive → PostgreSQL (Neon). O id real é injectado no deploy (secret KIANDA_HYPERDRIVE_ID).
   "hyperdrive": [
     { "binding": "HYPERDRIVE", "id": "KIANDA_HYPERDRIVE_ID", "localConnectionString": "postgresql://kianda:kianda@localhost:5432/kianda" }
-  ]
-  // Secret (definido pelo deploy): API_JWT_SECRET
+  ],
+  // Tarefas agendadas: sincronização do Multicaixa (30 min) e avisos de licença (08:00 em Luanda).
+  "triggers": { "crons": ["*/30 * * * *", "0 7 * * *"] }
+  // Secrets (definidos pelo deploy): API_JWT_SECRET e, quando existirem, PROXYPAY_API_KEY, RESEND_API_KEY, VENDUS_API_KEY;
+  // variáveis: PROXYPAY_ENV, PROXYPAY_ENTITY, MAIL_FROM, VENDUS_MODE, APP_BASE_URL.
 }

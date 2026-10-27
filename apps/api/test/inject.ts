@@ -5,6 +5,7 @@ export interface InjectResponse {
   body: string;
   json(): any;
   cookies: { name: string; value: string }[];
+  headers: Record<string, string>;
 }
 
 /** Adaptador de testes: mesma forma que o inject do Fastify, sobre app.request do Hono (sem rede). */
@@ -14,8 +15,9 @@ export function testClient(app: App) {
       const headers: Record<string, string> = { ...(o.headers ?? {}) };
       let body: string | undefined;
       if (o.payload !== undefined) {
-        body = JSON.stringify(o.payload);
-        headers['content-type'] = 'application/json';
+        // Texto passa tal como está (ex.: corpo assinado de um webhook); objectos vão em JSON.
+        body = typeof o.payload === 'string' ? o.payload : JSON.stringify(o.payload);
+        headers['content-type'] ??= 'application/json';
       }
       const res = await app.request(o.url, { method: o.method, headers, body });
       const text = await res.text();
@@ -24,7 +26,7 @@ export function testClient(app: App) {
         const i = pair!.indexOf('=');
         return { name: pair!.slice(0, i), value: pair!.slice(i + 1) };
       });
-      return { statusCode: res.status, body: text, json: () => JSON.parse(text), cookies };
+      return { statusCode: res.status, body: text, json: () => JSON.parse(text), cookies, headers: Object.fromEntries(res.headers) };
     },
     async close() {},
   };

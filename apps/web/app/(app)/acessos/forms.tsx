@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { send, useMutation } from '@/lib/client';
 
-interface Link { path: string; expiresAt: string }
+interface Link { path: string; expiresAt: string; emailed?: boolean }
 
 /** Painel de partilha: copiar, WhatsApp, SMS, email. */
 function SharePanel({ link, name, phone, email, kind, company }: { link: Link; name: string; phone?: string | null; email?: string | null; kind: 'invite' | 'reset'; company: string }) {
@@ -16,6 +16,7 @@ function SharePanel({ link, name, phone, email, kind, company }: { link: Link; n
   const [copied, setCopied] = useState(false);
   return (
     <div className="warn" style={{ margin: '8px 0', display: 'grid', gap: 8 }}>
+      {link.emailed && <div style={{ fontWeight: 600, color: 'var(--brand)' }}>✓ Enviada por email para {email}. Também pode partilhar por outro meio:</div>}
       <div style={{ wordBreak: 'break-all', fontSize: 12.5 }}>{url}</div>
       <div className="actions" style={{ justifyContent: 'flex-start' }}>
         <button className="btn sm" onClick={async () => { await navigator.clipboard.writeText(text); setCopied(true); }}>{copied ? 'Copiado ✓' : 'Copiar mensagem'}</button>

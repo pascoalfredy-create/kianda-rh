@@ -92,3 +92,21 @@ npx wrangler dev -c apps/web/wrangler.jsonc -c apps/api/wrangler.jsonc   # web +
 ## Administradores da plataforma (consola Kianda)
 
 Em **Settings → Secrets and variables → Actions → Variables**, crie `KIANDA_PLATFORM_ADMINS` com os emails (separados por vírgula) de quem administra a plataforma. Cada publicação sincroniza a lista. O email tem de corresponder a um utilizador que já exista (por exemplo, o proprietário de uma empresa criada em `/registo`); ao entrar, aparece o menu **Plataforma Kianda**.
+
+## Integrações (entrega 17) — activar quando houver contrato
+
+Cada integração liga-se sozinha quando o secret existir no GitHub (o deploy seguinte envia-o para o Worker da API). Sem secret, fica desligada e o Kianda usa o fluxo manual. O estado aparece na consola **Plataforma Kianda → Integrações**.
+
+| Integração | Secret (GitHub → Secrets) | Variáveis (GitHub → Variables) |
+| --- | --- | --- |
+| Multicaixa — ProxyPay | `KIANDA_PROXYPAY_API_KEY` | `KIANDA_PROXYPAY_ENV` = `sandbox` ou `production`; `KIANDA_PROXYPAY_ENTITY` = n.º da entidade (5 dígitos) |
+| Email — Resend | `KIANDA_RESEND_API_KEY` | `KIANDA_MAIL_FROM` = `Kianda RH <noreply@seudominio>` (domínio verificado no Resend) |
+| Facturação AGT — Cegid Vendus | `KIANDA_VENDUS_API_KEY` | `KIANDA_VENDUS_MODE` = `tests` (por omissão) ou `normal` |
+
+**ProxyPay (Multicaixa):** contrato com a TimeBoxed e um banco angolano; a ProxyPay fornece a chave da API (sandbox e produção) e a entidade. Peça para activarem o webhook com o endereço `https://<KIANDA_HOSTNAME>/api/v1/public/gateway/proxypay` (assinatura `X-Signature`, HMAC-SHA256 com a chave). Mesmo sem webhook, o Worker lê os pagamentos a cada 30 minutos. Em sandbox, a consola tem o botão "Simular pagamento".
+
+**Resend:** criar conta, verificar o domínio de envio (registos DNS na Cloudflare) e gerar a chave. Os emails também ficam registados na consola (enviados, não enviados, falhados).
+
+**Cegid Vendus:** a factura tem de ser emitida em software certificado pela AGT (Decreto Presidencial n.º 71/25 — facturação electrónica). Conta Vendus Angola → APPS → API → chave. Comece em `tests`; na consola defina o imposto (taxa normal ou isenção com código e fundamento — confirmar com o contabilista), o id do meio de pagamento e, se quiser, a emissão automática. Pagamentos sem factura aparecem na consola com "Emitir factura".
+
+**Tarefas agendadas do Worker da API:** `*/30 * * * *` (sincronização Multicaixa) e `0 7 * * *` (avisos de licença às 08:00 de Luanda).

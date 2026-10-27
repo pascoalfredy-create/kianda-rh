@@ -54,3 +54,13 @@ export function ReferenceForm({ id }: { id: string }) {
     </form>
   );
 }
+
+export function NewReference({ id }: { id: string }) {
+  const { busy, error, run } = useMutation();
+  return (
+    <>
+      <button className="btn sm" disabled={busy} onClick={() => run(`/v1/billing/requests/${id}/multicaixa`, 'POST', {})}>Gerar referência Multicaixa</button>
+      {error && <span className="err">{error}</span>}
+    </>
+  );
+}

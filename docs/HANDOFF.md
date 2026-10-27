@@ -1,7 +1,7 @@
 # Kianda RH — documento de passagem (handoff)
 
 > Para um novo agente/programador continuar o trabalho. Leia isto primeiro, depois `docs/ROADMAP.md` e `docs/DEPLOY.md`.
-> Última actualização: 27/10/2026 (entrega 16 publicada).
+> Última actualização: 27/10/2026 (entrega 17 publicada).
 
 ## 1. O que é
 
@@ -24,7 +24,7 @@ Plataforma SaaS de RH para empresas angolanas (estilo Factorial), com processame
 | Pasta | O quê |
 | --- | --- |
 | `packages/core` | Motor puro TypeScript (sem I/O): salários, IRT, INSS, férias, assiduidade, PGC, balancete, conciliação, despesas, cessação, documentos, talento, licenças, TOTP, sectores (`sectors.ts`: regimes, subsídios, conformidade). **Valores monetários em cêntimos inteiros** (`kz(1000)` = 100000). Regras legais por ano em `src/packs/ao-2026.ts` (com lista `toValidate`). |
-| `packages/db` | Drizzle 0.45 + pg. `src/schema.ts`, migrações SQL em `migrations/` (0000–0017), `scripts/seed.ts` (empresa demo), `scripts/migrate.ts`, `scripts/platform-admins.ts`. |
+| `packages/db` | Drizzle 0.45 + pg. `src/schema.ts`, migrações SQL em `migrations/` (0000–0018), `scripts/seed.ts` (empresa demo), `scripts/migrate.ts`, `scripts/platform-admins.ts`. |
 | `apps/api` | Hono 4 (corre em Node local e em Cloudflare Workers). Rotas em `src/routes/*.ts`, serviços em `src/services/`. Zod 4 para validação. Testes de API em `test/api.test.ts` (Vitest, base Postgres real). |
 | `apps/web` | Next 16 + React 19 (App Router) via OpenNext Cloudflare. Páginas autenticadas em `app/(app)/`; públicas: `login`, `registo`, `termos`, `acesso/[token]`, `carreiras/[company]`, `verificar/[code]`. |
 
@@ -49,7 +49,8 @@ Versões: TypeScript 5.9.3, Vitest 4.0.5, Hono 4.13, Zod 4.6, Next 16.4, React 1
 - **Base de dados:** Neon Postgres (Frankfurt) via **Hyperdrive** (id `139b36ef3c0e47f3b348311b60693147`, cache desligada).
 - **CI** (`.github/workflows/ci.yml`): job de testes (Postgres de serviço) → em `main` com `vars.KIANDA_DEPLOY == 'true'`: valida secrets → migra → administradores da plataforma → seed (se `KIANDA_SEED_DEMO == 'true'`) → `scripts/cf-prepare.mjs` → deploy API + `wrangler secret bulk` → build/deploy web → verifica `/api/health` e login das 3 contas demo.
 - **Secrets GitHub:** `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `KIANDA_HYPERDRIVE_ID`, `KIANDA_DATABASE_URL`, `KIANDA_DATABASE_CA_CERT` (opcional), `KIANDA_JWT_SECRET`, `KIANDA_SEED_OWNER_PASSWORD`.
-- **Variáveis GitHub:** `KIANDA_DEPLOY=true`, `KIANDA_SEED_DEMO=true` (pôr `false` antes de clientes reais), `KIANDA_HOSTNAME`, `KIANDA_PLATFORM_ADMINS=pascoalfredy@gmail.com`.
+- **Variáveis GitHub:** `KIANDA_DEPLOY=true`, `KIANDA_SEED_DEMO=true` (pôr `false` antes de clientes reais), `KIANDA_HOSTNAME`, `KIANDA_PLATFORM_ADMINS=pascoalfredy@gmail.com`; integrações (opcionais): `KIANDA_PROXYPAY_ENV`, `KIANDA_PROXYPAY_ENTITY`, `KIANDA_MAIL_FROM`, `KIANDA_VENDUS_MODE`.
+- **Secrets opcionais (integrações):** `KIANDA_PROXYPAY_API_KEY`, `KIANDA_RESEND_API_KEY`, `KIANDA_VENDUS_API_KEY`.
 - Nesta sessão de agente os **logs do Actions e a área de secrets estavam bloqueados (403)**; os erros do CI lêem-se pelas anotações (`scripts/ci-run.sh` emite `::error::`) com `gh api repos/…/check-runs/<id>/annotations`. `gh run list` funciona.
 
 ## 6. Contas
@@ -66,7 +67,7 @@ export DATABASE_URL=postgresql://kianda:kianda@127.0.0.1:5433/kianda
 export API_JWT_SECRET="segredo-de-desenvolvimento-local-com-mais-de-32"
 pnpm db:migrate && SEED_OWNER_PASSWORD=Kianda2026demo pnpm db:seed
 pnpm --filter @kianda/core build && pnpm --filter @kianda/db build   # a API consome os dist
-pnpm -r typecheck && pnpm -r test                                    # core 101 testes, API 93 testes
+pnpm -r typecheck && pnpm -r test                                    # core 101 testes, API 98 testes
 (cd apps/api && npx tsx src/server.ts)                               # :4000
 (cd apps/web && npx next build && API_URL=http://localhost:4000 npx next start -p 3000)
 ```
@@ -78,19 +79,19 @@ pnpm -r typecheck && pnpm -r test                                    # core 101 
 
 ## 8. Estado — o que está feito
 
-Entregas **1–13** (produto) e **14–16** (SaaS), todas publicadas. Resumo em `docs/ROADMAP.md`. Destaques:
+Entregas **1–13** (produto) e **14–17** (SaaS), todas publicadas. Resumo em `docs/ROADMAP.md`. Destaques:
 
 - Processamento: IRT Grupo A 2026, INSS 3%+8%, subsídios (férias/Natal, proporcionais), horas extra (50%/75%, blocos de 15 min), faltas, variáveis, mês incompleto proporcional, recibos com hash.
 - Contas PGC sugeridas (parametrizáveis): 72.2.1–72.2.4, 72.5.1, 34.3 (IRT), 34.9.1 (INSS), 36.1.2, 36.3, 36.9, 43.1, 75.2 (despesas), 72.8 (ajudas de custo e compensações por cessação), 63 (compensação por falta de aviso do trabalhador).
 - Licenças: escalões 0–100 = 99 999 Kz/mês; 101–250 = 200 000; 251–500 = 380 000; 501–1500 = 550 000; >1500 à medida. Semestral −10%, anual −20%. **Colaborador extra: 3 000 Kz, pagamento único.** Experimental **7 dias**. Tolerância 7 dias → modo de consulta.
 - Acessos: convites por ligação (WhatsApp/SMS/email), PIN com código da empresa, 2FA TOTP, bloqueio após 5 falhas.
 - Sectores (entrega 16): tabelas `work_schedules`, `allowance_types`, `employee_allowances`; `employees.scheduleId/scheduleAnchor`. Rotas em `apps/api/src/routes/sector.ts` (`/v1/sector`, `/v1/schedules`, `/v1/allowance-types`, `/v1/work-regime/:employeeId`, `/v1/employee-allowances/:id`, `/v1/compliance`). O processamento (`services/payroll.ts`) junta os subsídios como `otherEarnings` com o código do catálogo (vão para a conta de subsídios no fecho). Páginas `/sector`, `/conformidade` e separador "Horário e subsídios" na ficha.
+- Integrações (entrega 17): `apps/api/src/services/integrations.ts` (clientes ProxyPay, Resend, Vendus — só activos com o secret), `services/billing.ts` (referência, confirmação, factura, recibo, `applyGatewayPayment` idempotente por `gateway_events`, `syncGatewayPayments`), `services/mail.ts` (modelo HTML, registo em `outbound_emails`, `dedupeKey`), `services/jobs.ts` (avisos de licença). Webhook público `POST /v1/public/gateway/proxypay` (passa pelo proxy `/api` da web, que reencaminha `x-signature`). Worker com `scheduled()` e crons em `apps/api/wrangler.jsonc`. Nos testes, os fornecedores são simulados substituindo `globalThis.fetch` (ver bloco da entrega 17); para testar no browser use `PROXYPAY_BASE_URL`/`RESEND_BASE_URL`/`VENDUS_BASE_URL` a apontar para um servidor falso. Configuração em `docs/DEPLOY.md` (secção Integrações).
 
 ## 9. Próximos passos (por ordem)
 
-1. **Entrega 17 — Pagamentos automáticos:** referência Multicaixa via gateway (ProxyPay/AppyPay/EMIS) com activação automática; integração com software de facturação certificado AGT (hoje o Kianda só emite pró-formas; o n.º da factura certificada regista-se na consola). Envio de email transaccional (convites/recuperação por email automático — hoje a ligação é partilhada manualmente).
-2. **Entrega 18 — Blindagem:** Row-Level Security no Postgres, cópias e exportação por empresa, eliminação a pedido (Lei n.º 22/11), domínio próprio da marca.
-3. **Pendentes do dono antes de clientes reais:** rodar `KIANDA_JWT_SECRET` (gerado fora do chat); `KIANDA_SEED_DEMO=false`; regra de rate limiting no WAF da Cloudflare para `/api/v1/auth/login*`; preencher dados bancários/suporte na consola; validação jurídica da lista `toValidate` (em especial regras numéricas da cessação — Lei n.º 12/23 arts. 286.º, 289.º, 293.º, 295.º, 305.º, 307.º–311.º — e textos dos contratos); formatos oficiais do banco/AGT/INSS (hoje CSV genérico); armazenamento de ficheiros (R2) para CVs e recibos de despesas (hoje ligações).
+1. **Entrega 18 — Blindagem:** Row-Level Security no Postgres, cópias e exportação por empresa, eliminação a pedido (Lei n.º 22/11), domínio próprio da marca.
+2. **Pendentes do dono antes de clientes reais:** contratar ProxyPay, Resend e Cegid Vendus e definir os secrets (ver DEPLOY.md); rodar `KIANDA_JWT_SECRET` (gerado fora do chat); `KIANDA_SEED_DEMO=false`; regra de rate limiting no WAF da Cloudflare para `/api/v1/auth/login*`; preencher dados bancários/suporte na consola; validação jurídica da lista `toValidate` (em especial regras numéricas da cessação — Lei n.º 12/23 arts. 286.º, 289.º, 293.º, 295.º, 305.º, 307.º–311.º — e textos dos contratos); formatos oficiais do banco/AGT/INSS (hoje CSV genérico); armazenamento de ficheiros (R2) para CVs e recibos de despesas (hoje ligações).
 
 ## 10. Armadilhas já resolvidas (não repetir)
 

@@ -1249,6 +1249,139 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
   });
 
+  describe('pagamentos Multicaixa, facturação e emails (entrega 17)', () => {
+    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const put = (cookie: string, url: string, payload: object) => app.inject({ method: 'PUT', url, headers: as(cookie), payload });
+    const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
+    const KEY = 'chave-de-teste-proxypay';
+    const ENV = { PROXYPAY_API_KEY: KEY, PROXYPAY_ENTITY: '01234', RESEND_API_KEY: 're_teste', MAIL_FROM: 'Kianda RH <noreply@kianda.test>', VENDUS_API_KEY: 'vendus-teste', APP_BASE_URL: 'https://kianda.test' };
+    const realFetch = globalThis.fetch;
+    // Base de testes persistente: referências e ids de pagamento únicos por execução.
+    let nextRef = 900_000_000 + (Number(stamp) % 90_000) * 1000;
+    const pid = (n: number) => Number(stamp.slice(-7)) * 10 + n;
+    const references = new Map<string, { amount: string; end_datetime: string }>();
+    const deleted: string[] = [];
+    const acked: string[] = [];
+    let queue: object[] = [];
+    const emails: { to: string[]; subject: string; text: string }[] = [];
+    const invoices: Record<string, unknown>[] = [];
+    const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { 'content-type': 'application/json' } });
+    const sign = async (body: string) => {
+      const { hmacHex } = await import('../src/services/integrations.js');
+      return hmacHex(KEY, body);
+    };
+    const webhook = async (payload: object, signature?: string) => {
+      const raw = JSON.stringify(payload);
+      return app.inject({ method: 'POST', url: '/v1/public/gateway/proxypay', headers: { 'content-type': 'application/json', 'x-signature': signature ?? await sign(raw) }, payload: raw });
+    };
+
+    beforeAll(() => {
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? 'GET';
+        const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+        if (url.includes('proxypay.co.ao')) {
+          if ((init?.headers as Record<string, string>)?.Authorization !== `Token ${KEY}`) return json({ error: 'auth' }, 401);
+          const path = new URL(url).pathname;
+          if (method === 'POST' && path === '/reference_ids') return json(++nextRef);
+          if (method === 'PUT' && path.startsWith('/references/')) { references.set(path.split('/')[2]!, body); return new Response(null, { status: 204 }); }
+          if (method === 'DELETE' && path.startsWith('/references/')) { deleted.push(path.split('/')[2]!); return new Response(null, { status: 204 }); }
+          if (method === 'GET' && path === '/payments') { const q = queue; queue = []; return json(q); }
+          if (method === 'DELETE' && path.startsWith('/payments/')) { acked.push(path.split('/')[2]!); return new Response(null, { status: 204 }); }
+        }
+        if (url === 'https://api.resend.com/emails') { emails.push(body); return json({ id: `em_${emails.length}` }); }
+        if (url.startsWith('https://www.vendus.co.ao/ws/v1.1/documents')) {
+          if (url.endsWith('.pdf')) return new Response('%PDF-1.4 teste', { headers: { 'content-type': 'application/pdf' } });
+          invoices.push(body);
+          return json({ id: 5000 + invoices.length, number: `FR KRH2026/${invoices.length}` }, 201);
+        }
+        return realFetch(input, init);
+      }) as typeof fetch;
+    });
+    afterAll(() => { globalThis.fetch = realFetch; for (const k of Object.keys(ENV)) delete process.env[k]; });
+
+    it('sem integrações: o pedido fica com transferência e o email é registado como não enviado', async () => {
+      const r = (await post(financeUser, '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'monthly' })).json();
+      expect(r.gatewayReference).toBeNull();
+      expect((await get(financeUser, '/v1/billing')).json()).toMatchObject({ multicaixa: false, invoicesOnline: false });
+      const integ = (await get(owner, '/v1/platform/integrations')).json();
+      expect(integ.status).toMatchObject({ proxypay: { enabled: false }, email: { enabled: false }, vendus: { enabled: false } });
+      expect(integ.emails.find((e: { kind: string }) => e.kind === 'pedido_pagamento').status).toBe('skipped');
+    });
+
+    it('com ProxyPay: referência Multicaixa no pedido e instruções por email; o pedido substituído deixa de poder ser pago', async () => {
+      Object.assign(process.env, ENV);
+      const before = (await get(financeUser, '/v1/billing')).json().requests.find((x: { status: string; kind: string }) => x.status === 'pending' && x.kind === 'subscription');
+      const r = (await post(financeUser, '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'semiannual' })).json();
+      expect(r).toMatchObject({ gateway: 'proxypay', gatewayEntity: '01234', gatewayReference: String(nextRef) });
+      expect(references.get(r.gatewayReference)!.amount).toBe((r.amountMinor / 100).toFixed(2));
+      const mail = emails.find((e) => e.subject.includes(r.number))!;
+      // Vai para o proprietário e para Finanças (um email por pessoa).
+      expect(emails.filter((e) => e.subject.includes(r.number)).flatMap((e) => e.to)).toContain(`dona+${stamp}@a.ao`);
+      expect(mail.text).toContain('Entidade: 01234');
+      expect(mail.text).toContain('Referência:');
+      // O pedido anterior (sem referência) não tinha nada a anular; uma nova referência anula a anterior.
+      expect(before.gatewayReference).toBeNull();
+      const again = (await post(financeUser, `/v1/billing/requests/${r.id}/multicaixa`)).json();
+      expect(again.gatewayReference).not.toBe(r.gatewayReference);
+      expect(deleted).toContain(r.gatewayReference);
+    });
+
+    it('webhook: assinatura obrigatória, montante errado fica para revisão, pagamento certo activa a licença uma única vez', async () => {
+      const r = (await get(financeUser, '/v1/billing')).json().requests.find((x: { status: string; kind: string }) => x.status === 'pending' && x.kind === 'subscription');
+      expect((await webhook({ id: pid(0), reference_id: Number(r.gatewayReference), amount: '1.00' }, 'f'.repeat(64))).statusCode).toBe(401);
+      expect((await webhook({ id: pid(1), reference_id: Number(r.gatewayReference), amount: '1000.00', datetime: '2026-10-27T10:00:00' })).json().outcome).toBe('amount_mismatch');
+      expect((await get(financeUser, '/v1/billing')).json().requests.find((x: { id: string }) => x.id === r.id).status).toBe('pending');
+      const ok = await webhook({ id: pid(2), reference_id: Number(r.gatewayReference), amount: (r.amountMinor / 100).toFixed(2), datetime: '2026-10-27T10:05:00' });
+      expect(ok.json().outcome).toBe('applied');
+      expect(acked).toContain(String(pid(2)));
+      expect((await webhook({ id: pid(2), reference_id: Number(r.gatewayReference), amount: (r.amountMinor / 100).toFixed(2) })).json().outcome).toBe('duplicate');
+      const b = (await get(financeUser, '/v1/billing')).json();
+      const paid = b.requests.find((x: { id: string }) => x.id === r.id);
+      expect(paid).toMatchObject({ status: 'paid', confirmedVia: 'gateway', invoiceRef: null });
+      expect(b.paidUntil).toBe(r.periodEnd);
+      expect(emails.some((e) => e.subject === `Kianda RH — pagamento ${r.number} recebido`)).toBe(true);
+      const events = (await get(owner, '/v1/platform/integrations')).json().events;
+      expect(events.map((e: { outcome: string }) => e.outcome).slice(0, 2).sort()).toEqual(['amount_mismatch', 'applied']);
+    });
+
+    it('factura certificada no Vendus: emissão pela consola, PDF pela página Licença; automática quando activada', async () => {
+      const paid = (await get(financeUser, '/v1/billing')).json().requests.find((x: { confirmedVia: string | null }) => x.confirmedVia === 'gateway');
+      expect((await put(owner, '/v1/platform/invoicing', { autoIssue: true, taxId: 'ISE', exemptionCode: null, exemptionLaw: null, paymentMethodId: null, registerId: null })).statusCode).toBe(400);
+      expect((await put(owner, '/v1/platform/invoicing', { autoIssue: true, taxId: 'NOR', exemptionCode: null, exemptionLaw: null, paymentMethodId: 3, registerId: null })).statusCode).toBe(200);
+      const inv = (await post(owner, `/v1/platform/payment-requests/${paid.id}/invoice`)).json();
+      expect(inv).toMatchObject({ invoiceRef: 'FR KRH2026/1', invoiceProvider: 'vendus', invoiceError: null });
+      expect(invoices[0]).toMatchObject({ type: 'FR', mode: 'tests', tx_id: paid.number, client: { fiscal_id: nifA, country: 'AO' }, payments: [{ id: 3 }] });
+      expect((invoices[0] as { items: { gross_price: string; tax_id: string }[] }).items[0]).toMatchObject({ gross_price: (paid.amountMinor / 100).toFixed(2), tax_id: 'NOR' });
+      const pdf = await get(financeUser, `/v1/billing/requests/${paid.id}/invoice`);
+      expect(pdf.headers['content-type']).toBe('application/pdf');
+      // Sincronização (rede de segurança do webhook): colaboradores extra pagos → aplicado, factura automática, pagamento reconhecido.
+      const extra = (await post(financeUser, '/v1/billing/requests', { kind: 'extra_seats', seats: 2 })).json();
+      queue = [{ id: pid(3), reference_id: Number(extra.gatewayReference), amount: (extra.amountMinor / 100).toFixed(2) }];
+      expect((await post(owner, '/v1/platform/gateway/sync')).json()).toMatchObject({ enabled: true, processed: 1, applied: 1, issues: 0 });
+      expect(acked).toContain(String(pid(3)));
+      const after = (await get(financeUser, '/v1/billing')).json().requests.find((x: { id: string }) => x.id === extra.id);
+      expect(after).toMatchObject({ status: 'paid', invoiceRef: 'FR KRH2026/2' });
+    });
+
+    it('convite por email com a ligação pessoal; avisos de licença por data', async () => {
+      const e = (await post(owner, '/v1/employees', { number: `E${stamp.slice(-5)}`, name: 'Convidado Por Email', jobTitle: 'Técnico', email: `convidado+${stamp}@a.ao`, contract: { type: 'indefinite', startDate: '2026-01-05', base: 150000 } })).json();
+      const invRes = await post(owner, '/v1/access/invites', { employeeId: e.id });
+      expect(invRes.statusCode).toBe(201);
+      const inv = invRes.json();
+      expect(inv.emailed).toBe(true);
+      const m = emails.find((x) => x.to[0] === `convidado+${stamp}@a.ao`)!;
+      expect(m.text).toContain(`https://kianda.test${inv.path}`);
+      const { reminderFor } = await import('../src/services/jobs.js');
+      expect(reminderFor({ status: 'trial', trialEndsAt: '2026-11-03', paidUntil: null }, '2026-11-01')?.kind).toBe('experimental_2d');
+      expect(reminderFor({ status: 'trial', trialEndsAt: '2026-11-03', paidUntil: null }, '2026-11-04')?.kind).toBe('experimental_fim');
+      expect(reminderFor({ status: 'active', trialEndsAt: '2026-10-01', paidUntil: '2026-12-31' }, '2026-12-24')?.kind).toBe('renovacao_7d');
+      expect(reminderFor({ status: 'active', trialEndsAt: null, paidUntil: '2026-12-31' }, '2027-01-08')?.kind).toBe('modo_consulta');
+      expect(reminderFor({ status: 'active', trialEndsAt: null, paidUntil: '2099-12-31' }, '2026-12-24')).toBeNull();
+      expect((await post(owner, '/v1/platform/jobs/reminders')).json().checked).toBeGreaterThan(0);
+    });
+  });
+
   it('logout limpa o cookie', async () => {
     const r = await app.inject({ method: 'POST', url: '/v1/auth/logout', headers: as(owner) });
     expect(r.cookies.find((c) => c.name === 'kianda_session')?.value).toBe('');

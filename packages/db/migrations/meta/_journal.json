@@ -127,6 +127,13 @@
       "when": 1793073402117,
       "tag": "0017_sectores",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793094081573,
+      "tag": "0018_integracoes",
+      "breakpoints": true
     }
   ]
 }

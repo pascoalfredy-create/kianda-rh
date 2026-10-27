@@ -1,5 +1,5 @@
 import { isValidCompanyNif, luandaDate, SECTORS, tierFor, TRIAL_DAYS, verifyTotp } from '@kianda/core';
-import { auditLogs, companies, employees, getDb, hashPassword, passwordProblems, subscriptions, users, verifyPassword, type Db } from '@kianda/db';
+import { auditLogs, companies, employees, getDb, platformAdmins, hashPassword, passwordProblems, subscriptions, users, verifyPassword, type Db } from '@kianda/db';
 import { and, eq } from '@kianda/db';
 import { Hono } from 'hono';
 import { deleteCookie, setCookie } from 'hono/cookie';
@@ -8,6 +8,8 @@ import { z } from 'zod';
 import { isPlatformAdmin, licenceOf } from '../services/licence.js';
 import { body, jwtSecret, rateLimit, requireCompany, requireRole, SESSION_COOKIE, type AppEnv, type Ctx, type Role, type SessionClaims } from '../plugins/tenant.js';
 import { applySectorPreset } from '../services/sector.js';
+import { appBaseUrl } from '../services/integrations.js';
+import { sendMail } from '../services/mail.js';
 
 const SESSION_HOURS = 12;
 const password = z.string().superRefine((v, ctx) => { const p = passwordProblems(v); if (p) ctx.addIssue({ code: 'custom', message: p }); });
@@ -81,6 +83,21 @@ export function authRoutes() {
       return { company: co!, user: u! };
     });
     const token = await startSession(c, { sub: result.user.id, companyId: result.company.id, role: 'owner', employeeId: null, name: result.user.name });
+    // Boas-vindas ao proprietário e aviso à administração da plataforma (sem bloquear o registo).
+    const base = appBaseUrl();
+    const trialEnd = new Date(Date.parse(luandaDate(new Date())) + TRIAL_DAYS * 86_400_000).toISOString().slice(0, 10).split('-').reverse().join('/');
+    await sendMail(db, {
+      to: result.user.email, companyId: result.company.id, kind: 'boas_vindas', subject: 'Bem-vindo ao Kianda RH', title: `Bem-vindo ao Kianda RH, ${result.user.name.split(' ')[0]}`,
+      paragraphs: [`A conta de ${result.company.name} está criada, com ${TRIAL_DAYS} dias de período experimental (até ${trialEnd}).`, 'Comece por registar os colaboradores e convidá-los a aceder: cada um recebe uma ligação pessoal e entra com email ou com o código da empresa e um PIN.'],
+      facts: [['Código da empresa', result.company.code ?? '—']], button: base ? { label: 'Abrir o Kianda RH', url: base } : null,
+    });
+    for (const a of await db.select().from(platformAdmins)) {
+      await sendMail(db, {
+        to: a.email, kind: 'plataforma_registo', subject: `Nova empresa no Kianda RH — ${result.company.name}`, title: 'Nova empresa registada',
+        paragraphs: [`${result.company.name} (NIF ${result.company.nif}) registou-se${b.company.sector ? ` — sector ${SECTORS[b.company.sector]}` : ''}${b.company.employeesEstimate ? `, cerca de ${b.company.employeesEstimate} colaboradores` : ''}.`, `Proprietário: ${result.user.name} (${result.user.email}).`],
+        button: base ? { label: 'Abrir consola', url: `${base}/plataforma` } : null,
+      });
+    }
     return c.json({ company: result.company, user: { id: result.user.id, name: result.user.name, email: result.user.email, role: 'owner' }, token }, 201);
   });
 

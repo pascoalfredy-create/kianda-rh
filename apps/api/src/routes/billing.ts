@@ -1,12 +1,20 @@
 import { CYCLES, cyclePrice, DEFAULT_TIERS, luandaDate, periodEnd, SECTORS, type BillingCycle } from '@kianda/core';
 import {
-  and, auditLogs, companies, desc, employees, eq, getDb, like, paymentRequests, platformAdmins, platformSettings, sql, subscriptions, users, type Db,
+  and, auditLogs, companies, desc, employees, eq, gatewayEvents, getDb, like, outboundEmails, paymentRequests, platformAdmins, platformSettings, sql, subscriptions, users, type Db,
 } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { body, requireCompany, requireRole, type AppEnv } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
 import { isPlatformAdmin, licenceOf, platformSettingsGet, priceTable, tierOf, type PlatformSettings } from '../services/licence.js';
+import {
+  afterPayment, applyGatewayPayment, attachGatewayReference, confirmPaymentRequest, emailPaymentInstructions, invoiceSettingsGet, issueInvoice,
+  releaseGatewayReference, syncGatewayPayments,
+} from '../services/billing.js';
+import {
+  acknowledgePayment, integrationStatus, mockPayment, parseWebhookPayment, proxypayConfig, vendusConfig, vendusInvoicePdf, verifyWebhookSignature,
+} from '../services/integrations.js';
+import { dailyReminders } from '../services/jobs.js';
 
 const addDays = (d: string, n: number) => new Date(Date.parse(d) + n * 86_400_000).toISOString().slice(0, 10);
 
@@ -31,6 +39,7 @@ export function billingRoutes() {
       status: l.status, statusLabel: l.statusLabel, canWrite: l.canWrite, tier: l.tier, cycle: l.cycle, limit: l.limit, activeEmployees: l.activeEmployees,
       trialEndsAt: l.sub?.trialEndsAt ?? null, paidUntil: l.sub?.paidUntil ?? null, extraSeats: l.sub?.extraSeats ?? 0,
       prices: priceTable(), cycles: CYCLES, extraSeatMinor: settings.extraSeatMinor, bank: settings.bank, supportEmail: settings.supportEmail, supportPhone: settings.supportPhone, requests,
+      multicaixa: !!proxypayConfig(), invoicesOnline: !!vendusConfig(),
     });
   });
 
@@ -62,13 +71,42 @@ export function billingRoutes() {
       const amount = settings.extraSeatMinor * b.seats;
       values = { kind: 'extra_seats', seats: b.seats, grossMinor: amount, discountMinor: 0, amountMinor: amount };
     }
-    const r = await db.transaction(async (tx) => {
+    const replaced = await db.select().from(paymentRequests).where(and(eq(paymentRequests.companyId, actor.companyId), eq(paymentRequests.kind, values.kind!), eq(paymentRequests.status, 'pending')));
+    const created = await db.transaction(async (tx) => {
       await tx.update(paymentRequests).set({ status: 'cancelled' }).where(and(eq(paymentRequests.companyId, actor.companyId), eq(paymentRequests.kind, values.kind!), eq(paymentRequests.status, 'pending')));
       const [x] = await tx.insert(paymentRequests).values({ ...values, companyId: actor.companyId, number: await nextNumber(db), createdBy: actor.actorId } as typeof paymentRequests.$inferInsert).returning();
       await tx.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'create', entity: 'payment_request', entityId: x!.id, after: x });
       return x!;
     });
+    // Referência Multicaixa (se configurado) e instruções por email; o pedido anterior deixa de poder ser pago.
+    for (const old of replaced) await releaseGatewayReference(old);
+    const r = await attachGatewayReference(db, created);
+    await emailPaymentInstructions(db, r);
     return c.json(r, 201);
+  });
+
+  /** Nova referência Multicaixa para um pedido pendente (expirada ou com erro do gateway). */
+  app.post('/v1/billing/requests/:id/multicaixa', requireRole('finance'), async (c) => {
+    const actor = c.get('actor');
+    const db = getDb();
+    if (!proxypayConfig()) throw new DomainError('sem_multicaixa', 'O pagamento por referência Multicaixa ainda não está disponível', 400);
+    const [r] = await db.select().from(paymentRequests).where(and(eq(paymentRequests.id, c.req.param('id')), eq(paymentRequests.companyId, actor.companyId), eq(paymentRequests.status, 'pending')));
+    if (!r) throw new DomainError('nao_encontrado', 'Pedido inexistente ou já tratado', 404);
+    await releaseGatewayReference(r);
+    const u = await attachGatewayReference(db, r);
+    if (!u.gatewayReference || u.gatewayError) throw new DomainError('gateway_indisponivel', 'Não foi possível gerar a referência agora. Tente mais tarde ou pague por transferência.', 502);
+    await emailPaymentInstructions(db, u);
+    return c.json(u);
+  });
+
+  /** PDF da factura certificada (Vendus), pela API do Kianda. */
+  app.get('/v1/billing/requests/:id/invoice', requireRole('finance'), async (c) => {
+    const actor = c.get('actor');
+    const [r] = await getDb().select().from(paymentRequests).where(and(eq(paymentRequests.id, c.req.param('id')), eq(paymentRequests.companyId, actor.companyId)));
+    const cfg = vendusConfig();
+    if (!r?.invoiceExternalId || r.invoiceProvider !== 'vendus' || !cfg) throw new DomainError('sem_pdf', 'A factura deste pedido não está disponível em PDF no Kianda', 404);
+    const pdf = await vendusInvoicePdf(cfg, r.invoiceExternalId);
+    return new Response(pdf.body, { headers: { 'content-type': 'application/pdf', 'content-disposition': `inline; filename="Factura-${(r.invoiceRef ?? r.number).replace(/[^\w.-]+/g, '_')}.pdf"` } });
   });
 
   /** O cliente indica a referência da transferência (a validação é feita pela Kianda). */
@@ -86,6 +124,7 @@ export function billingRoutes() {
     const [u] = await getDb().update(paymentRequests).set({ status: 'cancelled' })
       .where(and(eq(paymentRequests.id, c.req.param('id')), eq(paymentRequests.companyId, actor.companyId), eq(paymentRequests.status, 'pending'))).returning();
     if (!u) throw new DomainError('nao_encontrado', 'Pedido inexistente ou já tratado', 404);
+    await releaseGatewayReference(u);
     return c.json(u);
   });
 
@@ -160,27 +199,59 @@ export function platformRoutes() {
     const actor = c.get('actor');
     const b = z.object({ invoiceRef: z.string().trim().max(80).optional().nullable() }).parse(await body(c));
     const db = getDb();
-    const [r] = await db.select().from(paymentRequests).where(eq(paymentRequests.id, c.req.param('id')));
-    if (!r || r.status !== 'pending') throw new DomainError('nao_encontrado', 'Pedido inexistente ou já tratado', 404);
-    const u = await db.transaction(async (tx) => {
-      const [sub] = await tx.select().from(subscriptions).where(eq(subscriptions.companyId, r.companyId));
-      if (r.kind === 'subscription') {
-        const values = { status: 'active', tierKey: r.tierKey!, cycle: r.cycle!, paidUntil: r.periodEnd!, updatedAt: new Date() };
-        if (sub) await tx.update(subscriptions).set(values).where(eq(subscriptions.companyId, r.companyId));
-        else await tx.insert(subscriptions).values({ companyId: r.companyId, ...values });
-      } else {
-        await tx.update(subscriptions).set({ extraSeats: (sub?.extraSeats ?? 0) + (r.seats ?? 0), updatedAt: new Date() }).where(eq(subscriptions.companyId, r.companyId));
-      }
-      const [x] = await tx.update(paymentRequests).set({ status: 'paid', paidAt: new Date(), confirmedBy: actor.actorId, invoiceRef: b.invoiceRef ?? null }).where(eq(paymentRequests.id, r.id)).returning();
-      await tx.insert(auditLogs).values({ companyId: r.companyId, actorId: actor.actorId, action: 'confirm_payment', entity: 'payment_request', entityId: r.id, after: x });
-      return x!;
-    });
-    return c.json(u);
+    const r = await confirmPaymentRequest(db, c.req.param('id'), { actorId: actor.actorId, via: 'manual', invoiceRef: b.invoiceRef ?? null });
+    await releaseGatewayReference(r);
+    return c.json(await afterPayment(db, r.id));
   });
+
+  /** Emitir (ou voltar a tentar) a factura certificada no Vendus. */
+  app.post('/v1/platform/payment-requests/:id/invoice', async (c) => {
+    if (!vendusConfig()) throw new DomainError('sem_vendus', 'O Vendus não está configurado (VENDUS_API_KEY)', 400);
+    const r = await issueInvoice(getDb(), c.req.param('id'), true);
+    if (r.invoiceError && !r.invoiceRef) throw new DomainError('factura_falhou', r.invoiceError, 502);
+    return c.json(r);
+  });
+
+  /** Integrações: estado (sem segredos), parâmetros de facturação, eventos do gateway e emails recentes. */
+  app.get('/v1/platform/integrations', async (c) => {
+    const db = getDb();
+    const events = await db.select().from(gatewayEvents).orderBy(desc(gatewayEvents.createdAt)).limit(30);
+    const emails = await db.select().from(outboundEmails).orderBy(desc(outboundEmails.createdAt)).limit(30);
+    const invoiceIssues = await db.select({ id: paymentRequests.id, number: paymentRequests.number, error: paymentRequests.invoiceError, company: companies.name })
+      .from(paymentRequests).innerJoin(companies, eq(companies.id, paymentRequests.companyId))
+      .where(and(eq(paymentRequests.status, 'paid'), sql`${paymentRequests.invoiceRef} is null`)).orderBy(desc(paymentRequests.paidAt)).limit(50);
+    return c.json({ status: integrationStatus(), invoicing: await invoiceSettingsGet(db), events, emails, invoiceIssues });
+  });
+
+  app.put('/v1/platform/invoicing', async (c) => {
+    const b = z.object({
+      autoIssue: z.boolean(), taxId: z.enum(['NOR', 'ISE']),
+      exemptionCode: z.string().trim().max(10).nullable(), exemptionLaw: z.string().trim().max(200).nullable(),
+      paymentMethodId: z.number().int().positive().nullable(), registerId: z.number().int().positive().nullable(),
+    }).refine((x) => x.taxId !== 'ISE' || (x.exemptionCode && x.exemptionLaw), { message: 'Isenção: indique o código e o fundamento legal', path: ['exemptionCode'] }).parse(await body(c));
+    await getDb().insert(platformSettings).values({ key: 'invoicing', value: b }).onConflictDoUpdate({ target: platformSettings.key, set: { value: b, updatedAt: new Date() } });
+    return c.json(b);
+  });
+
+  app.post('/v1/platform/gateway/sync', async (c) => c.json(await syncGatewayPayments(getDb())));
+
+  /** Ambiente de testes do ProxyPay: simula o pagamento da referência de um pedido. */
+  app.post('/v1/platform/gateway/mock', async (c) => {
+    const cfg = proxypayConfig();
+    if (!cfg || cfg.environment !== 'sandbox') throw new DomainError('so_testes', 'Só disponível com o ProxyPay em ambiente de testes (sandbox)', 400);
+    const { requestId } = z.object({ requestId: z.string() }).parse(await body(c));
+    const [r] = await getDb().select().from(paymentRequests).where(eq(paymentRequests.id, requestId));
+    if (!r?.gatewayReference) throw new DomainError('sem_referencia', 'O pedido não tem referência Multicaixa', 400);
+    await mockPayment(cfg, r.gatewayReference, r.amountMinor);
+    return c.json({ ok: true });
+  });
+
+  app.post('/v1/platform/jobs/reminders', async (c) => c.json(await dailyReminders(getDb(), luandaDate(new Date()))));
 
   app.post('/v1/platform/payment-requests/:id/cancel', async (c) => {
     const [u] = await getDb().update(paymentRequests).set({ status: 'cancelled' }).where(and(eq(paymentRequests.id, c.req.param('id')), eq(paymentRequests.status, 'pending'))).returning();
     if (!u) throw new DomainError('nao_encontrado', 'Pedido inexistente ou já tratado', 404);
+    await releaseGatewayReference(u);
     return c.json(u);
   });
 
@@ -216,5 +287,23 @@ export function platformRoutes() {
     return c.json(b);
   });
 
+  return app;
+}
+
+/** Webhook do ProxyPay (público, via /api da web): assinatura HMAC obrigatória; responde 200 a duplicados. */
+export function gatewayWebhookRoutes() {
+  const app = new Hono<AppEnv>();
+  app.post('/v1/public/gateway/proxypay', async (c) => {
+    const cfg = proxypayConfig();
+    if (!cfg) return c.json({ error: 'nao_configurado' }, 404);
+    const raw = await c.req.text();
+    if (!(await verifyWebhookSignature(cfg, raw, c.req.header('x-signature')))) return c.json({ error: 'assinatura_invalida' }, 401);
+    let payment;
+    try { payment = parseWebhookPayment(raw); } catch { return c.json({ error: 'corpo_invalido' }, 400); }
+    const r = await applyGatewayPayment(getDb(), payment);
+    // Reconhece o pagamento no ProxyPay (a sincronização também o faria; aqui evita trabalho repetido).
+    await acknowledgePayment(cfg, payment.id).catch(() => undefined);
+    return c.json({ ok: true, outcome: r.outcome });
+  });
   return app;
 }
