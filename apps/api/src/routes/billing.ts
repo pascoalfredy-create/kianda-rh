@@ -1,7 +1,7 @@
 import { storageMode } from '../services/storage.js';
 import { CYCLES, cyclePrice, DEFAULT_TIERS, luandaDate, periodEnd, SECTORS, type BillingCycle } from '@kianda/core';
 import {
-  and, auditLogs, companies, desc, employees, eq, files, gatewayEvents, getDb, like, outboundEmails, paymentRequests, platformAdmins, platformSettings, sql, subscriptions, users, type Db,
+  and, auditLogs, companyModules, companies, desc, employees, eq, files, gatewayEvents, getDb, like, outboundEmails, paymentRequests, platformAdmins, platformSettings, sql, subscriptions, users, type Db,
 } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -163,6 +163,21 @@ export function platformRoutes() {
   app.use('/v1/platform/*', async (c, next) => {
     if (!(await isPlatformAdmin(getDb(), c.get('actor').actorId))) return c.json({ error: 'sem_permissao', message: 'Reservado à administração da plataforma Kianda.' }, 403);
     await next();
+  });
+
+  app.put('/v1/platform/companies/:id/modules/:module', async (c) => {
+    const module = z.enum(['hr', 'modeling']).parse(c.req.param('module'));
+    const input = z.object({ enabled: z.boolean(), status: z.enum(['trial', 'active', 'past_due', 'suspended', 'cancelled']).default('trial'), trialEndsAt: z.iso.date().nullable().default(null), paidUntil: z.iso.date().nullable().default(null) }).parse(await body(c));
+    if (module === 'modeling' && input.enabled && ['active', 'past_due'].includes(input.status) && !input.paidUntil) throw new DomainError('periodo_obrigatorio', 'Indique o fim do período pago.', 400);
+    if (module === 'modeling' && input.enabled && input.status === 'trial' && !input.trialEndsAt) throw new DomainError('periodo_obrigatorio', 'Indique o fim do período experimental.', 400);
+    const db = getDb(), companyId = c.req.param('id');
+    const [company] = await db.select({ id: companies.id }).from(companies).where(eq(companies.id, companyId));
+    if (!company) throw new DomainError('nao_encontrado', 'Empresa inexistente', 404);
+    const [before] = await db.select().from(companyModules).where(and(eq(companyModules.companyId, companyId), eq(companyModules.module, module)));
+    const values = module === 'hr' ? { enabled: input.enabled, status: 'trial', trialEndsAt: null, paidUntil: null } : input;
+    const [grant] = await db.insert(companyModules).values({ companyId, module, ...values }).onConflictDoUpdate({ target: [companyModules.companyId, companyModules.module], set: { ...values, updatedAt: new Date() } }).returning();
+    await db.insert(auditLogs).values({ companyId, actorId: c.get('actor').actorId, action: 'module_subscription', entity: 'company_module', entityId: grant!.id, before: before ?? null, after: grant });
+    return c.json(grant);
   });
 
   app.get('/v1/platform/companies', async (c) => {

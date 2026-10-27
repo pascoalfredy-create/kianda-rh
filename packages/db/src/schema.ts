@@ -950,3 +950,43 @@ export const journalLinesRelations = relations(journalLines, ({ one }) => ({
 export const absencesRelations = relations(absences, ({ one }) => ({
   employee: one(employees, { fields: [absences.employeeId], references: [employees.id] }),
 }));
+
+/** Direitos por módulo. Sem linha RH, preserva-se a subscrição histórica; Modelagem exige adesão explícita. */
+export const companyModules = pgTable('company_modules', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  module: text('module').notNull(),
+  enabled: boolean('enabled').notNull().default(false),
+  status: text('status').notNull().default('trial'),
+  trialEndsAt: date('trial_ends_at'),
+  paidUntil: date('paid_until'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex('company_modules_company_module').on(t.companyId, t.module)]);
+
+/** Rascunho independente do RH. Moeda explícita; pressupostos no formato versionado do Integra. */
+export const financialModels = pgTable('financial_models', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  name: text('name').notNull(),
+  sector: text('sector').notNull(),
+  currency: text('currency').notNull(),
+  assumptions: jsonb('assumptions').notNull().default({}),
+  revision: integer('revision').notNull().default(1),
+  createdBy: text('created_by').notNull(),
+  createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('financial_models_company').on(t.companyId)]);
+
+/** Cópia imutável dos dados agregados importados, sem nomes nem remunerações individuais. */
+export const financialPersonnelImports = pgTable('financial_personnel_imports', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  modelId: text('model_id').notNull().references(() => financialModels.id, { onDelete: 'cascade' }),
+  source: text('source').notNull(),
+  sourceId: text('source_id'),
+  fromPeriod: text('from_period').notNull(),
+  toPeriod: text('to_period').notNull(),
+  snapshot: jsonb('snapshot').notNull(),
+  importedBy: text('imported_by').notNull(),
+  importedAt: createdAt(),
+}, (t) => [index('financial_personnel_imports_model').on(t.modelId)]);

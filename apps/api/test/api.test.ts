@@ -1859,3 +1859,80 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     expect(r.cookies.find((c) => c.name === 'kianda_session')?.value).toBe('');
   });
 });
+
+describe.skipIf(!process.env.DATABASE_URL)('Integra: módulos e importação opcional de pessoal', () => {
+  const stamp = String(Date.now()) + 'mf';
+  const password = 'IntegraSegura2026';
+  let cookie = '', other = '', companyId = '', modelId = '', budgetId = '';
+  const request = (method: string, url: string, payload?: unknown, session = cookie) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
+  beforeAll(async () => {
+    for (const [i, name] of ['Integra A', 'Integra B'].entries()) {
+      const nif = String(Date.now() + i + 200).slice(-10);
+      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name, nif }, name, email: `${stamp}${i}@integra.ao`, password } });
+      expect(r.statusCode).toBe(201);
+      if (i === 0) cookie = cookieOf(r); else other = cookieOf(r);
+    }
+    companyId = (await request('GET', '/v1/auth/me')).json().company.id;
+  });
+  it('não concede Modelagem através da licença RH e protege a consola', async () => {
+    expect((await request('GET', '/v1/modeling/models')).statusCode).toBe(403);
+    expect((await request('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31' })).statusCode).toBe(403);
+    await getDb().insert(platformAdmins).values({ email: `${stamp}0@integra.ao` });
+    expect((await request('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31' })).statusCode).toBe(200);
+    expect((await request('GET', '/v1/modules')).json().modeling.canWrite).toBe(true);
+  });
+  it('cria modelo com pressupostos manuais e impede sobrescrita concorrente', async () => {
+    const values = { name: 'Estudo independente', sector: 'servicos', currency: 'Kz', assumptions: { pessoal: 123, receitas: [] } };
+    const r = await request('POST', '/v1/modeling/models', values);
+    expect(r.statusCode).toBe(201); modelId = r.json().id;
+    expect((await request('PUT', `/v1/modeling/models/${modelId}`, { ...values, revision: 1 })).json().revision).toBe(2);
+    expect((await request('PUT', `/v1/modeling/models/${modelId}`, { ...values, revision: 1 })).statusCode).toBe(409);
+  });
+  it('isola modelos entre empresas, incluindo a pesquisa por identificador', async () => {
+    await request('PUT', `/v1/platform/companies/${(await request('GET', '/v1/auth/me', undefined, other)).json().company.id}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31' });
+    expect((await request('GET', `/v1/modeling/models/${modelId}`, undefined, other)).statusCode).toBe(404);
+    expect((await request('GET', '/v1/modeling/models', undefined, other)).json()).toEqual([]);
+  });
+  it('recusa orçamento por aprovar e importa o custo anual com INSS incluído', async () => {
+    const [{ id }] = (await getDb().execute(sql`insert into personnel_budgets(company_id,year,created_by) values (${companyId}, 2026, 'test') returning id`)).rows as { id: string }[];
+    budgetId = id;
+    expect((await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'budget', budgetId, revision: 2 })).statusCode).toBe(409);
+    await getDb().execute(sql`update personnel_budgets set status='approved' where id=${budgetId}`);
+    await getDb().execute(sql`insert into personnel_budget_lines(company_id,budget_id,period,headcount,gross_minor,cost_minor) values (${companyId},${budgetId},'2026-01',2,100000,108000)`);
+    const r = await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'budget', budgetId, revision: 2 });
+    expect(r.statusCode).toBe(201);
+    expect(r.json().model.assumptions.pessoal).toBe(1080);
+    expect(r.json().model.assumptions.receitas).toEqual([]);
+    expect(r.json().import.snapshot.months).toHaveLength(12);
+  });
+  it('alterações no RH não alteram o modelo nem a cópia importada', async () => {
+    await getDb().execute(sql`update personnel_budget_lines set cost_minor=999999 where budget_id=${budgetId}`);
+    const r = (await request('GET', `/v1/modeling/models/${modelId}`)).json();
+    expect(r.assumptions.pessoal).toBe(1080);
+    expect(r.imports[0].snapshot.totalMinor).toBe(108000);
+    await expect(withTenant(companyId, () => getDb().execute(sql`update financial_personnel_imports set source='actual' where model_id=${modelId}`))).rejects.toThrow();
+  });
+  it('exige doze meses fechados e câmbio explícito para moeda estrangeira', async () => {
+    expect((await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'actual', from: '2026-01', to: '2026-12', revision: 3 })).statusCode).toBe(409);
+    await request('PUT', `/v1/modeling/models/${modelId}`, { name: 'USD', sector: 'servicos', currency: 'USD', assumptions: { pessoal: 1080 }, revision: 3 });
+    expect((await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'budget', budgetId, revision: 4 })).statusCode).toBe(400);
+    const r = await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'budget', budgetId, revision: 4, exchangeRate: 0.001 });
+    expect(r.statusCode).toBe(201);
+    expect(r.json().model.assumptions.pessoal).toBeCloseTo(9.99999);
+  });
+  it('Modelagem continua activa com RH desligado; importação opcional fica bloqueada', async () => {
+    await request('PUT', `/v1/platform/companies/${companyId}/modules/hr`, { enabled: false });
+    await getDb().execute(sql`update subscriptions set status='suspended' where company_id=${companyId}`);
+    expect((await request('GET', '/v1/employees')).statusCode).toBe(403);
+    expect((await request('POST', '/v1/payroll-runs', {})).statusCode).toBe(403);
+    const values = { name: 'Sem RH', sector: 'servicos', currency: 'Kz', assumptions: { pessoal: 700 } };
+    expect((await request('POST', '/v1/modeling/models', values)).statusCode).toBe(201);
+    expect((await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'budget', budgetId, revision: 5, exchangeRate: 0.001 })).statusCode).toBe(403);
+  });
+  it('suspender Modelagem mantém consulta e bloqueia alterações; empresa não altera direitos', async () => {
+    await request('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'suspended' });
+    expect((await request('GET', `/v1/modeling/models/${modelId}`)).statusCode).toBe(200);
+    expect((await request('POST', '/v1/modeling/models', {})).statusCode).toBe(402);
+    await expect(withTenant(companyId, () => getDb().execute(sql`update company_modules set enabled=true where company_id=${companyId}`))).rejects.toThrow();
+  });
+});
