@@ -55,6 +55,9 @@ export function PersonalForm({ p, departments, people }: { p: Profile; departmen
           {PROVINCES.map((x) => <option key={x}>{x}</option>)}
         </select>
       </label>
+      <label>Município de trabalho
+        <input name="municipality" defaultValue={v(p.municipality)} placeholder="Vazio = o da sede" />
+      </label>
       <label>Dias de férias transitados
         <input name="vacationCarryOver" type="number" min={0} max={44} defaultValue={p.vacationCarryOver ?? 0} />
       </label>

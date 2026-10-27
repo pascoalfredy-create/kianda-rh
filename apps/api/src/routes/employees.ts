@@ -42,6 +42,7 @@ const personal = {
   departmentId: z.string().optional().nullable(),
   managerId: z.string().optional().nullable(),
   province: optionalText,
+  municipality: optionalText,
   gender: z.enum(['F', 'M']).optional().nullable(),
   birthDate: optionalDate,
   nationality: optionalText,

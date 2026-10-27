@@ -2,11 +2,12 @@
 
 import { useState } from 'react';
 import { useMutation } from '@/lib/client';
+import { PROVINCES } from '@/lib/types';
 
 const kzField = (v: FormDataEntryValue | null) => { const t = String(v ?? '').trim().replace(/\s/g, '').replace(/\./g, '').replace(',', '.'); return t ? Math.round(Number(t) * 100) : null; };
 const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
-export function SettingsForm({ s }: { s: { inssNumber: string | null; address: string | null; workdayMinutes: number; christmasSubsidyMonth: number; holidaySubsidyMonth: number | null; perDiemNationalMinor: number | null; perDiemInternationalMinor: number | null; autoIssueDeclarations: boolean; allowancesOnVacation: boolean } }) {
+export function SettingsForm({ s }: { s: { inssNumber: string | null; address: string | null; workdayMinutes: number; christmasSubsidyMonth: number; holidaySubsidyMonth: number | null; perDiemNationalMinor: number | null; perDiemInternationalMinor: number | null; autoIssueDeclarations: boolean; allowancesOnVacation: boolean; province: string | null; municipality: string | null; bankFileProfile: string } }) {
   const { busy, error, run } = useMutation();
   const [ok, setOk] = useState('');
   return (
@@ -27,6 +28,9 @@ export function SettingsForm({ s }: { s: { inssNumber: string | null; address: s
           perDiemInternationalMinor: kzField(f.get('perDiemInternational')),
           autoIssueDeclarations: f.get('autoIssueDeclarations') === 'on',
           allowancesOnVacation: f.get('allowancesOnVacation') === 'on',
+          province: String(f.get('province') || '') || null,
+          municipality: String(f.get('municipality') || '').trim() || null,
+          bankFileProfile: String(f.get('bankFileProfile') || 'generic'),
         });
         if (done) setOk('Definições gravadas.');
       }}
@@ -34,6 +38,18 @@ export function SettingsForm({ s }: { s: { inssNumber: string | null; address: s
       <h3>Empresa</h3>
       <label>N.º de contribuinte INSS<input name="inssNumber" defaultValue={s.inssNumber ?? ''} /></label>
       <label className="span2">Morada (aparece nos recibos)<input name="address" defaultValue={s.address ?? ''} /></label>
+      <label>Província da sede
+        <select name="province" defaultValue={s.province ?? ''}><option value="">—</option>{PROVINCES.map((x) => <option key={x}>{x}</option>)}</select>
+      </label>
+      <label>Município da sede<input name="municipality" defaultValue={s.municipality ?? ''} placeholder="Ex.: Belas" /></label>
+      <label className="span2">Banco dos salários (ficheiro de transferências)
+        <select name="bankFileProfile" defaultValue={s.bankFileProfile}>
+          <option value="generic">Genérico (CSV: IBAN; nome; valor)</option>
+          <option value="bfa">BFA — Excel para o BFA Net Empresas</option>
+          <option value="bai">BAI — Excel para o Pagamento em Massa (PSX)</option>
+        </select>
+      </label>
+      <p className="muted wide">A província e o município da sede entram no mapa de remunerações da AGT para quem não tem outro local de trabalho na ficha.</p>
       <label>Jornada diária (horas)<input name="workdayHours" inputMode="decimal" defaultValue={String(s.workdayMinutes / 60).replace('.', ',')} /></label>
       <h3>Subsídios</h3>
       <label className="span2">Subsídio de Natal pago em

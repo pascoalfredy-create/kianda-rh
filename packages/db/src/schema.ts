@@ -30,6 +30,11 @@ export const companies = pgTable('companies', {
   nif: text('nif').notNull().unique(),
   inssNumber: text('inss_number'),
   address: text('address'),
+  /** Sede (mapa de remunerações da AGT): usados quando a ficha do colaborador não indica outro local de trabalho. */
+  province: text('province'),
+  municipality: text('municipality'),
+  /** Banco do ficheiro de transferências dos salários (bfa, bai ou generic). */
+  bankFileProfile: text('bank_file_profile').notNull().default('generic'),
   caeCode: text('cae_code'),
   microOrStartup: boolean('micro_or_startup').notNull().default(false),
   bankAccountIban: text('bank_account_iban'),
@@ -180,6 +185,8 @@ export const employees = pgTable('employees', {
   jobTitle: text('job_title').notNull(),
   departmentId: text('department_id').references(() => departments.id),
   province: text('province'),
+  /** Município do local de trabalho (mapa de remunerações da AGT). Vazio = o da sede da empresa. */
+  municipality: text('municipality'),
   managerId: text('manager_id'),
   status: employeeStatusEnum('status').notNull().default('active'),
   vacationCarryOver: integer('vacation_carry_over').notNull().default(0),

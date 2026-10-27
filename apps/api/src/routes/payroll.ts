@@ -166,7 +166,7 @@ export function payrollRoutes() {
 
   app.get('/v1/company/settings', async (c) => {
     const [co] = await getDb().select().from(companies).where(eq(companies.id, c.get('actor').companyId));
-    return c.json({ name: co!.name, nif: co!.nif, inssNumber: co!.inssNumber, address: co!.address, workdayMinutes: co!.workdayMinutes, christmasSubsidyMonth: co!.christmasSubsidyMonth, holidaySubsidyMonth: co!.holidaySubsidyMonth, perDiemNationalMinor: co!.perDiemNationalMinor, perDiemInternationalMinor: co!.perDiemInternationalMinor, autoIssueDeclarations: co!.autoIssueDeclarations, allowancesOnVacation: co!.allowancesOnVacation });
+    return c.json({ name: co!.name, nif: co!.nif, inssNumber: co!.inssNumber, address: co!.address, workdayMinutes: co!.workdayMinutes, christmasSubsidyMonth: co!.christmasSubsidyMonth, holidaySubsidyMonth: co!.holidaySubsidyMonth, perDiemNationalMinor: co!.perDiemNationalMinor, perDiemInternationalMinor: co!.perDiemInternationalMinor, autoIssueDeclarations: co!.autoIssueDeclarations, allowancesOnVacation: co!.allowancesOnVacation, province: co!.province, municipality: co!.municipality, bankFileProfile: co!.bankFileProfile });
   });
 
   app.patch('/v1/company/settings', requireRole('hr_admin'), async (c) => {
@@ -181,6 +181,9 @@ export function payrollRoutes() {
       perDiemInternationalMinor: z.number().int().positive().max(1e11).nullable().optional(),
       autoIssueDeclarations: z.boolean().optional(),
       allowancesOnVacation: z.boolean().optional(),
+      province: z.string().trim().max(40).nullable().optional(),
+      municipality: z.string().trim().max(60).nullable().optional(),
+      bankFileProfile: z.enum(['generic', 'bfa', 'bai']).optional(),
     }).parse(await body(c));
     const db = getDb();
     const [before] = await db.select().from(companies).where(eq(companies.id, actor.companyId));

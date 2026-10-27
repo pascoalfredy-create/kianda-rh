@@ -70,6 +70,7 @@ export interface Profile {
   phone: string | null;
   address: string | null;
   province: string | null;
+  municipality?: string | null;
   emergencyContactName: string | null;
   emergencyContactPhone: string | null;
   vacationCarryOver: number;

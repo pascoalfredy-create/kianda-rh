@@ -104,7 +104,7 @@ async function DataTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
     return <div className="card"><PersonalForm p={p} departments={departments} people={refs} /></div>;
   }
   const rows: [string, string][] = [
-    ['Função', p.jobTitle], ['Departamento', val(p.department?.name)], ['Chefia directa', val(p.manager?.name)], ['Província', val(p.province)],
+    ['Função', p.jobTitle], ['Departamento', val(p.department?.name)], ['Chefia directa', val(p.manager?.name)], ['Província', val(p.province)], ['Município', val(p.municipality)],
     ['Data de nascimento', fmtDate(p.birthDate)], ['Nacionalidade', val(p.nationality)], ['Estado civil', val(p.maritalStatus)],
     ['BI', val(p.biNumber)], ['NIF', val(p.nif)], ['INSS', val(p.inssNumber)], ['Banco', val(p.bank)], ['IBAN', val(p.iban)],
     ['Email', val(p.email)], ['Telefone', val(p.phone)], ['Morada', val(p.address)],

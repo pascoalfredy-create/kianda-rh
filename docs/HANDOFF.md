@@ -81,7 +81,7 @@ pnpm -r typecheck && pnpm -r test                                    # core 113 
 
 ## 8. Estado — o que está feito
 
-Entregas **1–13** (produto), **14–18** (SaaS) **19** (revisão LGT + adiantamentos) e **20** (ficheiros + recuperação por email), todas publicadas. Resumo em `docs/ROADMAP.md`. Destaques:
+Entregas **1–13** (produto), **14–18** (SaaS) **19** (revisão LGT + adiantamentos) e **20** (ficheiros + recuperação por email) e **21** (formatos oficiais AGT/INSS/bancos), todas publicadas. Resumo em `docs/ROADMAP.md`. Destaques:
 
 - Processamento: IRT Grupo A 2026, INSS 3%+8%, subsídios (férias/Natal, proporcionais), horas extra (50%/75%, blocos de 15 min), faltas, variáveis, mês incompleto proporcional, recibos com hash.
 - Contas PGC sugeridas (parametrizáveis): 72.2.1–72.2.4, 72.5.1, 34.3 (IRT), 34.9.1 (INSS), 36.1.2, 36.3, 36.9, 43.1, 75.2 (despesas), 72.8 (ajudas de custo e compensações por cessação), 63 (compensação por falta de aviso do trabalhador).
@@ -93,9 +93,11 @@ Entregas **1–13** (produto), **14–18** (SaaS) **19** (revisão LGT + adianta
 - Ficheiros (entrega 20): tabelas `files` (metadados) e `file_blobs` (conteúdo quando não há R2), ambas com RLS. `services/storage.ts` (`setObjectStore`, `storeFile`, `readFileData`, `removeFiles`; o Worker liga o R2 pelo binding `FILES`), rotas em `routes/files.ts` (`GET/POST /v1/files?entity=&entityId=`, `GET/DELETE /v1/files/:id`; o envio é o corpo em bruto, sem multipart). Entidades: `employee`, `employee_document`, `absence`, `expense_claim` — regras de acesso em `fileAccess`. Componente web `components/attachments.tsx`. O CI cria o bucket `kianda-files` e só então junta o binding (`KIANDA_R2=1` → `scripts/cf-prepare.mjs`).
 - Recuperação por email (entrega 20): `POST /v1/auth/forgot` cria ligações `access_links.kind = 'self_reset'` (1 h); a aceitação troca só a palavra-passe e mantém a 2FA (`completeLogin(..., secondFactorDone=false)`). Página `/recuperar`.
 
+- Formatos oficiais (entrega 21): `packages/core/src/official.ts` (`AGT_MAP_COLUMNS`, `agtMapRow`, `agtProvince`, `ANGOLA_BANKS`, `bankFromIban`, `bankAmount`), `apps/api/src/lib/xlsx.ts` (xlsx mínimo, ZIP stored), rotas `GET /v1/payroll-runs/:id/maps/agt?format=xlsx|csv|json` e `bank-file?profile=generic|bfa|bai`. Campos novos: `companies.province/municipality/bankFileProfile`, `employees.municipality`. Fontes: guia rápido da AGT (upload Excel/CSV/XML, todos os trabalhadores), documentação Cegid/Primavera das 31 colunas e siglas, guia do BFA (transferências por lotes) e página do BAI (pagamento em massa). Por confirmar com o dono: template real do portal da AGT e do INSS Virtual (pedir-lhe os ficheiros) e regras dos gestores de conta.
+
 ## 9. Próximos passos (por ordem)
 
-1. **Fase seguinte (a definir com o dono):** formatos oficiais (ficheiro bancário de salários por banco, declarações AGT/INSS), CVs dos candidatos como ficheiros, app móvel (PWA) do colaborador, relatórios para gestão.
+1. **Fase seguinte (a definir com o dono):** alinhar os formatos com os templates reais (AGT/INSS Virtual/bancos), CVs dos candidatos como ficheiros, app móvel (PWA) do colaborador, relatórios para gestão.
 2. **Pendentes do dono antes de clientes reais:** definir `KIANDA_BACKUP_PASSPHRASE` (cópias); empresa em constituição — depois actualizar dados de facturação/IBAN na consola e o domínio próprio (`KIANDA_HOSTNAME` com vários domínios); contratar ProxyPay, Resend e Cegid Vendus e definir os secrets (ver DEPLOY.md) — o Vendus só é necessário quando a facturação electrónica geral entrar em vigor (Janeiro); enquadramento de IVA/isenção das licenças a definir pelo dono; rodar `KIANDA_JWT_SECRET` (gerado fora do chat); `KIANDA_SEED_DEMO=false`; regra de rate limiting no WAF da Cloudflare para `/api/v1/auth/login*`; preencher dados bancários/suporte na consola; validação jurídica da lista `toValidate` (em especial regras numéricas da cessação — Lei n.º 12/23 arts. 286.º, 289.º, 293.º, 295.º, 305.º, 307.º–311.º — e textos dos contratos); formatos oficiais do banco/AGT/INSS (hoje CSV genérico).
 
 ## 10. Armadilhas já resolvidas (não repetir)
