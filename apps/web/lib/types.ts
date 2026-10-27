@@ -157,7 +157,7 @@ export interface DayRow {
   overtimeMinutes: number;
   flags: string[];
 }
-export interface EntryRow { id: string; workDate: string; in: string; out: string | null; source: 'web' | 'manual'; note: string | null }
+export interface EntryRow { id: string; workDate: string; in: string; out: string | null; source: 'web' | 'manual' | 'offline'; note: string | null; offlineOut?: boolean }
 export interface MonthTotals {
   period: string;
   workedMinutes: number;

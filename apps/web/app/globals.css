@@ -164,6 +164,7 @@ tr.rest td { background: #fafbfc; color: var(--ink3); }
 tr.holiday td { background: #fff6f3; }
 .entry-chip { display: inline-flex; gap: 4px; align-items: center; padding: 2px 8px; border-radius: 7px; background: #eef0f3; font-size: 12.5px; margin: 1px 4px 1px 0; font-variant-numeric: tabular-nums; }
 .entry-chip.manual { background: #e6effd; color: #2556a8; }
+.entry-chip.offline { background: var(--amber-soft); color: #7a5214; }
 .entry-chip button { background: none; border: 0; cursor: pointer; color: var(--ink3); padding: 0 2px; font-size: 12px; }
 .entry-chip button:hover { color: var(--red); }
 @media (max-width: 820px) {
@@ -213,3 +214,9 @@ table.dense th, table.dense td { padding: 8px 8px; font-size: 13px; }
 .doc p { margin: 10px 0; }
 @media print { .doc { border: 0; box-shadow: none; padding: 0; max-width: none; } }
 .err { color: var(--red); font-size: 12.5px; }
+
+/* App instalável (PWA) */
+.offline-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 60; background: #3b3f47; color: #fff; font-size: 13px; padding: 8px 14px; padding-top: max(8px, env(safe-area-inset-top)); text-align: center; }
+.install-bar { position: fixed; left: 10px; right: 10px; bottom: calc(72px + env(safe-area-inset-bottom)); z-index: 55; display: flex; gap: 10px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; box-shadow: 0 8px 24px rgba(20, 24, 31, .14); }
+.install-bar img { border-radius: 8px; }
+@media (display-mode: standalone) { body { padding-top: env(safe-area-inset-top); } }

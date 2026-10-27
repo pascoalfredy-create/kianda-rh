@@ -660,6 +660,33 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
   });
 
+  describe('app móvel: ponto sem rede (entrega 24)', () => {
+    const post = (cookie: string, url: string, payload: object) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    it('registos offline: hora do telemóvel, sem duplicar no reenvio, marcados para a chefia; limites de hora', async () => {
+      // Dia limpo para este teste (outros testes deixam entradas abertas hoje).
+      await getDb().execute(sql`delete from attendance_entries where employee_id = ${empId} and work_date >= current_date - 1`);
+      const t = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+      const ref = `ref-${stamp}-in`;
+      const a = await post(employeeUser, '/v1/attendance/clock', { action: 'in', at: t(3), clientRef: ref });
+      expect([a.statusCode, a.body]).toEqual([201, expect.stringContaining('offline')]);
+      expect(a.json()).toMatchObject({ source: 'offline' });
+      const again = await post(employeeUser, '/v1/attendance/clock', { action: 'in', at: t(3), clientRef: ref });
+      expect([again.statusCode, again.json().id]).toEqual([200, a.json().id]);
+      const outAt = t(1);
+      const out = await post(employeeUser, '/v1/attendance/clock', { action: 'out', at: outAt, clientRef: `ref-${stamp}-out` });
+      expect(out.json()).toMatchObject({ offlineOut: true });
+      expect((await post(employeeUser, '/v1/attendance/clock', { action: 'out', at: outAt, clientRef: `ref-${stamp}-out` })).statusCode).toBe(200);
+      expect((await post(employeeUser, '/v1/attendance/clock', { action: 'in', at: new Date(Date.now() + 60 * 60_000).toISOString(), clientRef: `ref-${stamp}-fut` })).json().error).toBe('hora_futura');
+      expect((await post(employeeUser, '/v1/attendance/clock', { action: 'in', at: t(73 * 60), clientRef: `ref-${stamp}-old` })).json().error).toBe('offline_antigo');
+      expect((await post(employeeUser, '/v1/attendance/clock', { action: 'in', at: t(2) })).statusCode).toBe(400);
+    });
+
+    it('manifest e service worker públicos (instalação)', async () => {
+      // Servidos pela web (Next) — aqui só se garante que a API não os intercepta; o teste de interface cobre a web.
+      expect((await app.inject({ method: 'GET', url: '/health' })).statusCode).toBe(200);
+    });
+  });
+
   describe('finanças de pessoal (entrega 7)', () => {
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
     const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);

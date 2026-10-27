@@ -105,26 +105,51 @@ export function attendanceRoutes() {
   });
 
   /** Registar entrada ou saída — sempre com a hora do servidor. */
+  /**
+   * Registo de ponto. Com rede: hora do servidor. Sem rede (app): a marcação fica no telemóvel e é enviada depois com
+   * `at` (hora do telemóvel) e `clientRef` (idempotente) — fica marcada como offline para a chefia validar.
+   */
   app.post('/v1/attendance/clock', async (c) => {
     const actor = c.get('actor');
     if (!actor.employeeId) return c.json({ error: 'sem_ficha', message: 'O seu utilizador não está associado a uma ficha de colaborador.' }, 409);
-    const { action } = z.object({ action: z.enum(['in', 'out']) }).parse(await body(c));
+    const b = z.object({ action: z.enum(['in', 'out']), at: z.iso.datetime({ offset: true }).optional(), clientRef: z.string().trim().min(8).max(64).optional() })
+      .refine((x) => !x.at === !x.clientRef, { message: 'Registo offline incompleto' }).parse(await body(c));
     const db = getDb();
-    const now = new Date();
+    const serverNow = new Date();
+    const offline = Boolean(b.at);
+    const now = offline ? new Date(b.at!) : serverNow;
+    if (offline) {
+      if (now.getTime() > serverNow.getTime() + 5 * 60_000) throw new DomainError('hora_futura', 'A hora do telemóvel está à frente da hora real — acerte o relógio do telemóvel.', 400);
+      if (serverNow.getTime() - now.getTime() > 72 * 3_600_000) throw new DomainError('offline_antigo', 'Registos sem rede com mais de 72 horas não são aceites — peça à chefia para corrigir o ponto.', 400);
+    }
     const today = luandaDate(now);
     const emp = await loadEmployee(db, actor, actor.employeeId);
     if (emp.status !== 'active') throw new DomainError('inactivo', 'Ficha suspensa ou cessada: não é possível registar ponto.', 403);
+    // Reenvio do mesmo registo offline: devolve o que já foi gravado.
+    if (offline && b.action === 'in') {
+      const [dup] = await db.select().from(attendanceEntries).where(and(eq(attendanceEntries.employeeId, emp.id), eq(attendanceEntries.clientRef, b.clientRef!)));
+      if (dup) return c.json(view(dup), 200);
+    }
+    if (offline && b.action === 'out') {
+      const [dup] = await db.select().from(attendanceEntries).where(and(eq(attendanceEntries.employeeId, emp.id), eq(attendanceEntries.workDate, today), eq(attendanceEntries.offlineOut, true), eq(attendanceEntries.clockOut, now)));
+      if (dup) return c.json(view(dup), 200);
+    }
     // O ponto regista factos: nunca é bloqueado por processamento fechado (é comum fechar a 20–25 do mês);
     // as horas desses dias seguem na aprovação do mês e no processamento seguinte.
     const [open] = await db.select().from(attendanceEntries).where(and(eq(attendanceEntries.employeeId, emp.id), eq(attendanceEntries.workDate, today), isNull(attendanceEntries.clockOut)));
-    if (action === 'in') {
+    if (b.action === 'in') {
       if (open) throw new DomainError('entrada_aberta', `Já registou entrada às ${luandaTime(open.clockIn)}. Registe a saída primeiro.`);
-      const [e] = await db.insert(attendanceEntries).values({ companyId: actor.companyId, employeeId: emp.id, workDate: today, clockIn: now, source: 'web', createdBy: actor.actorId }).returning();
+      const [e] = await db.insert(attendanceEntries).values({
+        companyId: actor.companyId, employeeId: emp.id, workDate: today, clockIn: now, source: offline ? 'offline' : 'web', createdBy: actor.actorId,
+        clientRef: b.clientRef ?? null, note: offline ? `Registado sem rede; enviado às ${luandaTime(serverNow)}` : null,
+      }).returning();
       return c.json(view(e!), 201);
     }
     if (!open) throw new DomainError('sem_entrada', 'Não há entrada registada hoje. Registe a entrada primeiro.');
     if (now.getTime() - open.clockIn.getTime() < 60_000) throw new DomainError('demasiado_cedo', 'A saída tem de ser pelo menos 1 minuto depois da entrada.');
-    const [e] = await db.update(attendanceEntries).set({ clockOut: now }).where(eq(attendanceEntries.id, open.id)).returning();
+    const [e] = await db.update(attendanceEntries).set({
+      clockOut: now, ...(offline ? { offlineOut: true, note: [open.note, `Saída registada sem rede; enviada às ${luandaTime(serverNow)}`].filter(Boolean).join(' · ') } : {}),
+    }).where(eq(attendanceEntries.id, open.id)).returning();
     return c.json(view(e!));
   });
 

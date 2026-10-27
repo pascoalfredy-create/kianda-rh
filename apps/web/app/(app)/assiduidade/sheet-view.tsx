@@ -65,6 +65,9 @@ export function SheetView({ sheet, period }: { sheet: Sheet; period: string }) {
         {!days.length && <div className="empty">Sem dias para mostrar</div>}
       </div>
 
+      {sheet.entries.some((e) => e.source === 'offline' || e.offlineOut) && (
+        <div className="warn" style={{ marginTop: 10 }}>📵 {sheet.entries.filter((e) => e.source === 'offline' || e.offlineOut).length} registo(s) feitos sem rede, com a hora do telemóvel — confirme-os antes de aprovar o mês (corrija com ✎ se a hora não estiver certa).</div>
+      )}
       {sheet.canApprove && <ApproveMonth employeeId={sheet.employee.id} period={period} overtimeMinutes={s.overtimeMinutes} openDays={s.openDays} />}
       {!sheet.approval && !sheet.canApprove && sheet.canEdit && <p className="muted" style={{ marginTop: 10 }}>A aprovação do mês fica disponível depois de o mês terminar.</p>}
     </>

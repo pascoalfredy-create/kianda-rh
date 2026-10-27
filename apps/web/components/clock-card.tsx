@@ -3,6 +3,9 @@
 import { formatMinutes } from '@kianda/core';
 import { useCallback, useEffect, useState } from 'react';
 import { send } from '@/lib/client';
+import { enqueuePunch, flushPunches, isNetworkError, pendingPunches } from '@/lib/offline-punch';
+
+const ME_CACHE = 'kianda_me_cache';
 
 interface Me {
   today: string;
@@ -21,28 +24,66 @@ export function ClockCard({ compact }: { compact?: boolean }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [clock, setClock] = useState('');
+  const [info, setInfo] = useState('');
+  const [pending, setPending] = useState(0);
 
   const load = useCallback(async () => {
-    const r = await send<Me>('/v1/attendance/me', 'GET');
-    if (r.ok) setMe(r.data!); else setError(r.message ?? '');
+    try {
+      const r = await send<Me>('/v1/attendance/me', 'GET');
+      if (r.ok) {
+        setMe(r.data!);
+        try { localStorage.setItem(ME_CACHE, JSON.stringify(r.data)); } catch { /* sem armazenamento */ }
+      } else setError(r.message ?? '');
+    } catch {
+      // Sem rede: último estado conhecido + marcações por enviar.
+      try {
+        const cached = JSON.parse(localStorage.getItem(ME_CACHE) ?? 'null') as Me | null;
+        if (cached) {
+          const q = pendingPunches();
+          setMe({ ...cached, open: q.length ? q[q.length - 1]!.action === 'in' : cached.open });
+        } else setError('Sem rede e sem dados guardados neste telemóvel — abra a app uma vez com rede.');
+      } catch { /* sem cache */ }
+      setInfo('Sem rede — pode registar o ponto na mesma; fica guardado no telemóvel.');
+    }
+    setPending(pendingPunches().length);
   }, []);
 
+  const sync = useCallback(async () => {
+    if (!pendingPunches().length) return;
+    const r = await flushPunches();
+    if (r.sent) setInfo(`${r.sent} registo(s) feitos sem rede foram enviados.`);
+    if (r.rejected.length) setError(r.rejected.map((x) => `Registo de ${new Date(x.punch.at).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Luanda' })}: ${x.message}`).join(' · '));
+    await load();
+  }, [load]);
+
   useEffect(() => {
-    load();
+    void sync().then(load);
+    const online = () => { setInfo(''); void sync(); };
+    window.addEventListener('online', online);
     const t = setInterval(load, 60_000);
     const tick = () => setClock(new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Africa/Luanda' }));
     tick();
     const c = setInterval(tick, 1000);
-    return () => { clearInterval(t); clearInterval(c); };
-  }, [load]);
+    return () => { clearInterval(t); clearInterval(c); window.removeEventListener('online', online); };
+  }, [load, sync]);
 
   async function punch(action: 'in' | 'out') {
     setBusy(true);
     setError('');
-    const r = await send('/v1/attendance/clock', 'POST', { action });
+    setInfo('');
+    try {
+      if (!navigator.onLine) throw new TypeError('offline');
+      const r = await send('/v1/attendance/clock', 'POST', { action });
+      if (!r.ok) setError(r.message ?? 'Erro');
+      await load();
+    } catch (e) {
+      if (!isNetworkError(e)) throw e;
+      const p = enqueuePunch(action);
+      setMe((m) => (m ? { ...m, open: action === 'in' } : m));
+      setPending(pendingPunches().length);
+      setInfo(`Sem rede: ${action === 'in' ? 'entrada' : 'saída'} guardada no telemóvel às ${new Date(p.at).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Luanda' })}. É enviada sozinha quando houver rede (a chefia confirma a hora).`);
+    }
     setBusy(false);
-    if (!r.ok) setError(r.message ?? 'Erro');
-    await load();
   }
 
   if (!me && error) return compact ? null : <div className="card section"><h2>Registo de ponto</h2><div className="empty">{error}</div></div>;
@@ -65,6 +106,8 @@ export function ClockCard({ compact }: { compact?: boolean }) {
         <button className="btn big ghost" disabled={busy || !me.open} onClick={() => punch('out')}>Registar saída</button>
       </div>
       {error && <div className="err" role="alert" style={{ color: 'var(--red)', marginTop: 8 }}>{error}</div>}
+      {info && <div className="muted" role="status" style={{ marginTop: 8 }}>{info}</div>}
+      {pending > 0 && <div className="warn" style={{ marginTop: 8, marginBottom: 0 }}>📵 {pending} registo(s) por enviar.{' '}<button className="link" onClick={() => void sync()}>Enviar agora</button></div>}
       {me.forgottenDays.length > 0 && (
         <div className="warn" style={{ marginTop: 10, marginBottom: 0 }}>
           Ficou por registar a saída em {me.forgottenDays.map(pt).join(', ')}. Peça à sua chefia para corrigir.
@@ -73,11 +116,11 @@ export function ClockCard({ compact }: { compact?: boolean }) {
       {!compact && me.entries.length > 0 && (
         <div className="clock-entries">
           {me.entries.map((e) => (
-            <span key={e.id} className="tag">{e.in} – {e.out ?? '…'}{e.source === 'manual' ? ' (corrigido)' : ''}</span>
+            <span key={e.id} className="tag">{e.in} – {e.out ?? '…'}{e.source === 'manual' ? ' (corrigido)' : e.source === 'offline' ? ' (sem rede)' : ''}</span>
           ))}
         </div>
       )}
-      <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>A hora registada é a do servidor (hora de Luanda), não a do seu dispositivo.</p>
+      <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>{pending > 0 ? "Registos sem rede ficam com a hora do telemóvel e são confirmados pela chefia." : "A hora registada é a do servidor (hora de Luanda), não a do seu dispositivo; sem rede, fica a do telemóvel, confirmada pela chefia."}</p>
     </div>
   );
 }

@@ -20,7 +20,7 @@ export const payrollStatusEnum = pgEnum('payroll_status', ['draft', 'closed']);
 export const terminationStatusEnum = pgEnum('termination_status', ['draft', 'confirmed', 'cancelled']);
 export const expenseClaimStatusEnum = pgEnum('expense_claim_status', ['draft', 'submitted', 'approved', 'rejected', 'paid', 'cancelled']);
 export const documentTypeEnum = pgEnum('document_type', ['bi', 'passport', 'residence_card', 'work_visa', 'driving_licence', 'professional_card', 'other']);
-export const punchSourceEnum = pgEnum('punch_source', ['web', 'manual']);
+export const punchSourceEnum = pgEnum('punch_source', ['web', 'manual', 'offline']);
 export const payrollVariableKindEnum = pgEnum('payroll_variable_kind', ['bonus', 'other_earning', 'advance', 'other_deduction']);
 export const bankLineStatusEnum = pgEnum('bank_line_status', ['pending', 'suggested', 'matched', 'out_of_scope']);
 
@@ -331,11 +331,15 @@ export const attendanceEntries = pgTable('attendance_entries', {
   clockOut: timestamp('clock_out', { withTimezone: true }),
   source: punchSourceEnum('source').notNull().default('web'),
   note: text('note'),
+  /** Registo feito sem rede na app: referência gerada no telemóvel (evita duplicar no reenvio). */
+  clientRef: text('client_ref'),
+  /** Saída registada sem rede (hora do telemóvel) — a validar pela chefia. */
+  offlineOut: boolean('offline_out').notNull().default(false),
   createdBy: text('created_by').notNull(),
   updatedBy: text('updated_by'),
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
-}, (t) => [index('attendance_entries_employee_date').on(t.employeeId, t.workDate), index('attendance_entries_company_date').on(t.companyId, t.workDate)]);
+}, (t) => [index('attendance_entries_employee_date').on(t.employeeId, t.workDate), index('attendance_entries_company_date').on(t.companyId, t.workDate), uniqueIndex('attendance_entries_client_ref').on(t.employeeId, t.clientRef)]);
 
 /** Folha de assiduidade mensal aprovada: fecha o mês e fixa as horas extra que seguem para o processamento. */
 export const attendanceMonths = pgTable('attendance_months', {

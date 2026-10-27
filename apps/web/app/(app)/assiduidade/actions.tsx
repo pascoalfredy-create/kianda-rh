@@ -25,7 +25,7 @@ export function AddEntry({ employeeId, date }: { employeeId: string; date: strin
 }
 
 /** Chip de um registo, com edição da saída e remoção (chefia/RH). */
-export function EntryChip({ e, editable }: { e: { id: string; in: string; out: string | null; source: string; note: string | null }; editable: boolean }) {
+export function EntryChip({ e, editable }: { e: { id: string; in: string; out: string | null; source: string; note: string | null; offlineOut?: boolean }; editable: boolean }) {
   const { busy, error, run } = useMutation();
   const [editing, setEditing] = useState(false);
   const [start, setStart] = useState(e.in);
@@ -45,7 +45,8 @@ export function EntryChip({ e, editable }: { e: { id: string; in: string; out: s
     );
   }
   return (
-    <span className={`entry-chip ${e.source === 'manual' ? 'manual' : ''}`} title={e.note ?? (e.source === 'web' ? 'Registado pelo colaborador' : '')}>
+    <span className={`entry-chip ${e.source === 'manual' ? 'manual' : ''} ${e.source === 'offline' || e.offlineOut ? 'offline' : ''}`} title={e.note ?? (e.source === 'web' ? 'Registado pelo colaborador' : '')}>
+      {(e.source === 'offline' || e.offlineOut) && <span aria-label="Registado sem rede">📵</span>}
       {e.in} – {e.out ?? <b style={{ color: 'var(--red)' }}>sem saída</b>}
       {editable && <button aria-label="Corrigir" onClick={() => setEditing(true)}>✎</button>}
     </span>
