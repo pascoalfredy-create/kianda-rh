@@ -88,7 +88,6 @@ export const AO_2026: CountryPack = {
     { title: 'Decreto Presidencial n.º 227/18 — regime de contribuições INSS' },
   ],
   toValidate: [
-    'Fiscal (não LGT): subsídio de férias fora da base do INSS e de Natal dentro (DP 227/18); ajudas de custo fora do IRT/INSS até à diária da empresa; compensações por cessação isentas de IRT até ao valor legal — confirmar com a legislação fiscal e de segurança social',
     'Maternidade (art. 31.º, n.º 4 remete para diploma próprio): o motor mantém o salário pago pela empresa durante a licença; confirmar o regime de pagamento/reembolso pelo INSS',
     'Doença (art. 226.º): paga pela empresa até 6 meses, com direito de regresso sobre a protecção social — o motor não regista o reembolso do INSS',
     'Trabalho em feriado (art. 200.º, n.º 2): "acréscimo de mais de um dia de salário normal" calculado como valor-hora × 8 h por feriado trabalhado (fora dos turnos)',
@@ -101,6 +100,7 @@ export const AO_2026: CountryPack = {
   ],
   /** Regras confirmadas no texto da Lei n.º 12/23 (LGT) — revisão de 27/10/2026. */
   confirmed: [
+    'IRT Grupo A (tabela do OGE 2026, Lei n.º 14/25 — última actualização) e INSS 3% + 8%, incluindo as incidências nos subsídios, ajudas de custo e compensações por cessação — validado pelo contabilista da Kianda (27/10/2026)',
     'Período experimental: 60 dias (indeterminado), até 120/180 por acordo escrito; até 30 dias nos contratos a termo (art. 18.º)',
     'Contrato a termo: limites de 6/12/36/60 meses conforme a causa e conversão em indeterminado (arts. 15.º–17.º); aviso de não renovação de 30 dias, ou compensação de 30 dias (art. 17.º, n.º 3 e 4)',
     'Período normal: 8 h/dia e 44 h/semana, alargável a 54 h em turnos/horário modulado (art. 148.º); turnos rotativos +20% do salário base, que inclui o nocturno (arts. 161.º–162.º); nocturno (20h–6h) +20% (arts. 179.º e 182.º)',
