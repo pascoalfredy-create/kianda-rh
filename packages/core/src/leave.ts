@@ -33,14 +33,17 @@ export const ABSENCE_POLICIES: Record<AbsenceType, AbsencePolicy> = {
     limit: (p) => ({ calendarDays: p.leave.maternityCalendarDays }),
   },
   paternity: {
+    // Art. 218.º: 1 dia pago + 7 dias úteis complementares não remunerados (descontados no processamento).
     type: 'paternity', label: 'Licença de paternidade', deductsVacation: false, paid: false, selfService: true, needsProof: true, color: '#3f6fd8',
-    limit: (p) => ({ workingDays: p.leave.paternityWorkingDays }),
+    limit: (p) => ({ workingDays: p.leave.paternityPaidDays + p.leave.paternityUnpaidWorkingDays }),
   },
   marriage: {
+    // Art. 222.º, n.º 1, a): até 8 dias seguidos de calendário.
     type: 'marriage', label: 'Casamento', deductsVacation: false, paid: true, selfService: true, needsProof: true, color: '#d6589a',
-    limit: (p) => ({ workingDays: p.leave.marriageWorkingDays }),
+    limit: (p) => ({ calendarDays: p.leave.marriageCalendarDays }),
   },
   bereavement: {
+    // Art. 223.º: 8 dias úteis (cônjuge, pais, filhos, irmãos, agregado); 3 (avós, netos, tios, primos, sobrinhos, sogros, genros, noras).
     type: 'bereavement', label: 'Luto', deductsVacation: false, paid: true, selfService: true, needsProof: true, color: '#3d4452',
     limit: (p) => ({ workingDays: p.leave.bereavementWorkingDays }),
   },
@@ -68,7 +71,10 @@ export function vacationEntitlement(hireDate: string, year: number, pack: Countr
   if (year < hireYear) return 0;
   const max = pack.labour.vacationWorkingDays;
   if (year > hireYear) return max;
-  return Math.min(max, fullMonthsBetween(hireDate, `${year}-12-31`) * pack.leave.firstYearDaysPerMonth);
+  // Art. 204.º, n.º 2: 2 dias úteis por mês completo, com o mínimo de 6 dias úteis.
+  const months = fullMonthsBetween(hireDate, `${year}-12-31`);
+  if (!months) return 0;
+  return Math.min(max, Math.max(pack.leave.firstYearMinDays, months * pack.leave.firstYearDaysPerMonth));
 }
 
 /** Primeiro dia em que pode gozar férias (após os meses mínimos de serviço). */

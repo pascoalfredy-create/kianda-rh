@@ -44,6 +44,8 @@ export const companies = pgTable('companies', {
   perDiemInternationalMinor: bigint('per_diem_international_minor', { mode: 'number' }),
   /** Portal: declarações pedidas pelo colaborador emitidas automaticamente (sem passar pelo RH). */
   autoIssueDeclarations: boolean('auto_issue_declarations').notNull().default(false),
+  /** Pagar alimentação e transporte nos dias de férias (por acordo; a regra legal é não pagar — LGT, art. 213.º, n.º 2). */
+  allowancesOnVacation: boolean('allowances_on_vacation').notNull().default(false),
   /** Sector de actividade (registo) — pré-configurações por sector. */
   sector: text('sector'),
   /** Logotipo para o papel timbrado (data URL PNG/JPEG, até 300 KB). */
@@ -122,6 +124,32 @@ export const employeeAllowances = pgTable('employee_allowances', {
   createdBy: text('created_by').notNull(),
   createdAt: createdAt(),
 }, (t) => [index('employee_allowances_employee').on(t.employeeId), index('employee_allowances_company').on(t.companyId)]);
+
+/** Adiantamentos salariais: pedido escrito do colaborador, aprovação com plano de prestações, pagamento e reembolso (LGT, art. 248.º). */
+export const salaryAdvances = pgTable('salary_advances', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  employeeId: text('employee_id').notNull().references(() => employees.id),
+  number: text('number').notNull(),
+  amountMinor: money('amount_minor'),
+  installments: integer('installments').notNull(),
+  /** Primeiro mês de desconto (AAAA-MM). */
+  firstPeriod: text('first_period').notNull(),
+  reason: text('reason'),
+  /** pending | approved | rejected | cancelled | paid */
+  status: text('status').notNull().default('pending'),
+  /** Pedido escrito do trabalhador (art. 248.º, n.º 6): quem pediu e quando confirmou. */
+  requestedBy: text('requested_by').notNull(),
+  writtenRequestAt: timestamp('written_request_at', { withTimezone: true }).notNull(),
+  decidedBy: text('decided_by'),
+  decidedAt: timestamp('decided_at', { withTimezone: true }),
+  decisionNote: text('decision_note'),
+  paidOn: date('paid_on'),
+  paidBy: text('paid_by'),
+  bankAccountId: text('bank_account_id'),
+  journalEntryId: text('journal_entry_id'),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex('salary_advances_company_number').on(t.companyId, t.number), index('salary_advances_employee').on(t.employeeId)]);
 
 export const departments = pgTable('departments', {
   id: id(),
@@ -254,6 +282,10 @@ export const attendanceMonths = pgTable('attendance_months', {
   expectedMinutes: integer('expected_minutes').notNull(),
   overtimeMinutes: integer('overtime_minutes').notNull(),
   approvedOvertimeMinutes: integer('approved_overtime_minutes').notNull(),
+  /** Parte do extra em dias de descanso/feriado (paga à parte), minutos de descanso a pagar (mín. 3 h/dia) e feriados trabalhados. */
+  restHolidayOvertimeMinutes: integer('rest_holiday_overtime_minutes').notNull().default(0),
+  restDayPaidMinutes: integer('rest_day_paid_minutes').notNull().default(0),
+  holidayWorkDays: integer('holiday_work_days').notNull().default(0),
   note: text('note'),
   approvedBy: text('approved_by').notNull(),
   approvedAt: timestamp('approved_at', { withTimezone: true }).notNull().defaultNow(),
@@ -313,6 +345,8 @@ export const payrollVariables = pgTable('payroll_variables', {
   code: text('code'),
   /** Variáveis geradas por uma cessação (apagadas se a cessação for anulada). */
   terminationId: text('termination_id'),
+  /** Prestação de reembolso de um adiantamento salarial. */
+  advanceId: text('advance_id'),
   note: text('note'),
   createdBy: text('created_by').notNull(),
   createdAt: createdAt(),

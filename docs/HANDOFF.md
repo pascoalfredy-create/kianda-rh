@@ -1,7 +1,7 @@
 # Kianda RH — documento de passagem (handoff)
 
 > Para um novo agente/programador continuar o trabalho. Leia isto primeiro, depois `docs/ROADMAP.md` e `docs/DEPLOY.md`.
-> Última actualização: 27/10/2026 (entrega 18 publicada — fase SaaS concluída).
+> Última actualização: 27/10/2026 (entrega 19 publicada — revisão pela LGT e adiantamentos).
 
 ## 1. O que é
 
@@ -24,7 +24,7 @@ Plataforma SaaS de RH para empresas angolanas (estilo Factorial), com processame
 | Pasta | O quê |
 | --- | --- |
 | `packages/core` | Motor puro TypeScript (sem I/O): salários, IRT, INSS, férias, assiduidade, PGC, balancete, conciliação, despesas, cessação, documentos, talento, licenças, TOTP, sectores (`sectors.ts`: regimes, subsídios, conformidade). **Valores monetários em cêntimos inteiros** (`kz(1000)` = 100000). Regras legais por ano em `src/packs/ao-2026.ts` (com lista `toValidate`). |
-| `packages/db` | Drizzle 0.45 + pg. `src/schema.ts`, migrações SQL em `migrations/` (0000–0021), `scripts/seed.ts` (empresa demo), `scripts/migrate.ts`, `scripts/platform-admins.ts`. |
+| `packages/db` | Drizzle 0.45 + pg. `src/schema.ts`, migrações SQL em `migrations/` (0000–0022), `scripts/seed.ts` (empresa demo), `scripts/migrate.ts`, `scripts/platform-admins.ts`. |
 | `apps/api` | Hono 4 (corre em Node local e em Cloudflare Workers). Rotas em `src/routes/*.ts`, serviços em `src/services/`. Zod 4 para validação. Testes de API em `test/api.test.ts` (Vitest, base Postgres real). |
 | `apps/web` | Next 16 + React 19 (App Router) via OpenNext Cloudflare. Páginas autenticadas em `app/(app)/`; públicas: `login`, `registo`, `termos`, `acesso/[token]`, `carreiras/[company]`, `verificar/[code]`. |
 
@@ -40,6 +40,8 @@ Versões: TypeScript 5.9.3, Vitest 4.0.5, Hono 4.13, Zod 4.6, Next 16.4, React 1
 - **Web → API:** route handler `app/api/[...path]/route.ts` reencaminha para a API (binding `API` em Cloudflare, `API_URL` em local). Páginas usam `api()` / `currentUser()` de `lib/api.ts`; cliente usa `send()` / `useMutation()` de `lib/client.ts`.
 - **Next:** não exportar constantes de ficheiros `page.tsx` (usar `status.ts`/`types.ts` ao lado). Constantes partilhadas não vêm de módulos `'use client'`. Protecção de páginas no layout do grupo `(app)` (sem `proxy.ts`).
 - **Hora de Luanda (UTC+1):** `luandaDate()` do core.
+- **Regras laborais:** revistas contra o texto oficial da LGT (Lei n.º 12/23, MAPTSS 2024) — cada regra confirmada está em `AO_2026.confirmed` com o artigo; `toValidate` ficou só com pontos fiscais/segurança social e de interpretação. Ao mudar uma regra numérica, sobe a versão do pacote (`AO-2026.2`) e acrescenta um teste em `packages/core/test/lgt.test.ts` com o artigo.
+- **Adiantamentos (`salary_advances`):** `routes/advances.ts` + `core/advances.ts`. Prestações = `payroll_variables` com `advance_id` (não se apagam à mão). Limites do art. 248.º validados no pedido e na aprovação (exposição de outros adiantamentos por mês).
 - **Lançamentos contabilísticos:** nunca se apagam; anula-se com estorno. Referências: `PS-AAAAMM` (processamento), `PG-…` (pagamentos), `ND-AAAA-NNNN` (despesas), `DOC-AAAA-NNNN` (documentos), `PF-AAAA-NNNN` (pedidos de pagamento da licença).
 - **Auditoria:** tabela `audit_logs` em todas as operações sensíveis.
 
@@ -67,7 +69,7 @@ export DATABASE_URL=postgresql://kianda:kianda@127.0.0.1:5433/kianda
 export API_JWT_SECRET="segredo-de-desenvolvimento-local-com-mais-de-32"
 pnpm db:migrate && SEED_OWNER_PASSWORD=Kianda2026demo pnpm db:seed
 pnpm --filter @kianda/core build && pnpm --filter @kianda/db build   # a API consome os dist
-pnpm -r typecheck && pnpm -r test                                    # core 101 testes, API 104 testes
+pnpm -r typecheck && pnpm -r test                                    # core 113 testes, API 107 testes
 (cd apps/api && npx tsx src/server.ts)                               # :4000
 (cd apps/web && npx next build && API_URL=http://localhost:4000 npx next start -p 3000)
 ```
@@ -79,7 +81,7 @@ pnpm -r typecheck && pnpm -r test                                    # core 101 
 
 ## 8. Estado — o que está feito
 
-Entregas **1–13** (produto) e **14–18** (SaaS), todas publicadas. Resumo em `docs/ROADMAP.md`. Destaques:
+Entregas **1–13** (produto), **14–18** (SaaS) e **19** (revisão LGT + adiantamentos), todas publicadas. Resumo em `docs/ROADMAP.md`. Destaques:
 
 - Processamento: IRT Grupo A 2026, INSS 3%+8%, subsídios (férias/Natal, proporcionais), horas extra (50%/75%, blocos de 15 min), faltas, variáveis, mês incompleto proporcional, recibos com hash.
 - Contas PGC sugeridas (parametrizáveis): 72.2.1–72.2.4, 72.5.1, 34.3 (IRT), 34.9.1 (INSS), 36.1.2, 36.3, 36.9, 43.1, 75.2 (despesas), 72.8 (ajudas de custo e compensações por cessação), 63 (compensação por falta de aviso do trabalhador).

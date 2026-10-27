@@ -401,7 +401,7 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       const l = await lineOf(decRun);
       expect(codes(l)).toEqual(expect.arrayContaining(['BASE', 'BONUS', 'SUBFER', 'SUBNAT', 'ADIANT', 'OUTDESC']));
       const natal = l.breakdown.find((b: { code: string }) => b.code === 'SUBNAT');
-      expect(natal.name).toMatch(/proporcional 98[.,]9/);
+      expect(natal.name).toMatch(/proporcional 91[.,]7/);
     });
 
     it('decisão manual: excluir o subsídio de férias e voltar à regra automática', async () => {
@@ -775,7 +775,7 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(p.proposal.seniority).toMatchObject({ years: 7, months: 8 });
       expect(p.proposal.notice).toMatchObject({ requiredDays: 30, givenDays: 14, missingDays: 16 });
       const by = (c: string) => p.items.find((i: { code: string }) => i.code === c)?.amountMinor;
-      expect(by('COMP')).toBe(30_000_000 * 5 + 15_000_000 * 2);
+      expect(by('COMP')).toBe(30_000_000 * 5 + 15_000_000 * 3); // 7 anos e 8 meses → 8 anos (LGT, art. 311.º)
       expect(by('AVISO')).toBe(16_000_000);
       expect(by('FERNG')).toBe(30_000_000); // 22 dias por gozar = 1 mês
       expect(p.payslip.lines.find((l: { code: string }) => l.code === 'BASE')).toMatchObject({ name: 'Vencimento base (15 dia(s))', amountMinor: 15_000_000 });
@@ -1175,7 +1175,8 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(s.allowanceTypes.map((x: { code: string }) => x.code).sort()).toEqual(['SUBALOJ', 'SUBCAMPO', 'SUBISOL', 'SUBRISCO']);
       expect(s.profile.schedules.every((x: { applied: boolean }) => x.applied)).toBe(true);
       const rot = s.schedules.find((x: { presetKey: string }) => x.presetKey === 'rotation_28');
-      expect(rot.stats).toMatchObject({ avgWeeklyMinutes: 2520, problems: [] });
+      expect(rot.stats.avgWeeklyMinutes).toBe(2520);
+      expect(rot.stats.problems.join()).toMatch(/art\. 161\.º/); // 12 h em turnos rotativos: excepção do art. 161.º, n.º 3
       rotationId = rot.id;
       // Aplicar outra vez não duplica nada.
       expect((await send('POST', mine, '/v1/sector/apply')).json()).toEqual({ schedules: 0, allowances: 0 });
@@ -1480,6 +1481,66 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       const tables = (await db.execute(sql`select table_name from information_schema.columns where table_schema = 'public' and column_name = 'company_id'`)).rows.map((r) => String(r.table_name));
       for (const t of tables) expect((await db.execute(sql`select count(*)::int as n from ${sql.identifier(t)} where company_id = ${idP}`)).rows[0], t).toEqual({ n: 0 });
       expect((await post(owner, `/v1/platform/companies/${companyA}/purge`, { confirmNif: nifA })).json().error).toBe('protegida'); // a própria empresa do administrador
+    });
+  });
+
+  describe('adiantamentos salariais e revisão da LGT (entrega 19)', () => {
+    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
+    let ownerQ = '';
+    let empQ = '';
+    let advId = '';
+
+    beforeAll(async () => {
+      const nifQ = String(Number(nifA) + 11).padStart(10, '0').slice(-10);
+      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Empresa Adiantamentos', nif: nifQ }, name: 'Dono Q', email: `dono+${stamp}@q.ao`, password: pw } });
+      ownerQ = cookieOf(r);
+      empQ = (await post(ownerQ, '/v1/employees', { number: '1', name: 'Pedro Adiantamento', jobTitle: 'Técnico', contract: { type: 'indefinite', startDate: '2025-01-06', base: 300000 } })).json().id;
+    });
+
+    it('limites legais: 25% do líquido por prestação e 3 salários base no total (art. 248.º)', async () => {
+      const sim = (await get(ownerQ, `/v1/advances/simulate?employeeId=${empQ}&amount=200000&installments=1&firstPeriod=2026-11`)).json();
+      expect(sim.maxAmountMinor).toBe(90_000_000);
+      expect(sim.minInstallments).toBeGreaterThan(1);
+      expect(sim.problems.join()).toMatch(/pelo menos \d+ prestações/);
+      expect((await post(ownerQ, '/v1/advances', { employeeId: empQ, amount: 200000, installments: 1, firstPeriod: '2026-11', confirm: true })).json().error).toBe('limite_legal');
+      expect((await post(ownerQ, '/v1/advances', { employeeId: empQ, amount: 950000, installments: 24, firstPeriod: '2026-11', confirm: true })).json().message).toMatch(/3 salários base/);
+      expect((await post(ownerQ, '/v1/advances', { employeeId: empQ, amount: 100000, installments: 2, firstPeriod: '2026-11' })).statusCode).toBe(400); // sem confirmação do pedido escrito
+      expect((await post(ownerQ, '/v1/advances', { employeeId: empQ, amount: 100000, installments: 2, firstPeriod: '2025-01', confirm: true })).json().error).toBe('periodo_passado');
+    });
+
+    it('pedido → aprovação → pagamento com lançamento 36.3 → prestações no processamento', async () => {
+      const r = await post(ownerQ, '/v1/advances', { employeeId: empQ, amount: 200000, installments: 4, firstPeriod: '2026-11', reason: 'Despesas de saúde', confirm: true });
+      expect(r.statusCode).toBe(201);
+      advId = r.json().id;
+      expect(r.json()).toMatchObject({ status: 'pending', number: expect.stringMatching(/^AD-\d{4}-0001$/) });
+      expect((await post(ownerQ, `/v1/advances/${advId}/pay`, { paidOn: '2026-10-20' })).json().error).toBe('estado_invalido');
+      expect((await post(ownerQ, `/v1/advances/${advId}/decide`, { approve: false })).statusCode).toBe(400); // recusa exige motivo
+      expect((await post(ownerQ, `/v1/advances/${advId}/decide`, { approve: true })).json().status).toBe('approved');
+      const paid = await post(ownerQ, `/v1/advances/${advId}/pay`, { paidOn: '2026-10-20' });
+      expect(paid.json().status).toBe('paid');
+      const ledger = (await get(ownerQ, '/v1/ledger/journal?from=2026-10-01&to=2026-10-31')).json();
+      const je = ledger.find((x: { reference: string }) => x.reference === paid.json().number);
+      expect(je.lines.map((l: { account: string; debitMinor: number; creditMinor: number }) => [l.account, l.debitMinor, l.creditMinor])).toEqual([['36.3', 20_000_000, 0], ['43.1', 0, 20_000_000]]);
+      const list = (await get(ownerQ, '/v1/advances')).json();
+      expect(list[0]).toMatchObject({ outstandingMinor: 20_000_000, plan: [{ period: '2026-11', amountMinor: 5_000_000 }, {}, {}, { period: '2027-02' }] });
+      const vars = (await get(ownerQ, '/v1/payroll-variables?period=2026-11')).json();
+      const inst = vars.find((v: { advanceId: string | null }) => v.advanceId === advId);
+      expect(inst).toMatchObject({ kind: 'advance', amountMinor: 5_000_000 });
+      expect((await app.inject({ method: 'DELETE', url: `/v1/payroll-variables/${inst.id}`, headers: as(ownerQ) })).json().error).toBe('gerida_pelo_adiantamento');
+      const draft = (await post(ownerQ, '/v1/payroll-runs', { period: '2026-11' })).json();
+      const run = (await get(ownerQ, `/v1/payroll-runs/${draft.run.id}`)).json();
+      const line = run.lines.find((l: { employeeId: string }) => l.employeeId === empQ);
+      expect(line.breakdown.find((x: { code: string }) => x.code === 'ADIANT').amountMinor).toBe(5_000_000);
+      expect(draft.warnings.some((w: { message: string }) => /25%/.test(w.message))).toBe(false);
+      // Em dívida conta para o limite de 3 salários: agora só cabem 900 000 − 200 000.
+      expect((await get(ownerQ, `/v1/advances/simulate?employeeId=${empQ}&amount=750000&installments=24&firstPeriod=2027-03`)).json().maxAmountMinor).toBe(70_000_000);
+    });
+
+    it('cancelar: pago já não se cancela; o colaborador não vê os pedidos de outros', async () => {
+      expect((await post(ownerQ, `/v1/advances/${advId}/cancel`)).json().error).toBe('estado_invalido');
+      expect((await get(employeeUser, '/v1/advances')).json()).toEqual([]);
+      expect((await post(employeeUser, `/v1/advances/${advId}/decide`, { approve: true })).statusCode).toBe(403);
     });
   });
 

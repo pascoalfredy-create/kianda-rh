@@ -18,6 +18,7 @@ import { billingRoutes, gatewayWebhookRoutes, platformRoutes } from './routes/bi
 import { accessRoutes } from './routes/access.js';
 import { sectorRoutes } from './routes/sector.js';
 import { privacyRoutes } from './routes/privacy.js';
+import { advanceRoutes } from './routes/advances.js';
 import { authRoutes } from './routes/auth.js';
 import { employeeRoutes } from './routes/employees.js';
 import { payrollRoutes } from './routes/payroll.js';
@@ -75,6 +76,7 @@ export function buildApp(opts: { logger?: boolean; rateLimit?: boolean } = {}) {
   app.route('/', accessRoutes());
   app.route('/', sectorRoutes());
   app.route('/', privacyRoutes());
+  app.route('/', advanceRoutes());
   return app;
 }
 

@@ -19,3 +19,4 @@ export * from './talent.js';
 export * from './licensing.js';
 export * from './access.js';
 export * from './sectors.js';
+export * from './advances.js';

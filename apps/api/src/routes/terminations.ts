@@ -4,7 +4,7 @@ import {
 } from '@kianda/core';
 import {
   absences, and, asc, auditLogs, companies, compensationChanges, contracts, desc, employees, eq, getDb, gte, inArray, lte, payrollLines, payrollRuns,
-  payrollVariables, terminations, users, type Db,
+  payrollVariables, sql, terminations, users, type Db,
 } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -69,6 +69,13 @@ async function context(db: Db, companyId: string, employeeId: string, effectiveD
   const [run] = await db.select().from(payrollRuns).where(and(eq(payrollRuns.companyId, companyId), eq(payrollRuns.period, period)));
   if (run?.status === 'closed') warnings.push(`O processamento de ${period.slice(5)}/${period.slice(0, 4)} já está fechado: o fecho de contas não pode entrar nesse mês.`);
   if (emp.status === 'terminated') warnings.push('O colaborador já está cessado.');
+  // Adiantamentos com prestações depois do mês da cessação: não são descontadas automaticamente (art. 248.º).
+  const later = await db.select({ label: payrollVariables.label, period: payrollVariables.period, amount: payrollVariables.amountMinor }).from(payrollVariables)
+    .where(and(eq(payrollVariables.employeeId, emp.id), sql`${payrollVariables.advanceId} is not null`, sql`${payrollVariables.period} > ${period}`));
+  if (later.length) {
+    const total = later.reduce((s, v) => s + v.amount, 0);
+    warnings.push(`Adiantamento salarial com ${later.length} prestação(ões) depois de ${period.slice(5)}/${period.slice(0, 4)} (${(total / 100).toLocaleString('pt-PT', { minimumFractionDigits: 2 })} Kz em dívida): acerte no fecho de contas (outro desconto) — descontos a crédito até 25% do líquido (LGT, art. 248.º, n.º 7).`);
+  }
   return {
     emp, contract, hire, pay, pack, period, run, warnings,
     vacation: { entitlement, taken, unused: Math.max(0, entitlement - taken) },

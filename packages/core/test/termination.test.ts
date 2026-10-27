@@ -13,13 +13,13 @@ describe('cessação do contrato', () => {
   it('despedimento por causas objectivas: compensação 5 anos × base + 50% nos restantes; aviso em falta pago', () => {
     const p = terminationProposal({ ...base, reason: 'objective_dismissal', hireDate: '2018-03-01', effectiveDate: '2026-10-31', noticeDate: '2026-10-15', baseMinor: kz(300_000), vacationUnusedDays: 10, holidaySubsidyPaidThisYear: false, christmasSubsidyPaidThisYear: false });
     expect(p.notice).toEqual({ requiredDays: 30, givenDays: 16, missingDays: 14, by: 'employer' });
-    expect(code(p, 'COMP')).toBe(kz(1_950_000));
+    expect(code(p, 'COMP')).toBe(kz(2_100_000)); // 8 anos e 8 meses → 9 anos (art. 311.º): 5 × 300 000 + 4 × 150 000
     expect(code(p, 'AVISO')).toBe(kz(140_000));
     expect(code(p, 'FERNG')).toBe(13_636_364);
     expect(code(p, 'FERPROP')).toBe(27_272_727);
     expect(code(p, 'SUBFERPROP')).toBe(13_636_364);
     expect(code(p, 'SUBFER')).toBe(kz(150_000));
-    expect(code(p, 'SUBNAT')).toBe(Math.round(kz(150_000) * 304 / 365));
+    expect(code(p, 'SUBNAT')).toBe(kz(125_000)); // 10 meses completos / 12 (art. 238.º, n.º 3)
     expect(p.items.find((i) => i.code === 'COMP')).toMatchObject({ inInss: false, inIrt: false });
   });
 
@@ -32,8 +32,8 @@ describe('cessação do contrato', () => {
   });
 
   it('mútuo acordo: até à referência legal isento; o excesso tributado em IRT', () => {
-    const p = terminationProposal({ ...base, reason: 'mutual_agreement', hireDate: '2023-06-01', effectiveDate: '2026-10-31', baseMinor: kz(400_000), agreedCompensationMinor: kz(1_500_000) });
-    expect(p.items.find((i) => i.code === 'COMP')).toMatchObject({ amountMinor: kz(1_200_000), inIrt: false });
+    const p = terminationProposal({ ...base, reason: 'mutual_agreement', hireDate: '2023-06-01', effectiveDate: '2026-10-31', baseMinor: kz(400_000), agreedCompensationMinor: kz(1_900_000) });
+    expect(p.items.find((i) => i.code === 'COMP')).toMatchObject({ amountMinor: kz(1_600_000), inIrt: false }); // referência: 3 anos e 5 meses → 4 anos (art. 311.º) = 1 600 000
     expect(p.items.find((i) => i.code === 'COMPEXC')).toMatchObject({ amountMinor: kz(300_000), inIrt: true, inInss: false });
   });
 

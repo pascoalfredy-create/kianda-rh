@@ -113,6 +113,7 @@ export function payrollRoutes() {
     const [v] = await db.select().from(payrollVariables).where(and(eq(payrollVariables.id, c.req.param('id')), eq(payrollVariables.companyId, actor.companyId)));
     if (!v) return c.json({ error: 'nao_encontrado', message: 'Variável inexistente' }, 404);
     if (v.terminationId) throw new DomainError('gerida_pela_cessacao', 'Esta linha faz parte de um fecho de contas: altere-a na cessação do contrato');
+    if (v.advanceId) throw new DomainError('gerida_pelo_adiantamento', 'Esta linha é uma prestação de um adiantamento salarial: gerida na página Adiantamentos');
     const [run] = await db.select({ status: payrollRuns.status }).from(payrollRuns).where(and(eq(payrollRuns.companyId, actor.companyId), eq(payrollRuns.period, v.period)));
     if (run?.status === 'closed') throw new DomainError('processamento_fechado', 'O processamento deste mês já está fechado');
     await db.delete(payrollVariables).where(eq(payrollVariables.id, v.id));
@@ -162,7 +163,7 @@ export function payrollRoutes() {
 
   app.get('/v1/company/settings', async (c) => {
     const [co] = await getDb().select().from(companies).where(eq(companies.id, c.get('actor').companyId));
-    return c.json({ name: co!.name, nif: co!.nif, inssNumber: co!.inssNumber, address: co!.address, workdayMinutes: co!.workdayMinutes, christmasSubsidyMonth: co!.christmasSubsidyMonth, holidaySubsidyMonth: co!.holidaySubsidyMonth, perDiemNationalMinor: co!.perDiemNationalMinor, perDiemInternationalMinor: co!.perDiemInternationalMinor, autoIssueDeclarations: co!.autoIssueDeclarations });
+    return c.json({ name: co!.name, nif: co!.nif, inssNumber: co!.inssNumber, address: co!.address, workdayMinutes: co!.workdayMinutes, christmasSubsidyMonth: co!.christmasSubsidyMonth, holidaySubsidyMonth: co!.holidaySubsidyMonth, perDiemNationalMinor: co!.perDiemNationalMinor, perDiemInternationalMinor: co!.perDiemInternationalMinor, autoIssueDeclarations: co!.autoIssueDeclarations, allowancesOnVacation: co!.allowancesOnVacation });
   });
 
   app.patch('/v1/company/settings', requireRole('hr_admin'), async (c) => {
@@ -176,6 +177,7 @@ export function payrollRoutes() {
       perDiemNationalMinor: z.number().int().positive().max(1e11).nullable().optional(),
       perDiemInternationalMinor: z.number().int().positive().max(1e11).nullable().optional(),
       autoIssueDeclarations: z.boolean().optional(),
+      allowancesOnVacation: z.boolean().optional(),
     }).parse(await body(c));
     const db = getDb();
     const [before] = await db.select().from(companies).where(eq(companies.id, actor.companyId));

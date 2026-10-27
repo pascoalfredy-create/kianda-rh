@@ -25,7 +25,7 @@ export const COMPANY_TABLES_PURGE_ORDER: Scope[] = [
   { table: 'compensation_changes' },
   { table: 'contracts', via: { column: 'employee_id', parent: 'employees' } },
   { table: 'employee_documents' }, { table: 'documents' }, { table: 'absences' }, { table: 'attendance_entries' }, { table: 'attendance_months' },
-  { table: 'access_links' }, { table: 'users' }, { table: 'employees' }, { table: 'departments' },
+  { table: 'salary_advances' }, { table: 'access_links' }, { table: 'users' }, { table: 'employees' }, { table: 'departments' },
   { table: 'bank_accounts' }, { table: 'account_mappings' },
   { table: 'gateway_events', via: { column: 'payment_request_id', parent: 'payment_requests' } },
   { table: 'payment_requests' }, { table: 'subscriptions' }, { table: 'outbound_emails' }, { table: 'audit_logs' },

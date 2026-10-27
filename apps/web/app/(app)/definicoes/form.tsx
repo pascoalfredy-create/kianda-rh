@@ -6,7 +6,7 @@ import { useMutation } from '@/lib/client';
 const kzField = (v: FormDataEntryValue | null) => { const t = String(v ?? '').trim().replace(/\s/g, '').replace(/\./g, '').replace(',', '.'); return t ? Math.round(Number(t) * 100) : null; };
 const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
-export function SettingsForm({ s }: { s: { inssNumber: string | null; address: string | null; workdayMinutes: number; christmasSubsidyMonth: number; holidaySubsidyMonth: number | null; perDiemNationalMinor: number | null; perDiemInternationalMinor: number | null; autoIssueDeclarations: boolean } }) {
+export function SettingsForm({ s }: { s: { inssNumber: string | null; address: string | null; workdayMinutes: number; christmasSubsidyMonth: number; holidaySubsidyMonth: number | null; perDiemNationalMinor: number | null; perDiemInternationalMinor: number | null; autoIssueDeclarations: boolean; allowancesOnVacation: boolean } }) {
   const { busy, error, run } = useMutation();
   const [ok, setOk] = useState('');
   return (
@@ -26,6 +26,7 @@ export function SettingsForm({ s }: { s: { inssNumber: string | null; address: s
           perDiemNationalMinor: kzField(f.get('perDiemNational')),
           perDiemInternationalMinor: kzField(f.get('perDiemInternational')),
           autoIssueDeclarations: f.get('autoIssueDeclarations') === 'on',
+          allowancesOnVacation: f.get('allowancesOnVacation') === 'on',
         });
         if (done) setOk('Definições gravadas.');
       }}
@@ -44,7 +45,8 @@ export function SettingsForm({ s }: { s: { inssNumber: string | null; address: s
           {MONTHS.map((m, i) => <option key={m} value={i + 1}>Em {m}, para todos</option>)}
         </select>
       </label>
-      <p className="muted wide">Ambos os subsídios correspondem a 50% do salário base (pacote AO-2026); no ano de admissão são proporcionais. Nenhum subsídio é pago duas vezes no mesmo ano. Regras assinaladas para validação jurídica.</p>
+      <p className="muted wide">Ambos os subsídios correspondem a 50% do salário base (LGT, art. 238.º); sem um ano completo de serviço são proporcionais aos meses completos trabalhados. Nenhum subsídio é pago duas vezes no mesmo ano. A gratificação de férias deve ser paga até 15 dias antes do início das férias (art. 213.º, n.º 5).</p>
+      <label className="wide" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><input type="checkbox" name="allowancesOnVacation" defaultChecked={s.allowancesOnVacation} /> Pagar subsídios de alimentação e de transporte também nos dias de férias (por acordo — a regra da LGT, art. 213.º, n.º 2, é não pagar)</label>
       <h3>Ajudas de custo</h3>
       <label className="span2">Diária — território nacional (Kz)<input name="perDiemNational" inputMode="decimal" placeholder="Sem limite" defaultValue={s.perDiemNationalMinor ? String(s.perDiemNationalMinor / 100).replace('.', ',') : ''} /></label>
       <label className="span2">Diária — estrangeiro (Kz)<input name="perDiemInternational" inputMode="decimal" placeholder="Sem limite" defaultValue={s.perDiemInternationalMinor ? String(s.perDiemInternationalMinor / 100).replace('.', ',') : ''} /></label>

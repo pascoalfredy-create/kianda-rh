@@ -1,5 +1,6 @@
 import { applyBps, assertMinor, prorate, sum, type Minor } from './money.js';
 import { getPack, type CountryPack } from './packs/index.js';
+import { fullMonthsBetween } from './leave.js';
 
 export interface EarningInput {
   code: string;
@@ -21,6 +22,17 @@ export interface PayrollInput {
   overtimeHours?: number;
   /** Faltas injustificadas descontadas, em dias. */
   absenceDays?: number;
+  /** Horas de falta (regime de horário): desconto = valor-hora × horas (LGT, arts. 237.º, n.º 7 e 240.º). Sem isto: dias × horas diárias. */
+  absenceHours?: number;
+  /** Licença não remunerada (ex.: paternidade complementar, art. 218.º): horas a descontar ao valor-hora. */
+  unpaidLeaveHours?: number;
+  unpaidLeaveLabel?: string;
+  /** Dia de descanso semanal trabalhado: horas a pagar com +75% (art. 194.º; o mínimo de 3 h já vem aplicado). */
+  restDayHours?: number;
+  /** Feriados trabalhados (fora de turnos): mais um dia de salário por feriado (art. 200.º). */
+  holidayWorkDays?: number;
+  /** Alimentação e transporte não são devidos nos dias de férias, salvo acordo (art. 213.º, n.º 2): fracção a retirar (0–1). */
+  vacationAllowanceCut?: { fraction: number; days: number };
   advancesMinor?: Minor;
   otherDeductionsMinor?: Minor;
   /** Compensação por falta de aviso prévio do trabalhador, descontada no fecho de contas (não reduz bases). */
@@ -93,10 +105,19 @@ export class NegativeNetError extends RangeError {
 }
 
 /**
- * Fracção pro rata do ano civil em que o colaborador esteve ao serviço (ano de admissão/cessação).
- * Usada no subsídio de Natal proporcional.
+ * Fracção do ano para os subsídios quando não há um ano completo de serviço: meses completos trabalhados / 12
+ * (LGT, art. 238.º, n.º 3).
  */
 export function yearServiceFraction(year: number, from: string, until?: string | null): number {
+  const start = from > `${year}-01-01` ? from : `${year}-01-01`;
+  const end = until && until < `${year}-12-31` ? until : `${year}-12-31`;
+  if (end < start) return 0;
+  if (start === `${year}-01-01` && end === `${year}-12-31`) return 1;
+  return Math.min(12, fullMonthsBetween(start, end)) / 12;
+}
+
+/** @deprecated proporção por dias (versões anteriores do pacote); mantida para recálculo de históricos. */
+export function yearServiceFractionByDays(year: number, from: string, until?: string | null): number {
   const start = from > `${year}-01-01` ? from : `${year}-01-01`;
   const end = until && until < `${year}-12-31` ? until : `${year}-12-31`;
   if (end < start) return 0;
@@ -112,8 +133,11 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   const partial = input.workedDays !== undefined && input.workedDays < pack.labour.dailyRateDivisor;
   const part = (v: Minor) => (partial ? prorate(v, Math.max(0, input.workedDays!), pack.labour.dailyRateDivisor) : v);
   const base = part(fullBase);
-  const meal = part(assertMinor(input.mealMinor ?? 0, 'subsídio de alimentação'));
-  const transport = part(assertMinor(input.transportMinor ?? 0, 'subsídio de transporte'));
+  const cut = input.vacationAllowanceCut && input.vacationAllowanceCut.fraction > 0 ? Math.min(1, input.vacationAllowanceCut.fraction) : 0;
+  const lessVacation = (v: Minor) => (cut ? v - Math.round(v * cut) : v);
+  const meal = lessVacation(part(assertMinor(input.mealMinor ?? 0, 'subsídio de alimentação')));
+  const transport = lessVacation(part(assertMinor(input.transportMinor ?? 0, 'subsídio de transporte')));
+  const vacationNote = cut ? ` (sem ${input.vacationAllowanceCut!.days} dia(s) de férias)` : '';
   const lines: PayrollLine[] = [];
   let inssBase = 0;
   let irtBase = 0;
@@ -128,10 +152,18 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   earn('BASE', partial ? `Vencimento base (${input.workedDays} dia(s))` : 'Vencimento base', base, true, true);
   // Alimentação e transporte: fora do INSS; isentos de IRT até ao limite do pacote, cada um.
   const ex = pack.irt.allowanceExemptionMinor;
-  if (meal) { lines.push({ code: 'ALIM', name: 'Subsídio de alimentação', kind: 'earning', amountMinor: meal }); irtBase += Math.max(0, meal - ex); }
-  if (transport) { lines.push({ code: 'TRANSP', name: 'Subsídio de transporte', kind: 'earning', amountMinor: transport }); irtBase += Math.max(0, transport - ex); }
+  if (meal) { lines.push({ code: 'ALIM', name: `Subsídio de alimentação${vacationNote}`, kind: 'earning', amountMinor: meal }); irtBase += Math.max(0, meal - ex); }
+  if (transport) { lines.push({ code: 'TRANSP', name: `Subsídio de transporte${vacationNote}`, kind: 'earning', amountMinor: transport }); irtBase += Math.max(0, transport - ex); }
   for (const o of input.otherEarnings ?? []) earn(o.code, o.name, assertMinor(o.amountMinor, o.name), o.inInss ?? true, o.inIrt ?? true);
   if (input.overtimeHours) earn('HE', `Horas extraordinárias (${input.overtimeHours} h)`, overtimeMinor(fullBase, input.overtimeHours, pack), true, true);
+  const hourly = hourlyRateMinor(fullBase, pack);
+  if (input.restDayHours) {
+    const r = pack.labour.restDayWork;
+    earn('HEDESC', `Trabalho em dia de descanso (${input.restDayHours} h, +${r.extraBps / 100}%)`, Math.round(input.restDayHours * hourly * (1 + r.extraBps / 10_000)), true, true);
+  }
+  if (input.holidayWorkDays) {
+    earn('FERTRAB', `Trabalho em feriado (${input.holidayWorkDays} dia(s), +1 dia de salário)`, Math.round(input.holidayWorkDays * pack.labour.holidayWorkExtraDays * pack.labour.dailyHours * hourly), true, true);
+  }
   const subsidy = (flag: boolean | number | undefined, bps: number) => {
     const f = flag === true ? 1 : typeof flag === 'number' ? Math.min(1, Math.max(0, flag)) : 0;
     return { f, amount: f ? Math.round(applyBps(fullBase, bps) * f) : 0 };
@@ -141,12 +173,16 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   if (sf.amount) earn('SUBFER', `Subsídio de férias${pct(sf.f)}`, sf.amount, pack.inss.holidaySubsidyInBase, true);
   const sn = subsidy(input.christmasSubsidy, pack.labour.christmasSubsidyBps);
   if (sn.amount) earn('SUBNAT', `Subsídio de Natal${pct(sn.f)}`, sn.amount, pack.inss.christmasSubsidyInBase, true);
-  if (input.absenceDays) {
-    const v = prorate(fullBase, input.absenceDays, pack.labour.dailyRateDivisor);
-    lines.push({ code: 'FALTAS', name: `Faltas (${input.absenceDays} dia(s))`, kind: 'earning', amountMinor: -v });
+  // Ausências não pagas: valor-hora × horas (arts. 237.º, n.º 7 e 240.º, n.º 2).
+  const deductHours = (code: string, name: string, hours: number) => {
+    const v = Math.min(base, Math.round(hours * hourly));
+    if (!v) return;
+    lines.push({ code, name, kind: 'earning', amountMinor: -v });
     inssBase -= v;
     irtBase -= v;
-  }
+  };
+  if (input.absenceDays) deductHours('FALTAS', `Faltas injustificadas (${input.absenceDays} dia(s))`, input.absenceHours ?? input.absenceDays * pack.labour.dailyHours);
+  if (input.unpaidLeaveHours) deductHours('LICNR', input.unpaidLeaveLabel ?? 'Licença não remunerada', input.unpaidLeaveHours);
 
   const gross = sum(...lines.filter((l) => l.kind === 'earning').map((l) => l.amountMinor));
   const inssEmployee = applyBps(Math.max(0, inssBase), pack.inss.employeeBps);

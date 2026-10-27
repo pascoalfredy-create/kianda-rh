@@ -52,6 +52,7 @@ export async function monthSheet(db: Db, companyId: string, emp: Employee, perio
   const regime = sched ? { kind: sched.kind as 'weekly' | 'cycle', pattern: sched.pattern, anchorDate: sched.anchorDate } : null;
   const anchor = emp.scheduleAnchor ?? sched?.anchorDate ?? null;
   const summary = summarizeMonth({
+    shiftRegime: regime?.kind === 'cycle',
     schedule: regime ? (d) => scheduledMinutes(regime, d, anchor) : undefined,
     employedFrom: first?.d ?? null,
     employedUntil: emp.status === 'terminated' ? (last?.t ?? last?.e ?? null) : null,
@@ -232,9 +233,24 @@ export function attendanceRoutes() {
     const approved = b.approvedOvertimeMinutes ?? summary.overtimeMinutes;
     if (approved > summary.overtimeMinutes) throw new DomainError('extra_acima', `Não pode aprovar mais horas extra do que as registadas (${summary.overtimeMinutes} min)`, 400);
     if (approved < summary.overtimeMinutes && !b.note) throw new DomainError('motivo_obrigatorio', 'Indique o motivo para aprovar menos horas extra do que as registadas', 400);
+    // Limites do trabalho extraordinário (LGT, art. 185.º): acima disso, só com consentimento do trabalhador e autorização da IGT.
+    const limits = labourRules('AO', Number(b.period.slice(0, 4))).labour.overtimeLimits;
+    const yearRows = await db.select({ m: attendanceMonths.approvedOvertimeMinutes }).from(attendanceMonths)
+      .where(and(eq(attendanceMonths.employeeId, emp.id), gte(attendanceMonths.period, `${b.period.slice(0, 4)}-01`), lte(attendanceMonths.period, `${b.period.slice(0, 4)}-12`)));
+    const yearTotal = yearRows.reduce((s, r) => s + r.m, 0) + approved;
+    if ((approved > limits.perMonth * 60 || yearTotal > limits.perYear * 60) && !b.note) {
+      throw new DomainError('limite_extra', `${approved > limits.perMonth * 60 ? `Mais de ${limits.perMonth} h extra no mês` : `Mais de ${limits.perYear} h extra no ano (${Math.round(yearTotal / 60)} h)`}: só com consentimento do trabalhador e autorização da Inspecção Geral do Trabalho (LGT, art. 185.º). Indique a autorização na nota.`, 400);
+    }
+    // Descanso semanal e feriados são pagos à parte (arts. 194.º e 200.º). Ao aprovar menos do que o registado, o corte vai
+    // primeiro ao trabalho em descanso/feriado (normalmente o não autorizado) e só depois aos dias normais.
+    const workdayPart = Math.min(approved, summary.overtimeMinutes - summary.restOrHolidayOvertimeMinutes);
+    const restHoliday = approved - workdayPart;
     const [row] = await db.insert(attendanceMonths).values({
       companyId: actor.companyId, employeeId: emp.id, period: b.period, workedMinutes: summary.workedMinutes, expectedMinutes: summary.expectedMinutes,
       overtimeMinutes: summary.overtimeMinutes, approvedOvertimeMinutes: approved, note: b.note ?? null, approvedBy: actor.actorId,
+      restHolidayOvertimeMinutes: restHoliday,
+      restDayPaidMinutes: restHoliday < summary.restOrHolidayOvertimeMinutes ? Math.min(summary.restDayPaidMinutes, restHoliday) : summary.restDayPaidMinutes,
+      holidayWorkDays: restHoliday < summary.restOrHolidayOvertimeMinutes ? 0 : summary.holidayWorkDays,
     }).returning();
     await audit(db, actor, 'approve', 'attendance_month', row!.id, null, { ...row, employeeId: emp.id });
     return c.json(row, 201);

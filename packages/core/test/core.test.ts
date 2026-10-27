@@ -29,7 +29,7 @@ describe('processamento salarial', () => {
     expect(r.irtMinor).toBe(kz(69_656));
     expect(r.netMinor).toBe(kz(392_744));
     expect(r.inssEmployerMinor).toBe(kz(33_600));
-    expect(r.packVersion).toBe('AO-2026.1');
+    expect(r.packVersion).toBe('AO-2026.2');
   });
   it('tributa só o excesso dos subsídios acima de 30 000 Kz', () => {
     const r = calculatePayroll({ period: '2026-10', baseMinor: kz(1_850_000), mealMinor: kz(45_000), transportMinor: kz(40_000) });
@@ -132,7 +132,7 @@ describe('IBAN angolano: formatos reais e mensagens', async () => {
 describe('processamento completo: subsídios proporcionais e lançamento com outros descontos', async () => {
   const { yearServiceFraction, NegativeNetError } = await import('../src/index.js');
   it('subsídio de Natal proporcional ao tempo de serviço no ano', () => {
-    expect(yearServiceFraction(2026, '2026-07-02')).toBeCloseTo(0.5014, 3);
+    expect(yearServiceFraction(2026, '2026-07-02')).toBeCloseTo(5 / 12, 6); // meses completos (art. 238.º, n.º 3)
     expect(yearServiceFraction(2026, '2023-01-16')).toBe(1);
     const r = calculatePayroll({ period: '2026-12', baseMinor: kz(400_000), christmasSubsidy: 0.5 });
     expect(r.lines.find((l) => l.code === 'SUBNAT')).toMatchObject({ amountMinor: kz(100_000), name: 'Subsídio de Natal (proporcional 50%)' });

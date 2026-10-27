@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import {
-  allowanceAmount, businessDays, calculatePayroll, scheduledDays, type Schedule, compensationAt, DEFAULT_PGC_ACCOUNTS, getPack, labourRules, lastDayOfMonth, NegativeNetError, overtimeHoursFromMinutes,
-  payrollJournal, vacationEntitlement, yearServiceFraction, type EarningInput, type PayrollResult, type PayrollTotals, type PgcAccountMap,
+  allowanceAmount, businessDays, calculatePayroll, fullMonthsBetween, monthlyDeductionCap, scheduledDays, scheduledMinutes, type Schedule, compensationAt, DEFAULT_PGC_ACCOUNTS, getPack, labourRules, lastDayOfMonth, NegativeNetError, overtimeHoursFromMinutes,
+  payrollJournal, yearServiceFraction, type EarningInput, type PayrollResult, type PayrollTotals, type PgcAccountMap,
 } from '@kianda/core';
 import {
   absences, accountMappings, allowanceTypes, and, asc, employeeAllowances, isNull, or, workSchedules, attendanceEntries, attendanceMonths, auditLogs, companies, compensationChanges, contracts, departments, desc, employees, eq,
@@ -59,6 +59,15 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       eq(absences.companyId, companyId), eq(absences.type, 'vacation'), eq(absences.status, 'approved'),
       gte(absences.startDate, `${year}-01-01`), lte(absences.startDate, `${year}-12-31`),
     ));
+    // Licenças não remuneradas no mês (paternidade complementar, art. 218.º) e férias no mês (alimentação/transporte, art. 213.º).
+    const monthLeaves = await tx.select().from(absences).where(and(
+      eq(absences.companyId, companyId), inArray(absences.type, ['paternity', 'vacation']), eq(absences.status, 'approved'),
+      lte(absences.startDate, periodEnd), gte(absences.endDate, periodStart),
+    ));
+    const unjustifiedYear = await tx.select().from(absences).where(and(
+      eq(absences.companyId, companyId), eq(absences.type, 'unjustified'), eq(absences.status, 'approved'),
+      gte(absences.endDate, `${year}-01-01`), lte(absences.startDate, periodEnd),
+    ));
     const withPunches = new Set((await tx.select({ id: attendanceEntries.employeeId }).from(attendanceEntries)
       .where(and(eq(attendanceEntries.companyId, companyId), gte(attendanceEntries.workDate, periodStart), lte(attendanceEntries.workDate, periodEnd)))).map((r) => r.id));
     const variables = await tx.select().from(payrollVariables).where(and(eq(payrollVariables.companyId, companyId), eq(payrollVariables.period, period)));
@@ -93,7 +102,10 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       // Assiduidade e faltas
       const att = approvedMonths.find((m) => m.employeeId === e.id);
       if (!att && withPunches.has(e.id)) warnings.push({ employeeId: e.id, message: `${e.name}: assiduidade de ${period} por aprovar — horas extra não incluídas` });
-      const overtimeHours = att ? overtimeHoursFromMinutes(att.approvedOvertimeMinutes) : 0;
+      // Extra em dias normais (+50%/+75%); descanso semanal (+75%, mín. 3 h) e feriados (+1 dia) à parte — arts. 188.º, 194.º e 200.º.
+      const overtimeHours = att ? overtimeHoursFromMinutes(Math.max(0, att.approvedOvertimeMinutes - att.restHolidayOvertimeMinutes)) : 0;
+      const restDayHours = att ? overtimeHoursFromMinutes(att.restDayPaidMinutes) : 0;
+      const holidayWorkDays = att?.holidayWorkDays ?? 0;
       // Regime do colaborador (turnos/rotação) ou o horário normal da empresa.
       const sched = e.scheduleId ? schedules.get(e.scheduleId) : undefined;
       const regime: Schedule = sched ? { kind: sched.kind as Schedule['kind'], pattern: sched.pattern, anchorDate: sched.anchorDate } : companyWeek;
@@ -102,6 +114,45 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       // Faltas injustificadas: dias de trabalho previstos (regime) dentro da falta, sem feriados.
       const myAbsences = unjustified.filter((a) => a.employeeId === e.id).map((a) => ({ from: a.startDate < periodStart ? periodStart : a.startDate, to: a.endDate > periodEnd ? periodEnd : a.endDate }));
       const absenceDays = myAbsences.reduce((s, a) => s + (sched ? scheduledDays(regime, a.from, a.to, anchor, holidaySet) : businessDays(a.from, a.to, [labourRules('AO', year)])), 0);
+      // Horas de falta pelo regime (valor-hora × horas, arts. 237.º e 240.º); sem regime: dias × 8 h.
+      const minutesIn = (from: string, to: string) => {
+        let m = 0;
+        for (let t = Date.parse(from); t <= Date.parse(to); t += 86_400_000) {
+          const d = new Date(t).toISOString().slice(0, 10);
+          if (!holidaySet.has(d)) m += scheduledMinutes(regime, d, anchor);
+        }
+        return m;
+      };
+      const absenceHours = sched ? Math.round((myAbsences.reduce((s, a) => s + minutesIn(a.from, a.to), 0) / 60) * 100) / 100 : undefined;
+      const unjustifiedThisMonth = absenceDays;
+      const unjustifiedThisYear = unjustifiedYear.filter((a) => a.employeeId === e.id).reduce((s, a) => {
+        const f = a.startDate < `${year}-01-01` ? `${year}-01-01` : a.startDate;
+        const l = a.endDate > periodEnd ? periodEnd : a.endDate;
+        return s + businessDays(f, l, [labourRules('AO', year)]);
+      }, 0);
+      const disc = pack.labour.unjustifiedDisciplinary;
+      if (unjustifiedThisMonth > disc.perMonth || unjustifiedThisYear > disc.perYear) {
+        warnings.push({ employeeId: e.id, message: `${e.name}: ${unjustifiedThisMonth > disc.perMonth ? `${unjustifiedThisMonth} faltas injustificadas no mês` : `${unjustifiedThisYear} faltas injustificadas no ano`} — constitui infracção disciplinar (LGT, art. 230.º)` });
+      }
+      // Paternidade: 1 dia pago e o restante não remunerado (art. 218.º).
+      const workMinutesIn = (from: string, to: string) => (sched ? minutesIn(from, to) : businessDays(from, to, [labourRules('AO', year)]) * pack.labour.dailyHours * 60);
+      let unpaidLeaveHours = 0;
+      for (const a of monthLeaves.filter((x) => x.employeeId === e.id && x.type === 'paternity')) {
+        const from = a.startDate < periodStart ? periodStart : a.startDate;
+        const to = a.endDate > periodEnd ? periodEnd : a.endDate;
+        let mins = workMinutesIn(from, to);
+        if (a.startDate >= periodStart) mins -= Math.min(mins, pack.leave.paternityPaidDays * pack.labour.dailyHours * 60); // dia pago
+        unpaidLeaveHours += mins / 60;
+      }
+      unpaidLeaveHours = Math.round(unpaidLeaveHours * 100) / 100;
+      // Férias no mês: alimentação e transporte não são devidos nesses dias, salvo acordo (art. 213.º, n.º 2).
+      let vacationAllowanceCut: { fraction: number; days: number } | undefined;
+      if (!company?.allowancesOnVacation) {
+        const dayCount = (from: string, to: string) => (sched ? scheduledDays(regime, from, to, anchor, holidaySet) : businessDays(from, to, [labourRules('AO', year)]));
+        const vacDays = monthLeaves.filter((x) => x.employeeId === e.id && x.type === 'vacation').reduce((s, a) => s + dayCount(a.startDate < periodStart ? periodStart : a.startDate, a.endDate > periodEnd ? periodEnd : a.endDate), 0);
+        const monthDays = dayCount(periodStart, periodEnd);
+        if (vacDays > 0 && monthDays > 0) vacationAllowanceCut = { fraction: Math.min(1, vacDays / monthDays), days: vacDays };
+      }
 
       // Variáveis do mês
       const mine = variables.filter((v) => v.employeeId === e.id);
@@ -153,8 +204,8 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
         if (paid(e.id, 'SUBFER')) {
           if (ov.holiday) warnings.push({ employeeId: e.id, message: `${e.name}: subsídio de férias de ${year} já foi pago — não incluído` });
         } else {
-          const entitlement = vacationEntitlement(hire, year, pack);
-          holidaySubsidy = Math.round((entitlement / pack.labour.vacationWorkingDays) * 10_000) / 10_000;
+          // Art. 238.º, n.º 3: sem um ano de serviço, proporcional aos meses completos trabalhados (até ao pagamento).
+          holidaySubsidy = hire > `${year}-01-01` ? Math.round((Math.min(12, fullMonthsBetween(hire, periodEnd)) / 12) * 10_000) / 10_000 : 1;
           if (!holidaySubsidy) holidaySubsidy = false;
         }
       }
@@ -172,8 +223,14 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       try {
         r = calculatePayroll({
           period, pack, baseMinor: pay.baseMinor, mealMinor: pay.mealMinor, transportMinor: pay.transportMinor,
-          overtimeHours, absenceDays, otherEarnings, advancesMinor, otherDeductionsMinor, noticeDeductionMinor, holidaySubsidy, christmasSubsidy, workedDays,
+          overtimeHours, absenceDays, absenceHours, otherEarnings, advancesMinor, otherDeductionsMinor, noticeDeductionMinor, holidaySubsidy, christmasSubsidy, workedDays,
+          restDayHours, holidayWorkDays, unpaidLeaveHours, unpaidLeaveLabel: unpaidLeaveHours ? `Licença de paternidade não remunerada (${unpaidLeaveHours} h)` : undefined,
+          vacationAllowanceCut,
         });
+        // Descontos a crédito (adiantamentos e outros) até 25% do líquido (LGT, art. 248.º, n.º 7).
+        const credit = advancesMinor + otherDeductionsMinor;
+        const cap = monthlyDeductionCap(r.netMinor + credit + noticeDeductionMinor, pack);
+        if (credit > cap) warnings.push({ employeeId: e.id, message: `${e.name}: adiantamentos e outros descontos (${(credit / 100).toLocaleString('pt-PT')} Kz) acima de 25% do salário líquido (${(cap / 100).toLocaleString('pt-PT')} Kz) — LGT, art. 248.º, n.º 7` });
       } catch (err) {
         if (err instanceof NegativeNetError) throw new DomainError('liquido_negativo', `${e.name}: os descontos (adiantamentos e outros) excedem o ilíquido do mês. Reduza ou reparta pelos meses seguintes.`, 422);
         throw err;
@@ -232,10 +289,10 @@ export async function closePayroll(db: Db, companyId: string, runId: string, act
       const t = byCc.get(key) ?? { costCenter: key, baseMinor: 0, allowancesMinor: 0, overtimeAndBonusMinor: 0, holidayChristmasMinor: 0, employerInssMinor: 0, terminationMinor: 0 };
       for (const item of linesOf(l)) {
         if (item.kind !== 'earning') continue;
-        if (item.code === 'BASE' || item.code === 'FALTAS' || item.code === 'FERNG' || item.code === 'FERPROP') t.baseMinor += item.amountMinor;
+        if (item.code === 'BASE' || item.code === 'FALTAS' || item.code === 'LICNR' || item.code === 'FERNG' || item.code === 'FERPROP') t.baseMinor += item.amountMinor;
         else if (item.code === 'SUBFER' || item.code === 'SUBNAT' || item.code === 'SUBFERPROP') t.holidayChristmasMinor += item.amountMinor;
         else if (item.code === 'COMP' || item.code === 'COMPEXC' || item.code === 'AVISO') t.terminationMinor = (t.terminationMinor ?? 0) + item.amountMinor;
-        else if (item.code === 'HE' || item.code.startsWith('BONUS')) t.overtimeAndBonusMinor += item.amountMinor;
+        else if (item.code === 'HE' || item.code === 'HEDESC' || item.code === 'FERTRAB' || item.code.startsWith('BONUS')) t.overtimeAndBonusMinor += item.amountMinor;
         else t.allowancesMinor += item.amountMinor;
       }
       t.employerInssMinor += l.inssEmployerMinor;

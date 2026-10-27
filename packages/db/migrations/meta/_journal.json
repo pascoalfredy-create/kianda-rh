@@ -155,6 +155,13 @@
       "when": 1793107820740,
       "tag": "0021_minimizacao_dados",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1793109733100,
+      "tag": "0022_adiantamentos_lgt",
+      "breakpoints": true
     }
   ]
 }

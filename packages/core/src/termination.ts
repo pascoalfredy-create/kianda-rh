@@ -12,11 +12,11 @@ import { fullMonthsBetween } from './leave.js';
 
 export type TerminationReason =
   | 'resignation' | 'resignation_just_cause' | 'mutual_agreement' | 'fixed_term_expiry' | 'objective_dismissal'
-  | 'collective_dismissal' | 'disciplinary_dismissal' | 'probation' | 'retirement' | 'death';
+  | 'collective_dismissal' | 'disciplinary_dismissal' | 'probation' | 'retirement' | 'death' | 'employer_extinction';
 
-export const TERMINATION_REASONS: Record<TerminationReason, { label: string; legal: string; notice: 'employee' | 'employer' | null; compensation: 'objective' | 'just_cause' | 'agreed' | null }> = {
+export const TERMINATION_REASONS: Record<TerminationReason, { label: string; legal: string; notice: 'employee' | 'employer' | null; compensation: 'objective' | 'just_cause' | 'agreed' | 'extinction' | null }> = {
   resignation: { label: 'Denúncia pelo trabalhador (demissão)', legal: 'Art. 305.º — aviso prévio do trabalhador', notice: 'employee', compensation: null },
-  resignation_just_cause: { label: 'Rescisão pelo trabalhador com justa causa', legal: 'Arts. 307.º a 310.º — indemnização', notice: null, compensation: 'just_cause' },
+  resignation_just_cause: { label: 'Rescisão pelo trabalhador com justa causa (despedimento indirecto)', legal: 'Arts. 303.º e 310.º — indemnização de 1 salário base por ano, mínimo de 3', notice: null, compensation: 'just_cause' },
   mutual_agreement: { label: 'Revogação por mútuo acordo', legal: 'Compensação acordada entre as partes', notice: null, compensation: 'agreed' },
   fixed_term_expiry: { label: 'Caducidade do contrato por tempo determinado', legal: 'Art. 17.º, n.º 3 e 4 — aviso de não renovação', notice: 'employer', compensation: null },
   objective_dismissal: { label: 'Despedimento individual por causas objectivas', legal: 'Arts. 284.º a 289.º — aviso prévio e compensação', notice: 'employer', compensation: 'objective' },
@@ -25,6 +25,7 @@ export const TERMINATION_REASONS: Record<TerminationReason, { label: string; leg
   probation: { label: 'Cessação no período experimental', legal: 'Art. 18.º, n.º 4 — sem aviso nem indemnização', notice: null, compensation: null },
   retirement: { label: 'Caducidade por reforma do trabalhador', legal: 'Caducidade', notice: null, compensation: null },
   death: { label: 'Caducidade por morte do trabalhador', legal: 'Caducidade — créditos pagos aos herdeiros', notice: null, compensation: null },
+  employer_extinction: { label: 'Caducidade por morte, reforma, insolvência ou extinção do empregador', legal: 'Arts. 277.º, 278.º e 307.º — compensação de 50% do salário base por ano', notice: null, compensation: 'extinction' },
 };
 
 export interface SettlementItem {
@@ -86,7 +87,12 @@ export function seniority(from: string, to: string) {
   return { years: Math.max(0, y), months: Math.max(0, m), days: Math.max(0, d), label: parts.join(', ') || '0 dias' };
 }
 
-/** Compensação legal por despedimento por causas objectivas/colectivo: 1 base por ano até N anos, depois a percentagem do pacote. */
+/** Anos de antiguidade para compensações: fracção igual ou superior a 3 meses conta como um ano (art. 311.º). */
+export function compensationYears(sen: { years: number; months: number }, pack: CountryPack): number {
+  return sen.years + (sen.months >= pack.termination.seniorityFractionMonths ? 1 : 0);
+}
+
+/** Compensação legal por despedimento por causas objectivas/colectivo: 1 base por ano até N anos, depois a percentagem do pacote (art. 308.º). */
 export function objectiveCompensation(baseMinor: Minor, years: number, pack: CountryPack): Minor {
   const t = pack.termination;
   const full = Math.min(years, t.compensationFullYears);
@@ -123,10 +129,8 @@ export function terminationProposal(i: TerminationInput): TerminationProposal {
     add('SUBFER', `${pack.labour.holidaySubsidyBps / 100}% da base × ${ent}/${pack.labour.vacationWorkingDays} (não pago em ${year})`, prorate(applyBps(i.baseMinor, pack.labour.holidaySubsidyBps), ent, pack.labour.vacationWorkingDays), 'earning', pack.inss.holidaySubsidyInBase, true);
   }
   if (!i.christmasSubsidyPaidThisYear) {
-    const from = hiredThisYear ? i.hireDate : yearStart;
-    const served = daysBetween(from, i.effectiveDate) + 1;
-    const total = daysBetween(yearStart, `${year}-12-31`) + 1;
-    add('SUBNAT', `${pack.labour.christmasSubsidyBps / 100}% da base × ${served}/${total} dias do ano`, Math.round(applyBps(i.baseMinor, pack.labour.christmasSubsidyBps) * served / total), 'earning', pack.inss.christmasSubsidyInBase, true);
+    // Art. 238.º, n.º 3: proporcional aos meses completos trabalhados no ano.
+    add('SUBNAT', `${pack.labour.christmasSubsidyBps / 100}% da base × ${monthsThisYear}/12 meses completos`, prorate(applyBps(i.baseMinor, pack.labour.christmasSubsidyBps), monthsThisYear, 12), 'earning', pack.inss.christmasSubsidyInBase, true);
   }
 
   // Aviso prévio
@@ -149,19 +153,26 @@ export function terminationProposal(i: TerminationInput): TerminationProposal {
 
   // Compensação legal
   let legal = 0;
+  const years = compensationYears(sen, pack);
+  const yearsNote = years !== sen.years ? ` (${sen.label}: fracção ≥ ${t.seniorityFractionMonths} meses conta 1 ano, art. 311.º)` : '';
   if (def.compensation === 'objective') {
-    legal = objectiveCompensation(i.baseMinor, sen.years, pack);
-    const over = Math.max(0, sen.years - t.compensationFullYears);
-    add('COMP', `Base ${kz(i.baseMinor)} × ${Math.min(sen.years, t.compensationFullYears)} ano(s)${over ? ` + ${t.compensationExtraYearBps / 100}% × ${over} ano(s)` : ''}`, legal, 'earning', false, false);
-    if (!sen.years) notes.push('Antiguidade inferior a um ano completo: sem compensação pela regra dos anos completos (confirmar art. 311.º).');
+    legal = objectiveCompensation(i.baseMinor, years, pack);
+    const over = Math.max(0, years - t.compensationFullYears);
+    add('COMP', `Base ${kz(i.baseMinor)} × ${Math.min(years, t.compensationFullYears)} ano(s)${over ? ` + ${t.compensationExtraYearBps / 100}% × ${over} ano(s)` : ''}${yearsNote}`, legal, 'earning', false, false);
+    if (!years) notes.push(`Antiguidade inferior a ${t.seniorityFractionMonths} meses: sem compensação (art. 311.º).`);
   } else if (def.compensation === 'just_cause') {
-    legal = Math.round(applyBps(i.baseMinor, t.justCauseYearBps) * sen.years);
-    add('COMP', `Base ${kz(i.baseMinor)} × ${sen.years} ano(s) de antiguidade`, legal, 'earning', false, false);
+    const byYears = Math.round(applyBps(i.baseMinor, t.justCauseYearBps) * years);
+    const min = i.baseMinor * t.justCauseMinBaseSalaries;
+    legal = Math.max(byYears, min);
+    add('COMP', byYears >= min ? `Base ${kz(i.baseMinor)} × ${years} ano(s) de antiguidade${yearsNote}` : `Mínimo legal de ${t.justCauseMinBaseSalaries} salários base (art. 310.º, n.º 3)`, legal, 'earning', false, false);
+  } else if (def.compensation === 'extinction') {
+    legal = Math.round(applyBps(i.baseMinor, t.employerExtinctionYearBps) * years);
+    add('COMP', `${t.employerExtinctionYearBps / 100}% da base ${kz(i.baseMinor)} × ${years} ano(s) (art. 307.º)${yearsNote}`, legal, 'earning', false, false);
   }
   const agreed = i.agreedCompensationMinor ?? 0;
   if (def.compensation === 'agreed' && agreed > 0) {
     // No mútuo acordo, a parte até ao valor que seria devido num despedimento por causas objectivas fica isenta (a validar).
-    const ref = objectiveCompensation(i.baseMinor, sen.years, pack);
+    const ref = objectiveCompensation(i.baseMinor, years, pack);
     add('COMP', `Acordada, até à referência legal de ${kz(ref)}`, Math.min(agreed, ref), 'earning', false, false);
     add('COMPEXC', `Acordada acima da referência legal`, Math.max(0, agreed - ref), 'earning', false, true);
     legal = Math.min(agreed, ref);
@@ -173,6 +184,11 @@ export function terminationProposal(i: TerminationInput): TerminationProposal {
     notes.push(`Atenção: o período experimental por omissão é de ${pack.labour.probationDaysIndefinite} dias — confirme que o contrato previa um período mais longo.`);
   }
   if (i.reason === 'death') notes.push('Os créditos são pagos aos herdeiros, mediante habilitação.');
+  if (i.reason === 'objective_dismissal' || i.reason === 'collective_dismissal') {
+    notes.push(`Durante o aviso prévio o trabalhador tem ${t.noticeJobSearchDays} dias de dispensa remunerada para procurar emprego, se os motivos não forem económicos (art. 287.º). A compensação e os créditos têm de estar à disposição até ao fim do aviso (art. 288.º, n.º 2).`);
+  }
+  if (i.reason === 'mutual_agreement') notes.push('O acordo é escrito, em duplicado, com a data de efeito e a data de pagamento da compensação (art. 280.º).');
+  notes.push(`Prazo de pagamento do fecho de contas: ${t.settlementPaymentDays} dias após a cessação (art. 245.º, n.º 4).`);
   return { seniority: sen, notice: { requiredDays: required, givenDays: Math.min(given, required || given), missingDays: missing, by: def.notice }, legalCompensationMinor: legal, items, notes };
 }
 

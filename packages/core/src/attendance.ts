@@ -36,6 +36,17 @@ export function formatMinutes(min: number): string {
 
 export interface Punch { clockIn: Date; clockOut: Date | null }
 
+/**
+ * Arredondamento do trabalho extraordinário (LGT, art. 188.º, n.º 4): fracções < 15 min não contam;
+ * de 15 a 44 min contam meia hora; de 45 a 60 min contam uma hora.
+ */
+export function roundOvertimeMinutes(raw: number): number {
+  if (raw <= 0) return 0;
+  const hours = Math.floor(raw / 60);
+  const rest = raw % 60;
+  return hours * 60 + (rest < 15 ? 0 : rest < 45 ? 30 : 60);
+}
+
 export type DayFlag = 'open' | 'not_employed' | 'no_record' | 'rest_day_work' | 'holiday_work' | 'absence_work' | 'over_2h';
 
 export interface DaySummary {
@@ -46,6 +57,8 @@ export interface DaySummary {
   workedMinutes: number;
   expectedMinutes: number;
   overtimeMinutes: number;
+  /** Dia de descanso trabalhado: minutos a pagar com o adicional do art. 194.º (mínimo de 3 h). */
+  restDayPaidMinutes: number;
   flags: DayFlag[];
 }
 
@@ -75,8 +88,10 @@ export function summarizeDay(input: {
   today: string;
   /** Fora do contrato (antes da admissão ou depois da cessação): nada previsto, nada em falta. */
   inactive?: boolean;
-  /** Horas extra contadas em blocos completos (minutos). Por omissão 15: 0h12 → 0; 0h38 → 0h30. */
+  /** Só para simulações: blocos fixos (minutos) em vez do arredondamento legal do art. 188.º, n.º 4. */
   overtimeBlockMinutes?: number;
+  /** Mínimo pago por dia de descanso trabalhado (art. 194.º): 180 min por omissão. */
+  restDayMinMinutes?: number;
   /** Regime de horário do colaborador: minutos previstos neste dia (0 = descanso). Sem regime: dias úteis × jornada. */
   scheduledMinutes?: number;
 }): DaySummary {
@@ -84,13 +99,14 @@ export function summarizeDay(input: {
   const scheduled = input.scheduledMinutes;
   const dailyMinutes = scheduled !== undefined ? scheduled : input.dailyMinutes;
   const restDay = scheduled !== undefined ? scheduled === 0 : isWeekend(date);
-  const block = input.overtimeBlockMinutes ?? 15;
+  const block = input.overtimeBlockMinutes;
   const kind: DaySummary['kind'] = inactive ? 'inactive' : holiday ? 'holiday' : restDay ? 'rest' : absence ? 'absence' : 'workday';
   const closed = punches.filter((p) => p.clockOut);
   const worked = closed.reduce((s, p) => s + minutesBetween(p.clockIn, p.clockOut!), 0);
   const expected = kind === 'workday' && date <= today ? dailyMinutes : 0;
   const rawOvertime = kind === 'workday' ? Math.max(0, worked - dailyMinutes) : worked;
-  const overtime = block > 1 ? Math.floor(rawOvertime / block) * block : rawOvertime;
+  const overtime = block === undefined ? roundOvertimeMinutes(rawOvertime) : block > 1 ? Math.floor(rawOvertime / block) * block : rawOvertime;
+  const restDayPaidMinutes = kind === 'rest' && overtime > 0 ? Math.max(overtime, input.restDayMinMinutes ?? 180) : 0;
   const flags: DayFlag[] = [];
   // Saída por registar só é pendência a partir do dia seguinte (hoje o colaborador ainda pode estar em serviço).
   if (punches.some((p) => !p.clockOut) && date < today) flags.push('open');
@@ -100,7 +116,7 @@ export function summarizeDay(input: {
   if (worked > 0 && kind === 'holiday') flags.push('holiday_work');
   if (worked > 0 && kind === 'absence') flags.push('absence_work');
   if (kind === 'workday' && overtime > 120) flags.push('over_2h');
-  return { date, kind, holiday, absence, workedMinutes: worked, expectedMinutes: expected, overtimeMinutes: overtime, flags };
+  return { date, kind, holiday, absence, workedMinutes: worked, expectedMinutes: expected, overtimeMinutes: overtime, restDayPaidMinutes, flags };
 }
 
 export interface MonthSummary {
@@ -111,6 +127,12 @@ export interface MonthSummary {
   overtimeMinutes: number;
   /** Horas extra em dias de descanso/feriado (subconjunto de overtimeMinutes). */
   restOrHolidayOvertimeMinutes: number;
+  /** Extra em dias normais de trabalho (pago a +50%/+75%, art. 188.º). */
+  workdayOvertimeMinutes: number;
+  /** Dias de descanso trabalhados: minutos a pagar a +75%, com mínimo de 3 h por dia (art. 194.º). */
+  restDayPaidMinutes: number;
+  /** Feriados trabalhados (fora de turnos): cada um dá direito a mais um dia de salário (art. 200.º). */
+  holidayWorkDays: number;
   openDays: number;
   noRecordDays: number;
 }
@@ -129,6 +151,8 @@ export function summarizeMonth(input: {
   overtimeBlockMinutes?: number;
   /** Regime de horário: minutos previstos por data (0 = descanso). */
   schedule?: (date: string) => number;
+  /** Turnos (art. 200.º, n.º 3): os feriados seguem a escala (sem o acréscimo de feriado). */
+  shiftRegime?: boolean;
 }): MonthSummary {
   const [y, m] = input.period.split('-').map(Number) as [number, number];
   const n = new Date(Date.UTC(y, m, 0)).getUTCDate();
@@ -138,7 +162,7 @@ export function summarizeMonth(input: {
     const date = `${input.period}-${String(d).padStart(2, '0')}`;
     days.push(summarizeDay({
       date, punches: input.punches.filter((p) => p.workDate === date), dailyMinutes: input.dailyMinutes,
-      holiday: hol.get(date), absence: input.absences[date], today: input.today,
+      holiday: input.shiftRegime ? undefined : hol.get(date), absence: input.absences[date], today: input.today,
       overtimeBlockMinutes: input.overtimeBlockMinutes,
       scheduledMinutes: input.schedule?.(date),
       inactive: (!!input.employedFrom && date < input.employedFrom) || (!!input.employedUntil && date > input.employedUntil),
@@ -152,6 +176,9 @@ export function summarizeMonth(input: {
     expectedMinutes: sum((d) => d.expectedMinutes),
     overtimeMinutes: sum((d) => d.overtimeMinutes),
     restOrHolidayOvertimeMinutes: sum((d) => (d.kind === 'rest' || d.kind === 'holiday' ? d.overtimeMinutes : 0)),
+    workdayOvertimeMinutes: sum((d) => (d.kind === 'workday' ? d.overtimeMinutes : 0)),
+    restDayPaidMinutes: sum((d) => d.restDayPaidMinutes),
+    holidayWorkDays: days.filter((d) => d.kind === 'holiday' && d.workedMinutes > 0).length,
     openDays: days.filter((d) => d.flags.includes('open')).length,
     noRecordDays: days.filter((d) => d.flags.includes('no_record')).length,
   };

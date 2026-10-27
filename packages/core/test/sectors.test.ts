@@ -27,9 +27,12 @@ describe('regimes de horário', () => {
 
   it('estatísticas e avisos', () => {
     const r = scheduleStats(rot, 44);
-    expect(r).toMatchObject({ cycleDays: 56, workDays: 28, avgWeeklyMinutes: 2520, problems: [] });
+    expect(r).toMatchObject({ cycleDays: 56, workDays: 28, avgWeeklyMinutes: 2520 });
+    expect(r.problems).toEqual([expect.stringMatching(/turnos rotativos o limite é 8 h por dia.*art\. 161\.º/)]); // média 42 h cumpre o art. 148.º
+    expect(scheduleStats(SCHEDULE_PRESETS.shift_3x8!, 44).problems).toEqual([]);
     expect(scheduleStats(SCHEDULE_PRESETS.shift_12x2!, 44).avgWeeklyMinutes).toBe(2520);
-    expect(scheduleStats(SCHEDULE_PRESETS.rotation_42_21!, 44).problems[0]).toMatch(/acima do limite de 44 h/);
+    expect(scheduleStats(SCHEDULE_PRESETS.rotation_42_21!, 44).problems[0]).toMatch(/acima de 44 h: só admissível em turnos.*até 54 h/);
+    expect(scheduleStats({ kind: 'weekly', pattern: [660, 660, 660, 660, 660, 0, 0] }, 44).problems[0]).toMatch(/acima do máximo de 54 h/);
     expect(scheduleStats({ kind: 'weekly', pattern: [480, 480, 480, 480, 480, 480, 480] }, 44).problems.join()).toMatch(/descanso semanal/);
     expect(describeSchedule(rot)).toBe('Ciclo de 56 dias: 28 de trabalho (12h00), 28 de descanso');
     expect(describeSchedule(SCHEDULE_PRESETS.standard!)).toBe('Semanal: seg 8h00, ter 8h00, qua 8h00, qui 8h00, sex 8h00');

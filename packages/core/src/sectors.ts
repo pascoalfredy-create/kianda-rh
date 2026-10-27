@@ -51,7 +51,7 @@ export function scheduledDays(s: Schedule, from: string, to: string, anchor?: st
 export interface ScheduleStats { cycleDays: number; workDays: number; restDays: number; maxDailyMinutes: number; avgWeeklyMinutes: number; problems: string[] }
 
 /** Estatísticas e avisos de um regime (média semanal ao longo do ciclo contra o limite do pacote). */
-export function scheduleStats(s: Schedule, weeklyHoursLimit: number): ScheduleStats {
+export function scheduleStats(s: Schedule, weeklyHoursLimit: number, extendedWeeklyHours?: number): ScheduleStats {
   const total = s.pattern.reduce((a, b) => a + b, 0);
   const cycleDays = s.kind === 'weekly' ? 7 : s.pattern.length;
   const workDays = s.pattern.filter((m) => m > 0).length;
@@ -62,8 +62,11 @@ export function scheduleStats(s: Schedule, weeklyHoursLimit: number): ScheduleSt
   if (s.kind === 'weekly' && s.pattern.length !== 7) problems.push('O regime semanal tem de ter 7 dias');
   if (s.kind === 'cycle' && s.pattern.length < 2) problems.push('O ciclo tem de ter pelo menos 2 dias');
   if (s.pattern.some((m) => m < 0 || m > 24 * 60)) problems.push('Cada dia tem entre 0 e 24 horas');
-  if (avgWeeklyMinutes > weeklyHoursLimit * 60) problems.push(`Média de ${hours(avgWeeklyMinutes)} por semana acima do limite de ${weeklyHoursLimit} h — só com regime de adaptabilidade ou turnos acordado, ou pago como trabalho extraordinário`);
-  if (maxDailyMinutes > 12 * 60) problems.push(`Jornadas de ${hours(maxDailyMinutes)} — acima de 12 h por dia exige enquadramento específico`);
+  const extended = extendedWeeklyHours ?? 54;
+  if (avgWeeklyMinutes > extended * 60) problems.push(`Média de ${hours(avgWeeklyMinutes)} por semana acima do máximo de ${extended} h, mesmo em turnos ou horário modulado (art. 148.º, n.º 2) — o excesso é trabalho extraordinário`);
+  else if (avgWeeklyMinutes > weeklyHoursLimit * 60) problems.push(`Média de ${hours(avgWeeklyMinutes)} por semana acima de ${weeklyHoursLimit} h: só admissível em turnos, horário modulado ou de recuperação, até ${extended} h (art. 148.º, n.º 2)`);
+  if (s.kind === 'cycle' && maxDailyMinutes > 8 * 60) problems.push(`Turnos de ${hours(maxDailyMinutes)}: em turnos rotativos o limite é 8 h por dia, salvo quando a natureza da actividade não o permita (art. 161.º, n.º 1 e 3)`);
+  else if (maxDailyMinutes > 10 * 60) problems.push(`Jornadas de ${hours(maxDailyMinutes)}: acima de 10 h por dia só em trabalho intermitente ou de simples presença (art. 148.º, n.º 3)`);
   if (s.kind === 'weekly' && s.pattern.length === 7 && s.pattern.every((m) => m > 0)) problems.push('Sem dia de descanso semanal');
   return { cycleDays, workDays, restDays: cycleDays - workDays, maxDailyMinutes, avgWeeklyMinutes, problems };
 }
@@ -115,8 +118,8 @@ const A = (key: string, code: string, label: string, calc: AllowanceCalc, v: num
   ({ key, code, label, calc, ...(calc === 'base_pct' ? { bps: v } : { valueMinor: v }), inInss: true, inIrt: true, note });
 
 export const ALLOWANCE_PRESETS: Record<string, AllowanceSpec> = {
-  shift: A('shift', 'SUBTURNO', 'Subsídio de turno', 'base_pct', 1000, 'Trabalho em regime de turnos rotativos'),
-  night: A('night', 'SUBNOCT', 'Subsídio de trabalho nocturno', 'fixed', 1_500_000, 'Para quem trabalha regularmente em período nocturno'),
+  shift: A('shift', 'SUBTURNO', 'Subsídio de turno', 'base_pct', 2000, 'Turnos rotativos: 20% do salário base, já inclui o nocturno (LGT, art. 162.º); não é devido em dois turnos fixos'),
+  night: A('night', 'SUBNOCT', 'Subsídio de trabalho nocturno', 'base_pct', 2000, 'Trabalho entre as 20h e as 6h (pelo menos 3 h por dia): 20% do salário base (LGT, arts. 179.º–182.º); não acumula com o subsídio de turno'),
   risk: A('risk', 'SUBRISCO', 'Subsídio de risco', 'base_pct', 1000, 'Funções com exposição a risco (armas, explosivos, alturas, agentes químicos)'),
   isolation: A('isolation', 'SUBISOL', 'Subsídio de isolamento', 'per_day', 500_000, 'Por dia em local isolado (frentes de mina, estaleiros remotos)'),
   field: A('field', 'SUBCAMPO', 'Subsídio de campo', 'per_day', 300_000, 'Por dia de trabalho no campo/estaleiro'),
@@ -153,7 +156,7 @@ export const SECTOR_PROFILES: Record<Sector, SectorProfile> = {
   security: {
     schedules: ['shift_12x2', 'six_days', 'standard'], allowances: ['shift', 'night', 'risk'],
     requiredDocuments: [{ type: 'professional_card', label: 'Cartão profissional de vigilante', reason: 'A actividade de segurança privada exige pessoal habilitado com cartão profissional válido', appliesTo: ['vigilante', 'seguranca', 'guarda', 'agente de protec', 'supervisor de seguranca'], appliesToLabel: 'vigilantes e agentes de segurança' }],
-    notes: ['Formação e cartão profissional válidos para todos os vigilantes (lei da segurança privada)', 'Uso de arma: licença de uso e porte e formação específica', 'Turnos de 12 h: o regime de turnos deve constar do contrato ou de acordo escrito com o trabalhador', 'Trabalho nocturno regular deve ser compensado nos termos da LGT'],
+    notes: ['Formação e cartão profissional válidos para todos os vigilantes (lei da segurança privada)', 'Uso de arma: licença de uso e porte e formação específica', 'Turnos de 12 h: só quando a natureza da actividade não permite turnos de 8 h, com média até 54 h semanais (LGT, arts. 148.º e 161.º), e com acordo escrito', 'Trabalhadores nocturnos: exame de saúde antes do início e anual (LGT, art. 181.º)'],
   },
   mining: {
     schedules: ['rotation_28', 'rotation_21', 'standard'], allowances: ['isolation', 'field', 'risk', 'housing'], requiredDocuments: [],
