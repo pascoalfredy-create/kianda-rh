@@ -158,6 +158,8 @@ export const employees = pgTable('employees', {
   /** Regime de horário (vazio = horário normal da empresa, segunda a sexta) e início do ciclo próprio (turnos/rotação por equipa). */
   scheduleId: text('schedule_id'),
   scheduleAnchor: date('schedule_anchor'),
+  /** Lei 22/11: dados pessoais não obrigatórios eliminados (ex-colaborador); ficam só os exigidos por lei. */
+  dataMinimizedAt: timestamp('data_minimized_at', { withTimezone: true }),
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex('employees_company_number').on(t.companyId, t.number), index('employees_company_status').on(t.companyId, t.status)]);

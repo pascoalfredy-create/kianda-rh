@@ -1,4 +1,5 @@
-import { closeDb, getDb, platformAdmins, platformSettings } from '@kianda/db';
+import { candidates, closeDb, employees as employeesTable, getDb, jobOpenings, platformAdmins, platformSettings, sql, withTenant } from '@kianda/db';
+import { COMPANY_TABLES_PURGE_ORDER } from '../src/services/privacy.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { totp } from '@kianda/core';
 import { buildApp } from '../src/app.js';
@@ -1379,6 +1380,106 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(reminderFor({ status: 'active', trialEndsAt: null, paidUntil: '2026-12-31' }, '2027-01-08')?.kind).toBe('modo_consulta');
       expect(reminderFor({ status: 'active', trialEndsAt: null, paidUntil: '2099-12-31' }, '2026-12-24')).toBeNull();
       expect((await post(owner, '/v1/platform/jobs/reminders')).json().checked).toBeGreaterThan(0);
+    });
+  });
+
+  describe('blindagem: RLS, exportação e eliminação de dados (entrega 18)', () => {
+    const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
+    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    let companyA = '';
+    let companyB = '';
+    beforeAll(async () => {
+      companyA = (await get(owner, '/v1/auth/me')).json().company.id;
+      companyB = (await get(ownerB, '/v1/auth/me')).json().company.id;
+    });
+
+    it('guarda: todas as tabelas com dados de empresa têm RLS e entram na eliminação', async () => {
+      const db = getDb();
+      const withCompany = (await db.execute(sql`select table_name from information_schema.columns where table_schema = 'public' and column_name = 'company_id'`)).rows.map((r) => String(r.table_name));
+      const rls = new Set((await db.execute(sql`select relname from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relrowsecurity`)).rows.map((r) => String(r.relname)));
+      const exempt = ['gateway_events']; // registo da plataforma (sem acesso do papel da aplicação)
+      expect(withCompany.filter((t) => !rls.has(t) && !exempt.includes(t))).toEqual([]);
+      for (const t of ['companies', 'contracts', 'payroll_lines', 'journal_lines', 'expense_lines', 'candidate_events']) expect(rls.has(t), t).toBe(true);
+      const purged = new Set(COMPANY_TABLES_PURGE_ORDER.map((x) => x.table));
+      expect(withCompany.filter((t) => !purged.has(t))).toEqual([]);
+    });
+
+    it('RLS: dentro de um pedido da empresa A, a base de dados só mostra e só aceita dados da A', async () => {
+      const r = await withTenant(companyA, async () => {
+        const db = getDb();
+        const all = await db.select({ companyId: employeesTable.companyId }).from(employeesTable); // sem filtro de propósito
+        const cos = (await db.execute(sql`select id from companies`)).rows;
+        let insertError = '';
+        try {
+          await db.execute(sql`savepoint t`);
+          await db.insert(employeesTable).values({ companyId: companyB, number: 'X1', name: 'Intruso', jobTitle: 'Teste' });
+        } catch (e) { insertError = String((e as { cause?: { message?: string } }).cause?.message ?? (e as Error).message); await db.execute(sql`rollback to savepoint t`); }
+        return { all, cos, insertError };
+      });
+      expect(r.all.length).toBeGreaterThan(0);
+      expect(new Set(r.all.map((x) => x.companyId))).toEqual(new Set([companyA]));
+      expect(r.cos).toEqual([{ id: companyA }]);
+      expect(r.insertError).toMatch(/row-level security/);
+      // Papel da aplicação sem empresa definida: não vê nada (falha fechada).
+      const none = await getDb().transaction(async (tx) => {
+        await tx.execute(sql`set local role kianda_app`);
+        return (await tx.execute(sql`select count(*)::int as n from employees`)).rows[0];
+      });
+      expect(none).toEqual({ n: 0 });
+    });
+
+    it('exportação completa da empresa (só o proprietário), sem segredos de acesso', async () => {
+      expect((await get(financeUser, '/v1/company/export')).statusCode).toBe(403);
+      const r = await get(owner, '/v1/company/export');
+      expect(r.headers['content-disposition']).toMatch(/attachment; filename="kianda-export-/);
+      const d = r.json();
+      expect(d).toMatchObject({ format: 'kianda-export', company: { id: companyA } });
+      expect(d.tables.employees.every((e: { company_id: string }) => e.company_id === companyA)).toBe(true);
+      expect(d.tables.users.length).toBeGreaterThan(0);
+      expect(d.tables.users.some((u: Record<string, unknown>) => 'password_hash' in u || 'pin_hash' in u || 'totp_secret' in u)).toBe(false);
+      expect(d.tables.payroll_lines.length).toBeGreaterThan(0);
+      expect(JSON.stringify(d)).not.toContain(companyB);
+    });
+
+    it('ex-colaborador: eliminação dos dados não obrigatórios, com confirmação; mantém o necessário por lei', async () => {
+      const e = (await post(owner, '/v1/employees', { number: `M${stamp.slice(-5)}`, name: 'Ex Colaborador', jobTitle: 'Técnico', email: `ex+${stamp}@a.ao`, phone: '923111222', iban: 'AO06 0040 0000 5521 8890 1015 5', nif: '004512398LA041', contract: { type: 'indefinite', startDate: '2026-01-05', base: 150000 } })).json();
+      expect((await post(owner, `/v1/privacy/employees/${e.id}/minimize`, { confirm: e.number })).json().error).toBe('nao_cessado');
+      await getDb().update(employeesTable).set({ status: 'terminated' }).where(sql`id = ${e.id}`);
+      expect((await post(owner, `/v1/privacy/employees/${e.id}/minimize`, { confirm: 'errado' })).statusCode).toBe(422);
+      expect((await post(financeUser, `/v1/privacy/employees/${e.id}/minimize`, { confirm: e.number })).statusCode).toBe(403);
+      expect((await post(owner, `/v1/privacy/employees/${e.id}/minimize`, { confirm: e.number })).statusCode).toBe(200);
+      const [row] = await getDb().select().from(employeesTable).where(sql`id = ${e.id}`);
+      expect(row).toMatchObject({ name: 'Ex Colaborador', email: null, phone: null, iban: null, nif: '004512398LA041' });
+      expect(row!.dataMinimizedAt).not.toBeNull();
+      expect((await post(owner, `/v1/privacy/employees/${e.id}/minimize`, { confirm: e.number })).json().error).toBe('ja_eliminado');
+    });
+
+    it('candidato: eliminação total; não se apaga quem foi contratado; outra empresa não lhe toca', async () => {
+      const [op] = await getDb().insert(jobOpenings).values({ companyId: companyA, title: 'Vaga RGPD', createdBy: 'teste' } as typeof jobOpenings.$inferInsert).returning();
+      const [cand] = await getDb().insert(candidates).values({ companyId: companyA, openingId: op!.id, name: 'Candidato Teste', email: `c+${stamp}@x.ao` } as typeof candidates.$inferInsert).returning();
+      expect((await app.inject({ method: 'DELETE', url: `/v1/privacy/candidates/${cand!.id}`, headers: as(ownerB) })).statusCode).toBe(404);
+      expect((await app.inject({ method: 'DELETE', url: `/v1/privacy/candidates/${cand!.id}`, headers: as(owner) })).statusCode).toBe(200);
+      expect(await getDb().select().from(candidates).where(sql`id = ${cand!.id}`)).toEqual([]);
+    });
+
+    it('eliminar uma empresa: só cancelada e com o NIF confirmado; não fica nenhuma linha', async () => {
+      const nifP = String(Number(nifA) + 9).padStart(10, '0').slice(-10);
+      const reg = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Empresa a eliminar', nif: nifP, sector: 'security' }, name: 'Dono P', email: `dono+${stamp}@p.ao`, password: pw } });
+      const ownerP = cookieOf(reg);
+      const idP = reg.json().company.id;
+      await post(ownerP, '/v1/employees', { number: '1', name: 'Vigia', jobTitle: 'Vigilante', contract: { type: 'indefinite', startDate: '2026-01-05', base: 120000 } });
+      await post(ownerP, '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'monthly' });
+      expect((await post(owner, `/v1/platform/companies/${idP}/purge`, { confirmNif: nifP })).json().error).toBe('nao_cancelada');
+      await app.inject({ method: 'PATCH', url: `/v1/platform/companies/${idP}/subscription`, headers: as(owner), payload: { status: 'cancelled' } });
+      expect((await get(owner, `/v1/platform/companies/${idP}/export`)).json().tables.employees).toHaveLength(1);
+      expect((await post(owner, `/v1/platform/companies/${idP}/purge`, { confirmNif: '0000000000' })).statusCode).toBe(422);
+      expect((await post(financeUser, `/v1/platform/companies/${idP}/purge`, { confirmNif: nifP })).statusCode).toBe(403);
+      const ok = (await post(owner, `/v1/platform/companies/${idP}/purge`, { confirmNif: nifP })).json();
+      expect(ok.deleted).toMatchObject({ companies: 1, employees: 1, users: 1, subscriptions: 1, payment_requests: 1 });
+      const db = getDb();
+      const tables = (await db.execute(sql`select table_name from information_schema.columns where table_schema = 'public' and column_name = 'company_id'`)).rows.map((r) => String(r.table_name));
+      for (const t of tables) expect((await db.execute(sql`select count(*)::int as n from ${sql.identifier(t)} where company_id = ${idP}`)).rows[0], t).toEqual({ n: 0 });
+      expect((await post(owner, `/v1/platform/companies/${companyA}/purge`, { confirmNif: nifA })).json().error).toBe('protegida'); // a própria empresa do administrador
     });
   });
 

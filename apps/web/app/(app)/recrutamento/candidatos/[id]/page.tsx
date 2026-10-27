@@ -2,6 +2,7 @@ import { formatKz, SOURCES, STAGE_LABEL, type Stage } from '@kianda/core';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { EventForm, Rating, StageActions } from '../../forms';
+import { DeleteCandidate } from '@/components/privacy-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,7 @@ export default async function Candidato({ params }: { params: Promise<{ id: stri
         <Rating id={c.id} value={c.rating} />
       </div>
       {c.stage !== 'hired' && <StageActions id={c.id} stage={c.stage} canHire={c.canHire} />}
+      {!c.employeeId && <div style={{ margin: '0 0 14px' }}><DeleteCandidate id={c.id} back={`/recrutamento/${c.opening.id}`} /></div>}
       {c.employeeId && <div className="warn">Contratado. <Link href={`/colaboradores/${c.employeeId}`}>Abrir a ficha do colaborador</Link>.</div>}
       {c.rejectionReason && <div className="warn">Motivo: {c.rejectionReason}</div>}
       <div className="two" style={{ alignItems: 'start' }}>

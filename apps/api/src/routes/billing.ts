@@ -15,13 +15,15 @@ import {
   acknowledgePayment, integrationStatus, mockPayment, parseWebhookPayment, proxypayConfig, vendusConfig, vendusInvoicePdf, verifyWebhookSignature,
 } from '../services/integrations.js';
 import { dailyReminders } from '../services/jobs.js';
+import { exportCompany, purgeCompany } from '../services/privacy.js';
 
 const addDays = (d: string, n: number) => new Date(Date.parse(d) + n * 86_400_000).toISOString().slice(0, 10);
 
 async function nextNumber(db: Db) {
+  // Contagem global (função SECURITY DEFINER): o RLS só deixa a empresa ver os seus pedidos.
   const year = luandaDate(new Date()).slice(0, 4);
-  const [n] = await db.select({ n: sql<number>`count(*)::int` }).from(paymentRequests).where(like(paymentRequests.number, `PF-${year}-%`));
-  return `PF-${year}-${String((n?.n ?? 0) + 1).padStart(4, '0')}`;
+  const r = await db.execute(sql`select kianda_next_payment_number(${year}) as n`);
+  return String((r.rows[0] as { n: string }).n);
 }
 
 /** Licença da empresa (proprietário e Finanças): estado, escalões, pedidos de pagamento e logotipo. */
@@ -272,6 +274,30 @@ export function platformRoutes() {
       : await db.insert(subscriptions).values({ companyId: id, ...b }).returning();
     await db.insert(auditLogs).values({ companyId: id, actorId: actor.actorId, action: 'platform_update', entity: 'subscription', entityId: id, before: before ?? null, after: u });
     return c.json(u);
+  });
+
+  /** Exportação dos dados de uma empresa (ex.: entregar ao cliente antes de eliminar a conta). */
+  app.get('/v1/platform/companies/:id/export', async (c) => {
+    const data = await exportCompany(getDb(), c.req.param('id'));
+    if (!data.company) throw new DomainError('nao_encontrado', 'Empresa inexistente', 404);
+    return new Response(JSON.stringify(data, null, 1), { headers: { 'content-type': 'application/json; charset=utf-8', 'content-disposition': `attachment; filename="kianda-export-${String((data.company as { nif: string }).nif)}.json"` } });
+  });
+
+  /** Eliminação definitiva de uma empresa (Lei 22/11 / fim de contrato): só com a licença cancelada e o NIF confirmado. */
+  app.post('/v1/platform/companies/:id/purge', async (c) => {
+    const actor = c.get('actor');
+    const { confirmNif } = z.object({ confirmNif: z.string().trim() }).parse(await body(c));
+    const db = getDb();
+    const id = c.req.param('id');
+    const [co] = await db.select().from(companies).where(eq(companies.id, id));
+    if (!co) throw new DomainError('nao_encontrado', 'Empresa inexistente', 404);
+    if (co.nif === 'PLATAFORMA' || co.id === actor.companyId) throw new DomainError('protegida', 'Esta empresa não pode ser eliminada');
+    const [sub] = await db.select().from(subscriptions).where(eq(subscriptions.companyId, id));
+    if (sub?.status !== 'cancelled') throw new DomainError('nao_cancelada', 'Cancele primeiro a licença da empresa (e entregue a exportação dos dados ao cliente)');
+    if (confirmNif !== co.nif) throw new DomainError('confirmacao', 'Para confirmar, escreva o NIF da empresa', 422);
+    const deleted = await purgeCompany(db, id);
+    await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'purge_company', entity: 'company', entityId: id, after: { name: co.name, nif: co.nif, deleted } });
+    return c.json({ ok: true, deleted });
   });
 
   app.get('/v1/platform/settings', async (c) => c.json({ ...(await platformSettingsGet(getDb())), admins: (await getDb().select().from(platformAdmins)).map((a) => a.email) }));

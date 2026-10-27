@@ -53,6 +53,7 @@ export interface PersonRef { id: string; name: string; jobTitle: string; number?
 export interface Profile {
   id: string;
   number: string;
+  dataMinimizedAt?: string | null;
   name: string;
   jobTitle: string;
   status: 'active' | 'suspended' | 'terminated';

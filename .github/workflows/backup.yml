@@ -1,0 +1,51 @@
+# Cópia de segurança diária da base de dados (Neon), cifrada, guardada 30 dias como artefacto privado do GitHub.
+# Complementa o restauro do próprio Neon (histórico/ramificação). Restauro: ver docs/DEPLOY.md, secção "Cópias de segurança".
+name: Cópia de segurança
+
+on:
+  schedule:
+    - cron: '17 1 * * *' # 02:17 em Luanda
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    if: vars.KIANDA_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Verificar secrets
+        run: |
+          [ -n "$DATABASE_URL" ] || { echo "::error title=Cópia de segurança::Falta o secret KIANDA_DATABASE_URL"; exit 1; }
+          [ ${#PASSPHRASE} -ge 20 ] || { echo "::error title=Cópia de segurança::Defina o secret KIANDA_BACKUP_PASSPHRASE (20+ caracteres). Sem ele a cópia não é feita — nunca se guardam dados de clientes sem cifra."; exit 1; }
+        env:
+          DATABASE_URL: ${{ secrets.KIANDA_DATABASE_URL }}
+          PASSPHRASE: ${{ secrets.KIANDA_BACKUP_PASSPHRASE }}
+
+      - name: pg_dump cifrado (AES-256)
+        run: |
+          set -euo pipefail
+          stamp=$(TZ=Africa/Luanda date +%Y-%m-%d_%H%M)
+          echo "STAMP=$stamp" >> "$GITHUB_ENV"
+          # pg_dump recente (consegue copiar versões anteriores do servidor); formato custom para pg_restore.
+          docker run --rm -e DATABASE_URL postgres:18 sh -c 'pg_dump --format=custom --no-owner --no-privileges "$DATABASE_URL"' > /tmp/kianda.dump
+          size=$(stat -c %s /tmp/kianda.dump)
+          [ "$size" -gt 10000 ] || { echo "::error title=Cópia de segurança::Cópia demasiado pequena ($size bytes)"; exit 1; }
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$PASSPHRASE" --symmetric --cipher-algo AES256 -o "/tmp/kianda-$stamp.dump.gpg" /tmp/kianda.dump
+          shred -u /tmp/kianda.dump
+          sha256sum "/tmp/kianda-$stamp.dump.gpg" | tee "/tmp/kianda-$stamp.sha256"
+          echo "Cópia: $(numfmt --to=iec "$size") (antes da cifra)"
+        env:
+          DATABASE_URL: ${{ secrets.KIANDA_DATABASE_URL }}
+          PASSPHRASE: ${{ secrets.KIANDA_BACKUP_PASSPHRASE }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kianda-db-${{ env.STAMP }}
+          path: |
+            /tmp/kianda-${{ env.STAMP }}.dump.gpg
+            /tmp/kianda-${{ env.STAMP }}.sha256
+          retention-days: 30
+          if-no-files-found: error

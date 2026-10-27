@@ -110,3 +110,18 @@ Cada integração liga-se sozinha quando o secret existir no GitHub (o deploy se
 **Cegid Vendus:** a factura tem de ser emitida em software certificado pela AGT (Decreto Presidencial n.º 71/25 — facturação electrónica; hoje obrigatória só para fornecedores do Estado, regime geral a partir de Janeiro). Até lá a factura pode continuar a ser emitida fora e o n.º registado ao confirmar o pagamento. Conta Vendus Angola → APPS → API → chave. Comece em `tests`; na consola defina o imposto da licença de software (taxa normal, ou isenção com código e fundamento legal — decisão do dono, que é o contabilista), o id do meio de pagamento e, se quiser, a emissão automática. Pagamentos sem factura aparecem na consola com "Emitir factura".
 
 **Tarefas agendadas do Worker da API:** `*/30 * * * *` (sincronização Multicaixa) e `0 7 * * *` (avisos de licença às 08:00 de Luanda).
+
+## Cópias de segurança (entrega 18)
+
+O workflow **Cópia de segurança** (`.github/workflows/backup.yml`) corre todos os dias às 02:17 de Luanda (e manualmente em Actions → Cópia de segurança → Run workflow): `pg_dump` da base Neon, cifrado com AES-256 antes de sair do runner, guardado 30 dias como artefacto privado do repositório. Complementa o restauro de histórico do próprio Neon.
+
+- **Secret obrigatório:** `KIANDA_BACKUP_PASSPHRASE` — frase longa (20+ caracteres), gerada e guardada fora do GitHub (gestor de palavras-passe). Sem ela não há cópia (nunca se guardam dados de clientes sem cifra). **Perder a frase = perder as cópias.**
+- **Restaurar:** descarregar o artefacto → `gpg --decrypt kianda-AAAA-MM-DD_HHMM.dump.gpg > kianda.dump` → criar um ramo (branch) novo no Neon → `pg_restore --no-owner --no-privileges -d "<ligação do ramo>" kianda.dump` → validar → apontar o Hyperdrive para o ramo restaurado (ou copiar só as tabelas necessárias).
+
+## Domínio próprio
+
+`KIANDA_HOSTNAME` aceita vários domínios separados por vírgula; o **primeiro é o principal** (ligações nos emails e verificações do deploy). Para mudar de domínio sem cortes: (1) adicionar a zona do domínio novo à conta Cloudflare; (2) `KIANDA_HOSTNAME=rh.dominio-novo.ao,kianda.yelaperformance.com`; (3) avisar o ProxyPay do novo endereço do webhook; (4) mais tarde, retirar o antigo da lista.
+
+## Segurança por empresa (RLS)
+
+A migração `0019` cria o papel `kianda_app` (sem login, sem `BYPASSRLS`) e as políticas `empresa`. Os pedidos de uma empresa correm em `withTenant` (transacção com `SET LOCAL ROLE kianda_app` e `app.company_id`). O utilizador da ligação (Hyperdrive) continua a ser o dono das tabelas — não é preciso mudar a ligação. Tarefas de sistema, registo, login, webhook e consola da plataforma correm sem papel restrito.

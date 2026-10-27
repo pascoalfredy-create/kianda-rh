@@ -2,7 +2,8 @@
 /**
  * Prepara as configurações Cloudflare para produção (corre no GitHub Actions antes do deploy):
  *  - API: substitui o id do Hyperdrive (secret KIANDA_HYPERDRIVE_ID);
- *  - Web: liga o Worker ao subdomínio (variável KIANDA_HOSTNAME, ex.: rh.seudominio.com) como custom domain.
+ *  - Web: liga o Worker aos domínios (variável KIANDA_HOSTNAME, ex.: rh.seudominio.com; vários separados por vírgula,
+ *    o primeiro é o principal — útil para mudar de domínio sem cortar o antigo) como custom domains.
  * Escreve wrangler.deploy.json ao lado de cada wrangler.jsonc (ficheiros gerados, fora do git).
  */
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -36,9 +37,10 @@ api.hyperdrive = api.hyperdrive.map((h) => ({ binding: h.binding, id: need('KIAN
 writeFileSync('apps/api/wrangler.deploy.json', JSON.stringify(api, null, 2));
 
 const web = parseJsonc(readFileSync('apps/web/wrangler.jsonc', 'utf8'));
-const hostname = process.env.KIANDA_HOSTNAME;
-if (hostname) {
-  web.routes = [{ pattern: hostname, custom_domain: true }];
+const hostnames = (process.env.KIANDA_HOSTNAME ?? '').split(',').map((h) => h.trim()).filter(Boolean);
+const hostname = hostnames.join(', ');
+if (hostnames.length) {
+  web.routes = hostnames.map((h) => ({ pattern: h, custom_domain: true }));
   web.workers_dev = false;
 }
 writeFileSync('apps/web/wrangler.deploy.json', JSON.stringify(web, null, 2));

@@ -1,7 +1,7 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { verify } from 'hono/jwt';
-import { getDb } from '@kianda/db';
+import { getDb, withTenant } from '@kianda/db';
 import { licenceBlocks } from '../services/licence.js';
 
 export type Role = 'owner' | 'hr_admin' | 'payroll' | 'finance' | 'manager' | 'employee';
@@ -53,8 +53,21 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
   // Licença inactiva: só consulta (excepto tratar da licença).
   const blocked = await licenceBlocks(getDb(), claims.companyId, c.req.method, c.req.path);
   if (blocked) return c.json({ error: 'licenca_inactiva', message: blocked }, 402);
-  await next();
+  // A consola da plataforma vê todas as empresas (o acesso é verificado a seguir: só administradores Kianda).
+  if (c.req.path.startsWith('/v1/platform/')) return next();
+  // Segurança por empresa na base de dados (RLS): o pedido corre numa transacção restrita à empresa da sessão.
+  // Um erro no pedido desfaz tudo o que gravou (o onError do Hono já preparou a resposta).
+  try {
+    await withTenant(claims.companyId, async () => {
+      await next();
+      if (c.error) throw new Rollback();
+    });
+  } catch (e) {
+    if (!(e instanceof Rollback)) throw e;
+  }
 };
+
+class Rollback extends Error {}
 
 /** Permite o acesso apenas aos perfis indicados. O proprietário (owner) tem sempre acesso. */
 export function requireRole(...roles: Role[]): MiddlewareHandler<AppEnv> {

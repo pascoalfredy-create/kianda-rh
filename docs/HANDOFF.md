@@ -1,7 +1,7 @@
 # Kianda RH — documento de passagem (handoff)
 
 > Para um novo agente/programador continuar o trabalho. Leia isto primeiro, depois `docs/ROADMAP.md` e `docs/DEPLOY.md`.
-> Última actualização: 27/10/2026 (entrega 17 publicada).
+> Última actualização: 27/10/2026 (entrega 18 publicada — fase SaaS concluída).
 
 ## 1. O que é
 
@@ -24,7 +24,7 @@ Plataforma SaaS de RH para empresas angolanas (estilo Factorial), com processame
 | Pasta | O quê |
 | --- | --- |
 | `packages/core` | Motor puro TypeScript (sem I/O): salários, IRT, INSS, férias, assiduidade, PGC, balancete, conciliação, despesas, cessação, documentos, talento, licenças, TOTP, sectores (`sectors.ts`: regimes, subsídios, conformidade). **Valores monetários em cêntimos inteiros** (`kz(1000)` = 100000). Regras legais por ano em `src/packs/ao-2026.ts` (com lista `toValidate`). |
-| `packages/db` | Drizzle 0.45 + pg. `src/schema.ts`, migrações SQL em `migrations/` (0000–0018), `scripts/seed.ts` (empresa demo), `scripts/migrate.ts`, `scripts/platform-admins.ts`. |
+| `packages/db` | Drizzle 0.45 + pg. `src/schema.ts`, migrações SQL em `migrations/` (0000–0021), `scripts/seed.ts` (empresa demo), `scripts/migrate.ts`, `scripts/platform-admins.ts`. |
 | `apps/api` | Hono 4 (corre em Node local e em Cloudflare Workers). Rotas em `src/routes/*.ts`, serviços em `src/services/`. Zod 4 para validação. Testes de API em `test/api.test.ts` (Vitest, base Postgres real). |
 | `apps/web` | Next 16 + React 19 (App Router) via OpenNext Cloudflare. Páginas autenticadas em `app/(app)/`; públicas: `login`, `registo`, `termos`, `acesso/[token]`, `carreiras/[company]`, `verificar/[code]`. |
 
@@ -32,7 +32,7 @@ Versões: TypeScript 5.9.3, Vitest 4.0.5, Hono 4.13, Zod 4.6, Next 16.4, React 1
 
 ## 4. Arquitectura e convenções importantes
 
-- **Multi-empresa (tenant):** a empresa vem SEMPRE do JWT de sessão (`requireCompany` em `apps/api/src/plugins/tenant.ts`); todas as consultas filtram por `companyId`. Ainda **não** há Row-Level Security no Postgres (planeado na entrega 18).
+- **Multi-empresa (tenant):** a empresa vem SEMPRE do JWT de sessão (`requireCompany` em `apps/api/src/plugins/tenant.ts`); as consultas filtram por `companyId` **e** a base de dados impõe-no: `requireCompany` corre o pedido em `withTenant` (`@kianda/db`) — transacção com `SET LOCAL ROLE kianda_app` + `app.company_id` (RLS, migração 0019). Um erro no pedido desfaz a transacção. `/v1/platform/*` corre sem RLS (só administradores). **Regras para tabelas novas:** se tem `company_id`, a migração tem de incluir `ENABLE ROW LEVEL SECURITY` + `CREATE POLICY empresa … USING (company_id = kianda_tenant()) WITH CHECK (…)`, e a tabela entra em `COMPANY_TABLES_PURGE_ORDER` (`services/privacy.ts`); tabelas-filhas sem `company_id` usam `coluna IN (SELECT id FROM tabela_mãe)`. Os testes de guarda da entrega 18 falham se isto for esquecido. Numeração global entre empresas tem de passar por função `SECURITY DEFINER` (ex.: `kianda_next_payment_number`).
 - **Licença:** `requireCompany` bloqueia escritas (HTTP 402 `licenca_inactiva`) quando a licença não está activa, excepto `/v1/billing`, `/v1/auth/`, `/v1/platform`. Lógica em `apps/api/src/services/licence.ts` + `packages/core/src/licensing.ts`.
 - **Perfis:** `owner`, `hr_admin`, `payroll`, `finance`, `manager`, `employee`. `requireRole(...)` — o `owner` passa sempre. Chefia decide sobre a equipa directa (`managerId`); ninguém decide sobre si próprio (excepto owner).
 - **Middlewares Hono** registados por caminho (`app.use('/v1/x/*', requireCompany)`), nunca `'*'` em sub-apps.
@@ -67,7 +67,7 @@ export DATABASE_URL=postgresql://kianda:kianda@127.0.0.1:5433/kianda
 export API_JWT_SECRET="segredo-de-desenvolvimento-local-com-mais-de-32"
 pnpm db:migrate && SEED_OWNER_PASSWORD=Kianda2026demo pnpm db:seed
 pnpm --filter @kianda/core build && pnpm --filter @kianda/db build   # a API consome os dist
-pnpm -r typecheck && pnpm -r test                                    # core 101 testes, API 98 testes
+pnpm -r typecheck && pnpm -r test                                    # core 101 testes, API 104 testes
 (cd apps/api && npx tsx src/server.ts)                               # :4000
 (cd apps/web && npx next build && API_URL=http://localhost:4000 npx next start -p 3000)
 ```
@@ -79,7 +79,7 @@ pnpm -r typecheck && pnpm -r test                                    # core 101 
 
 ## 8. Estado — o que está feito
 
-Entregas **1–13** (produto) e **14–17** (SaaS), todas publicadas. Resumo em `docs/ROADMAP.md`. Destaques:
+Entregas **1–13** (produto) e **14–18** (SaaS), todas publicadas. Resumo em `docs/ROADMAP.md`. Destaques:
 
 - Processamento: IRT Grupo A 2026, INSS 3%+8%, subsídios (férias/Natal, proporcionais), horas extra (50%/75%, blocos de 15 min), faltas, variáveis, mês incompleto proporcional, recibos com hash.
 - Contas PGC sugeridas (parametrizáveis): 72.2.1–72.2.4, 72.5.1, 34.3 (IRT), 34.9.1 (INSS), 36.1.2, 36.3, 36.9, 43.1, 75.2 (despesas), 72.8 (ajudas de custo e compensações por cessação), 63 (compensação por falta de aviso do trabalhador).
@@ -90,8 +90,8 @@ Entregas **1–13** (produto) e **14–17** (SaaS), todas publicadas. Resumo em 
 
 ## 9. Próximos passos (por ordem)
 
-1. **Entrega 18 — Blindagem:** Row-Level Security no Postgres, cópias e exportação por empresa, eliminação a pedido (Lei n.º 22/11), domínio próprio da marca.
-2. **Pendentes do dono antes de clientes reais:** contratar ProxyPay, Resend e Cegid Vendus e definir os secrets (ver DEPLOY.md) — o Vendus só é necessário quando a facturação electrónica geral entrar em vigor (Janeiro); enquadramento de IVA/isenção das licenças a definir pelo dono; rodar `KIANDA_JWT_SECRET` (gerado fora do chat); `KIANDA_SEED_DEMO=false`; regra de rate limiting no WAF da Cloudflare para `/api/v1/auth/login*`; preencher dados bancários/suporte na consola; validação jurídica da lista `toValidate` (em especial regras numéricas da cessação — Lei n.º 12/23 arts. 286.º, 289.º, 293.º, 295.º, 305.º, 307.º–311.º — e textos dos contratos); formatos oficiais do banco/AGT/INSS (hoje CSV genérico); armazenamento de ficheiros (R2) para CVs e recibos de despesas (hoje ligações).
+1. **Fase seguinte (a definir com o dono):** formatos oficiais (ficheiro bancário de salários por banco, declarações AGT/INSS), armazenamento de ficheiros (R2) para CVs, comprovativos e documentos digitalizados, app móvel (PWA) do colaborador, relatórios para gestão.
+2. **Pendentes do dono antes de clientes reais:** definir `KIANDA_BACKUP_PASSPHRASE` (cópias); empresa em constituição — depois actualizar dados de facturação/IBAN na consola e o domínio próprio (`KIANDA_HOSTNAME` com vários domínios); contratar ProxyPay, Resend e Cegid Vendus e definir os secrets (ver DEPLOY.md) — o Vendus só é necessário quando a facturação electrónica geral entrar em vigor (Janeiro); enquadramento de IVA/isenção das licenças a definir pelo dono; rodar `KIANDA_JWT_SECRET` (gerado fora do chat); `KIANDA_SEED_DEMO=false`; regra de rate limiting no WAF da Cloudflare para `/api/v1/auth/login*`; preencher dados bancários/suporte na consola; validação jurídica da lista `toValidate` (em especial regras numéricas da cessação — Lei n.º 12/23 arts. 286.º, 289.º, 293.º, 295.º, 305.º, 307.º–311.º — e textos dos contratos); formatos oficiais do banco/AGT/INSS (hoje CSV genérico); armazenamento de ficheiros (R2) para CVs e recibos de despesas (hoje ligações).
 
 ## 10. Armadilhas já resolvidas (não repetir)
 

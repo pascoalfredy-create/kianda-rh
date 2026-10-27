@@ -1,0 +1,1 @@
+ALTER TABLE "employees" ADD COLUMN "data_minimized_at" timestamp with time zone;

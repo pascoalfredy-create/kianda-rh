@@ -134,6 +134,27 @@
       "when": 1793094081573,
       "tag": "0018_integracoes",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793107663784,
+      "tag": "0019_seguranca_por_empresa",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793107741564,
+      "tag": "0020_numeracao_global",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793107820740,
+      "tag": "0021_minimizacao_dados",
+      "breakpoints": true
     }
   ]
 }

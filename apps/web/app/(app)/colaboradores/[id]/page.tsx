@@ -10,6 +10,7 @@ import { ABSENCE_POLICIES, type AbsenceType } from '@kianda/core';
 import { AbsenceActions } from '../../ausencias/actions';
 import { CompensationForm, ContractForm, DeleteDocument, DocumentForm, PersonalForm } from './forms';
 import { AllowanceActions, AssignAllowance, RegimeForm } from './regime';
+import { MinimizeEmployee } from '@/components/privacy-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,6 +74,10 @@ export default async function Ficha({ params, searchParams }: { params: Promise<
           <ul>{p.alerts.map((a) => <li key={a}>{a}</li>)}</ul>
         </div>
       )}
+
+      {p.status === 'terminated' && (p.dataMinimizedAt
+        ? <div className="warn">Dados pessoais eliminados a {fmtDate(p.dataMinimizedAt.slice(0, 10))} (Lei n.º 22/11). Conservam-se só os dados exigidos para as obrigações fiscais, de segurança social e contabilísticas.</div>
+        : canEdit && ['owner', 'hr_admin'].includes(me?.user.role ?? '') && <div style={{ marginBottom: 14 }}><MinimizeEmployee id={p.id} number={p.number} /></div>)}
 
       <nav className="tabs">
         {tabs.map(([k, label]) => <Link key={k} href={`?s=${k}`} className={tab === k ? 'on' : ''} scroll={false}>{label}</Link>)}

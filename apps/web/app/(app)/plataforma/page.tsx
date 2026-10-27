@@ -1,6 +1,7 @@
 import { DEFAULT_TIERS, formatKz } from '@kianda/core';
 import { redirect } from 'next/navigation';
 import { api, currentUser } from '@/lib/api';
+import { PurgeCompany } from '@/components/privacy-actions';
 import { ConfirmPayment, EditSubscription, InvoicingForm, IssueInvoice, JobButtons, MockPayment, SettingsForm } from './forms';
 
 export const dynamic = 'force-dynamic';
@@ -69,7 +70,7 @@ export default async function Plataforma() {
                 <td><span className={ST[c.status]}>{c.statusLabel}</span><div className="muted">{c.tierLabel}{c.cycle ? ` · ${c.cycle}` : ''}</div></td>
                 <td className="num">{c.activeEmployees}{c.limit ? ` / ${c.limit}` : ''}</td>
                 <td>{c.status === 'trial' ? `experimental até ${pt(c.trialEndsAt)}` : `pago até ${pt(c.paidUntil)}`}{c.pendingPayments ? <div><span className="tag future">{c.pendingPayments} pagamento(s) pendente(s)</span></div> : null}</td>
-                <td className="num"><EditSubscription c={c} tiers={DEFAULT_TIERS} /></td>
+                <td className="num"><EditSubscription c={c} tiers={DEFAULT_TIERS} /><PurgeCompany id={c.id} nif={c.nif} cancelled={c.status === 'cancelled'} /></td>
               </tr>
             ))}
           </tbody>

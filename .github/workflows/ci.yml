@@ -100,6 +100,13 @@ jobs:
           DATABASE_CA_CERT: ${{ secrets.KIANDA_DATABASE_CA_CERT }}
           SEED_OWNER_PASSWORD: ${{ secrets.KIANDA_SEED_OWNER_PASSWORD }}
 
+      - name: Domínio principal (o primeiro de KIANDA_HOSTNAME)
+        run: |
+          h="${KIANDA_HOSTNAME%%,*}"; h="${h// /}"
+          echo "PRIMARY_HOST=$h" >> "$GITHUB_ENV"
+        env:
+          KIANDA_HOSTNAME: ${{ vars.KIANDA_HOSTNAME }}
+
       - name: Preparar configuração de produção
         run: node scripts/cf-prepare.mjs
         env:
@@ -123,7 +130,7 @@ jobs:
           MAIL_FROM: ${{ vars.KIANDA_MAIL_FROM }}
           VENDUS_API_KEY: ${{ secrets.KIANDA_VENDUS_API_KEY }}
           VENDUS_MODE: ${{ vars.KIANDA_VENDUS_MODE }}
-          APP_BASE_URL: ${{ vars.KIANDA_HOSTNAME && format('https://{0}', vars.KIANDA_HOSTNAME) || '' }}
+          APP_BASE_URL: ${{ env.PRIMARY_HOST && format('https://{0}', env.PRIMARY_HOST) || '' }}
 
       - name: Publicar web (kianda-web)
         working-directory: apps/web
@@ -135,14 +142,16 @@ jobs:
         if: vars.KIANDA_HOSTNAME != ''
         run: |
           sleep 15
-          scripts/ci-run.sh "Verificar /api/health" curl -sS --fail-with-body "https://${{ vars.KIANDA_HOSTNAME }}/api/health"
+          for h in $(echo "${{ vars.KIANDA_HOSTNAME }}" | tr ',' ' '); do
+            scripts/ci-run.sh "Verificar /api/health em $h" curl -sS --fail-with-body "https://$h/api/health"
+          done
 
       - name: Verificar base de dados (login de demonstração)
         if: vars.KIANDA_HOSTNAME != '' && vars.KIANDA_SEED_DEMO == 'true'
         run: |
           for email in admin@kwanzalog.co.ao edson@kwanzalog.co.ao joana@kwanzalog.co.ao; do
             printf '{"email":"%s","password":"%s"}' "$email" "$PW" > /tmp/login.json
-            scripts/ci-run.sh "Login de demonstração $email" curl -sS --fail-with-body -o /tmp/login.out -X POST -H 'content-type: application/json' --data @/tmp/login.json "https://${{ vars.KIANDA_HOSTNAME }}/api/v1/auth/login"
+            scripts/ci-run.sh "Login de demonstração $email" curl -sS --fail-with-body -o /tmp/login.out -X POST -H 'content-type: application/json' --data @/tmp/login.json "https://$PRIMARY_HOST/api/v1/auth/login"
             grep -q '"company"' /tmp/login.out && echo "Login OK: $email"
           done
           rm -f /tmp/login.json /tmp/login.out
