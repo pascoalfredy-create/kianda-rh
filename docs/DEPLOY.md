@@ -87,3 +87,8 @@ Continua igual: `pnpm dev` (API Node em :4000, web em :3000) com PostgreSQL loca
 pnpm --filter @kianda/web cf:build
 npx wrangler dev -c apps/web/wrangler.jsonc -c apps/api/wrangler.jsonc   # web + API ligados por service binding
 ```
+
+
+## Administradores da plataforma (consola Kianda)
+
+Em **Settings → Secrets and variables → Actions → Variables**, crie `KIANDA_PLATFORM_ADMINS` com os emails (separados por vírgula) de quem administra a plataforma. Cada publicação sincroniza a lista. O email tem de corresponder a um utilizador que já exista (por exemplo, o proprietário de uma empresa criada em `/registo`); ao entrar, aparece o menu **Plataforma Kianda**.

@@ -84,6 +84,13 @@ jobs:
           DATABASE_URL: ${{ secrets.KIANDA_DATABASE_URL }}
           DATABASE_CA_CERT: ${{ secrets.KIANDA_DATABASE_CA_CERT }}
 
+      - name: Administradores da plataforma
+        run: pnpm --filter @kianda/db platform-admins
+        env:
+          DATABASE_URL: ${{ secrets.KIANDA_DATABASE_URL }}
+          DATABASE_CA_CERT: ${{ secrets.KIANDA_DATABASE_CA_CERT }}
+          KIANDA_PLATFORM_ADMINS: ${{ vars.KIANDA_PLATFORM_ADMINS }}
+
       - name: Dados de demonstração (opcional, idempotente)
         if: vars.KIANDA_SEED_DEMO == 'true'
         run: pnpm db:seed

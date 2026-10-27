@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { DEFAULT_ACCOUNT_MAPPINGS, DEFAULT_COMPETENCIES, kz } from '@kianda/core';
 import { and, eq } from 'drizzle-orm';
-import { absences, accountMappings, bankAccounts, candidateEvents, candidates, expenseClaims, expenseLines, jobOpenings, reviewCycles, reviews, attendanceEntries, closeDb, companies, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, hashPassword, users, verifyPassword } from '../src/index.js';
+import { absences, accountMappings, bankAccounts, subscriptions, candidateEvents, candidates, expenseClaims, expenseLines, jobOpenings, reviewCycles, reviews, attendanceEntries, closeDb, companies, compensationChanges, contracts, departments, employeeDocuments, employees, getDb, hashPassword, users, verifyPassword } from '../src/index.js';
 
 /** Dados de demonstração: empresa fictícia com três departamentos, cinco colaboradores, hierarquia e documentos. Idempotente. */
 const db = getDb();
@@ -85,6 +85,10 @@ if (joana) {
     companyId: company.id, employeeId: joana.id, effectiveDate: '2025-01-01', baseMinor: kz(420_000), mealMinor: kz(30_000), transportMinor: kz(25_000), reason: 'Promoção a Técnica de Contabilidade',
   }).onConflictDoNothing();
 }
+
+// Licença da empresa de demonstração (sem expiração) e código da empresa.
+await db.insert(subscriptions).values({ companyId: company.id, status: 'active', tierKey: 't1', cycle: 'annual', paidUntil: '2099-12-31', notes: 'Empresa de demonstração' }).onConflictDoNothing();
+if (!company.code) await db.update(companies).set({ code: 'KWANZA' }).where(eq(companies.id, company.id));
 
 // Conta bancária de salários (IBAN fictício do banco 0000).
 const [hasBank] = await db.select({ id: bankAccounts.id }).from(bankAccounts).where(eq(bankAccounts.companyId, company.id));

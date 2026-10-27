@@ -14,6 +14,7 @@ import { documentRoutes, documentVerificationRoutes } from './routes/documents.j
 import { careersRoutes, recruitmentRoutes } from './routes/recruitment.js';
 import { performanceRoutes } from './routes/performance.js';
 import { portalRoutes } from './routes/portal.js';
+import { billingRoutes, platformRoutes } from './routes/billing.js';
 import { authRoutes } from './routes/auth.js';
 import { employeeRoutes } from './routes/employees.js';
 import { payrollRoutes } from './routes/payroll.js';
@@ -65,6 +66,8 @@ export function buildApp(opts: { logger?: boolean; rateLimit?: boolean } = {}) {
   app.route('/', careersRoutes());
   app.route('/', performanceRoutes());
   app.route('/', portalRoutes());
+  app.route('/', billingRoutes());
+  app.route('/', platformRoutes());
   return app;
 }
 

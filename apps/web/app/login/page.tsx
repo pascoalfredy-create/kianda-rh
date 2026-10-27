@@ -41,6 +41,7 @@ function LoginForm() {
       {askNif && <label>NIF da empresa<input inputMode="numeric" value={companyNif} onChange={(e) => setCompanyNif(e.target.value)} /></label>}
       {error && <div className="alert" role="alert">{error}</div>}
       <button className="btn" disabled={busy} style={{ width: '100%' }}>{busy ? 'A entrar…' : 'Entrar'}</button>
+      <p className="muted" style={{ textAlign: 'center', marginTop: 14 }}>Empresa nova? <a href="/registo">Criar conta — 30 dias grátis</a></p>
     </form>
   );
 }

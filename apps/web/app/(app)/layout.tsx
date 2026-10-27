@@ -7,6 +7,21 @@ import { LogoutButton } from './logout-button';
 const STAFF = ['owner', 'hr_admin', 'payroll', 'finance', 'manager'];
 
 /** Área autenticada: sem sessão válida (verificada pela API), redirecciona para o login. */
+/** Aviso de licença: experimental a terminar, pagamento em atraso ou só consulta. */
+function LicenceBanner({ me }: { me: NonNullable<Awaited<ReturnType<typeof currentUser>>> }) {
+  const l = me.licence;
+  if (!l) return null;
+  const manage = ['owner', 'finance'].includes(me.user.role);
+  const link = manage ? <> · <Link href="/licenca">Ver licença</Link></> : null;
+  if (!l.canWrite) return <div className="alert no-print">Conta em <b>modo de consulta</b> ({l.label.toLowerCase()}). {manage ? 'Regularize a licença para voltar a gravar.' : 'Fale com a administração da empresa.'}{link}</div>;
+  if (l.status === 'past_due') return <div className="warn no-print">Pagamento da licença em atraso: a conta passa a modo de consulta em poucos dias.{link}</div>;
+  if (l.status === 'trial' && l.trialEndsAt && manage) {
+    const days = Math.max(0, Math.ceil((Date.parse(l.trialEndsAt) - Date.now()) / 86_400_000));
+    return <div className="warn no-print">Período experimental: {days} dia(s) restante(s), até {l.trialEndsAt.split('-').reverse().join('/')}.{link}</div>;
+  }
+  return null;
+}
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const me = await currentUser();
   if (!me) redirect('/login');
@@ -42,6 +57,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Link href="/simulador">Simulador salarial</Link>
           {(me.user.role === 'owner' || me.user.role === 'hr_admin') && <Link href="/pedidos">Pedidos do portal</Link>}
           {(me.user.role === 'owner' || me.user.role === 'hr_admin') && <Link href="/definicoes">Definições</Link>}
+          {['owner', 'finance'].includes(me.user.role) && <Link href="/licenca">Licença</Link>}
+          {me.platformAdmin && <Link href="/plataforma">Plataforma Kianda</Link>}
         </nav>
         <div className="who">
           <b>{me.user.name}</b>
@@ -49,7 +66,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <LogoutButton />
         </div>
       </aside>
-      <main className="content">{children}</main>
+      <main className="content">
+        <LicenceBanner me={me} />
+        {children}
+      </main>
       {/* Telemóvel: barra inferior com as acções do dia-a-dia */}
       <nav className="mobile-nav">
         <Link href="/">Início</Link>

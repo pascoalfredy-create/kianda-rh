@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { api, currentUser } from '@/lib/api';
 import { SettingsForm } from './form';
+import { LogoForm } from './logo';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,7 @@ export default async function Definicoes() {
     <>
       <h1>Definições</h1>
       <p className="sub">{s.name} · NIF {s.nif}</p>
+      <LogoForm current={(await api<{ logo: string | null } | null>('/v1/company/branding'))?.logo ?? null} />
       <SettingsForm s={s} />
     </>
   );

@@ -1,6 +1,8 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { verify } from 'hono/jwt';
+import { getDb } from '@kianda/db';
+import { licenceBlocks } from '../services/licence.js';
 
 export type Role = 'owner' | 'hr_admin' | 'payroll' | 'finance' | 'manager' | 'employee';
 
@@ -48,6 +50,9 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
     return c.json({ error: 'sessao_invalida', message: 'Inicie sessão para continuar.' }, 401);
   }
   c.set('actor', { companyId: claims.companyId, actorId: claims.sub, role: claims.role, employeeId: claims.employeeId, session: claims });
+  // Licença inactiva: só consulta (excepto tratar da licença).
+  const blocked = await licenceBlocks(getDb(), claims.companyId, c.req.method, c.req.path);
+  if (blocked) return c.json({ error: 'licenca_inactiva', message: blocked }, 402);
   await next();
 };
 

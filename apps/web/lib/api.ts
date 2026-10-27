@@ -19,7 +19,12 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export interface Me { user: { sub: string; name: string; role: string; companyId: string; employeeId: string | null }; company: { id: string; name: string; nif: string } | null }
+export interface Me {
+  user: { sub: string; name: string; role: string; companyId: string; employeeId: string | null };
+  company: { id: string; name: string; nif: string; code?: string | null; hasLogo?: boolean } | null;
+  licence?: { status: string; label: string; canWrite: boolean; trialEndsAt: string | null; paidUntil: string | null };
+  platformAdmin?: boolean;
+}
 
 export async function currentUser(): Promise<Me | null> {
   try { return await api<Me>('/v1/auth/me'); } catch { return null; }

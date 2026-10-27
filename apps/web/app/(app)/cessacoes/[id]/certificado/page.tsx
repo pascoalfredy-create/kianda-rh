@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Letterhead } from '@/components/letterhead';
 import { api } from '@/lib/api';
 import type { TerminationDetail } from '../../types';
 import { PrintButton } from '../../print';
@@ -14,6 +15,7 @@ export default async function Certificado({ params }: { params: Promise<{ id: st
     <>
       <div className="crumb no-print"><Link href={`/cessacoes/${d.id}`}>← Cessação</Link> <PrintButton /></div>
       <div className="card doc">
+        <Letterhead />
         <p><b>{d.company.name}</b><br />NIF {d.company.nif}{d.company.address ? <><br />{d.company.address}</> : null}</p>
         <h2 style={{ textAlign: 'center', margin: '40px 0 30px' }}>Certificado de trabalho</h2>
         <p style={{ lineHeight: 1.9 }}>

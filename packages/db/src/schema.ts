@@ -44,6 +44,12 @@ export const companies = pgTable('companies', {
   perDiemInternationalMinor: bigint('per_diem_international_minor', { mode: 'number' }),
   /** Portal: declarações pedidas pelo colaborador emitidas automaticamente (sem passar pelo RH). */
   autoIssueDeclarations: boolean('auto_issue_declarations').notNull().default(false),
+  /** Sector de actividade (registo) — pré-configurações por sector. */
+  sector: text('sector'),
+  /** Logotipo para o papel timbrado (data URL PNG/JPEG, até 300 KB). */
+  logoDataUrl: text('logo_data_url'),
+  /** Código curto da empresa (entrada dos colaboradores por n.º/telefone + PIN). */
+  code: text('code').unique(),
   createdAt: createdAt(),
 });
 
@@ -270,6 +276,55 @@ export const payrollLines = pgTable('payroll_lines', {
   breakdown: jsonb('breakdown').notNull().default([]),
   calculationHash: text('calculation_hash'),
 }, (t) => [uniqueIndex('payroll_lines_run_employee').on(t.runId, t.employeeId)]);
+
+/** Licença da empresa (uma por empresa). */
+export const subscriptions = pgTable('subscriptions', {
+  companyId: text('company_id').primaryKey().references(() => companies.id),
+  /** trial | active | suspended | cancelled (atraso e só leitura por falta de pagamento são calculados). */
+  status: text('status').notNull().default('trial'),
+  tierKey: text('tier_key').notNull().default('t1'),
+  cycle: text('cycle').notNull().default('monthly'),
+  trialEndsAt: date('trial_ends_at'),
+  paidUntil: date('paid_until'),
+  extraSeats: integer('extra_seats').notNull().default(0),
+  /** Escalão à medida: limite e preço mensal negociados. */
+  customMaxEmployees: integer('custom_max_employees'),
+  customMonthlyMinor: bigint('custom_monthly_minor', { mode: 'number' }),
+  notes: text('notes'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Pedidos de pagamento (pró-forma): a factura fiscal é emitida em software certificado e o n.º fica registado. */
+export const paymentRequests = pgTable('payment_requests', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  number: text('number').notNull().unique(),
+  /** subscription | extra_seats */
+  kind: text('kind').notNull(),
+  tierKey: text('tier_key'),
+  cycle: text('cycle'),
+  seats: integer('seats'),
+  periodStart: date('period_start'),
+  periodEnd: date('period_end'),
+  grossMinor: money('gross_minor'),
+  discountMinor: money('discount_minor'),
+  amountMinor: money('amount_minor'),
+  /** pending | paid | cancelled */
+  status: text('status').notNull().default('pending'),
+  payerReference: text('payer_reference'),
+  payerNote: text('payer_note'),
+  paidAt: timestamp('paid_at', { withTimezone: true }),
+  confirmedBy: text('confirmed_by'),
+  invoiceRef: text('invoice_ref'),
+  createdBy: text('created_by').notNull(),
+  createdAt: createdAt(),
+}, (t) => [index('payment_requests_company').on(t.companyId), index('payment_requests_status').on(t.status)]);
+
+/** Administradores da plataforma (consola Kianda) — definidos pela variável KIANDA_PLATFORM_ADMINS na publicação. */
+export const platformAdmins = pgTable('platform_admins', { email: text('email').primaryKey(), createdAt: createdAt() });
+
+/** Parâmetros comerciais da plataforma (escalões, preço por colaborador extra, dados bancários). */
+export const platformSettings = pgTable('platform_settings', { key: text('key').primaryKey(), value: jsonb('value').notNull(), updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow() });
 
 /** Portal do colaborador: pedidos de declarações. */
 export const documentRequests = pgTable('document_requests', {

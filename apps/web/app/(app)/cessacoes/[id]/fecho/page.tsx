@@ -1,5 +1,6 @@
 import { formatKz } from '@kianda/core';
 import Link from 'next/link';
+import { Letterhead } from '@/components/letterhead';
 import { api } from '@/lib/api';
 import type { TerminationDetail } from '../../types';
 import { PrintButton } from '../../print';
@@ -15,6 +16,7 @@ export default async function Fecho({ params }: { params: Promise<{ id: string }
     <>
       <div className="crumb no-print"><Link href={`/cessacoes/${d.id}`}>← Cessação</Link> <PrintButton /></div>
       <div className="card doc">
+        <Letterhead />
         <h2 style={{ textAlign: 'center' }}>Fecho de contas</h2>
         <p><b>{d.company.name}</b> · NIF {d.company.nif}{d.company.address ? ` · ${d.company.address}` : ''}</p>
         <p>Trabalhador: <b>{d.employee.name}</b> (n.º {d.employee.number}){d.employee.biNumber ? `, BI ${d.employee.biNumber}` : ''}, {d.employee.jobTitle}.</p>

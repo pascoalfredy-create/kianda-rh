@@ -17,6 +17,7 @@ export default async function Recibo({ params }: { params: Promise<{ id: string 
     if (e instanceof ApiError && e.status === 404) notFound();
     throw e;
   }
+  const logo = (await api<{ logo: string | null } | null>('/v1/company/branding').catch(() => null))?.logo ?? null;
   const earnings = p.lines.filter((l) => l.kind === 'earning');
   const deductions = p.lines.filter((l) => l.kind === 'deduction');
   const employer = p.lines.filter((l) => l.kind === 'employer');
@@ -31,6 +32,7 @@ export default async function Recibo({ params }: { params: Promise<{ id: string 
       <article className="card payslip">
         <header>
           <div>
+            {logo && <img src={logo} alt="" style={{ maxHeight: 52, maxWidth: 160, objectFit: 'contain', marginBottom: 6, display: 'block' }} />}
             <h2>{p.company.name}</h2>
             <div className="muted">NIF {p.company.nif}{p.company.inssNumber ? ` · INSS ${p.company.inssNumber}` : ''}</div>
             {p.company.address && <div className="muted">{p.company.address}</div>}

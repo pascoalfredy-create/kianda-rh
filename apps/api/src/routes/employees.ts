@@ -10,6 +10,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { body, requireCompany, requireRole, type Actor, type AppEnv } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
+import { licenceOf } from '../services/licence.js';
 
 const STAFF = ['hr_admin', 'payroll', 'finance', 'manager'] as const;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -179,6 +180,10 @@ export function employeeRoutes() {
     await assertDepartment(db, req.companyId, b.departmentId);
     await assertManager(db, req.companyId, null, b.managerId);
     assertMinimumWage(kz(b.contract.base), b.contract.type, b.contract.startDate);
+    const lic = await licenceOf(db, req.companyId);
+    if (lic.limit !== null && lic.activeEmployees >= lic.limit) {
+      throw new DomainError('limite_colaboradores', `A licença (${lic.tier.label}) permite ${lic.limit} colaboradores activos. Acrescente colaboradores extra ou mude de escalão no menu Licença.`, 402);
+    }
     const { contract, candidateId, ...data } = b;
     const [cand] = candidateId ? await db.select().from(candidates).where(and(eq(candidates.id, candidateId), eq(candidates.companyId, req.companyId))) : [];
     if (candidateId && !cand) throw new DomainError('nao_encontrado', 'Candidato inexistente', 404);
