@@ -589,6 +589,29 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
   });
 
+  describe('relatórios de gestão de pessoas (entrega 22)', () => {
+    const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
+    it('custo = ilíquido + INSS 8% dos processamentos fechados; efectivo, grupos e departamentos coerentes', async () => {
+      expect((await get(employeeUser, '/v1/reports/people')).statusCode).toBe(403);
+      const r = (await get(financeUser, '/v1/reports/people')).json();
+      expect(r.months.length).toBeGreaterThan(0);
+      expect(r.to).toBe(r.available[r.available.length - 1]);
+      const companyId = (await get(owner, '/v1/auth/me')).json().company.id;
+      const [db] = (await getDb().execute(sql`select coalesce(sum(l.gross_minor + l.inss_employer_minor), 0)::bigint as cost, count(*)::int as n from payroll_lines l join payroll_runs r on r.id = l.run_id where r.company_id = ${companyId} and r.status = 'closed' and r.period between ${r.from} and ${r.to}`)).rows;
+      expect(r.totals.costMinor).toBe(Number(db!.cost));
+      expect(r.months.reduce((s: number, m: { headcount: number }) => s + m.headcount, 0)).toBe(db!.n);
+      // Os grupos de rubricas somam o ilíquido; os departamentos somam o custo.
+      expect(Object.values(r.totals.groups as Record<string, number>).reduce((a, b) => a + b, 0)).toBe(r.totals.grossMinor);
+      expect(r.departments.reduce((s: number, d: { costMinor: number }) => s + d.costMinor, 0)).toBe(r.totals.costMinor);
+      const one = (await get(financeUser, `/v1/reports/people?from=${r.to}&to=${r.to}`)).json();
+      expect(one.months).toHaveLength(1);
+      const x = await get(financeUser, '/v1/reports/people?format=xlsx');
+      expect(x.headers['content-disposition']).toContain('relatorio-pessoas-');
+      for (const t of ['Resumo', 'Mensal', 'Departamentos', 'Rubricas', 'Custo com pessoal (Kz)', 'Rotatividade (%)']) expect(x.body).toContain(t);
+      expect((await get(ownerB, '/v1/reports/people')).json()).toMatchObject({ empty: true });
+    });
+  });
+
   describe('finanças de pessoal (entrega 7)', () => {
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
     const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);

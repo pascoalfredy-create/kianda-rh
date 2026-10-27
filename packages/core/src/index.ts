@@ -21,3 +21,4 @@ export * from './access.js';
 export * from './sectors.js';
 export * from './advances.js';
 export * from './official.js';
+export * from './reports.js';
