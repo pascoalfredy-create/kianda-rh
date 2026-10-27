@@ -7,7 +7,7 @@
 
 Plataforma SaaS de RH para empresas angolanas (estilo Factorial), com processamento salarial, obrigações (IRT/INSS), finanças de pessoal em **PGC Angola (Decreto n.º 82/2001)**, conciliação bancária, despesas, cessação, documentos, recrutamento, desempenho e portal do colaborador. Vendida por licença com escalões.
 
-- **Dono do produto:** Pascoal Frederico (CFO, especialista em PGC Angola). Fala português (de Angola, pré-AO90 nos textos da app: "acção", "efectivo", "direcção").
+- **Dono do produto:** Pascoal Frederico (CFO e contabilista — decide ele próprio as questões fiscais/contabilísticas; especialista em PGC Angola). Faz software de gestão, não software de facturação (por isso a factura certificada vai para o Vendus). Fala português (de Angola, pré-AO90 nos textos da app: "acção", "efectivo", "direcção").
 - **Produção:** https://kianda.yelaperformance.com
 - **Repositório:** `pascoalfredy-create/kianda-rh` (GitHub), branch `main`. Cada push para `main` testa e publica (GitHub Actions → Cloudflare).
 
@@ -91,7 +91,7 @@ Entregas **1–13** (produto) e **14–17** (SaaS), todas publicadas. Resumo em 
 ## 9. Próximos passos (por ordem)
 
 1. **Entrega 18 — Blindagem:** Row-Level Security no Postgres, cópias e exportação por empresa, eliminação a pedido (Lei n.º 22/11), domínio próprio da marca.
-2. **Pendentes do dono antes de clientes reais:** contratar ProxyPay, Resend e Cegid Vendus e definir os secrets (ver DEPLOY.md); rodar `KIANDA_JWT_SECRET` (gerado fora do chat); `KIANDA_SEED_DEMO=false`; regra de rate limiting no WAF da Cloudflare para `/api/v1/auth/login*`; preencher dados bancários/suporte na consola; validação jurídica da lista `toValidate` (em especial regras numéricas da cessação — Lei n.º 12/23 arts. 286.º, 289.º, 293.º, 295.º, 305.º, 307.º–311.º — e textos dos contratos); formatos oficiais do banco/AGT/INSS (hoje CSV genérico); armazenamento de ficheiros (R2) para CVs e recibos de despesas (hoje ligações).
+2. **Pendentes do dono antes de clientes reais:** contratar ProxyPay, Resend e Cegid Vendus e definir os secrets (ver DEPLOY.md) — o Vendus só é necessário quando a facturação electrónica geral entrar em vigor (Janeiro); enquadramento de IVA/isenção das licenças a definir pelo dono; rodar `KIANDA_JWT_SECRET` (gerado fora do chat); `KIANDA_SEED_DEMO=false`; regra de rate limiting no WAF da Cloudflare para `/api/v1/auth/login*`; preencher dados bancários/suporte na consola; validação jurídica da lista `toValidate` (em especial regras numéricas da cessação — Lei n.º 12/23 arts. 286.º, 289.º, 293.º, 295.º, 305.º, 307.º–311.º — e textos dos contratos); formatos oficiais do banco/AGT/INSS (hoje CSV genérico); armazenamento de ficheiros (R2) para CVs e recibos de despesas (hoje ligações).
 
 ## 10. Armadilhas já resolvidas (não repetir)
 

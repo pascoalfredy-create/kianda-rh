@@ -107,6 +107,6 @@ Cada integração liga-se sozinha quando o secret existir no GitHub (o deploy se
 
 **Resend:** criar conta, verificar o domínio de envio (registos DNS na Cloudflare) e gerar a chave. Os emails também ficam registados na consola (enviados, não enviados, falhados).
 
-**Cegid Vendus:** a factura tem de ser emitida em software certificado pela AGT (Decreto Presidencial n.º 71/25 — facturação electrónica). Conta Vendus Angola → APPS → API → chave. Comece em `tests`; na consola defina o imposto (taxa normal ou isenção com código e fundamento — confirmar com o contabilista), o id do meio de pagamento e, se quiser, a emissão automática. Pagamentos sem factura aparecem na consola com "Emitir factura".
+**Cegid Vendus:** a factura tem de ser emitida em software certificado pela AGT (Decreto Presidencial n.º 71/25 — facturação electrónica; hoje obrigatória só para fornecedores do Estado, regime geral a partir de Janeiro). Até lá a factura pode continuar a ser emitida fora e o n.º registado ao confirmar o pagamento. Conta Vendus Angola → APPS → API → chave. Comece em `tests`; na consola defina o imposto da licença de software (taxa normal, ou isenção com código e fundamento legal — decisão do dono, que é o contabilista), o id do meio de pagamento e, se quiser, a emissão automática. Pagamentos sem factura aparecem na consola com "Emitir factura".
 
 **Tarefas agendadas do Worker da API:** `*/30 * * * *` (sincronização Multicaixa) e `0 7 * * *` (avisos de licença às 08:00 de Luanda).
