@@ -156,6 +156,35 @@ export const salaryAdvances = pgTable('salary_advances', {
   createdAt: createdAt(),
 }, (t) => [uniqueIndex('salary_advances_company_number').on(t.companyId, t.number), index('salary_advances_employee').on(t.employeeId)]);
 
+/** Orçamento de pessoal do ano (um por empresa e ano): hipóteses usadas e estado (rascunho / aprovado). */
+export const personnelBudgets = pgTable('personnel_budgets', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  year: integer('year').notNull(),
+  /** draft | approved */
+  status: text('status').notNull().default('draft'),
+  assumptions: jsonb('assumptions').notNull().default({}),
+  notes: text('notes'),
+  createdBy: text('created_by').notNull(),
+  approvedBy: text('approved_by'),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex('personnel_budgets_company_year').on(t.companyId, t.year)]);
+
+/** Células do orçamento: custo com pessoal (ilíquido + INSS da empresa) e efectivo previstos por mês e departamento. */
+export const personnelBudgetLines = pgTable('personnel_budget_lines', {
+  id: id(),
+  budgetId: text('budget_id').notNull().references(() => personnelBudgets.id, { onDelete: 'cascade' }),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  /** Vazio = sem departamento. */
+  departmentId: text('department_id'),
+  period: text('period').notNull(),
+  headcount: numeric('headcount', { precision: 8, scale: 1 }).notNull().default('0'),
+  grossMinor: money('gross_minor'),
+  costMinor: money('cost_minor'),
+}, (t) => [index('personnel_budget_lines_budget').on(t.budgetId)]);
+
 export const departments = pgTable('departments', {
   id: id(),
   companyId: text('company_id').notNull().references(() => companies.id),

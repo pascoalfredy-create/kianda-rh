@@ -612,6 +612,54 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
   });
 
+  describe('orçamento de pessoal (entrega 23)', () => {
+    const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
+    const send = (cookie: string, method: string, url: string, payload: object = {}) => app.inject({ method, url, headers: as(cookie), payload });
+    const hyp = { year: 2026, increaseBps: 500, increaseFrom: '2026-07', holidayMonth: 12, christmasMonth: 12, hires: [{ departmentId: null, from: '2026-09', count: 2, baseMinor: 15_000_000, mealMinor: 0, transportMinor: 0 }] };
+    let id = '';
+
+    it('simula sem gravar; validações das hipóteses; o colaborador não vê', async () => {
+      expect((await get(employeeUser, '/v1/budgets?year=2026')).statusCode).toBe(403);
+      expect((await get(financeUser, '/v1/budgets?year=2026')).json()).toMatchObject({ budget: null, defaults: { year: 2026 } });
+      const sim = (await send(financeUser, 'POST', '/v1/budgets/simulate', hyp)).json();
+      expect(sim.months).toHaveLength(12);
+      expect(sim.totalMinor).toBeGreaterThan(0);
+      const noHires = (await send(financeUser, 'POST', '/v1/budgets/simulate', { ...hyp, hires: [] })).json();
+      // Duas admissões a 150 000 Kz de Setembro a Dezembro, férias e Natal proporcionais (4/12) em Dezembro;
+      // INSS de 8% sobre a base e o Natal (o subsídio de férias está fora da base no pacote AO-2026).
+      expect(sim.totalMinor - noHires.totalMinor).toBe(Math.round(2 * (4 * 15_000_000 * 1.08 + 2_500_000 + 2_500_000 * 1.08)));
+      expect((await send(financeUser, 'POST', '/v1/budgets/simulate', { ...hyp, hires: [{ ...hyp.hires[0], from: '2027-01' }] })).statusCode).toBe(400);
+      expect((await get(financeUser, '/v1/budgets?year=2026')).json().budget).toBeNull();
+    });
+
+    it('cria, compara com o real dos meses fechados, ajusta e aprova (só o proprietário)', async () => {
+      const created = await send(financeUser, 'POST', '/v1/budgets', { ...hyp, notes: 'Orçamento inicial' });
+      expect(created.statusCode).toBe(201);
+      id = created.json().id;
+      expect((await send(financeUser, 'POST', '/v1/budgets', hyp)).statusCode).toBe(409);
+      const g = (await get(financeUser, '/v1/budgets?year=2026')).json();
+      expect(g.closed).toEqual(expect.arrayContaining(['2026-10', '2026-12']));
+      const report = (await get(financeUser, '/v1/reports/people?from=2026-01&to=2026-12')).json();
+      expect(g.comparison.totals.actualToDateMinor).toBe(report.totals.costMinor);
+      expect(g.comparison.months.find((m: { period: string }) => m.period === '2026-11').actualMinor).toBeNull();
+      const before = g.comparison.totals.budgetYearMinor;
+      expect((await send(financeUser, 'PUT', `/v1/budgets/${id}/lines`, { lines: [{ departmentId: null, period: '2026-01', costMinor: 99_900_000, headcount: 9 }] })).statusCode).toBe(200);
+      const after = (await get(financeUser, '/v1/budgets?year=2026')).json();
+      expect(after.lines.find((l: { period: string; departmentId: string | null }) => l.period === '2026-01' && l.departmentId === null)).toMatchObject({ costMinor: 99_900_000, headcount: 9 });
+      expect(after.comparison.totals.budgetYearMinor).not.toBe(before);
+      expect((await send(financeUser, 'POST', `/v1/budgets/${id}/approve`)).statusCode).toBe(403);
+      expect((await send(owner, 'POST', `/v1/budgets/${id}/approve`)).statusCode).toBe(200);
+      expect((await send(financeUser, 'PUT', `/v1/budgets/${id}/lines`, { lines: [{ departmentId: null, period: '2026-02', costMinor: 1 }] })).json().error).toBe('aprovado');
+      expect((await send(financeUser, 'DELETE', `/v1/budgets/${id}`)).statusCode).toBe(409);
+      const x = await get(payrollUser, `/v1/budgets/${id}/export`);
+      for (const t of ['Orçado vs real', 'Departamentos', 'Previsão de fecho']) expect(x.body).toContain(t);
+      expect((await get(ownerB, `/v1/budgets/${id}/export`)).statusCode).toBe(404);
+      expect((await send(owner, 'POST', `/v1/budgets/${id}/reopen`)).statusCode).toBe(200);
+      expect((await send(financeUser, 'POST', `/v1/budgets/${id}/regenerate`, hyp)).statusCode).toBe(200);
+      expect((await get(financeUser, '/v1/budgets?year=2026')).json().comparison.totals.budgetYearMinor).toBe(before);
+    });
+  });
+
   describe('finanças de pessoal (entrega 7)', () => {
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
     const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
