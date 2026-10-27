@@ -87,7 +87,7 @@ export function payrollRoutes() {
     const actor = c.get('actor');
     const b = z.object({
       employeeId: z.string(), period: periodSchema,
-      kind: z.enum(['bonus', 'other_earning', 'advance', 'other_deduction']),
+      kind: z.enum(['bonus', 'other_earning', 'advance', 'other_deduction', 'salary_cut']),
       label: z.string().trim().min(2, 'Indique a descrição'),
       amount: z.number().positive('O valor tem de ser positivo'),
       inInss: z.boolean().default(true), inIrt: z.boolean().default(true),
@@ -98,9 +98,12 @@ export function payrollRoutes() {
     if (!emp) return c.json({ error: 'colaborador_inexistente', message: 'Colaborador inexistente' }, 404);
     const [run] = await db.select({ status: payrollRuns.status }).from(payrollRuns).where(and(eq(payrollRuns.companyId, actor.companyId), eq(payrollRuns.period, b.period)));
     if (run?.status === 'closed') throw new DomainError('processamento_fechado', `O processamento de ${b.period} já está fechado: lance no mês seguinte.`);
+    // Desconto na remuneração (cálculo manual: maternidade, suspensões…): abono negativo que reduz as bases de INSS e IRT.
+    const cutKind = b.kind === 'salary_cut';
     const isEarning = b.kind === 'bonus' || b.kind === 'other_earning';
     const [v] = await db.insert(payrollVariables).values({
-      companyId: actor.companyId, employeeId: b.employeeId, period: b.period, kind: b.kind, label: b.label, amountMinor: kz(b.amount),
+      companyId: actor.companyId, employeeId: b.employeeId, period: b.period, kind: b.kind === 'salary_cut' ? 'other_earning' : b.kind, label: b.label,
+      amountMinor: cutKind ? -kz(b.amount) : kz(b.amount), code: cutKind ? 'CORTE' : null,
       inInss: isEarning ? b.inInss : true, inIrt: isEarning ? b.inIrt : true, note: b.note ?? null, createdBy: actor.actorId,
     }).returning();
     await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'create', entity: 'payroll_variable', entityId: v!.id, after: { ...v } });

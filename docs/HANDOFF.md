@@ -104,3 +104,11 @@ Entregas **1–13** (produto), **14–18** (SaaS) e **19** (revisão LGT + adian
 - Estado React em sequência rápida (avaliações): usar actualizações funcionais `setX((s) => …)`.
 - Referências de lançamento únicas: depois de um estorno, novo pagamento leva sufixo `-2`, `-3`.
 - Testes que criam dados partilhados (ex.: parâmetros da plataforma) devem limpar no `beforeAll`.
+
+### Regra de cálculo manual (27/10/2026)
+Decisão do contabilista: onde a LGT não fecha a regra, o motor **não calcula** — conta os dias, avisa no processamento ("CÁLCULO MANUAL") e o valor é lançado nas variáveis:
+- Licença de maternidade (suspensão do salário) → variável "Desconto na remuneração" (código `CORTE`, abono negativo que reduz INSS/IRT).
+- Feriado trabalhado (art. 200.º, n.º 2) → "Outro abono".
+- Vésperas de 24 e 31 de Dezembro (art. 199.º) → aviso em Dezembro; horas devidas lançadas à mão.
+- Subsídios em ano com suspensão (art. 238.º, n.º 3) → aviso; ajuste manual.
+O core mantém `suspendedDays`, `holidayWorkDays` e `familyEveMinutes` (testados), mas a API não os usa.

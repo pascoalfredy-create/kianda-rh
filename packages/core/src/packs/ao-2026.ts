@@ -90,9 +90,10 @@ export const AO_2026: CountryPack = {
   ],
   toValidate: [
     'Doença (art. 226.º): paga pela empresa até 6 meses, com direito de regresso sobre a protecção social — o motor não regista o reembolso do INSS',
-    'Trabalho em feriado (art. 200.º, n.º 2): "acréscimo de mais de um dia de salário normal" — a LGT não define o salário diário; calculado como valor-hora (art. 237.º, n.º 7) × 8 h por feriado trabalhado (fora dos turnos)',
-    'Vésperas de 24 e 31 de Dezembro (art. 199.º): paragem às 12h30 — o motor prevê 4h30 (08h00–12h30); ajuste se o horário começar a outra hora',
-    'Subsídios em ano com suspensão do contrato (ex.: maternidade): o art. 238.º, n.º 3 manda pagar proporcional aos meses completos de serviço efectivo — o motor avisa mas não reduz automaticamente',
+    'CÁLCULO MANUAL — Trabalho em feriado (art. 200.º, n.º 2): "mais um dia de salário normal" sem definição na LGT; o motor conta os feriados trabalhados e avisa, o valor é lançado em "Outro abono"',
+    'CÁLCULO MANUAL — Vésperas de 24 e 31 de Dezembro (art. 199.º): paragem às 12h30; o motor avisa em Dezembro, as horas devidas depois das 12h30 são lançadas à mão',
+    'CÁLCULO MANUAL — Licença de maternidade: suspende o salário (arts. 267.º, c) e 268.º); o motor conta os dias e avisa, o valor a retirar é lançado em "Desconto na remuneração"',
+    'CÁLCULO MANUAL — Subsídios em ano com suspensão do contrato (ex.: maternidade): proporcionais aos meses de serviço efectivo (art. 238.º, n.º 3); o motor avisa, o ajuste é manual',
     'Gratificação de férias (arts. 213.º, n.º 5 e 238.º): paga até 15 dias antes do gozo — o motor paga no mês das primeiras férias aprovadas (ou no mês fixado pela empresa) e avisa quando o prazo não é cumprido',
     'Sectores: valores sugeridos dos subsídios sem base na LGT (isolamento, campo, offshore, risco, alojamento, deslocação, falhas) e incidência INSS/IRT pela regra geral; documentos obrigatórios e avisos (seguro de acidentes, angolanização, vistos)',
     'Modelos de documentos (contratos, declarações, certificado, comunicações): revisão por jurista antes do uso',

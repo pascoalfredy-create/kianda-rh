@@ -381,7 +381,7 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
 
     it('variáveis do mês: só o processamento as lança', async () => {
       expect((await post(employeeUser, '/v1/payroll-variables', { employeeId: empId, period: '2026-12', kind: 'bonus', label: 'Prémio', amount: 1 })).statusCode).toBe(403);
-      for (const [kind, label, amount] of [['bonus', 'Prémio de desempenho', 50000], ['advance', 'Adiantamento de 10/12', 30000], ['other_deduction', 'Quota sindical', 10000]] as const) {
+      for (const [kind, label, amount] of [['bonus', 'Prémio de desempenho', 50000], ['advance', 'Adiantamento de 10/12', 30000], ['other_deduction', 'Quota sindical', 10000], ['salary_cut', 'Licença de maternidade (cálculo manual)', 20000]] as const) {
         expect((await post(payrollUser, '/v1/payroll-variables', { employeeId: empId, period: '2026-12', kind, label, amount })).statusCode).toBe(201);
       }
       bigAdvance = (await post(payrollUser, '/v1/payroll-variables', { employeeId: empId, period: '2026-12', kind: 'advance', label: 'Erro', amount: 5_000_000 })).json().id;
@@ -399,7 +399,8 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(r.statusCode).toBe(201);
       decRun = r.json().run.id;
       const l = await lineOf(decRun);
-      expect(codes(l)).toEqual(expect.arrayContaining(['BASE', 'BONUS', 'SUBFER', 'SUBNAT', 'ADIANT', 'OUTDESC']));
+      expect(codes(l)).toEqual(expect.arrayContaining(['BASE', 'BONUS', 'SUBFER', 'SUBNAT', 'ADIANT', 'OUTDESC', 'CORTE']));
+      expect(l.breakdown.find((b: { code: string }) => b.code === 'CORTE').amountMinor).toBe(-2_000_000);
       const natal = l.breakdown.find((b: { code: string }) => b.code === 'SUBNAT');
       expect(natal.name).toMatch(/proporcional 91[.,]7/);
     });

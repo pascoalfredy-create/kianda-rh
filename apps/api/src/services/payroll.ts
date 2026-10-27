@@ -149,15 +149,13 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
         unpaidLeaveHours += mins / 60;
       }
       unpaidLeaveHours = Math.round(unpaidLeaveHours * 100) / 100;
-      // Licença de maternidade: suspende o contrato e o salário; o subsídio é pago pela segurança social (arts. 267.º, c) e 268.º).
-      let suspendedDays = 0;
+      // Licença de maternidade: suspende o contrato e o salário (arts. 267.º, c) e 268.º) — cálculo manual, só se contam os dias.
+      let maternityDays = 0;
       for (const a of monthLeaves.filter((x) => x.employeeId === e.id && x.type === 'maternity')) {
         const from = a.startDate < periodStart ? periodStart : a.startDate;
         const to = a.endDate > periodEnd ? periodEnd : a.endDate;
-        suspendedDays += Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1;
+        maternityDays += Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1;
       }
-      // Mês inteiro suspenso conta 30 dias (divisor legal), mesmo em meses de 31 dias.
-      if (suspendedDays >= Math.round((Date.parse(periodEnd) - Date.parse(periodStart)) / 86_400_000) + 1) suspendedDays = pack.labour.dailyRateDivisor;
       // Férias no mês: alimentação e transporte não são devidos nesses dias, salvo acordo (art. 213.º, n.º 2).
       let vacationAllowanceCut: { fraction: number; days: number } | undefined;
       if (!company?.allowancesOnVacation) {
@@ -237,12 +235,15 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
         r = calculatePayroll({
           period, pack, baseMinor: pay.baseMinor, mealMinor: pay.mealMinor, transportMinor: pay.transportMinor,
           overtimeHours, absenceDays, absenceHours, otherEarnings, advancesMinor, otherDeductionsMinor, noticeDeductionMinor, holidaySubsidy, christmasSubsidy, workedDays,
-          restDayHours, holidayWorkDays, unpaidLeaveHours, unpaidLeaveLabel: unpaidLeaveHours ? `Licença de paternidade não remunerada (${unpaidLeaveHours} h)` : undefined,
-          vacationAllowanceCut, suspendedDays: suspendedDays || undefined,
-          suspendedLabel: suspendedDays ? `Licença de maternidade (${suspendedDays} dia(s)) — salário suspenso, subsídio pago pela segurança social` : undefined,
+          restDayHours, unpaidLeaveHours, unpaidLeaveLabel: unpaidLeaveHours ? `Licença de paternidade não remunerada (${unpaidLeaveHours} h)` : undefined,
+          vacationAllowanceCut,
         });
+        // Casos sem regra fechada na LGT: o motor não calcula — avisa e o valor é lançado à mão nas variáveis.
+        if (maternityDays) warnings.push({ employeeId: e.id, message: `${e.name}: ${maternityDays} dia(s) de licença de maternidade em ${period} — CÁLCULO MANUAL: o salário está suspenso (arts. 267.º, c) e 268.º) e o motor pagou o mês por inteiro; lance "Desconto na remuneração" com o valor a retirar (base, alimentação, transporte)` });
+        if (holidayWorkDays) warnings.push({ employeeId: e.id, message: `${e.name}: ${holidayWorkDays} feriado(s) trabalhado(s) — CÁLCULO MANUAL do acréscimo do art. 200.º, n.º 2 ("mais um dia de salário normal"): lance em "Outro abono"` });
+        if (period.endsWith('-12') && att && sched?.kind !== 'cycle') warnings.push({ employeeId: e.id, message: `${e.name}: 24 e 31 de Dezembro com paragem às 12h30 (art. 199.º) — CÁLCULO MANUAL: horas trabalhadas depois das 12h30 não entram como extraordinárias; lance-as em "Outro abono" se forem devidas` });
         if (maternityYear.has(e.id) && (holidaySubsidy || christmasSubsidy)) {
-          warnings.push({ employeeId: e.id, message: `${e.name}: subsídio pago num ano com licença de maternidade — o art. 238.º, n.º 3 manda pagar proporcional aos meses completos de serviço efectivo; confirme o valor` });
+          warnings.push({ employeeId: e.id, message: `${e.name}: subsídio pago num ano com licença de maternidade — o art. 238.º, n.º 3 manda pagar proporcional aos meses completos de serviço efectivo; CÁLCULO MANUAL: confirme e ajuste o valor` });
         }
         // Descontos a crédito (adiantamentos e outros) até 25% do líquido (LGT, art. 248.º, n.º 7).
         const credit = advancesMinor + otherDeductionsMinor;
@@ -306,7 +307,7 @@ export async function closePayroll(db: Db, companyId: string, runId: string, act
       const t = byCc.get(key) ?? { costCenter: key, baseMinor: 0, allowancesMinor: 0, overtimeAndBonusMinor: 0, holidayChristmasMinor: 0, employerInssMinor: 0, terminationMinor: 0 };
       for (const item of linesOf(l)) {
         if (item.kind !== 'earning') continue;
-        if (item.code === 'BASE' || item.code === 'FALTAS' || item.code === 'LICNR' || item.code === 'FERNG' || item.code === 'FERPROP') t.baseMinor += item.amountMinor;
+        if (item.code === 'BASE' || item.code === 'FALTAS' || item.code === 'LICNR' || item.code === 'CORTE' || item.code === 'SUSP' || item.code === 'FERNG' || item.code === 'FERPROP') t.baseMinor += item.amountMinor;
         else if (item.code === 'SUBFER' || item.code === 'SUBNAT' || item.code === 'SUBFERPROP') t.holidayChristmasMinor += item.amountMinor;
         else if (item.code === 'COMP' || item.code === 'COMPEXC' || item.code === 'AVISO') t.terminationMinor = (t.terminationMinor ?? 0) + item.amountMinor;
         else if (item.code === 'HE' || item.code === 'HEDESC' || item.code === 'FERTRAB' || item.code.startsWith('BONUS')) t.overtimeAndBonusMinor += item.amountMinor;

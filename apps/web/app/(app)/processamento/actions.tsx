@@ -72,6 +72,7 @@ export function AddVariable({ period, people }: { period: string; people: { id: 
           <option value="other_earning">Outro abono</option>
           <option value="advance">Adiantamento (desconto)</option>
           <option value="other_deduction">Outro desconto</option>
+          <option value="salary_cut">Desconto na remuneração (reduz INSS/IRT — cálculo manual)</option>
         </select>
       </label>
       <label>Valor (Kz)<input name="amount" inputMode="decimal" required /></label>
