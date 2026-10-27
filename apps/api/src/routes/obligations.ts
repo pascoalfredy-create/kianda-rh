@@ -107,7 +107,7 @@ export function obligationRoutes() {
 
   /**
    * Mapa Mensal de Remunerações (AGT) nos templates oficiais: completo "IRT A2.1" (32 colunas, por omissão) ou simplificado
-   * (?template=simple, 15 colunas). NIF do contribuinte em C1, período em C2, cabeçalho nas linhas 3–4, dados a partir da 5;
+   * (?template=simple, 15 colunas). NIF do contribuinte em A1, período em A2 (rótulos em B1/B2), cabeçalho nas linhas 3–4, dados a partir da 5;
    * todos os trabalhadores do processamento. ?format=xlsx|csv|json.
    */
   app.get('/v1/payroll-runs/:id/maps/agt', requireRole(...READERS), async (c) => {
@@ -140,15 +140,15 @@ export function obligationRoutes() {
     const simple = c.req.query('template') === 'simple';
     const columns: readonly string[] = simple ? AGT_SIMPLE_COLUMNS : AGT_MAP_COLUMNS;
     const money = simple ? AGT_SIMPLE_MONEY_COLUMNS : AGT_MONEY_COLUMNS;
-    const data = simple ? full.map(agtSimpleRow) : full;
+    const data = simple ? full.map((r) => agtSimpleRow(r, pack.irt.allowanceExemptionMinor)) : full;
     const totalIrt = full.reduce((s, r) => s + Number(r[AGT_MAP_COLUMNS.indexOf('IRT Apurado')]), 0);
     const format = c.req.query('format') ?? 'json';
     const file = `mapa-remuneracoes-${simple ? 'simplificado' : 'A2.1'}-${co?.nif ?? ''}-${run.period}`;
     if (format === 'xlsx') {
       const width = columns.length;
       const blank = () => Array<string | number>(width).fill('');
-      const r1 = blank(); r1[1] = 'NIF do Contribuinte'; r1[2] = co?.nif ?? '';
-      const r2 = blank(); r2[1] = 'Período (AAAA-MM)'; r2[2] = run.period;
+      const r1 = blank(); r1[0] = co?.nif ?? ''; r1[1] = 'NIF do Contribuinte';
+      const r2 = blank(); r2[0] = run.period; r2[1] = 'Período (AAAA-MM)';
       const r3 = blank();
       const r4 = blank();
       let merges: string[];
@@ -163,7 +163,7 @@ export function obligationRoutes() {
       }
       const body = data.map((r) => r.map((v, i) => (money.has(i) ? Number(v) / 100 : v)));
       return xlsxResponse(xlsx([{
-        name: 'Mapa de Remunerações', rows: [r1, r2, r3, r4, ...body], boldRows: [0, 1, 2, 3], freezeRows: 4, merges,
+        name: 'Mapa de Remunerações', rows: [r1, r2, r3, r4, ...body], boldRows: [2, 3], freezeRows: 4, merges,
         widths: columns.map((h, i) => (i === 1 ? 32 : i === 0 || i === 2 ? 19 : Math.max(13, Math.min(20, h.length)))),
       }]), `${file}.xlsx`);
     }

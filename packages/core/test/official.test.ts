@@ -33,7 +33,7 @@ describe('formatos oficiais', () => {
     grossMinor: 55_590_909, inssBaseMinor: 50_090_909, inssEmployeeMinor: 1_502_727, irtMinor: 7_000_000, irtTaxableMinor: 48_388_182,
   };
 
-  it('template A2.1: 32 colunas, abonos nos grupos certos, descontos em positivo, base IRT antes do INSS', () => {
+  it('template A2.1: 32 colunas, abonos nos grupos certos, descontos em positivo, base IRT = matéria colectável', () => {
     const row = agtMapRow(input);
     const v = (c: (typeof AGT_MAP_COLUMNS)[number]) => row[AGT_MAP_COLUMNS.indexOf(c)];
     expect(AGT_MAP_COLUMNS).toHaveLength(32);
@@ -42,14 +42,18 @@ describe('formatos oficiais', () => {
     expect(v('Descontos por Falta')).toBe(2_009_091);
     // Subsídio de turno sujeito; os 2 000 Kz fora do IRT passam para "Outros" (Art. 2.º).
     expect([v('Outros Subsídios Sujeitos'), v('Outros')]).toEqual([8_400_000, 200_000]);
-    expect(v('Base Tributável IRT')).toBe(input.irtTaxableMinor + input.inssEmployeeMinor);
+    expect(v('Base Tributável IRT')).toBe(48_388_182);
     expect([v('Cálculo Manual de Excesso de Subsídios?'), v('Registo Manual de Contribuição Segurança Social?'), v('Não Sujeito a Segurança Social?'), v('Isento IRT?')]).toEqual(['N', 'N', 'N', 'N']);
   });
 
   it('template simplificado: 15 colunas que somam ao ilíquido', () => {
-    const s = agtSimpleRow(agtMapRow(input));
+    const s = agtSimpleRow(agtMapRow(input), 3_000_000);
     expect(AGT_SIMPLE_COLUMNS).toHaveLength(15);
     expect(s).toHaveLength(15);
+    // Alimentação 30 000 e transporte 25 000 dentro do limite + 2 000 fora do IRT = partes isentas.
+    expect([s[6], s[7]]).toEqual([5_700_000, 8_400_000 + 1_000_000 + 500_000]);
+    const over = agtSimpleRow(agtMapRow({ ...input, breakdown: input.breakdown.map((l) => (l.code === 'ALIM' ? { ...l, amountMinor: 4_000_000 } : l)), grossMinor: input.grossMinor + 1_000_000, irtTaxableMinor: input.irtTaxableMinor + 1_000_000 }), 3_000_000);
+    expect([over[6], over[7]]).toEqual([5_700_000, 9_900_000 + 1_000_000]);
     expect(Number(s[5]) + Number(s[6]) + Number(s[7])).toBe(input.grossMinor);
   });
 

@@ -550,12 +550,14 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(joana[col('Registo Manual de Contribuição Segurança Social?')]).toBe('N');
       const irt = (await get(financeUser, `/v1/payroll-runs/${dec}/maps/irt`)).json();
       expect(j.totalIrtMinor).toBe(irt.totalIrt);
+      // Base Tributável IRT = matéria colectável (instrução 34 do template).
+      for (const r of irt.rows) expect(j.rows.find((x: (string | number)[]) => x[1] === r.name)[col('Base Tributável IRT')]).toBe(r.taxable);
       const earningsCols = ['Salário Base', 'Subsídio Alimentação', 'Subsídio Transporte', 'Abono Família', 'Reembolso de Despesas', 'Outros', 'Abono de Falhas', 'Subsídio Renda de Casa', 'Compensação Por Rescisão', 'Subsídio de Férias', 'Horas Extras', 'Subsídio de Atavio', 'Subsídio de Representação', 'Prémios', 'Subsídio de Natal', 'Outros Subsídios Sujeitos'];
       for (const r of j.rows) expect(earningsCols.reduce((s, c) => s + Number(r[col(c)]), 0) - Number(r[col('Descontos por Falta')])).toBe(r[col('Salário Ilíquido')]);
       const x = await get(financeUser, `/v1/payroll-runs/${dec}/maps/agt?format=xlsx`);
       expect(x.headers['content-type']).toContain('spreadsheetml');
       expect(x.body.startsWith('PK')).toBe(true);
-      for (const t of ['NIF do Contribuinte', 'Período (AAAA-MM)', '2026-12', 'Subsídios Não Sujeitos a IRT (Art. 2º do CIRT)', '<mergeCell ref="O3:X3"/>', '<c r="A5" t="inlineStr">', '<v>500000</v>']) expect(x.body).toContain(t);
+      for (const t of ['NIF do Contribuinte', 'Período (AAAA-MM)', '2026-12', 'Subsídios Não Sujeitos a IRT (Art. 2º do CIRT)', '<mergeCell ref="O3:X3"/>', '<c r="A5" t="inlineStr">', '<c r="A2" t="inlineStr"><is><t xml:space="preserve">2026-12</t>', '<v>500000</v>']) expect(x.body).toContain(t);
       const simple = (await get(financeUser, `/v1/payroll-runs/${dec}/maps/agt?template=simple`)).json();
       expect(simple.columns).toHaveLength(15);
       for (const r of simple.rows) expect(Number(r[5]) + Number(r[6]) + Number(r[7])).toBe(r[8]);

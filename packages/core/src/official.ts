@@ -1,8 +1,8 @@
 /**
  * Formatos de entrega oficiais (Angola), alinhados com os modelos reais entregues pelo contabilista (27/10/2026):
  * - AGT: "Template IRT A2.1 — Mapa de Remunerações" (32 colunas) e "Novo Template Simplificado IRT" (15 colunas), do
- *   Portal do Contribuinte → Declarações → IRT → Mapa de Remunerações → Upload de Ficheiro. NIF do contribuinte em C1,
- *   período (AAAA-MM) em C2, cabeçalho nas linhas 3–4, dados a partir da linha 5; todos os trabalhadores do mês.
+ *   Portal do Contribuinte → Declarações → IRT → Mapa de Remunerações → Upload de Ficheiro. NIF do contribuinte em A1,
+ *   período (AAAA-MM) em A2 (rótulos em B1/B2), cabeçalho nas linhas 3–4, dados a partir da linha 5; todos os trabalhadores do mês.
  *   Província por sigla e município pela lista da folha "Auxiliar" do template.
  * - INSS: "Folha de Remuneração Normal" do INSS Virtual (inscrição, nome, categoria, salário base, remunerações
  *   adicionais, total; totais e parcelas de 3% e 8%).
@@ -93,11 +93,13 @@ export function agtMapRow(i: AgtMapInput): (string | number)[] {
     if (REDUCTIONS.has(l.code) || l.amountMinor < 0) { col['Descontos por Falta'] += Math.abs(l.amountMinor); continue; }
     col[COLUMN_OF[l.code] ?? (l.code.startsWith('BONUS') ? 'Prémios' : 'Outros Subsídios Sujeitos')] += l.amountMinor;
   }
-  const irtBase = i.irtTaxableMinor > 0 ? i.irtTaxableMinor + i.inssEmployeeMinor : 0;
+  // "Base Tributável IRT" = matéria colectável (instrução 34 do template: o IRT é apurado a partir desta coluna).
+  const irtBase = Math.max(0, i.irtTaxableMinor);
+  const irtBeforeInss = irtBase > 0 ? irtBase + i.inssEmployeeMinor : 0;
   // Abonos fora do IRT que não são alimentação/transporte (variáveis ou subsídios marcados sem IRT) → "Outros" (Art. 2.º).
   const ex = i.allowanceExemptionMinor;
   const exemptAllowances = Math.min(col['Subsídio Alimentação'], ex) + Math.min(col['Subsídio Transporte'], ex);
-  const otherNonSubject = Math.max(0, i.grossMinor - irtBase - exemptAllowances);
+  const otherNonSubject = Math.max(0, i.grossMinor - irtBeforeInss - exemptAllowances);
   const moved = Math.min(otherNonSubject, col['Outros Subsídios Sujeitos']);
   col['Outros Subsídios Sujeitos'] -= moved;
   col.Outros += moved;
@@ -124,14 +126,19 @@ export function agtMapRow(i: AgtMapInput): (string | number)[] {
   });
 }
 
-/** Linha do template simplificado (15 colunas), derivada da completa: salário base já líquido das faltas. */
-export function agtSimpleRow(full: (string | number)[]): (string | number)[] {
+/**
+ * Linha do template simplificado (15 colunas), derivada da completa. Instruções do template: "Subsídios Não Sujeitos a IRT"
+ * = soma das partes isentas; "Subsídios Sujeitos a IRT" = subsídios sujeitos + excesso dos não sujeitos. O salário base
+ * vai já líquido dos descontos por falta (o template não tem essa coluna).
+ */
+export function agtSimpleRow(full: (string | number)[], allowanceExemptionMinor: Minor): (string | number)[] {
   const v = (c: AgtColumn) => full[AGT_MAP_COLUMNS.indexOf(c)]!;
   const n = (c: AgtColumn) => Number(v(c));
+  const excess = Math.max(0, n('Subsídio Alimentação') - allowanceExemptionMinor) + Math.max(0, n('Subsídio Transporte') - allowanceExemptionMinor);
   return [
     v('NIF Trabalhador'), v('Nome'), v('Nº Segurança Social'), v('Província'), v('Município'),
     n('Salário Base') - n('Descontos por Falta'),
-    AGT_NON_SUBJECT.reduce((s, c) => s + n(c), 0), AGT_SUBJECT.reduce((s, c) => s + n(c), 0),
+    AGT_NON_SUBJECT.reduce((s, c) => s + n(c), 0) - excess, AGT_SUBJECT.reduce((s, c) => s + n(c), 0) + excess,
     n('Salário Ilíquido'), n('Base Tributável Segurança Social'), v('Não Sujeito a Segurança Social?'), n('Contribuição Segurança Social'),
     n('Base Tributável IRT'), v('Isento IRT?'), n('IRT Apurado'),
   ];
