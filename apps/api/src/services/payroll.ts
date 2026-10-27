@@ -61,9 +61,13 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
     ));
     // Licenças não remuneradas no mês (paternidade complementar, art. 218.º) e férias no mês (alimentação/transporte, art. 213.º).
     const monthLeaves = await tx.select().from(absences).where(and(
-      eq(absences.companyId, companyId), inArray(absences.type, ['paternity', 'vacation']), eq(absences.status, 'approved'),
+      eq(absences.companyId, companyId), inArray(absences.type, ['paternity', 'vacation', 'maternity']), eq(absences.status, 'approved'),
       lte(absences.startDate, periodEnd), gte(absences.endDate, periodStart),
     ));
+    const maternityYear = new Set((await tx.select({ id: absences.employeeId }).from(absences).where(and(
+      eq(absences.companyId, companyId), eq(absences.type, 'maternity'), eq(absences.status, 'approved'),
+      lte(absences.startDate, `${year}-12-31`), gte(absences.endDate, `${year}-01-01`),
+    ))).map((r) => r.id));
     const unjustifiedYear = await tx.select().from(absences).where(and(
       eq(absences.companyId, companyId), eq(absences.type, 'unjustified'), eq(absences.status, 'approved'),
       gte(absences.endDate, `${year}-01-01`), lte(absences.startDate, periodEnd),
@@ -145,6 +149,15 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
         unpaidLeaveHours += mins / 60;
       }
       unpaidLeaveHours = Math.round(unpaidLeaveHours * 100) / 100;
+      // Licença de maternidade: suspende o contrato e o salário; o subsídio é pago pela segurança social (arts. 267.º, c) e 268.º).
+      let suspendedDays = 0;
+      for (const a of monthLeaves.filter((x) => x.employeeId === e.id && x.type === 'maternity')) {
+        const from = a.startDate < periodStart ? periodStart : a.startDate;
+        const to = a.endDate > periodEnd ? periodEnd : a.endDate;
+        suspendedDays += Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1;
+      }
+      // Mês inteiro suspenso conta 30 dias (divisor legal), mesmo em meses de 31 dias.
+      if (suspendedDays >= Math.round((Date.parse(periodEnd) - Date.parse(periodStart)) / 86_400_000) + 1) suspendedDays = pack.labour.dailyRateDivisor;
       // Férias no mês: alimentação e transporte não são devidos nesses dias, salvo acordo (art. 213.º, n.º 2).
       let vacationAllowanceCut: { fraction: number; days: number } | undefined;
       if (!company?.allowancesOnVacation) {
@@ -225,8 +238,12 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
           period, pack, baseMinor: pay.baseMinor, mealMinor: pay.mealMinor, transportMinor: pay.transportMinor,
           overtimeHours, absenceDays, absenceHours, otherEarnings, advancesMinor, otherDeductionsMinor, noticeDeductionMinor, holidaySubsidy, christmasSubsidy, workedDays,
           restDayHours, holidayWorkDays, unpaidLeaveHours, unpaidLeaveLabel: unpaidLeaveHours ? `Licença de paternidade não remunerada (${unpaidLeaveHours} h)` : undefined,
-          vacationAllowanceCut,
+          vacationAllowanceCut, suspendedDays: suspendedDays || undefined,
+          suspendedLabel: suspendedDays ? `Licença de maternidade (${suspendedDays} dia(s)) — salário suspenso, subsídio pago pela segurança social` : undefined,
         });
+        if (maternityYear.has(e.id) && (holidaySubsidy || christmasSubsidy)) {
+          warnings.push({ employeeId: e.id, message: `${e.name}: subsídio pago num ano com licença de maternidade — o art. 238.º, n.º 3 manda pagar proporcional aos meses completos de serviço efectivo; confirme o valor` });
+        }
         // Descontos a crédito (adiantamentos e outros) até 25% do líquido (LGT, art. 248.º, n.º 7).
         const credit = advancesMinor + otherDeductionsMinor;
         const cap = monthlyDeductionCap(r.netMinor + credit + noticeDeductionMinor, pack);

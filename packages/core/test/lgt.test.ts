@@ -76,3 +76,22 @@ describe('LGT — cessação', () => {
     expect(e.legalCompensationMinor).toBe(kz(100_000) * 7);
   });
 });
+
+describe('LGT — suspensão e vésperas', () => {
+  it('maternidade suspende o contrato e o salário (arts. 267.º, c) e 268.º): base, alimentação e transporte ÷ 30 × dias', () => {
+    const r = calculatePayroll({ period: '2026-11', baseMinor: kz(300_000), mealMinor: kz(30_000), suspendedDays: 20, suspendedLabel: 'Licença de maternidade (20 dias — subsídio pago pela segurança social)' });
+    const by = Object.fromEntries(r.lines.map((l) => [l.code, l.amountMinor]));
+    expect(by.SUSP).toBe(-kz(200_000));
+    expect(by.ALIM).toBe(kz(10_000));
+    const all = calculatePayroll({ period: '2026-11', baseMinor: kz(300_000), suspendedDays: 30 });
+    expect(all.grossMinor).toBe(0);
+    expect(all.netMinor).toBe(0);
+  });
+  it('24 e 31 de Dezembro: trabalho até às 12h30 (art. 199.º); trabalho depois disso conta como extra', () => {
+    const at = (d: string, a: string, b: string) => ({ workDate: d, clockIn: fromLuanda(d, a), clockOut: fromLuanda(d, b) });
+    const m = summarizeMonth({ period: '2026-12', dailyMinutes: 480, holidays: AO_2026.holidays, absences: {}, today: '2027-01-05', familyEveMinutes: 270, punches: [at('2026-12-24', '08:00', '17:00')] });
+    const eve = m.days.find((d) => d.date === '2026-12-24')!;
+    expect(eve).toMatchObject({ expectedMinutes: 270, overtimeMinutes: 270 });
+    expect(m.days.find((d) => d.date === '2026-12-31')!.expectedMinutes).toBe(270);
+  });
+});

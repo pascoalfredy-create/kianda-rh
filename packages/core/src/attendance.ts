@@ -153,6 +153,8 @@ export function summarizeMonth(input: {
   schedule?: (date: string) => number;
   /** Turnos (art. 200.º, n.º 3): os feriados seguem a escala (sem o acréscimo de feriado). */
   shiftRegime?: boolean;
+  /** 24 e 31 de Dezembro: minutos previstos até à paragem das 12h30 (art. 199.º); não se aplica a turnos/laboração contínua. */
+  familyEveMinutes?: number;
 }): MonthSummary {
   const [y, m] = input.period.split('-').map(Number) as [number, number];
   const n = new Date(Date.UTC(y, m, 0)).getUTCDate();
@@ -164,7 +166,13 @@ export function summarizeMonth(input: {
       date, punches: input.punches.filter((p) => p.workDate === date), dailyMinutes: input.dailyMinutes,
       holiday: input.shiftRegime ? undefined : hol.get(date), absence: input.absences[date], today: input.today,
       overtimeBlockMinutes: input.overtimeBlockMinutes,
-      scheduledMinutes: input.schedule?.(date),
+      scheduledMinutes: (() => {
+        const sched = input.schedule?.(date);
+        const eve = !input.shiftRegime && input.familyEveMinutes !== undefined && /-12-(24|31)$/.test(date);
+        if (!eve) return sched;
+        const normal = sched ?? (isWeekend(date) ? 0 : input.dailyMinutes);
+        return Math.min(normal, input.familyEveMinutes!);
+      })(),
       inactive: (!!input.employedFrom && date < input.employedFrom) || (!!input.employedUntil && date > input.employedUntil),
     }));
   }

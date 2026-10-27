@@ -53,6 +53,7 @@ export async function monthSheet(db: Db, companyId: string, emp: Employee, perio
   const anchor = emp.scheduleAnchor ?? sched?.anchorDate ?? null;
   const summary = summarizeMonth({
     shiftRegime: regime?.kind === 'cycle',
+    familyEveMinutes: labourRules('AO', Number(period.slice(0, 4))).labour.familyEveMinutes,
     schedule: regime ? (d) => scheduledMinutes(regime, d, anchor) : undefined,
     employedFrom: first?.d ?? null,
     employedUntil: emp.status === 'terminated' ? (last?.t ?? last?.e ?? null) : null,

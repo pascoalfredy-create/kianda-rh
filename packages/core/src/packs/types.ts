@@ -46,6 +46,8 @@ export interface CountryPack {
     nightWorkBps: number;
     /** Adiantamentos: total até N salários base; descontos (adiantamentos, empréstimos, bens a crédito) até X% do líquido (art. 248.º, n.º 6 e 7). */
     advances: { maxBaseSalaries: number; maxNetShareBps: number };
+    /** 24 e 31 de Dezembro: o trabalho pára às 12h30 (art. 199.º) — minutos previstos nesses dias (08h00–12h30). */
+    familyEveMinutes: number;
     /** Faltas injustificadas que constituem infracção disciplinar (art. 230.º). */
     unjustifiedDisciplinary: { perMonth: number; perYear: number };
   };

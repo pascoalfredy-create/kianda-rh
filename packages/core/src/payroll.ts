@@ -31,6 +31,12 @@ export interface PayrollInput {
   restDayHours?: number;
   /** Feriados trabalhados (fora de turnos): mais um dia de salário por feriado (art. 200.º). */
   holidayWorkDays?: number;
+  /**
+   * Suspensão do contrato no mês (ex.: licença de maternidade — LGT, arts. 267.º, c) e 268.º, n.º 1): dias de calendário sem
+   * direito a salário (o subsídio é pago pela segurança social). Salário-base, alimentação e transporte ÷ 30 × dias.
+   */
+  suspendedDays?: number;
+  suspendedLabel?: string;
   /** Alimentação e transporte não são devidos nos dias de férias, salvo acordo (art. 213.º, n.º 2): fracção a retirar (0–1). */
   vacationAllowanceCut?: { fraction: number; days: number };
   advancesMinor?: Minor;
@@ -134,7 +140,11 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   const part = (v: Minor) => (partial ? prorate(v, Math.max(0, input.workedDays!), pack.labour.dailyRateDivisor) : v);
   const base = part(fullBase);
   const cut = input.vacationAllowanceCut && input.vacationAllowanceCut.fraction > 0 ? Math.min(1, input.vacationAllowanceCut.fraction) : 0;
-  const lessVacation = (v: Minor) => (cut ? v - Math.round(v * cut) : v);
+  const susp = Math.min(pack.labour.dailyRateDivisor, Math.max(0, input.suspendedDays ?? 0));
+  const lessVacation = (v: Minor) => {
+    const afterSusp = susp ? v - prorate(v, susp, pack.labour.dailyRateDivisor) : v;
+    return cut ? afterSusp - Math.round(afterSusp * cut) : afterSusp;
+  };
   const meal = lessVacation(part(assertMinor(input.mealMinor ?? 0, 'subsídio de alimentação')));
   const transport = lessVacation(part(assertMinor(input.transportMinor ?? 0, 'subsídio de transporte')));
   const vacationNote = cut ? ` (sem ${input.vacationAllowanceCut!.days} dia(s) de férias)` : '';
@@ -181,6 +191,14 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
     inssBase -= v;
     irtBase -= v;
   };
+  if (susp) {
+    const v = Math.min(base, prorate(fullBase, susp, pack.labour.dailyRateDivisor));
+    if (v) {
+      lines.push({ code: 'SUSP', name: input.suspendedLabel ?? `Suspensão do contrato (${susp} dia(s))`, kind: 'earning', amountMinor: -v });
+      inssBase -= v;
+      irtBase -= v;
+    }
+  }
   if (input.absenceDays) deductHours('FALTAS', `Faltas injustificadas (${input.absenceDays} dia(s))`, input.absenceHours ?? input.absenceDays * pack.labour.dailyHours);
   if (input.unpaidLeaveHours) deductHours('LICNR', input.unpaidLeaveLabel ?? 'Licença não remunerada', input.unpaidLeaveHours);
 
