@@ -15,3 +15,4 @@ packages/db/src/generated/
 .open-next
 .wrangler
 wrangler.deploy.json
+apps/web/public/modeling-pdf/

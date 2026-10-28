@@ -1,4 +1,4 @@
-/** Monta a interface aprovada sem alterar CSS/estrutura. O original fica reproduzível no repositório. */
+/** Monta a interface aprovada com ajustes funcionais e de espaço explícitos. O original fica reproduzível. */
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
@@ -51,6 +51,9 @@ replace("a?.anos?.[0]||'2024'", "a?.anos?.[0]||String(new Date().getFullYear()-1
 replace("a?.anos?.[1]||'2025'", "a?.anos?.[1]||String(new Date().getFullYear())");
 replace("<option ${a?.moeda==='USD'?'selected':''}>USD</option>", "<option ${a?.moeda==='USD'?'selected':''}>USD</option><option ${a?.moeda==='EUR'?'selected':''}>EUR</option>");
 replace('Saldo Devedor/Credor, Débito/Crédito ou Saldo', 'Saldo Devedor/Credor, Débito/Crédito acumulados incluindo abertura, ou Saldo');
+replace('accept=".csv,.txt"', 'accept=".csv,.txt,.pdf,text/csv,text/plain,application/pdf"');
+for (const number of [1,2]) replace(`id="anF${number}" accept=".csv,.txt,.pdf,text/csv,text/plain,application/pdf" style="margin-top:6px;font-size:12px">`, `id="anF${number}" accept=".csv,.txt,.pdf,text/csv,text/plain,application/pdf" style="margin-top:6px;font-size:12px"><span class="import-status" id="anStatus${number}" role="status" aria-live="polite"></span>`);
+replace('Aceita colunas Saldo Devedor/Credor', 'PDF com texto, CSV ou TXT. Confira as contas extraídas antes de premir Analisar. Aceita colunas Saldo Devedor/Credor');
 span('    const B=cN.B,B1=c1.B,P=cN.P;', "    const R=(n,v,c='')", `    const B=cN.B,B1=c1.B,P=cN.P,f=A.cashFlow;const {dEx,dCl,dOA,dFo,dOP,dPr,cfo,cfi,dEmp,dCap,cff}=f;const capexA=f.investment,div=-f.otherEquity,dCx=f.change,res=f.difference;\n`);
 replace('Aquisições líquidas de imobilizado e investimentos', 'Investimento líquido estimado (activos + amortizações)');
 replace('Dividendos / distribuições (implícitos)', 'Distribuições / outros movimentos de capital próprio, líquidos');
@@ -77,11 +80,12 @@ replace("t>=1&&k.debt[t-1]>0?brk(t):null", "t>=1&&(k.ds[t]>0||k.debt[t]>0)?brk(t
 span('function fsCSV(){', '/* ---------------- Eventos', '');
 source = source.slice(0, source.indexOf('/* ---------------- Eventos'));
 const adapter = (await readFile(new URL('modeling/adapter.js', web), 'utf8')).replace('__NEW_MODEL_DIALOG__', dialog);
-const imports = `import {runFinancialModel} from '${fileURLToPath(new URL('packages/core/src/modeling/engine.ts', root))}';\nimport {financialBreakEvenPrice} from '${fileURLToPath(new URL('packages/core/src/modeling/analysis.ts', root))}';\nimport {FinancialModelError} from '${fileURLToPath(new URL('packages/core/src/modeling/types.ts', root))}';\nimport {analyzeFinancialHistory,HISTORICAL_RATIO_DEFINITIONS} from '${fileURLToPath(new URL('packages/core/src/modeling/historical.ts', root))}';\nimport {ModelingStore,modelingRequest} from '${fileURLToPath(new URL('modeling/store.ts', web))}';\n`;
+const imports = `import {runFinancialModel} from '${fileURLToPath(new URL('packages/core/src/modeling/engine.ts', root))}';\nimport {financialBreakEvenPrice} from '${fileURLToPath(new URL('packages/core/src/modeling/analysis.ts', root))}';\nimport {FinancialModelError} from '${fileURLToPath(new URL('packages/core/src/modeling/types.ts', root))}';\nimport {analyzeFinancialHistory,HISTORICAL_RATIO_DEFINITIONS} from '${fileURLToPath(new URL('packages/core/src/modeling/historical.ts', root))}';\nimport {ModelingStore,modelingRequest} from '${fileURLToPath(new URL('modeling/store.ts', web))}';\nimport {extractPdfTrialBalance,PDF_IMPORT_LIMIT} from '${fileURLToPath(new URL('modeling/pdf-import.ts', web))}';\n`;
 const result = await build({ stdin: { contents: imports + source + adapter, resolveDir: fileURLToPath(web), sourcefile: 'integra-ui.js' }, bundle: true, format: 'iife', platform: 'browser', target: 'es2022', minify: true, legalComments: 'none', write: false, logLevel: 'silent' });
 const js = result.outputFiles[0].text;
 const digest = (s) => createHash('sha256').update(s).digest('hex');
-const generated = `// Gerado por scripts/build-modeling-ui.mjs. CSS e estrutura são os do protótipo aprovado.\nexport const MODELING_SHELL = ${JSON.stringify(shell)};\nexport const MODELING_SUFFIX = ${JSON.stringify(suffix)};\nexport const MODELING_ASSET_HASH = '${digest(js).slice(0,16)}';\nexport const MODELING_REFERENCE_HASH = '${digest(original)}';\n`;
+const spaceCss = await readFile(new URL('modeling/space.css', web), 'utf8');
+const generated = `// Gerado por scripts/build-modeling-ui.mjs. Referência original preservada, ajustes pedidos isolados.\nexport const MODELING_SHELL = ${JSON.stringify(shell)};\nexport const MODELING_SUFFIX = ${JSON.stringify(suffix)};\nexport const MODELING_SPACE_CSS = ${JSON.stringify(spaceCss)};\nexport const MODELING_ASSET_HASH = '${digest(js).slice(0,16)}';\nexport const MODELING_REFERENCE_HASH = '${digest(original)}';\n`;
 await mkdir(new URL('lib/modeling/', web), { recursive: true });
 for (const [path, data] of [['lib/modeling/generated.ts', generated], ['public/modeling-runtime.js', js]]) {
   const url = new URL(path, web);

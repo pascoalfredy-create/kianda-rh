@@ -6,7 +6,7 @@ import { historicalInput } from '../../../packages/core/test/fixtures/financial-
 const runtime = readFileSync(new URL('../public/modeling-runtime.js', import.meta.url), 'utf8');
 const views = ['painel', 'pressupostos', 'demonstracoes', 'avaliacao', 'credito', 'sensibilidade', 'relatorios'];
 /** Teste do código distribuído e das vistas, sem simular um motor de layout de navegador. */
-async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, incomplete = false, withHistory = false) {
+async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, incomplete = false, withHistory = false, deferRead = false) {
   const template = financialTemplate(sector), handlers = new Map<string, Function>();
   const nodes = new Map<string, any>();
   const node = (selector: string) => {
@@ -16,6 +16,7 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
   node('#integra-session').textContent = JSON.stringify({ canWrite, permission: canWrite ? 'editor' : 'viewer', formats: { pdf: true, xlsx: false, csv: false }, usage: {} });
   const model = { id: 'm1', name: template.name, sector, currency: template.currency, revision: 1, createdAt: '2026-10-28', archivedAt: null, assumptions: incomplete ? { pessoal: 1 } : template.assumptions };
   const requests: { path: string; method?: string; payload?: any }[] = [];
+  const pendingReads: (()=>void)[]=[];
   const currencyField=node('[data-p="moeda"]');currencyField.dataset={p:'moeda',t:'t'};currencyField.value=model.currency;
   node('#fxFrom').value=model.currency;
   const field = { disabled: false, dataset: { p: 'pessoal' } }, baseScenario = { disabled: true, dataset: { cen: 'base.preco' } };
@@ -23,8 +24,8 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
   runInNewContext(runtime, {
     document: { querySelector: node, querySelectorAll: (selector: string) => selector === '[data-p],[data-cen]' ? [field, baseScenario, currencyField] : selector === '[data-p]' ? [currencyField] : [], addEventListener: (name: string, fn: Function) => handlers.set(name, fn) },
     Element, window: { addEventListener() {}, scrollTo() {} }, location: { hash: '' }, history: { replaceState() {} },
-    setTimeout, clearTimeout, structuredClone, URL, URLSearchParams, TextDecoder, console,
-    FileReader: class { result?: ArrayBuffer; onload?: () => void; readAsArrayBuffer(file: { buffer: ArrayBuffer }) { this.result=file.buffer; this.onload?.(); } },
+    setTimeout, clearTimeout, structuredClone, URL, URLSearchParams, TextDecoder, AbortController, console,
+    FileReader: class { result?: ArrayBuffer; onload?: () => void; readAsArrayBuffer(file: { buffer: ArrayBuffer }) { this.result=file.buffer;if(deferRead)pendingReads.push(()=>this.onload?.());else this.onload?.(); } },
     fetch: async (path: string, init?: {method?:string;body?:string}) => {
       const payload=init?.body?JSON.parse(init.body):undefined;requests.push({path,method:init?.method,payload});
       let data:unknown;
@@ -36,7 +37,7 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
   });
   // boot() termina depois das respostas JSON e da montagem inicial.
   await new Promise<void>(resolve => setImmediate(resolve));
-  return { node, field, baseScenario, requests, model, async currency(to:string){currencyField.value=to;await currencyField.onchange();},async act(act:string){await handlers.get('click')!({target:new Element({act}),preventDefault(){}});}, async go(view: string) { await handlers.get('click')!({ target: new Element({ go: view }), preventDefault() {} }); return node('#view').innerHTML as string; }, async sub(k = 'pt', v = 'custos') { await handlers.get('click')!({ target: new Element({ act: 'sub', k, v }), preventDefault() {} }); return node('#view').innerHTML as string; } };
+  return { node, field, baseScenario, requests, model, pendingReads, async currency(to:string){currencyField.value=to;await currencyField.onchange();},async act(act:string){await handlers.get('click')!({target:new Element({act}),preventDefault(){}});}, async go(view: string) { await handlers.get('click')!({ target: new Element({ go: view }), preventDefault() {} }); return node('#view').innerHTML as string; }, async sub(k = 'pt', v = 'custos') { await handlers.get('click')!({ target: new Element({ act: 'sub', k, v }), preventDefault() {} }); return node('#view').innerHTML as string; } };
 }
 describe('runtime do protótipo ligado à API', () => {
   for (const sector of FINANCIAL_SECTORS) it(`renderiza sete vistas com o motor partilhado: ${sector}`, async () => {
@@ -76,6 +77,42 @@ describe('runtime do protótipo ligado à API', () => {
     const text = 'Conta;Designação;Saldo\n43;Depósito;100,25', bytes = Uint8Array.from([...text].map(c=>c.charCodeAt(0)));
     const file = { size: bytes.length, buffer: bytes.buffer }; ui.node('#anF2').files = [file]; ui.node('#anF2').onchange();
     expect(ui.node('#anT2').value).toBe(text);
+  });
+  it('alarga mapas extensos e os quadros de investimento, mantendo as outras vistas com a largura original', async () => {
+    const ui=await mount('comercio');
+    for(const view of ['demonstracoes','credito','sensibilidade','analise']){await ui.go(view);expect(ui.node('#view').dataset).toMatchObject({view,wide:'true'});}
+    for(const view of ['painel','avaliacao','relatorios']){await ui.go(view);expect(ui.node('#view').dataset.wide).toBe('false');}
+    await ui.go('pressupostos');await ui.sub('pt','capex');expect(ui.node('#view').dataset.wide).toBe('true');
+    await ui.sub('pt','geral');expect(ui.node('#view').dataset.wide).toBe('false');
+  });
+  it('aceita PDF nos dois exercícios e apresenta o resultado da leitura sem guardar automaticamente', async () => {
+    const ui=await mount('comercio');const html=await ui.go('analise');
+    expect(html.match(/accept="\.csv,\.txt,\.pdf,text\/csv,text\/plain,application\/pdf"/g)).toHaveLength(2);
+    expect(html).toContain('anStatus1');expect(html).toContain('anStatus2');expect(html).toContain('Confira as contas extraídas');
+    const text='Conta;Designação;Saldo\n43;Banco;100,25',bytes=new TextEncoder().encode(text);
+    ui.node('#anF2').files=[{name:'balancete.csv',size:bytes.length,buffer:bytes.buffer}];ui.node('#anF2').onchange();
+    expect(ui.node('#anStatus2').textContent).toContain('prima Analisar');
+    expect(ui.requests.filter(r=>r.method==='PUT'||r.method==='POST')).toHaveLength(0);
+  });
+  it('uma importação PDF demasiado grande conserva os dados anteriores sem alterar a base', async () => {
+    const ui=await mount('comercio');await ui.go('analise');ui.node('#anT2').value='origem existente';
+    ui.node('#anF2').files=[{name:'balancete.pdf',size:11*1024*1024}];ui.node('#anF2').onchange();
+    expect(ui.node('#anStatus2').textContent).toContain('10 MB');expect(ui.node('#anT2').value).toBe('origem existente');
+    expect(ui.requests.filter(r=>r.method==='PUT'||r.method==='POST')).toHaveLength(0);
+  });
+  it('não substitui texto editado enquanto um ficheiro está a ser lido', async () => {
+    const ui=await mount('comercio',true,false,false,true);await ui.go('analise');
+    const bytes=new TextEncoder().encode('Conta;Designação;Saldo\n43;Banco;10,00');
+    ui.node('#anF2').files=[{name:'balancete.csv',size:bytes.length,buffer:bytes.buffer}];ui.node('#anF2').onchange();
+    ui.node('#anT2').value='Edição posterior';ui.pendingReads[0]!();
+    expect(ui.node('#anT2').value).toBe('Edição posterior');expect(ui.node('#anStatus2').textContent).toContain('foi editado');
+  });
+  it('cancela uma leitura ao mudar de vista e não grava dados parciais', async () => {
+    const ui=await mount('comercio',true,false,false,true);await ui.go('analise');
+    const bytes=new TextEncoder().encode('Conta;Designação;Saldo\n43;Banco;10,00');
+    ui.node('#anT2').value='Origem anterior';ui.node('#anF2').files=[{name:'balancete.csv',size:bytes.length,buffer:bytes.buffer}];ui.node('#anF2').onchange();
+    await ui.go('demonstracoes');ui.pendingReads[0]!();
+    expect(ui.node('#anT2').value).toBe('Origem anterior');expect(ui.requests.filter(r=>r.method==='PUT'||r.method==='POST')).toHaveLength(0);
   });
   it('a mudança para EUR converte os valores e apresenta EUR nos montantes e nas instruções', async () => {
     const ui=await mount('mineracao');await ui.go('pressupostos');const before=ui.model.assumptions.pessoal;
