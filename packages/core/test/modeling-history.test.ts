@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeFinancialHistory, buildFinancialHistoricalReport, financialModelFromHistory, historicalAmount, parseHistoricalTrialBalance, runFinancialModel } from '../src/index.js';
+import { analyzeFinancialHistory, buildFinancialHistoricalReport, financialModelFromHistory, historicalAmount, parseHistoricalReference, parseHistoricalTrialBalance, runFinancialModel } from '../src/index.js';
 import { currentHistory, historicalInput, historyCsv } from './fixtures/financial-history.js';
 describe('balancetes históricos PGC', () => {
   it.each([['1.234.567,89', 123456789], ['1,234,567.89', 123456789], ['1 234,50 Kz', 123450], ['(45,20)', -4520], ['1.234', 123400], ['0.01', 1], ['', 0]])('lê %s sem perda de cêntimos', (input, expected) => { expect(historicalAmount(input)).toBe(expected); });
@@ -92,7 +92,7 @@ describe('balancetes históricos PGC', () => {
     const a = analyzeFinancialHistory({ ...historicalInput, N1: '', N: historyCsv([['43', 100], ['51', -100]]) });
     expect(a.cashFlow).toBeNull(); expect(a.rN.lg).toBeNull(); expect(a.rN.roe).toBe(0); expect(a.rN.cc).toBeNull();
     expect(JSON.stringify(a)).not.toMatch(/NaN|Infinity/);
-    expect(() => analyzeFinancialHistory({ ...historicalInput, anos: ['2023', '2025'] })).toThrow();
+    expect(analyzeFinancialHistory({ ...historicalInput, anos: ['2023', '2025'] }).cashFlow).toBeNull();
     expect(() => analyzeFinancialHistory({ ...historicalInput, N1: 'inválido' })).toThrow();
   });
   it('balancetes desequilibrados podem ser diagnosticados mas não originam modelos', () => {
@@ -114,5 +114,30 @@ describe('balancetes históricos PGC', () => {
     expect(report).toMatchObject({ key: 'analise', currency: 'EUR' });
     expect(JSON.stringify(report)).toContain('Fluxo de caixa estimado');
     for (const b of report.blocks) if (b.kind === 'table') for (const r of b.rows) expect(r.cells).toHaveLength(b.columns.length);
+  });
+  it('compara meses do mesmo exercício pelas datas de referência, sem inventar fluxos do acumulado',()=>{
+    const a=analyzeFinancialHistory({...historicalInput,anos:['2026','2026'],periods:{N1:{from:'2026-01-01',to:'2026-07-31'},N:{from:'2026-01-01',to:'2026-08-31'}}});
+    expect(a.cN.P.vn).toBe(1200);expect(a.c1!.P.vn).toBe(1000);expect(a.cashFlow).toBeNull();expect(a.warnings.join(' ')).toContain('durações diferentes');
+    const text=JSON.stringify(buildFinancialHistoricalReport(a));expect(text).toContain('31/07/2026');expect(text).toContain('31/08/2026');
+  });
+  it('aceita uma abertura do mesmo ano imediatamente anterior a um período mensal',()=>{
+    const a=analyzeFinancialHistory({...historicalInput,anos:['2026','2026'],periods:{N1:{from:'2026-01-01',to:'2026-07-31'},N:{from:'2026-08-01',to:'2026-08-31'}}});
+    expect(a.cashFlow).not.toBeNull();
+  });
+  it('recusa comparativos futuros, datas repetidas e anos iguais sem datas identificadas',()=>{
+    const attempts=[{anos:['2027','2026']},{anos:['2026','2026']},{anos:['2026','2026'],periods:{N:{from:'2026-01-01',to:'2026-08-31'},N1:{from:'2026-01-01',to:'2026-08-31'}}}];
+    for(const attempt of attempts)expect(()=>analyzeFinancialHistory({...historicalInput,...attempt})).toThrow();
+  });
+  it('a ausência de N identifica o campo obrigatório antes de validar o comparativo',()=>{
+    try{analyzeFinancialHistory({...historicalInput,N:'',anos:['2026','2026']});throw Error('não recusou');}catch(error){expect(error).toMatchObject({issues:[{path:'N',message:expect.stringContaining('apenas o comparativo')}]});}
+    expect(()=>analyzeFinancialHistory({...historicalInput,N1:'',anos:['2026','2026']})).not.toThrow();
+  });
+  it.each(['31/08/2026','2026-08-31'])('interpreta a referência %s sem a confundir com um exercício anual',value=>{
+    expect(parseHistoricalReference(value)).toEqual({year:'2026',period:{from:'2026-01-01',to:'2026-08-31'}});
+    expect(parseHistoricalReference(value,{from:'2026-08-01',to:'2026-08-31'})?.period?.from).toBe('2026-08-01');
+  });
+  it('mantém anos completos e recusa datas inválidas na leitura dos campos',()=>{
+    expect(parseHistoricalReference('2026')).toEqual({year:'2026'});
+    for(const value of ['31/02/2026','2026-02-30','','2026abc','2200'])expect(parseHistoricalReference(value)).toBeNull();
   });
 });

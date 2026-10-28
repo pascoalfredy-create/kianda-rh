@@ -56,10 +56,12 @@ const historicalDrafts=new Map(), historicalDirty=new Set();
 const historicalImports=new Map();
 const historicalReadErrors=new Map();
 const historicalFields=['anEmp','anY1','anY2','anCP','anMo','anT1','anT2','anF1','anF2'];
+function historicalReferenceField(input,key){return input?.periods?.[key]?.to?.split('-').reverse().join('/')||input?.anos?.[key==='N'?1:0]||String(new Date().getFullYear()-(key==='N'?0:1));}
 function captureHistoricalDraft(){
   if(VIEW!=='analise'||(SUB.at||'dados')!=='dados'||!M()||!session.canWrite||!historicalDirty.has(M().id))return;
   const input={empresa:$('#anEmp').value,anos:[$('#anY1').value,$('#anY2').value],pctCP:Number($('#anCP').value),moeda:$('#anMo').value,N1:$('#anT1').value,N:$('#anT2').value};
-  const periods={};for(const key of ['N','N1']){const period=S.an?.periods?.[key],year=input.anos[key==='N'?1:0];if(input[key].trim()&&period?.from.startsWith(year+'-')&&period?.to.startsWith(year+'-'))periods[key]=period;}
+  const periods={};for(const key of ['N','N1']){const index=key==='N'?1:0,reference=parseHistoricalReference(input.anos[index],S.an?.periods?.[key]);if(reference){input.anos[index]=reference.year;if(input[key].trim()&&reference.period)periods[key]=reference.period;}}
+  if(!input.N1.trim()&&!/^(?:19|20|21)\d{2}$/.test(input.anos[0])&&/^(?:19|20|21)\d{2}$/.test(input.anos[1]))input.anos[0]=String(Math.max(1900,Number(input.anos[1])-1));
   if(Object.keys(periods).length)input.periods=periods;
   historicalDrafts.set(M().id,input);S.an=input;
 }
@@ -85,6 +87,7 @@ function historicalScopeNotes(analysis){
 async function analyzeAndSave(){
   if(historicalImports.size)throw Error('Aguarde a leitura do ficheiro antes de analisar.');
   for(const target of ['#anT2','#anT1']){const error=historicalReadErrors.get(M().id+target);if(error)throw Error(error);}
+  if($('#anT2').value.trim()){for(const [target,reference,label]of [['#anT2','#anY2','período N'],['#anT1','#anY1','comparativo']])if($(target).value.trim()&&!parseHistoricalReference($(reference).value))throw Error('Referência do '+label+' inválida. Indique um ano (2026) ou uma data válida (31/08/2026).');}
   historicalDirty.add(M().id);captureHistoricalDraft();
   analyzeFinancialHistory(S.an);
   const historical=await store.saveHistory(M().id,S.an);
@@ -169,7 +172,7 @@ VIEWS.analise.after=()=>{
           const key=target==='#anT2'?'N':'N1',other=$(target==='#anT2'?'#anT1':'#anT2').value.trim();
           if(pdfResult?.currency&&other&&$('#anMo').value!==pdfResult.currency)throw Error('Os documentos têm moedas diferentes. Carregue balancetes na mesma moeda de apresentação.');
           const periods={...S.an?.periods};delete periods[key];
-          if(pdfResult?.period){periods[key]=pdfResult.period;const year=pdfResult.period.to.slice(0,4);$(key==='N'?'#anY2':'#anY1').value=year;if(key==='N'&&!other)$('#anY1').value=String(Number(year)-1);}
+          if(pdfResult?.period){periods[key]=pdfResult.period;const year=pdfResult.period.to.slice(0,4);$(key==='N'?'#anY2':'#anY1').value=pdfResult.period.to.split('-').reverse().join('/');if(key==='N'&&!other)$('#anY1').value=String(Math.max(1900,Number(year)-1));}
           if(pdfResult?.entityName&&!$('#anEmp').value.trim())$('#anEmp').value=pdfResult.entityName;
           if(pdfResult?.currency&&!other)$('#anMo').value=pdfResult.currency;
           S.an={...S.an,periods};
