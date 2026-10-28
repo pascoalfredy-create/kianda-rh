@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { FINANCIAL_REPORT_KEYS, FINANCIAL_REPORT_TITLES } from '@kianda/core';
-import { financialReportBundle, financialVersionOf } from '../services/modeling-versions.js';
+import { FINANCIAL_DOCUMENT_KEYS, FINANCIAL_REPORT_KEYS, FINANCIAL_REPORT_TITLES, type FinancialReportDocument } from '@kianda/core';
+import { financialHistoricalDocument, financialHistoryOf, financialReportBundle, financialVersionOf } from '../services/modeling-versions.js';
+import { modelingHistoryRoutes } from './modeling-history.js';
 import { renderFinancialPdf } from '../lib/financial-pdf.js';
 import { renderFinancialXlsx } from '../lib/financial-xlsx.js';
 import { FINANCIAL_SECTORS, financialBreakEvenPrice, financialScenarios, financialSensitivity, financialTemplate, runFinancialModel } from '@kianda/core';
@@ -51,6 +52,7 @@ export function modelingRoutes() {
     const licence = await moduleLicence(db, a.companyId, 'modeling');
     return c.json({ user: { id: a.actorId, name: a.session.name, role: a.role }, company, permission: member!.permission, canWrite: member!.permission === 'editor' && licence.canWrite, formats: await modelingExportOptions(db, a.actorId), usage: await modelingUsage(db, a.companyId) });
   });
+  app.route('/', modelingHistoryRoutes());
 
   const scenarioQuery = z.object({ scenario: z.enum(['base', 'otim', 'pess']).optional(), revision: z.coerce.number().int().positive().optional() });
   app.get('/v1/modeling/templates', async (c) => c.json(FINANCIAL_SECTORS.map(financialTemplate)));
@@ -102,23 +104,24 @@ export function modelingRoutes() {
     return c.json(version, 201);
   });
   app.get('/v1/modeling/models/:id/reports', async (c) => {
-    await financialModelOf(c);
-    return c.json({ reports: [...FINANCIAL_REPORT_KEYS.map((key) => ({ key, title: FINANCIAL_REPORT_TITLES[key], available: true })), { key: 'analise', title: 'Relatório de análise económico-financeira', available: false, reason: 'Requer balancetes históricos analisados; a integração desta fonte está pendente.' }], formats: await modelingExportOptions(getDb(), c.get('actor').actorId) });
+    const model = await financialModelOf(c, true), query = z.object({ version: z.uuid().optional() }).parse(c.req.query()), db = getDb();
+    const historical = query.version ? Boolean((await financialVersionOf(db, c.get('actor').companyId, model.id, query.version)).payload.reports.analise) : Boolean(await financialHistoryOf(db, model));
+    return c.json({ reports: [...FINANCIAL_REPORT_KEYS.map((key) => ({ key, title: FINANCIAL_REPORT_TITLES[key], available: true })), { key: 'analise', title: 'Relatório de análise económico-financeira', available: historical, ...(historical ? {} : { reason: 'Requer balancetes históricos analisados nesta revisão ou versão.' }) }], formats: await modelingExportOptions(db, c.get('actor').actorId) });
   });
   app.get('/v1/modeling/models/:id/reports/:reportKey', async (c) => {
     const a = c.get('actor'), db = getDb();
     const query = z.object({ format: z.enum(['pdf', 'xlsx']).default('pdf'), version: z.uuid().optional(), revision: z.coerce.number().int().positive().optional(), scenario: z.enum(['base', 'otim', 'pess']).optional() }).refine((q) => !q.version || !q.scenario, 'Uma versão aprovada não admite alteração de cenário.').parse(c.req.query());
     if (query.format === 'xlsx' && !(await modelingExportOptions(db, a.actorId)).xlsx) throw new DomainError('formato_nao_permitido', 'A exportação Excel é exclusiva da conta do proprietário da plataforma. Utilize PDF.', 403);
-    const model = await financialModelOf(c);
-    if (c.req.param('reportKey') === 'analise') throw new DomainError('historico_em_falta', 'Este relatório requer balancetes históricos analisados.', 422);
-    const key = z.enum(FINANCIAL_REPORT_KEYS).parse(c.req.param('reportKey'));
+    const model = await financialModelOf(c, true);
+    const key = z.enum(FINANCIAL_DOCUMENT_KEYS).parse(c.req.param('reportKey'));
     if (!query.version && query.revision !== undefined && model.revision !== query.revision) throw new DomainError('revisao_invalida', 'Projecto alterado. Volte a carregá-lo antes de exportar.', 409);
-    const bundle = query.version ? (await financialVersionOf(db, a.companyId, model.id, query.version)).payload : await financialReportBundle(db, query.scenario ? { ...model, assumptions: { ...(model.assumptions as Record<string, unknown>), cen: query.scenario } } : model);
+    const bundle: FinancialReportDocument = query.version ? (await financialVersionOf(db, a.companyId, model.id, query.version)).payload : key === 'analise' ? await financialHistoricalDocument(db, model) : await financialReportBundle(db, query.scenario ? { ...model, assumptions: { ...(model.assumptions as Record<string, unknown>), cen: query.scenario } } : model);
+    if (!bundle.reports[key]) throw new DomainError('historico_em_falta', 'Esta versão não contém balancetes históricos analisados.', 422);
     const data = query.format === 'pdf' ? renderFinancialPdf(bundle, key) : renderFinancialXlsx(bundle, key);
     const ref = bundle.source.versionNumber ? 'v' + bundle.source.versionNumber : 'r' + bundle.source.revision;
     const filename = `Integra-${model.id.slice(0, 8)}-${ref}-${key}.${query.format}`;
-    await db.insert(auditLogs).values({ companyId: a.companyId, actorId: a.actorId, action: 'export_report', entity: 'financial_model', entityId: model.id, after: { report: key, format: query.format, versionId: bundle.source.versionId ?? null, sourceRevision: bundle.source.revision, sourceHash: bundle.source.sourceHash } });
-    return new Response(new Uint8Array(data), { headers: { 'content-type': query.format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'content-disposition': `attachment; filename="${filename}"`, 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff', 'x-source-revision': String(bundle.source.revision), 'x-source-hash': bundle.source.sourceHash, 'x-source-scenario': bundle.result.scenario } });
+    await db.insert(auditLogs).values({ companyId: a.companyId, actorId: a.actorId, action: 'export_report', entity: 'financial_model', entityId: model.id, after: { report: key, format: query.format, versionId: bundle.source.versionId ?? null, sourceRevision: bundle.source.revision, sourceHash: bundle.source.sourceHash, historicalHash: bundle.source.historicalHash ?? null } });
+    return new Response(new Uint8Array(data), { headers: { 'content-type': query.format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'content-disposition': `attachment; filename="${filename}"`, 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff', 'x-source-revision': String(bundle.source.revision), 'x-source-hash': bundle.source.sourceHash, 'x-source-scenario': key === 'analise' ? 'historical' : (bundle as import('@kianda/core').FinancialReportBundle).result.scenario, ...(bundle.source.historicalHash ? { 'x-source-history-hash': bundle.source.historicalHash } : {}) } });
   });
 
   app.get('/v1/modeling/usage', async (c) => c.json(await modelingUsage(getDb(), c.get('actor').companyId)));

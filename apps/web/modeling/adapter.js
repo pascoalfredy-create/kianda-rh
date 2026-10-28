@@ -1,6 +1,34 @@
 /* Liga a interface aprovada à API. Este ficheiro é montado depois das vistas do protótipo. */
 let store, session, templates = [], notice = '', busy = false;
-const historicalPending = 'A análise histórica ficará disponível após a integração dos balancetes na base de dados.';
+const historicalDrafts=new Map(), historicalDirty=new Set();
+const historicalFields=['anEmp','anY1','anY2','anCP','anMo','anT1','anT2','anF1','anF2'];
+function captureHistoricalDraft(){
+  if(VIEW!=='analise'||(SUB.at||'dados')!=='dados'||!M()||!session.canWrite||!historicalDirty.has(M().id))return;
+  const input={empresa:$('#anEmp').value,anos:[$('#anY1').value,$('#anY2').value],pctCP:Number($('#anCP').value),moeda:$('#anMo').value,N1:$('#anT1').value,N:$('#anT2').value};
+  historicalDrafts.set(M().id,input);S.an=input;
+}
+async function selectHistorical(model){
+  if(historicalDrafts.has(model.id)){S.an=historicalDrafts.get(model.id);return;}
+  const historical=await store.history(model.id);S.an=historical?.analysis.input||null;
+  historicalDrafts.set(model.id,S.an);
+}
+function analyze(){
+  if(!S.an?.N)return null;
+  try{return analyzeFinancialHistory(S.an)}catch(error){return {err:esc(errorText(error))};}
+}
+async function analyzeAndSave(){
+  historicalDirty.add(M().id);captureHistoricalDraft();
+  analyzeFinancialHistory(S.an);
+  const historical=await store.saveHistory(M().id,S.an);
+  S.an=historical.analysis.input;historicalDrafts.set(M().id,S.an);historicalDirty.delete(M().id);
+  SUB.at='balanco';notice='';render();toast('Balancetes analisados e guardados neste projecto.');
+}
+async function modelFromHistorical(){
+  if(historicalDirty.has(M().id))throw Error('Prima Analisar para validar e guardar os balancetes antes de criar o modelo.');
+  const result=await store.createFromHistory(M().id);
+  S.active=result.model.id;S.an=result.historical.analysis.input;historicalDrafts.set(M().id,S.an);
+  go('pressupostos');toast('Modelo criado. Reveja os pressupostos de projecção e financiamento.');
+}
 function errorText(error) {
   if (error?.issues) return error.issues.map(v=>`${v.path}: ${v.message}`).join(' · ');
   return error?.message || 'Não foi possível concluir. Tente novamente.';
@@ -17,7 +45,8 @@ function protect() {
     if(!writable){if(el.dataset.restoreDisabled===undefined)el.dataset.restoreDisabled=el.disabled?'1':'0';el.disabled=true;}
     else if(el.dataset.restoreDisabled!==undefined){el.disabled=el.dataset.restoreDisabled==='1';delete el.dataset.restoreDisabled;}
   });
-  for(const action of ['newM','dupM','createM','addRev','delRev','addCap','delCap'])document.querySelectorAll(`[data-act="${action}"]`).forEach(el=>{
+  document.querySelectorAll(historicalFields.map(id=>'#'+id).join(',')).forEach(el=>{el.disabled=!writable;});
+  for(const action of ['newM','dupM','createM','addRev','delRev','addCap','delCap','anRun','anToModel','anDemo'])document.querySelectorAll(`[data-act="${action}"]`).forEach(el=>{
     el.disabled=!writable||(action==='dupM'&&!M());
     if(!session?.canWrite)el.title='Acesso apenas de consulta.';
   });
@@ -37,11 +66,24 @@ function render() {
   if(notice)$('#view').insertAdjacentHTML('afterbegin',alertMessage(notice));
   protect();
 }
-// As vistas históricas não usam armazenamento local ou exemplos como dados de uma empresa.
-VIEWS.analise=()=>ph('Análise de demonstrações financeiras','Balancetes PGC Angola')+`<div class="alert b">${ico('info',17)}${historicalPending}</div>`;
-REPS.analise.f=()=>`<div class="page">${LHM('AEF')}<h1>Relatório de análise económico-financeira</h1><div class="box">${historicalPending}</div>${FTM('Análise económico-financeira')}</div>`;
+// Os mesmos campos e separadores do protótipo; cada projecto carrega a sua própria origem.
+VIEWS.analise.after=()=>{
+  for(const [id,target] of [['#anF1','#anT1'],['#anF2','#anT2']]){
+    const field=$(id);if(field)field.onchange=()=>{
+      if(!session.canWrite||busy||!field.files?.[0])return;
+      const file=field.files[0];if(file.size>250000)return showError(Error('O balancete admite até 250 000 bytes.'));
+      const modelId=M().id;
+      const reader=new FileReader();reader.onerror=()=>showError(Error('Não foi possível ler o ficheiro.'));
+      reader.onload=()=>{
+        if(M()?.id!==modelId||VIEW!=='analise'||(SUB.at||'dados')!=='dados'||$(id)!==field||field.files?.[0]!==file)return;
+        let text;try{text=new TextDecoder('utf-8',{fatal:true}).decode(reader.result);}catch{text=new TextDecoder('windows-1252').decode(reader.result);}
+        $(target).value=text;historicalDirty.add(modelId);captureHistoricalDraft();
+      };reader.readAsArrayBuffer(file);
+    };
+  }
+};
 async function downloadReport(key) {
-  if(key==='analise')throw Error(historicalPending);
+  if(key==='analise'&&historicalDirty.has(M().id))throw Error('Prima Analisar para validar e guardar os balancetes antes de descarregar o PDF.');
   const response=await store.download(M(),key),blob=await response.blob();
   const link=document.createElement('a'),url=URL.createObjectURL(blob);
   link.href=url;link.download=/filename="([^"]+)"/.exec(response.headers.get('content-disposition')||'')?.[1]||`Integra-${key}.pdf`;
@@ -56,40 +98,46 @@ async function createCurrent() {
     nm.abertura={imob:nm.capex.reduce((s,c)=>s+c.valor,0)*0.6,vidaRem:8,exist:k.inv[2]||0,clientes:k.ar[2]||0,caixa:nm.caixaMin*2,fornec:k.ap[2]||0,divida:nm.divida.montante*0.5,divTaxa:nm.divida.taxa,divPrazo:4};
     nm.capex=[];nm.divida.montante=0;nm.receitas.forEach(r=>r.ramp='100');if(nm.tv.metodo==='nenhum')nm.tv.metodo='gordon';
   }
-  const model=await store.create(nm);S.active=model.id;closeModal();go('pressupostos');toast('Modelo criado na base de dados.');
+  const model=await store.create(nm);S.active=model.id;S.an=null;historicalDrafts.set(model.id,null);closeModal();go('pressupostos');toast('Modelo criado na base de dados.');
 }
 document.addEventListener('click',async ev=>{
   const target=ev.target instanceof Element?ev.target:null;if(!target)return;
+  captureHistoricalDraft();
   const g=target.closest('[data-go]');if(g){ev.preventDefault();if(!busy)go(g.dataset.go);return;}
   if(target.id==='ov')return closeModal();
   const a=target.closest('[data-act]');if(!a||a.disabled||busy)return;
   const d=a.dataset,m=M();
   const actions={close:closeModal,sub:()=>{SUB[d.k]=d.v;render();},newM:__NEW_MODEL_DIALOG__,createM:createCurrent,
-    dupM:async()=>{const model=await store.create({...clone(m),nome:m.nome+' (cópia)'});S.active=model.id;render();toast('Modelo duplicado na base de dados.');},
+    dupM:async()=>{const model=await store.create({...clone(m),nome:m.nome+' (cópia)'});S.active=model.id;S.an=null;historicalDrafts.set(model.id,null);render();toast('Modelo duplicado na base de dados.');},
     addRev:()=>{m.receitas.push({nome:'Nova linha',unid:'unidades',qtd:1000,cresc:5,ramp:'100',preco:1000,esc:m.inflacao});save();render();},
     delRev:()=>{m.receitas.splice(+d.i,1);save();render();},
     addCap:()=>{m.capex.push({nome:'Novo investimento',ano:1,valor:0,vida:5});save();render();},
     delCap:()=>{m.capex.splice(+d.i,1);save();render();},
     downloadFS:()=>downloadReport('demonstracoes'),downloadReport:()=>downloadReport(SUB.rep||'sumario'),
+    anRun:analyzeAndSave,anToModel:modelFromHistorical,
+    anDemo:()=>{S.an={empresa:DEMO_BAL.empresa,anos:DEMO_BAL.anos,N1:demoCSV(DEMO_BAL.N1),N:demoCSV(DEMO_BAL.N),pctCP:30,moeda:'Kz'};historicalDrafts.set(m.id,S.an);historicalDirty.add(m.id);SUB.at='dados';render();toast('Exemplo carregado. Prima Analisar se o quiser guardar neste projecto.');},
   };
   const action=actions[d.act];if(!action)return;ev.preventDefault();
-  const mutation=['createM','dupM','addRev','delRev','addCap','delCap'].includes(d.act);
+  const mutation=['createM','dupM','addRev','delRev','addCap','delCap','anRun','anToModel','anDemo'].includes(d.act);
   if(mutation&&!session.canWrite)return showError(Error('O seu acesso permite apenas consulta.'));
   busy=true;protect();
   try{await action();}catch(error){showError(error);}finally{busy=false;protect();}
 });
 $('#mSel').onchange=async()=>{
-  const next=$('#mSel').value;busy=true;protect();
-  try{await store.flush();S.active=next;notice='';render();}catch(error){$('#mSel').value=S.active;showError(error);}finally{busy=false;protect();}
+  captureHistoricalDraft();const next=$('#mSel').value;busy=true;protect();
+  try{await store.flush();const model=S.models.find(m=>m.id===next);await selectHistorical(model);S.active=next;notice='';render();}catch(error){$('#mSel').value=S.active;showError(error);}finally{busy=false;protect();}
 };
+document.addEventListener('input',e=>{if(session?.canWrite&&M()&&historicalFields.includes(e.target?.id))historicalDirty.add(M().id);});
+document.addEventListener('change',e=>{if(session?.canWrite&&M()&&historicalFields.includes(e.target?.id))historicalDirty.add(M().id);});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
-window.addEventListener('beforeunload',e=>{if(store?.dirty){e.preventDefault();e.returnValue='';}});
+window.addEventListener('beforeunload',e=>{if(store?.dirty||historicalDirty.size){e.preventDefault();e.returnValue='';}});
 async function boot(){
   try {
     session=JSON.parse($('#integra-session').textContent);
     store=new ModelingStore(session.canWrite,modelingRequest,showError);
     const data=await Promise.all([modelingRequest('/models'),modelingRequest('/templates')]);
     templates=data[1];store.load(data[0]);S.models=store.models;S.active=S.models[0]?.id||null;
+    if(M())await selectHistorical(M());
     const view=(location.hash||'').slice(1);if(VIEWS[view])VIEW=view;
     render();
   }catch(error){$('#view').innerHTML=alertMessage(errorText(error));document.querySelectorAll('button,select').forEach(e=>e.disabled=true);}

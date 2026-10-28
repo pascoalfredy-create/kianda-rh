@@ -1,11 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
-import { FINANCIAL_SECTORS, financialTemplate } from '@kianda/core';
+import { analyzeFinancialHistory, FINANCIAL_SECTORS, financialTemplate } from '@kianda/core';
+import { historicalInput } from '../../../packages/core/test/fixtures/financial-history.js';
 const runtime = readFileSync(new URL('../public/modeling-runtime.js', import.meta.url), 'utf8');
 const views = ['painel', 'pressupostos', 'demonstracoes', 'avaliacao', 'credito', 'sensibilidade', 'relatorios'];
 /** Teste do código distribuído e das vistas, sem simular um motor de layout de navegador. */
-async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, incomplete = false) {
+async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, incomplete = false, withHistory = false) {
   const template = financialTemplate(sector), handlers = new Map<string, Function>();
   const nodes = new Map<string, any>();
   const node = (selector: string) => {
@@ -19,12 +20,13 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
   runInNewContext(runtime, {
     document: { querySelector: node, querySelectorAll: (selector: string) => selector === '[data-p],[data-cen]' ? [field, baseScenario] : [], addEventListener: (name: string, fn: Function) => handlers.set(name, fn) },
     Element, window: { addEventListener() {}, scrollTo() {} }, location: { hash: '' }, history: { replaceState() {} },
-    setTimeout, clearTimeout, structuredClone, URL, URLSearchParams, console,
-    fetch: async (path: string) => new Response(JSON.stringify(path.endsWith('/templates') ? FINANCIAL_SECTORS.map(financialTemplate) : [model]), { headers: { 'content-type': 'application/json' } }),
+    setTimeout, clearTimeout, structuredClone, URL, URLSearchParams, TextDecoder, console,
+    FileReader: class { result?: ArrayBuffer; onload?: () => void; readAsArrayBuffer(file: { buffer: ArrayBuffer }) { this.result=file.buffer; this.onload?.(); } },
+    fetch: async (path: string) => new Response(JSON.stringify(path.endsWith('/templates') ? FINANCIAL_SECTORS.map(financialTemplate) : path.endsWith('/history') ? { revision: 1, historical: withHistory ? { inputHash: 'a'.repeat(64), updatedAt: '2026-10-28', analysis: analyzeFinancialHistory(historicalInput) } : null } : [model]), { headers: { 'content-type': 'application/json' } }),
   });
   // boot() termina depois das respostas JSON e da montagem inicial.
   await new Promise<void>(resolve => setImmediate(resolve));
-  return { node, field, baseScenario, async go(view: string) { await handlers.get('click')!({ target: new Element({ go: view }), preventDefault() {} }); return node('#view').innerHTML as string; }, async sub() { await handlers.get('click')!({ target: new Element({ act: 'sub', k: 'pt', v: 'custos' }), preventDefault() {} }); } };
+  return { node, field, baseScenario, async go(view: string) { await handlers.get('click')!({ target: new Element({ go: view }), preventDefault() {} }); return node('#view').innerHTML as string; }, async sub(k = 'pt', v = 'custos') { await handlers.get('click')!({ target: new Element({ act: 'sub', k, v }), preventDefault() {} }); return node('#view').innerHTML as string; } };
 }
 describe('runtime do protótipo ligado à API', () => {
   for (const sector of FINANCIAL_SECTORS) it(`renderiza sete vistas com o motor partilhado: ${sector}`, async () => {
@@ -34,7 +36,7 @@ describe('runtime do protótipo ligado à API', () => {
       const html = await ui.go(view); expect(html.length).toBeGreaterThan(100);
       expect(html, view).not.toContain('Pressupostos por rever'); expect(html, view).not.toMatch(/NaN|Infinity/);
     }
-    expect(await ui.go('analise')).toContain('integração dos balancetes');
+    expect(await ui.go('analise')).toContain('Balancete N (obrigatório)');
   });
   it('um rascunho incompleto permite abrir pressupostos sem inventar projecções', async () => {
     const ui = await mount('mineracao', true, true);
@@ -47,5 +49,22 @@ describe('runtime do protótipo ligado à API', () => {
   });
   it('os campos de consulta ficam bloqueados mesmo depois de mudar de separador', async () => {
     const ui = await mount('mineracao', false); await ui.go('pressupostos'); await ui.sub(); expect(ui.field.disabled).toBe(true);
+  });
+  it('os cinco separadores históricos apresentam os cálculos partilhados sem NaN', async () => {
+    const ui = await mount('comercio', true, false, true); await ui.go('analise');
+    for (const tab of ['dados', 'balanco', 'dr', 'fc', 'racios']) {
+      const html = await ui.sub('at', tab); expect(html.length).toBeGreaterThan(100); expect(html).not.toMatch(/NaN|Infinity|Pressupostos por rever/);
+      if (tab === 'fc') { expect(html).toContain('reconciliação é algébrica'); expect(html).not.toContain('Dividendos / distribuições (implícitos)'); }
+    }
+  });
+  it('a pré-visualização do relatório histórico funciona num projecto com projecção incompleta', async () => {
+    const ui = await mount('comercio', true, true, true); await ui.sub('rep', 'analise');
+    const html = await ui.go('relatorios'); expect(html).toContain('Empresa de teste'); expect(html).toContain('Relatório de análise económico-financeira'); expect(html).not.toContain('Pressupostos por rever');
+  });
+  it('os ficheiros de Excel em Windows-1252 conservam acentos e valores no formulário', async () => {
+    const ui = await mount('comercio'); await ui.go('analise');
+    const text = 'Conta;Designação;Saldo\n43;Depósito;100,25', bytes = Uint8Array.from([...text].map(c=>c.charCodeAt(0)));
+    const file = { size: bytes.length, buffer: bytes.buffer }; ui.node('#anF2').files = [file]; ui.node('#anF2').onchange();
+    expect(ui.node('#anT2').value).toBe(text);
   });
 });

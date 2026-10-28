@@ -995,6 +995,17 @@ export const financialPersonnelImports = pgTable('financial_personnel_imports', 
   importedAt: createdAt(),
 }, (t) => [index('financial_personnel_imports_model').on(t.modelId)]);
 
+/** Balancetes de trabalho por projecto. A aprovação congela uma cópia na versão. */
+export const financialHistoricalInputs = pgTable('financial_historical_inputs', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  modelId: text('model_id').notNull().references(() => financialModels.id, { onDelete: 'cascade' }),
+  input: jsonb('input').$type<import('@kianda/core').FinancialHistoricalInput>().notNull(),
+  inputHash: text('input_hash').notNull(),
+  updatedBy: text('updated_by').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex('financial_history_model').on(t.modelId), index('financial_history_company_model').on(t.companyId, t.modelId)]);
+
 /** Utilizadores autorizados no Integra; o proprietário da empresa ocupa um dos cinco acessos. */
 export const modelingMembers = pgTable('modeling_members', {
   id: id(),

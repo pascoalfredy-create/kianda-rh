@@ -32,3 +32,5 @@ export * from './modeling/engine.js';
 export * from './modeling/templates.js';
 export * from './modeling/analysis.js';
 export * from './modeling/reports.js';
+export * from './modeling/historical.js';
+export * from './modeling/historical-report.js';

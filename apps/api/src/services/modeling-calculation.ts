@@ -1,10 +1,15 @@
 import { createHash } from 'node:crypto';
-import { and, eq, financialModels, getDb } from '@kianda/db';
+import { and, companies, eq, financialModels, getDb } from '@kianda/db';
 import { type Ctx } from '../plugins/tenant.js';
 import { DomainError } from './payroll.js';
 
-export async function financialModelOf(c: Ctx) {
-  const [model] = await getDb().select().from(financialModels).where(and(eq(financialModels.companyId, c.get('actor').companyId), eq(financialModels.id, c.req.param('id')!)));
+export async function financialModelOf(c: Ctx, coherentHistory = false) {
+  const db = getDb(), companyId = c.get('actor').companyId;
+  // A revisão e os balancetes devem pertencer ao mesmo estado. A empresa é bloqueada
+  // primeiro, na ordem usada pela criação/arquivo, sem impedir consultas concorrentes.
+  if (coherentHistory) await db.select({ id: companies.id }).from(companies).where(eq(companies.id, companyId)).for('key share');
+  const query = db.select().from(financialModels).where(and(eq(financialModels.companyId, companyId), eq(financialModels.id, c.req.param('id')!)));
+  const [model] = coherentHistory ? await query.for('share') : await query;
   if (!model) throw new DomainError('nao_encontrado', 'Projecto inexistente', 404);
   return model;
 }

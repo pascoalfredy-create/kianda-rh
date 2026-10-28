@@ -218,6 +218,13 @@
       "when": 1793147198862,
       "tag": "0030_integra_approved_versions",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1793173013903,
+      "tag": "0031_integra_historical_analysis",
+      "breakpoints": true
     }
   ]
 }

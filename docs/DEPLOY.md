@@ -100,6 +100,8 @@ A Modelagem está em `https://<domínio-principal>/modelagem`, com a mesma sess�
 
 O script preserva qualquer licença já existente, incluindo suspensões e quotas, e não reactiva participações desactivadas ou ultrapassa cinco acessos. Uma configuração ambígua fica sem alterações e é indicada no log. As restantes empresas continuam a precisar de adesão explícita. O Excel continua a exigir `KIANDA_MODELING_OWNER_USER_ID` e estatuto de administrador: esta activação não o concede por inferência.
 
+A análise de balancetes usa a migração aditiva `0031_integra_historical_analysis`, aplicada pelo workflow antes da API. Não exige novos secrets ou alterações de subscrição. Ver [formato, limitações e utilização](./MODELAGEM-HISTORICO.md).
+
 ## Integrações (entrega 17) — activar quando houver contrato
 
 Cada integração liga-se sozinha quando o secret existir no GitHub (o deploy seguinte envia-o para o Worker da API). Sem secret, fica desligada e o Kianda usa o fluxo manual. O estado aparece na consola **Plataforma Kianda → Integrações**.
