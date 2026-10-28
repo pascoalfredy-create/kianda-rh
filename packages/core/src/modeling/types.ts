@@ -15,7 +15,7 @@ export interface FinancialAssumptions {
   tv: { metodo: 'gordon' | 'multiplo' | 'nenhum'; g: number; mult: number };
   abertura: { imob: number; vidaRem: number; exist: number; clientes: number; caixa: number; fornec: number; divida: number; divTaxa: number; divPrazo: number };
   receitas: FinancialRevenue[]; capex: FinancialCapex[]; cenarios: Record<FinancialScenario, ScenarioFactors>; cen: FinancialScenario;
-  cov: { dscr: number }; sens: number; prejuizosAnos: number; capitalAutomatico: boolean;
+  cov: { dscr: number; ndEbitda: number; icr: number }; mult: { lo: number; hi: number }; sens: number; prejuizosAnos: number; capitalAutomatico: boolean;
   valorResidualLiquido: number; libertarFundoManeio: boolean;
 }
 export interface FinancialOverrides { cen?: FinancialScenario; preco?: number; volume?: number; cvar?: number; fixos?: number; capex?: number; wacc?: number }
@@ -41,6 +41,8 @@ export interface FinancialResult {
   fundingGap: number; unfundedGap: number; fullyFunded: boolean; totalCapex: number;
   hasDebt: boolean; repY: number[]; serviceYears: number[]; minDscr: number | null; avgDscr: number | null;
   llcr: number | null; debtCap: number | null; ndE: (number | null)[]; icr: (number | null)[];
+  covenants: { year: number; dscr: boolean | null; ndEbitda: boolean | null; icr: boolean | null }[];
+  multiples: { year: number; ebitda: number; enterpriseLow: number | null; enterpriseHigh: number | null; equityLow: number | null; equityHigh: number | null };
   checks: { balance: boolean; cashFlow: boolean; maxBalanceDifference: number; maxCashFlowDifference: number };
   warnings: { code: string; message: string }[];
 }

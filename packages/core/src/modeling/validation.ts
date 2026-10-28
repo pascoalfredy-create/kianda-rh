@@ -35,7 +35,7 @@ export function validateFinancialAssumptions(value: unknown): FinancialAssumptio
   const o = obj(value, 'assumptions');
   const horizonte = n(o, 'horizonte', 'horizonte', 1, 40, undefined, true);
   const d = obj(o.divida, 'divida'), w = obj(o.wacc, 'wacc'), tv = obj(o.tv, 'tv'), ab = obj(o.abertura, 'abertura');
-  const s = obj(o.cenarios, 'cenarios');
+  const s = obj(o.cenarios, 'cenarios'), cov = obj(o.cov, 'cov'), mult = o.mult === undefined ? {} : obj(o.mult, 'mult');
   const cenarios = {} as FinancialAssumptions['cenarios'];
   for (const key of ['base', 'otim', 'pess'] as const) {
     const sc = obj(s[key], `cenarios.${key}`);
@@ -59,9 +59,10 @@ export function validateFinancialAssumptions(value: unknown): FinancialAssumptio
     }),
     capex: list(o, 'capex', 200).map((v, i) => { const c = obj(v, `capex.${i}`), path = `capex.${i}`; return { nome: text(c, 'nome', `${path}.nome`), ano: n(c, 'ano', `${path}.ano`, 0, horizonte, undefined, true), valor: n(c, 'valor', `${path}.valor`), vida: n(c, 'vida', `${path}.vida`, 1, 100, undefined, true) }; }),
     cenarios, cen: en(o, 'cen', ['base', 'otim', 'pess']),
-    cov: { dscr: n(obj(o.cov, 'cov'), 'dscr', 'cov.dscr', 0.01, 100) }, sens: n(o, 'sens', 'sens', 0, 99, 20), prejuizosAnos: n(o, 'prejuizosAnos', 'prejuizosAnos', 0, 20, 5, true),
+    cov: { dscr: n(cov, 'dscr', 'cov.dscr', 0.01, 100), ndEbitda: n(cov, 'ndEbitda', 'cov.ndEbitda', 0, 100, 3.5), icr: n(cov, 'icr', 'cov.icr', 0, 100, 3) }, mult: { lo: n(mult, 'lo', 'mult.lo', 0, 100, 4), hi: n(mult, 'hi', 'mult.hi', 0, 100, 7) }, sens: n(o, 'sens', 'sens', 0, 99, 20), prejuizosAnos: n(o, 'prejuizosAnos', 'prejuizosAnos', 0, 20, 5, true),
     capitalAutomatico: bool(o, 'capitalAutomatico', true), valorResidualLiquido: n(o, 'valorResidualLiquido', 'valorResidualLiquido', 0, 1e12, 0), libertarFundoManeio: bool(o, 'libertarFundoManeio', false),
   };
+  if (m.mult.lo > m.mult.hi) issues.push({ path: 'mult', message: 'O múltiplo mínimo não pode superar o máximo' });
   if (m.divida.montante > 0 && m.divida.carencia >= m.divida.prazo) issues.push({ path: 'divida.carencia', message: 'A carência deve ser inferior ao prazo' });
   if (m.tv.metodo !== 'nenhum' && (m.valorResidualLiquido || m.libertarFundoManeio)) issues.push({ path: 'tv', message: 'Valor residual e libertação do fundo de maneio exigem projecto finito (sem valor terminal de continuidade)' });
   if (issues.length) throw new FinancialModelError(issues);

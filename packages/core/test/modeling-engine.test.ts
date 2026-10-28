@@ -82,6 +82,7 @@ describe('financiamento, fiscalidade parametrizada e avaliação', () => {
     expect(r.pbDuration).toEqual({ years: 1, months: 8, totalMonths: 20 });
     expect(r.pi).toBeCloseTo((60 / 1.1 + 60 / 1.1 ** 2) / 100, 12);
     expect(r.minDscr).toBeNull();
+    expect(r.multiples.enterpriseLow).toBe(60 * simple().mult.lo);
   });
   it('TIR do accionista considera aportes, dividendos e caixa residual, não FCFE potencial', () => {
     const m = simple(), r = runFinancialModel(m);
@@ -116,6 +117,7 @@ describe('financiamento, fiscalidade parametrizada e avaliação', () => {
     const r = runFinancialModel(m);
     expect(r.serviceYears).toEqual([1, 2, 3]); expect(r.repY).toEqual([3]);
     expect(r.k.dscr[1]).toBe(0.2); expect(r.minDscr).toBe(0.2);
+    expect(r.covenants[0]).toMatchObject({ year: 2027, dscr: false, ndEbitda: false, icr: false });
   });
   it('a dívida que vence depois do horizonte não produz LLCR parcial enganador', () => {
     const m = simple(); Object.assign(m.divida, { montante: 40, prazo: 5 });

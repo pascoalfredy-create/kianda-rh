@@ -189,8 +189,20 @@ function calculate(m: FinancialAssumptions, ov: FinancialOverrides): FinancialRe
     fundingGap: m.capitalAutomatico ? k.eqAuto.reduce((s, v) => s + v / 100, 0) : unfundedGap, unfundedGap, fullyFunded, totalCapex: k.capexExp.reduce((s, v) => s + v / 100, 0),
     hasDebt: newDebt || oldDebt, repY, serviceYears, minDscr: ratios.length ? Math.min(...ratios) : null, avgDscr: ratios.length ? ratios.reduce((s, v) => s + v, 0) / ratios.length : null,
     llcr, debtCap, ndE: k.ebitda.map((v, t) => v > 0 ? (a('debt', t) - a('cash', t)) / v : null), icr: k.ebitda.map((v, t) => a('jur', t) > 0 ? v / a('jur', t) : null),
+    covenants: [],
+    multiples: { year: m.anoBase + 1, ebitda: a('ebitda', 1) / 100, enterpriseLow: null, enterpriseHigh: null, equityLow: null, equityHigh: null },
     checks: { balance: maxBalanceDifference === 0, cashFlow: maxCashFlowDifference === 0, maxBalanceDifference: maxBalanceDifference / 100, maxCashFlowDifference: maxCashFlowDifference / 100 }, warnings,
   };
+  result.covenants = result.years.slice(1).map((year, i) => {
+    const t = i + 1, dscrValue = dscr[t], leverage = result.ndE[t], interestCover = result.icr[t];
+    return { year, dscr: dscrValue == null ? null : dscrValue >= m.cov.dscr, ndEbitda: leverage == null ? null : leverage <= m.cov.ndEbitda, icr: interestCover == null ? null : interestCover >= m.cov.icr };
+  });
+  if (result.multiples.ebitda > 0) {
+    result.multiples.enterpriseLow = result.multiples.ebitda * m.mult.lo;
+    result.multiples.enterpriseHigh = result.multiples.ebitda * m.mult.hi;
+    result.multiples.equityLow = result.multiples.enterpriseLow - result.netDebt0;
+    result.multiples.equityHigh = result.multiples.enterpriseHigh - result.netDebt0;
+  }
   // JSON não deve converter silenciosamente Infinity/NaN em null.
   const checkFinite = (v: unknown): void => {
     if (typeof v === 'number' && !Number.isFinite(v)) throw new FinancialModelError([{ path: 'calculo', message: 'Resultado não finito; reveja os pressupostos' }]);
