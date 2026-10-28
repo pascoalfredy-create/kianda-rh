@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { closeDb, companyModules, eq, getDb, modelingMembers } from '@kianda/db';
-import { financialTemplate } from '@kianda/core';
+import { FINANCIAL_REPORT_KEYS, financialTemplate } from '@kianda/core';
 import { historicalInput } from '../../../packages/core/test/fixtures/financial-history.js';
 import { buildApp } from '../src/app.js';
 import { testClient } from './inject.js';
@@ -45,6 +45,14 @@ describe.skipIf(!process.env.DATABASE_URL)('conversão monetária atómica por e
     const attempts = await Promise.all([convert(3, 'Kz', 'EUR', 0.001), convert(3, 'Kz', 'EUR', 0.001)]);
     expect(attempts.map(r => r.statusCode).sort()).toEqual([200, 409]);
     const current = (await req('GET', `/v1/modeling/models/${id}`)).json(); expect(current).toMatchObject({ revision: 4, currency: 'EUR', assumptions: { pessoal: original.pessoal } });
+  });
+  it('a revisão convertida aplica EUR aos sete mapas exportados e identifica a moeda no download',async()=>{
+    for(const key of FINANCIAL_REPORT_KEYS){
+      const file=await req('GET',`/v1/modeling/models/${id}/reports/${key}?revision=4`);
+      expect(file.statusCode,key).toBe(200);expect(file.headers['content-type'],key).toBe('application/pdf');expect(file.headers['x-source-currency'],key).toBe('EUR');expect(file.headers['x-source-revision'],key).toBe('4');
+    }
+    expect((await req('GET',`/v1/modeling/models/${id}/reports/sumario?version=${version}`)).headers['x-source-currency']).toBe('USD');
+    expect((await req('GET',`/v1/modeling/models/${id}/reports/analise`)).headers['x-source-currency']).toBe('Kz');
   });
   it('PDF aprovado e balancetes conservam o conteúdo e a moeda originais', async () => {
     expect((await req('GET', `/v1/modeling/models/${id}/reports/sumario?version=${version}`)).bytes).toEqual(pdf);

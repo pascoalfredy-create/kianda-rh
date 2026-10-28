@@ -14,6 +14,8 @@ O câmbio é fixo nesta operação. Inflação, juros e taxa de desconto exigem 
 
 A moeda e todos os montantes são gravados numa única transacção com controlo de revisão e auditoria. A gravação genérica não permite alterar só a moeda. A última conversão fica identificada nos pressupostos e nos sete relatórios projectados, com taxa, data e fonte. A alteração do EUR também corrige as legendas monetárias e a indicação de inflação, que antes exibiam Kz/USD.
 
+A moeda é global para os mapas actuais do projecto: investimento, custos, DRE, Balanço, fluxos, financiamento, avaliação, cenários e PDFs projectados. Os cabeçalhos identificam **Moeda global**. Nos pressupostos, os montantes editáveis, totais e amortizações do investimento são apresentados em unidades da moeda escolhida. Nos mapas calculados, o selector Unidades/Milhares/Milhões altera apenas a escala de apresentação, mantendo a mesma moeda. As indicações de financiamento e desconto usam também a moeda seleccionada. Os balancetes históricos identificam a moeda da fonte e as versões aprovadas conservam a moeda em que foram aprovadas.
+
 ## Integração
 
 - `GET /v1/modeling/exchange-rate?from=USD&to=Kz`: consulta identificada; sem montantes nem identificadores enviados ao fornecedor.

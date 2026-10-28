@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
-import { analyzeFinancialHistory, convertFinancialCurrency, FINANCIAL_SECTORS, financialTemplate } from '@kianda/core';
+import { analyzeFinancialHistory, convertFinancialCurrency, FINANCIAL_REPORT_KEYS, FINANCIAL_SECTORS, financialTemplate, runFinancialModel, type FinancialAssumptions } from '@kianda/core';
 import { historicalInput } from '../../../packages/core/test/fixtures/financial-history.js';
 const runtime = readFileSync(new URL('../public/modeling-runtime.js', import.meta.url), 'utf8');
 const views = ['painel', 'pressupostos', 'demonstracoes', 'avaliacao', 'credito', 'sensibilidade', 'relatorios'];
@@ -28,7 +28,7 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
     fetch: async (path: string, init?: {method?:string;body?:string}) => {
       const payload=init?.body?JSON.parse(init.body):undefined;requests.push({path,method:init?.method,payload});
       let data:unknown;
-      if(path.includes('/exchange-rate?')){const q=new URLSearchParams(path.split('?')[1]);data={from:q.get('from'),to:q.get('to'),rate:1000,rateDate:'2026-10-27',source:'Referência do teste',stale:false};}
+      if(path.includes('/exchange-rate?')){const q=new URLSearchParams(path.split('?')[1]);data={from:q.get('from'),to:q.get('to'),rate:q.get('from')==='Kz'?0.001:1000,rateDate:'2026-10-27',source:'Referência do teste',stale:false};}
       else if(path.endsWith('/convert-currency')){model.currency=payload.to;model.assumptions={...convertFinancialCurrency(model.assumptions as unknown as Record<string,unknown>,payload.from,payload.to,payload.rate),currencyConversion:payload} as any;model.revision++;data=model;}
       else data=path.endsWith('/templates')?FINANCIAL_SECTORS.map(financialTemplate):path.endsWith('/history')?{revision:1,historical:withHistory?{inputHash:'a'.repeat(64),updatedAt:'2026-10-28',analysis:analyzeFinancialHistory(historicalInput)}:null}:[model];
       return new Response(JSON.stringify(data),{headers:{'content-type':'application/json'}});
@@ -88,5 +88,29 @@ describe('runtime do protótipo ligado à API', () => {
   it('cancelar a mudança de moeda mantém valores, moeda e revisão sem gravar', async () => {
     const ui=await mount('mineracao');await ui.go('pressupostos');const before=structuredClone(ui.model);
     await ui.currency('Kz');await ui.act('close');expect(ui.model).toEqual(before);expect(ui.requests.filter(r=>r.method==='POST'||r.method==='PUT')).toEqual([]);
+  });
+  for(const currency of ['USD','EUR'])it(`${currency}: investimento, DRE, Balanço, fluxos, avaliação e sete relatórios usam a moeda global`,async()=>{
+    const ui=await mount('comercio');await ui.go('pressupostos');await ui.currency(currency);await ui.act('applyCurrency');
+    const result=runFinancialModel(ui.model.assumptions);
+    const caption=`Moeda global: ${currency}`,money=new Intl.NumberFormat('pt-PT',{minimumFractionDigits:2,maximumFractionDigits:2});
+    for(const tab of ['geral','receitas','custos','capex','fm','fin','taxa']){
+      const html=await ui.sub('pt',tab);expect(html,tab).toContain(caption);
+      if(tab==='capex'){
+        expect(html).toContain(`Valor (${currency})`);
+        const table=html.match(/<table>[\s\S]*?<\/table>/)![0],capex=(ui.model.assumptions as FinancialAssumptions).capex;
+        const total=capex.reduce((s,c)=>s+c.valor,0),amort=capex[0]!.valor/capex[0]!.vida;
+        expect(table).toContain(money.format(total)+' '+currency);expect(table).toContain(money.format(amort)+' '+currency);
+        expect(table).not.toMatch(new RegExp(`(?:M|mil) ${currency}`));
+      }
+      if(tab==='fin')expect(html).toContain('Financiamento em '+currency);
+    }
+    await ui.go('demonstracoes');
+    for(const [tab,label,amount] of [['dr','Resultado operacional (82)',result.k.ebit[1]],['bal','Total do activo',result.k.assets[1]],['fc','Caixa no fim do ano',result.k.cash[1]]]as const){
+      const html=await ui.sub('dt',tab);expect(html).toContain(caption);expect(html).toContain(currency+' · milhões');
+      const row=html.split(`<td>${label}</td>`)[1]!.split('</tr>')[0]!;
+      const value=money.format(Math.abs(amount!)/1e6);expect(row).toContain(amount!<0?'('+value+')':value);
+    }
+    for(const view of ['painel','avaliacao','credito','sensibilidade']){const html=await ui.go(view);expect(html,view).toContain(caption);expect(html,view).not.toMatch(/\b(?:M|mil) Kz\b/);}
+    await ui.go('relatorios');for(const key of FINANCIAL_REPORT_KEYS){const html=await ui.sub('rep',key);expect(html,key).toContain(caption);expect(html,key).toContain(currency+' · cenário');expect(html,key).not.toMatch(/\b(?:M|mil) Kz\b/);}
   });
 });
