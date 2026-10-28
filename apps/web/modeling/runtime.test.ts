@@ -110,7 +110,7 @@ describe('runtime do protótipo ligado à API', () => {
   it('mostra e conserva o período do documento externo ao analisar e guardar', async()=>{
     const input:FinancialHistoricalInput={...historicalInput,anos:['2025','2026'],periods:{N:{from:'2026-01-01',to:'2026-08-31'}}};
     const ui=await mount('comercio',true,false,true,false,input);await ui.go('analise');
-    for(const[id,value]of Object.entries({anEmp:input.empresa,anY1:'2025',anY2:'2026',anCP:'25',anMo:'Kz',anT1:input.N1,anT2:input.N}))ui.edit(id,value);
+    for(const[id,value]of Object.entries({anEmp:input.empresa,anY1:'2025',anY2:'31/08/2026',anCP:'25',anMo:'Kz',anT1:input.N1,anT2:input.N}))ui.edit(id,value);
     await ui.act('anRun');expect(ui.requests.find(r=>r.method==='PUT')?.payload.input.periods).toEqual(input.periods);
     expect(ui.node('#view').innerHTML).toContain('01/01/2026 a 31/08/2026');
   });
@@ -121,6 +121,28 @@ describe('runtime do protótipo ligado à API', () => {
     const ebitda=html.split('<td>EBITDA</td>')[1]!.split('</tr>')[0]!;expect(ebitda).toContain('—');
     expect(await ui.sub('at','fc')).toContain('balancete de abertura coerente');
     await ui.sub('rep','analise');expect(await ui.go('relatorios')).not.toMatch(/NaN|Pressupostos por rever/);
+  });
+  it('compara datas do mesmo ano nos campos existentes e guarda os metadados correctos',async()=>{
+    const ui=await mount('comercio');const form=await ui.go('analise');expect(form).toContain('Referência do comparativo');expect(form).toContain('2026 ou 31/08/2026');
+    for(const[id,value]of Object.entries({anEmp:'Externa',anY1:'31/07/2026',anY2:'31/08/2026',anCP:'25',anMo:'Kz',anT1:historicalInput.N1,anT2:historicalInput.N}))ui.edit(id,value);
+    await ui.act('anRun');const input=ui.requests.find(r=>r.method==='PUT')?.payload.input;
+    expect(input.anos).toEqual(['2026','2026']);expect(input.periods).toEqual({N1:{from:'2026-01-01',to:'2026-07-31'},N:{from:'2026-01-01',to:'2026-08-31'}});expect(ui.node('#view').innerHTML).toContain('31/08/2026');
+  });
+  it('um único balancete em N não exige preencher a referência do comparativo',async()=>{
+    const ui=await mount('comercio');await ui.go('analise');
+    for(const[id,value]of Object.entries({anEmp:'Externa',anY1:'',anY2:'31/08/2026',anCP:'25',anMo:'Kz',anT1:'',anT2:historicalInput.N}))ui.edit(id,value);
+    await ui.act('anRun');expect(ui.requests.find(r=>r.method==='PUT')?.payload.input.anos).toEqual(['2025','2026']);
+  });
+  it('apenas um comparativo dá indicação de N, sem erro enganador sobre o ano anterior',async()=>{
+    const ui=await mount('comercio');await ui.go('analise');
+    for(const[id,value]of Object.entries({anEmp:'Externa',anY1:'31/08/2026',anY2:'2026',anCP:'25',anMo:'Kz',anT1:historicalInput.N,anT2:''}))ui.edit(id,value);
+    await ui.act('anRun');expect(ui.node('#view').innerHTML).toContain('apenas o comparativo');expect(ui.node('#view').innerHTML).not.toContain('exercício imediatamente anterior');expect(ui.requests.filter(r=>r.method==='PUT')).toHaveLength(0);
+  });
+  it('datas iguais e referências inválidas não são guardadas',async()=>{
+    const ui=await mount('comercio');await ui.go('analise');
+    for(const[id,value]of Object.entries({anEmp:'Externa',anY1:'31/08/2026',anY2:'31/08/2026',anCP:'25',anMo:'Kz',anT1:historicalInput.N1,anT2:historicalInput.N}))ui.edit(id,value);
+    await ui.act('anRun');expect(ui.node('#view').innerHTML).toContain('mesma data');
+    ui.edit('anY2','31/02/2026');await ui.act('anRun');expect(ui.node('#view').innerHTML).toContain('Referência do período N inválida');expect(ui.requests.filter(r=>r.method==='PUT')).toHaveLength(0);
   });
   it('não substitui texto editado enquanto um ficheiro está a ser lido', async () => {
     const ui=await mount('comercio',true,false,false,true);await ui.go('analise');

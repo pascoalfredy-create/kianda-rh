@@ -113,6 +113,10 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: balancetes por projecto e r
     const loaded=await req('GET',`/v1/modeling/models/${id}/history`,undefined,cookie);expect(loaded.json().historical.analysis.input).toEqual(input);
     const pdf=await req('GET',`/v1/modeling/models/${id}/reports/analise?revision=2`,undefined,cookie);expect(pdf.statusCode).toBe(200);expect(pdf.headers['content-type']).toBe('application/pdf');expect(pdf.headers['x-source-currency']).toBe('Kz');
     expect(pdf.headers['x-source-history-hash']).toBe(saved.json().historical.inputHash);
+    const compared={...input,anos:['2026','2026'],N1:historicalInput.N1,periods:{...input.periods,N1:{from:'2026-01-01',to:'2026-07-31'}}};
+    const comparison=await req('PUT',`/v1/modeling/models/${id}/history`,{revision:2,input:compared},cookie);expect(comparison.statusCode).toBe(200);expect(comparison.json().historical.analysis.cashFlow).toBeNull();
+    const repeated=await req('PUT',`/v1/modeling/models/${id}/history`,{revision:3,input:{...compared,periods:{...compared.periods,N1:input.periods.N}}},cookie);expect(repeated.statusCode).toBe(422);
+    const preserved=await req('GET',`/v1/modeling/models/${id}/history`,undefined,cookie);expect(preserved.json().revision).toBe(3);expect(preserved.json().historical.analysis.input).toEqual(compared);
     const unchanged=await req('GET',`/v1/modeling/models/${id}`,undefined,cookie);expect(unchanged.json().assumptions).toEqual({});expect(unchanged.json().currency).toBe('USD');
   });
 });

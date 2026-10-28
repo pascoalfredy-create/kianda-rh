@@ -3,7 +3,7 @@ import { financialTemplate } from './templates.js';
 import { validateFinancialAssumptions } from './validation.js';
 import { CLOSING_INCOME_KEYS, historicalAccountDescends, historicalClosingIncome } from './historical-closing.js';
 
-export const FINANCIAL_HISTORICAL_VERSION = 'integra-history-2';
+export const FINANCIAL_HISTORICAL_VERSION = 'integra-history-3';
 export interface HistoricalPeriod { from: string; to: string }
 export interface FinancialHistoricalInput { empresa: string; anos: [string, string]; N1: string; N: string; pctCP: number; moeda: 'Kz' | 'USD' | 'EUR'; periods?: { N?: HistoricalPeriod; N1?: HistoricalPeriod } }
 export interface HistoricalAccount { code: string; g: string; nome: string; v: number }
@@ -154,9 +154,9 @@ export function validateHistoricalInput(value: unknown): FinancialHistoricalInpu
   if (!value || typeof value !== 'object' || Array.isArray(value)) return fail('historico', 'Dados históricos obrigatórios.');
   const v = value as FinancialHistoricalInput;
   if (typeof v.empresa !== 'string' || v.empresa.trim().length > 200) return fail('empresa', 'Nome da empresa até 200 caracteres.');
-  if (!Array.isArray(v.anos) || v.anos.length !== 2 || v.anos.some((y) => typeof y !== 'string' || !/^(?:19|20|21)\d{2}$/.test(y))) return fail('anos', 'Indique exercícios entre 1900 e 2199.');
   if (typeof v.N !== 'string' || typeof v.N1 !== 'string' || v.N.length > 250_000 || v.N1.length > 250_000) return fail('N', 'Cada balancete admite até 250 000 caracteres.');
-  if (v.N1.trim() && Number(v.anos[0]) + 1 !== Number(v.anos[1])) return fail('anos', 'O comparativo deve corresponder ao exercício imediatamente anterior.');
+  if (!v.N.trim()) return fail('N', v.N1.trim() ? 'Carregou apenas o comparativo. Coloque o balancete que pretende analisar no campo Balancete N (obrigatório); o comparativo é opcional.' : 'O balancete N está vazio. Carregue o documento do período actual no campo Balancete N (obrigatório).');
+  if (!Array.isArray(v.anos) || v.anos.length !== 2 || v.anos.some((y) => typeof y !== 'string' || !/^(?:19|20|21)\d{2}$/.test(y))) return fail('anos', 'Indique exercícios entre 1900 e 2199.');
   if (typeof v.pctCP !== 'number' || !Number.isFinite(v.pctCP) || v.pctCP < 0 || v.pctCP > 100) return fail('pctCP', 'Percentagem de empréstimos de curto prazo entre 0 e 100.');
   if (!['Kz', 'USD', 'EUR'].includes(v.moeda)) return fail('moeda', 'Use Kz, USD ou EUR.');
   const periods: NonNullable<FinancialHistoricalInput['periods']> = {};
@@ -169,7 +169,24 @@ export function validateHistoricalInput(value: unknown): FinancialHistoricalInpu
       periods[key] = { from: p.from, to: p.to };
     }
   }
-  return { empresa: v.empresa.trim(), anos: [...v.anos], N1: v.N1.trim(), N: v.N.trim(), pctCP: v.pctCP, moeda: v.moeda, ...(Object.keys(periods).length ? { periods } : {}) };
+  const input: FinancialHistoricalInput = { empresa: v.empresa.trim(), anos: [...v.anos], N1: v.N1.trim(), N: v.N.trim(), pctCP: v.pctCP, moeda: v.moeda, ...(Object.keys(periods).length ? { periods } : {}) };
+  if (input.N1) {
+    if(input.anos[0]===input.anos[1]&&(!periods.N||!periods.N1))return fail('periods','Para comparar documentos do mesmo ano, indique as duas datas de referência, por exemplo 31/07/2026 e 31/08/2026.');
+    const before=periodOf(input,'N1').to,current=periodOf(input,'N').to;
+    if(before===current)return fail('periods.N1','Os dois documentos têm a mesma data de referência. Para analisar um único balancete, carregue-o apenas no campo N e deixe o comparativo vazio.');
+    if(before>current)return fail('periods.N1','A data do comparativo deve ser anterior à data do balancete N. Confirme as referências ou troque os documentos de campo.');
+  }
+  return input;
+}
+/** Referência do formulário: ano completo, data ISO ou data portuguesa, sem alterar os saldos. */
+export function parseHistoricalReference(value: string, previous?: HistoricalPeriod): { year: string; period?: HistoricalPeriod } | null {
+  const raw=value.trim();
+  if(/^(?:19|20|21)\d{2}$/.test(raw))return {year:raw};
+  const portuguese=/^(\d{2})\/(\d{2})\/((?:19|20|21)\d{2})$/.exec(raw);
+  const date=portuguese?`${portuguese[3]}-${portuguese[2]}-${portuguese[1]}`:raw;
+  if(!/^(?:19|20|21)\d{2}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date))||new Date(date).toISOString().slice(0,10)!==date)return null;
+  const year=date.slice(0,4),from=previous?.from.startsWith(year+'-')&&previous.from<=date?previous.from:year+'-01-01';
+  return {year,period:{from,to:date}};
 }
 export function historicalPeriodLabel(input: FinancialHistoricalInput, key: 'N' | 'N1'): string {
   const period = input.periods?.[key];
@@ -197,6 +214,7 @@ export function analyzeFinancialHistory(value: unknown) {
     if (c.B.caixa < 0) warnings.push(`Balancete ${label}: meios monetários com saldo credor. Reveja descobertos bancários e saldos de caixa; não foram reclassificados automaticamente.`);
   }
   if (input.periods?.N) warnings.push(`Período N: ${historicalPeriodLabel(input, 'N')} (${days} dias). Valores e rendibilidades do período, sem anualização automática; os prazos usam estes dias.`);
+  if(p1){const previousDays=periodDays(input,'N1');if(previousDays!==days)warnings.push('Os períodos comparados têm durações diferentes. As variações de proveitos e custos comparam os montantes apresentados, sem os anualizar ou ajustar pela duração.');}
   if (cN.income.stage === 'closing' && pN.lines.some(l => /^[67]/.test(l.g) && l.v !== 0)) warnings.push('Existem saldos nas classes 6/7 e contas de apuramento. Confira se há regularizações posteriores ao apuramento; a análise mantém ambos os saldos, sem compensações artificiais.');
   const diagnostics = HISTORICAL_RATIO_DEFINITIONS.map(([, key, label, format, thresholds]) => ({ key, label, format, value: rN[key], status: historicalRatioStatus(rN[key], thresholds, format.includes('i')) }));
   let cashFlow = null;
