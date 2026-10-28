@@ -1,5 +1,5 @@
-import { isValidCompanyNif, luandaDate, SECTORS, tierFor, TRIAL_DAYS, verifyTotp } from '@kianda/core';
-import { auditLogs, companies, employees, getDb, platformAdmins, hashPassword, passwordProblems, subscriptions, users, verifyPassword, type Db } from '@kianda/db';
+import { DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, isValidCompanyNif, luandaDate, SECTORS, tierFor, TRIAL_DAYS, verifyTotp } from '@kianda/core';
+import { auditLogs, companies, companyModules, employees, getDb, modelingMembers, platformAdmins, hashPassword, passwordProblems, subscriptions, users, verifyPassword, type Db } from '@kianda/db';
 import { and, eq } from '@kianda/db';
 import { Hono } from 'hono';
 import { deleteCookie, setCookie } from 'hono/cookie';
@@ -10,6 +10,8 @@ import { body, jwtSecret, rateLimit, requireCompany, requireRole, SESSION_COOKIE
 import { applySectorPreset } from '../services/sector.js';
 import { appBaseUrl } from '../services/integrations.js';
 import { sendMail } from '../services/mail.js';
+import { companyModulesOverview } from '../services/modules.js';
+import { validateModelingSectors } from '../services/modeling-policy.js';
 
 const SESSION_HOURS = 12;
 const password = z.string().superRefine((v, ctx) => { const p = passwordProblems(v); if (p) ctx.addIssue({ code: 'custom', message: p }); });
@@ -68,18 +70,34 @@ export function authRoutes() {
       email: z.email(),
       password,
       acceptTerms: z.literal(true, { message: 'É necessário aceitar os termos de utilização' }).optional(),
+      modules: z.array(z.enum(['hr', 'modeling'])).min(1, 'Escolha pelo menos um módulo').max(2).refine(v => new Set(v).size === v.length, 'Módulo repetido').default(['hr']),
+      hrPlan: z.object({ tierKey: z.enum(DEFAULT_TIERS.map(t => t.key) as [string, ...string[]]), cycle: z.enum(['monthly', 'semiannual', 'annual']) }).optional(),
+      modelingPlan: z.object({ key: z.enum(MODELING_PLANS.map(p => p.key) as [string, ...string[]]), cycle: z.enum(['monthly', 'semiannual', 'annual']), primarySector: z.enum(FINANCIAL_SECTORS), sectors: z.array(z.enum(FINANCIAL_SECTORS)).min(1).max(8) }).optional(),
     }).parse(await body(c));
+    const hasHr = b.modules.includes('hr'), hasModeling = b.modules.includes('modeling');
+    const hrTier = DEFAULT_TIERS.find(t => t.key === b.hrPlan?.tierKey) ?? tierFor(b.company.employeesEstimate ?? 1);
+    if (hasHr && hrTier.maxEmployees !== null && hrTier.maxEmployees < (b.company.employeesEstimate ?? 1)) return c.json({ error: 'escalao_pequeno', message: 'Escolha uma faixa que inclua todos os colaboradores declarados.' }, 400);
+    const modelingPlan = MODELING_PLANS.find(p => p.key === b.modelingPlan?.key) ?? MODELING_PLANS[0];
+    const modelingCycle = b.modelingPlan?.cycle ?? 'monthly';
+    if (hasModeling && !b.modelingPlan) return c.json({ error: 'plano_obrigatorio', message: 'Escolha o plano, o sector principal e os sectores adicionais da Modelagem.' }, 400);
+    const modelingSectors = hasModeling ? validateModelingSectors(modelingPlan.key, b.modelingPlan!.primarySector, b.modelingPlan!.sectors) : [];
+    if (hasModeling && modelingPlan.prices[modelingCycle] === null) return c.json({ error: 'ciclo_indisponivel', message: 'O plano ilimitado só está disponível com pagamento semestral ou anual.' }, 400);
     const db = getDb();
     const passwordHash = await hashPassword(b.password);
     const result = await db.transaction(async (tx) => {
       const [co] = await tx.insert(companies).values({ name: b.company.name, nif: b.company.nif, sector: b.company.sector ?? null, address: b.company.address ?? null, code: companyCode() }).returning();
       // Período experimental com o escalão adequado à dimensão declarada.
       const trialEnd = new Date(Date.parse(luandaDate(new Date())) + TRIAL_DAYS * 86_400_000).toISOString().slice(0, 10);
-      await tx.insert(subscriptions).values({ companyId: co!.id, status: 'trial', tierKey: tierFor(b.company.employeesEstimate ?? 1).key, cycle: 'monthly', trialEndsAt: trialEnd });
+      await tx.insert(subscriptions).values({ companyId: co!.id, status: hasHr ? 'trial' : 'cancelled', tierKey: hrTier.key, cycle: b.hrPlan?.cycle ?? 'monthly', trialEndsAt: hasHr ? trialEnd : null });
       const [u] = await tx.insert(users).values({ companyId: co!.id, email: b.email.toLowerCase(), name: b.name, passwordHash, role: 'owner' }).returning();
+      await tx.insert(companyModules).values([
+        { companyId: co!.id, module: 'hr', enabled: hasHr, status: hasHr ? 'trial' : 'cancelled' },
+        ...(hasModeling ? [{ companyId: co!.id, module: 'modeling', enabled: true, status: 'trial', trialEndsAt: trialEnd, planKey: modelingPlan.key, cycle: modelingCycle, projectLimit: modelingPlan.projectLimit, primarySector: b.modelingPlan!.primarySector, modelingSectors }] : []),
+      ]);
+      if (hasModeling) await tx.insert(modelingMembers).values({ companyId: co!.id, userId: u!.id, addedBy: u!.id });
       // Pré-configuração do sector: regimes de horário e subsídios sugeridos (a empresa ajusta depois).
-      await applySectorPreset(tx, co!.id, co!.sector, u!.id);
-      await tx.insert(auditLogs).values({ companyId: co!.id, actorId: u!.id, action: 'register', entity: 'company', entityId: co!.id, after: { company: co, owner: { id: u!.id, email: u!.email } } });
+      if (hasHr) await applySectorPreset(tx, co!.id, co!.sector, u!.id);
+      await tx.insert(auditLogs).values({ companyId: co!.id, actorId: u!.id, action: 'register', entity: 'company', entityId: co!.id, after: { company: co, owner: { id: u!.id, email: u!.email }, modules: b.modules, hrPlan: hasHr ? { tierKey: hrTier.key, cycle: b.hrPlan?.cycle ?? 'monthly' } : null, modelingPlan: hasModeling ? { key: modelingPlan.key, cycle: modelingCycle } : null } });
       return { company: co!, user: u! };
     });
     const token = await startSession(c, { sub: result.user.id, companyId: result.company.id, role: 'owner', employeeId: null, name: result.user.name });
@@ -88,8 +106,8 @@ export function authRoutes() {
     const trialEnd = new Date(Date.parse(luandaDate(new Date())) + TRIAL_DAYS * 86_400_000).toISOString().slice(0, 10).split('-').reverse().join('/');
     await sendMail(db, {
       to: result.user.email, companyId: result.company.id, kind: 'boas_vindas', subject: 'Bem-vindo ao Kianda RH', title: `Bem-vindo ao Kianda RH, ${result.user.name.split(' ')[0]}`,
-      paragraphs: [`A conta de ${result.company.name} está criada, com ${TRIAL_DAYS} dias de período experimental (até ${trialEnd}).`, 'Comece por registar os colaboradores e convidá-los a aceder: cada um recebe uma ligação pessoal e entra com email ou com o código da empresa e um PIN.'],
-      facts: [['Código da empresa', result.company.code ?? '—']], button: base ? { label: 'Abrir o Kianda RH', url: base } : null,
+      paragraphs: [`A conta de ${result.company.name} está criada, com ${TRIAL_DAYS} dias de período experimental (até ${trialEnd}) nos módulos escolhidos: ${[hasHr ? 'Recursos Humanos' : '', hasModeling ? 'Modelagem Financeira' : ''].filter(Boolean).join(' e ')}.`, 'Consulte os módulos, planos e pagamentos na página Módulos e licenças. Cada módulo tem a sua subscrição.'],
+      facts: [['Código da empresa', result.company.code ?? '—']], button: base ? { label: 'Ver módulos e licenças', url: `${base}/licenca` } : null,
     });
     for (const a of await db.select().from(platformAdmins)) {
       await sendMail(db, {
@@ -165,6 +183,7 @@ export function authRoutes() {
     return c.json({
       user, company: co ? { id: co.id, name: co.name, nif: co.nif, code: co.code, hasLogo: Boolean(co.logoDataUrl) } : null,
       licence: { status: licence.status, label: licence.statusLabel, canWrite: licence.canWrite, trialEndsAt: licence.sub?.trialEndsAt ?? null, paidUntil: licence.sub?.paidUntil ?? null },
+      modules: await companyModulesOverview(db, companyId, session.sub, session.role),
       platformAdmin: await isPlatformAdmin(db, session.sub),
     });
   });

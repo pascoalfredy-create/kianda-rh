@@ -9,6 +9,7 @@ import { DomainError } from '../services/payroll.js';
 import { appBaseUrl, mailConfig } from '../services/integrations.js';
 import { sendMail } from '../services/mail.js';
 import { completeLogin, isLocked, LOCKED, registerFailure } from './auth.js';
+import { moduleLicence } from '../services/modules.js';
 
 const LINK_DAYS = 7;
 const SELF_RESET_MINUTES = 60;
@@ -52,7 +53,7 @@ async function createLink(db: Db, actor: Actor, v: { kind: 'invite' | 'reset'; u
       subject: invite ? `Convite para o Kianda RH — ${co?.name ?? ''}` : `Kianda RH — recuperação de acesso`,
       title: invite ? `Bem-vindo(a) ao Kianda RH${v.name ? `, ${v.name.split(' ')[0]}` : ''}` : 'Recuperação de acesso',
       paragraphs: invite
-        ? [`${co?.name ?? 'A sua empresa'} convidou-o(a) a aceder ao Kianda RH: recibos, férias, ponto e documentos num só lugar.`, `A ligação é pessoal, só pode ser usada uma vez e é válida durante ${LINK_DAYS} dias.`]
+        ? [`${co?.name ?? 'A sua empresa'} convidou-o(a) para a plataforma Kianda. Depois de entrar, verá os módulos e acessos autorizados pela empresa.`, `A ligação é pessoal, só pode ser usada uma vez e é válida durante ${LINK_DAYS} dias.`]
         : ['Os Recursos Humanos geraram uma ligação para definir uma nova palavra-passe ou PIN.', `A ligação só pode ser usada uma vez e é válida durante ${LINK_DAYS} dias. Se não pediu esta recuperação, avise os Recursos Humanos.`],
       button: { label: invite ? 'Criar o meu acesso' : 'Definir novo acesso', url: `${base}/acesso/${token}` },
     })) === 'sent';
@@ -208,8 +209,9 @@ export function accessRoutes() {
     const actor = c.get('actor');
     const db = getDb();
     const us = await db.select().from(users).where(eq(users.companyId, actor.companyId));
-    const emps = await db.select({ id: employees.id, name: employees.name, number: employees.number, email: employees.email, phone: employees.phone, status: employees.status, jobTitle: employees.jobTitle })
-      .from(employees).where(eq(employees.companyId, actor.companyId)).orderBy(employees.number);
+    const hasHr = (await moduleLicence(db, actor.companyId, 'hr')).canRead;
+    const emps = hasHr ? await db.select({ id: employees.id, name: employees.name, number: employees.number, email: employees.email, phone: employees.phone, status: employees.status, jobTitle: employees.jobTitle })
+      .from(employees).where(eq(employees.companyId, actor.companyId)).orderBy(employees.number) : [];
     const links = await db.select().from(accessLinks).where(and(eq(accessLinks.companyId, actor.companyId), isNull(accessLinks.usedAt), isNull(accessLinks.revokedAt))).orderBy(desc(accessLinks.createdAt));
     const now = new Date();
     const userView = (u: typeof us[number]) => ({
@@ -223,7 +225,7 @@ export function accessRoutes() {
         const u = us.find((x) => x.employeeId === e.id);
         return { ...e, user: u ? userView(u) : null, pendingLink: pending((l) => l.employeeId === e.id) };
       }),
-      staff: us.filter((u) => !u.employeeId).map((u) => ({ ...userView(u), pendingLink: pending((l) => l.userId === u.id) })),
+      staff: us.filter((u) => !hasHr || !u.employeeId).map((u) => ({ ...userView(u), pendingLink: pending((l) => l.userId === u.id) })),
       staffInvites: links.filter((l) => l.kind === 'invite' && !l.employeeId && l.expiresAt > now).map((l) => ({ id: l.id, name: l.name, email: l.email, role: l.role, roleLabel: ROLE_LABEL[l.role], expiresAt: l.expiresAt })),
       roles: Object.fromEntries(ROLES.map((r) => [r, ROLE_LABEL[r]])),
     });
@@ -239,6 +241,7 @@ export function accessRoutes() {
     assertCanManage(actor, b.role);
     const db = getDb();
     if (b.employeeId) {
+      if (!(await moduleLicence(db, actor.companyId, 'hr')).canWrite) throw new DomainError('rh_inactivo', 'Convidar a partir da ficha de colaborador requer o módulo RH activo.', 403);
       const [e] = await db.select().from(employees).where(and(eq(employees.id, b.employeeId), eq(employees.companyId, actor.companyId)));
       if (!e) throw new DomainError('nao_encontrado', 'Colaborador inexistente', 404);
       if (e.status === 'terminated') throw new DomainError('colaborador_cessado', 'Colaborador cessado: não pode receber acesso', 409);

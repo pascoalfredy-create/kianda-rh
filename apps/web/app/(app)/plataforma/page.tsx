@@ -1,4 +1,4 @@
-import { DEFAULT_TIERS, formatKz } from '@kianda/core';
+import { CYCLES, DEFAULT_TIERS, LEGACY_CUSTOM_TIER, MODELING_PLANS, SUBSCRIPTION_STATUS, formatKz, type CompanyModulesOverview } from '@kianda/core';
 import { redirect } from 'next/navigation';
 import { api, currentUser } from '@/lib/api';
 import { PurgeCompany } from '@/components/privacy-actions';
@@ -6,8 +6,8 @@ import { ConfirmPayment, EditSubscription, InvoicingForm, IssueInvoice, JobButto
 
 export const dynamic = 'force-dynamic';
 
-interface Co { id: string; name: string; nif: string; sectorLabel: string | null; code: string | null; createdAt: string | null; owner: { email: string; name: string } | null; activeEmployees: number; status: string; statusLabel: string; tierKey: string | null; tierLabel: string; cycle: string | null; limit: number | null; trialEndsAt: string | null; paidUntil: string | null; extraSeats: number; notes: string | null; monthlyMinor: number | null; pendingPayments: number }
-interface Pay { id: string; number: string; company: string; nif: string; kind: string; tierKey: string | null; cycle: string | null; seats: number | null; periodStart: string | null; periodEnd: string | null; amountMinor: number; payerReference: string | null; payerNote: string | null; createdAt: string; gatewayEntity: string | null; gatewayReference: string | null; gatewayError: string | null }
+interface Co { id: string; name: string; nif: string; sectorLabel: string | null; code: string | null; createdAt: string | null; owner: { email: string; name: string } | null; activeEmployees: number; status: string; statusLabel: string; tierKey: string | null; tierLabel: string; cycle: string | null; limit: number | null; trialEndsAt: string | null; paidUntil: string | null; extraSeats: number; notes: string | null; monthlyMinor: number | null; pendingPayments: number; modules: CompanyModulesOverview }
+interface Pay { id: string; number: string; company: string; nif: string; kind: string; tierKey: string | null; cycle: string | null; seats: number | null; projectLimit: number | null; extraUsers: number | null; periodStart: string | null; periodEnd: string | null; amountMinor: number; payerReference: string | null; payerNote: string | null; createdAt: string; gatewayEntity: string | null; gatewayReference: string | null; gatewayError: string | null }
 interface Integrations {
   status: { proxypay: { enabled: boolean; environment: string | null; entity: string | null }; email: { enabled: boolean; from: string | null }; vendus: { enabled: boolean; mode: string | null }; baseUrl: string | null; files?: { mode: string; count: number; bytes: number } };
   invoicing: { autoIssue: boolean; taxId: 'NOR' | 'ISE'; exemptionCode: string | null; exemptionLaw: string | null; paymentMethodId: number | null; registerId: number | null };
@@ -38,7 +38,7 @@ export default async function Plataforma() {
       <p className="sub">Empresas clientes, licenças e pagamentos · administradores: {settings.admins.join(', ')}</p>
       <div className="grid">
         <div className="card kpi"><div className="l">Empresas</div><div className="v">{summary.total}</div><div className="muted">{summary.trial} em experimental</div></div>
-        <div className="card kpi"><div className="l">Activas (pagas)</div><div className="v">{summary.active}</div><div className="muted">{summary.pastDue} em atraso · {summary.suspended} suspensas</div></div>
+        <div className="card kpi"><div className="l">RH: activas (pagas)</div><div className="v">{summary.active}</div><div className="muted">{summary.pastDue} em atraso · {summary.suspended} suspensas</div></div>
         <div className="card kpi"><div className="l">Receita mensal recorrente</div><div className="v">{formatKz(summary.mrrMinor)}</div><div className="muted">valor mensal das licenças pagas</div></div>
         <div className="card kpi" style={pays.length ? { borderColor: '#f3d9a6' } : undefined}><div className="l">Pagamentos por confirmar</div><div className="v" style={{ color: pays.length ? 'var(--amber)' : undefined }}>{pays.length}</div></div>
       </div>
@@ -50,7 +50,7 @@ export default async function Plataforma() {
               {pays.map((p) => (
                 <tr key={p.id}>
                   <td><b>{p.number}</b><div className="muted">{p.company} · NIF {p.nif}</div></td>
-                  <td>{p.kind === 'subscription' ? `${DEFAULT_TIERS.find((t) => t.key === p.tierKey)?.label} · ${p.cycle} · ${pt(p.periodStart)}–${pt(p.periodEnd)}` : `${p.seats} extra`}<div><b>{formatKz(p.amountMinor)}</b></div></td>
+                  <td>{p.kind === 'modeling_subscription' ? `Modelagem · ${MODELING_PLANS.find(plan => plan.key === p.tierKey)?.label} · ${p.projectLimit === null ? 'projectos ilimitados' : `até ${p.projectLimit} projectos`} · ${5 + (p.extraUsers ?? 0)} utilizadores · ${CYCLES[p.cycle as keyof typeof CYCLES]?.label} · ${pt(p.periodStart)}–${pt(p.periodEnd)}` : p.kind === 'subscription' ? `RH · ${DEFAULT_TIERS.find((t) => t.key === p.tierKey)?.label ?? p.tierKey} · ${p.cycle} · ${pt(p.periodStart)}–${pt(p.periodEnd)}` : `RH · ${p.seats} extra`}<div><b>{formatKz(p.amountMinor)}</b></div></td>
                   <td>{p.gatewayReference && <div>Multicaixa <b>{p.gatewayReference}</b>{sandbox && <> · <MockPayment id={p.id} /></>}</div>}{p.gatewayError && <div className="err" style={{ fontSize: 12 }}>Gateway: {p.gatewayError}</div>}{p.payerReference ? <>Ref.: <b>{p.payerReference}</b>{p.payerNote ? <div className="muted">{p.payerNote}</div> : null}</> : !p.gatewayReference && <span className="muted">sem referência indicada</span>}</td>
                   <td className="num"><ConfirmPayment id={p.id} /></td>
                 </tr>
@@ -67,10 +67,10 @@ export default async function Plataforma() {
               <tr key={c.id} style={{ verticalAlign: 'top' }}>
                 <td><b>{c.name}</b><div className="muted">NIF {c.nif} · código {c.code ?? '—'}{c.sectorLabel ? ` · ${c.sectorLabel}` : ''}</div>{c.notes && <div className="muted">{c.notes}</div>}</td>
                 <td>{c.owner?.name ?? '—'}<div className="muted">{c.owner?.email}</div></td>
-                <td><span className={ST[c.status]}>{c.statusLabel}</span><div className="muted">{c.tierLabel}{c.cycle ? ` · ${c.cycle}` : ''}</div></td>
+                <td><b>RH</b> · <span className={ST[c.status]}>{c.modules.hr.subscribed ? c.statusLabel : 'Não subscrito'}</span><div className="muted">{c.tierLabel}{c.cycle ? ` · ${c.cycle}` : ''}</div><b>Modelagem</b> · <span className={ST[c.modules.modeling.status]}>{c.modules.modeling.subscribed ? SUBSCRIPTION_STATUS[c.modules.modeling.status] : 'Não subscrito'}</span><div className="muted">{MODELING_PLANS.find(p => p.key === c.modules.modeling.planKey)?.label ?? 'Contrato personalizado'} · {c.modules.modeling.projectLimit === null ? 'projectos ilimitados' : `${c.modules.modeling.projectLimit} projecto(s)`} · {c.modules.modeling.userLimit} utilizadores</div></td>
                 <td className="num">{c.activeEmployees}{c.limit ? ` / ${c.limit}` : ''}</td>
-                <td>{c.status === 'trial' ? `experimental até ${pt(c.trialEndsAt)}` : `pago até ${pt(c.paidUntil)}`}{c.pendingPayments ? <div><span className="tag future">{c.pendingPayments} pagamento(s) pendente(s)</span></div> : null}</td>
-                <td className="num"><EditSubscription c={c} tiers={DEFAULT_TIERS} /><PurgeCompany id={c.id} nif={c.nif} cancelled={c.status === 'cancelled'} /></td>
+                <td>RH: {c.modules.hr.subscribed ? c.status === 'trial' ? `experimental até ${pt(c.trialEndsAt)}` : `pago até ${pt(c.paidUntil)}` : '—'}<div>Modelagem: {c.modules.modeling.subscribed ? c.modules.modeling.status === 'trial' ? `experimental até ${pt(c.modules.modeling.trialEndsAt)}` : `pago até ${pt(c.modules.modeling.paidUntil)}` : '—'}</div>{c.pendingPayments ? <div><span className="tag future">{c.pendingPayments} pagamento(s) pendente(s)</span></div> : null}</td>
+                <td className="num"><EditSubscription c={c} tiers={[...DEFAULT_TIERS, LEGACY_CUSTOM_TIER]} /><PurgeCompany id={c.id} nif={c.nif} cancelled={c.status === 'cancelled' && (!c.modules.modeling.subscribed || c.modules.modeling.status === 'cancelled')} /></td>
               </tr>
             ))}
           </tbody>

@@ -4,6 +4,7 @@ import { ClockCard } from '@/components/clock-card';
 import { api, currentUser } from '@/lib/api';
 import type { AbsenceRow, BalanceRow } from '@/lib/types';
 import { PortalHome } from './portal-home';
+import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,7 @@ const pt = (d: string) => d.split('-').reverse().join('/');
 
 export default async function Home() {
   const me = (await currentUser())!;
+  if (!me.modules.hr.canAccess) redirect('/modulos');
   if (me.user.role === 'employee' && me.user.employeeId) return <PortalHome name={me.user.name} employeeId={me.user.employeeId} />;
   const today = new Date().toISOString().slice(0, 10);
   const year = Number(today.slice(0, 4));

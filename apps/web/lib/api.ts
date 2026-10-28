@@ -1,6 +1,7 @@
 import 'server-only';
 import { cookies } from 'next/headers';
 import { upstream } from './upstream';
+import type { CompanyModulesOverview } from '@kianda/core';
 export const SESSION_COOKIE = 'kianda_session';
 
 export class ApiError extends Error {
@@ -24,6 +25,7 @@ export interface Me {
   company: { id: string; name: string; nif: string; code?: string | null; hasLogo?: boolean } | null;
   licence?: { status: string; label: string; canWrite: boolean; trialEndsAt: string | null; paidUntil: string | null };
   platformAdmin?: boolean;
+  modules: CompanyModulesOverview;
 }
 
 export async function currentUser(): Promise<Me | null> {

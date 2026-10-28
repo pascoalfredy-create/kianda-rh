@@ -1,5 +1,5 @@
 import {
-  canWrite, cyclePrice, CYCLES, DEFAULT_TIERS, effectiveStatus, employeeLimit, luandaDate, SUBSCRIPTION_STATUS,
+  canWrite, cyclePrice, CYCLES, DEFAULT_TIERS, LEGACY_CUSTOM_TIER, effectiveStatus, employeeLimit, luandaDate, SUBSCRIPTION_STATUS,
   type BillingCycle, type SubscriptionStatus, type Tier,
 } from '@kianda/core';
 import { and, eq, employees, platformAdmins, platformSettings, sql, subscriptions, users, type Db } from '@kianda/db';
@@ -19,7 +19,7 @@ export async function platformSettingsGet(db: Db): Promise<PlatformSettings> {
 
 /** Escalão efectivo (o "à medida" usa o limite e o preço negociados). */
 export function tierOf(sub: typeof subscriptions.$inferSelect): Tier {
-  const base = DEFAULT_TIERS.find((t) => t.key === sub.tierKey) ?? DEFAULT_TIERS[0]!;
+  const base = sub.tierKey === 'custom' ? LEGACY_CUSTOM_TIER : DEFAULT_TIERS.find((t) => t.key === sub.tierKey) ?? DEFAULT_TIERS[0]!;
   if (base.key !== 'custom') return base;
   return { ...base, maxEmployees: sub.customMaxEmployees ?? null, monthlyMinor: sub.customMonthlyMinor ?? null };
 }

@@ -225,6 +225,20 @@
       "when": 1793173013903,
       "tag": "0031_integra_historical_analysis",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1793213020980,
+      "tag": "0032_unified_module_plans",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1793213967595,
+      "tag": "0033_modeling_sector_access",
+      "breakpoints": true
     }
   ]
 }
