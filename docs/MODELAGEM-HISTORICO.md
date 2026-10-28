@@ -15,7 +15,7 @@ O botão **Exemplo** apenas preenche o formulário. A origem só é gravada ao p
 
 ## Formato e cálculo
 
-- CSV/TXT com `;`, vírgula ou tabulação; aspas e separadores dentro das designações são suportados. Cada balancete admite 250 000 caracteres e até 5 000 contas. A selecção de ficheiros tem limite de 250 000 bytes.
+- CSV/TXT em UTF-8 ou Windows-1252, com `;`, vírgula ou tabulação; aspas e separadores dentro das designações são suportados. Cada balancete admite 250 000 caracteres e até 5 000 contas. A selecção de ficheiros tem limite de 250 000 bytes.
 - Colunas `Conta`, `Designação` e `Saldo Devedor`/`Saldo Credor`, ou `Saldo` com sinal. São aceites `Débito`/`Crédito` apenas como totais acumulados que incluam a abertura; movimentos isolados do período não são saldos finais. Sem cabeçalho: conta, designação, saldo; ou conta, designação, devedor, credor.
 - Montantes processados em cêntimos. Valores inválidos, contas repetidas ou sem classificação e comparativos de anos não consecutivos são recusados. O comparativo inválido nunca é ignorado.
 - Contas-mãe e filhas não se somam duas vezes. O total da mãe tem de corresponder à soma das subcontas fornecidas. Códigos compactos e com pontos são normalizados para detectar repetições.

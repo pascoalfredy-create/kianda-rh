@@ -20,7 +20,8 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
   runInNewContext(runtime, {
     document: { querySelector: node, querySelectorAll: (selector: string) => selector === '[data-p],[data-cen]' ? [field, baseScenario] : [], addEventListener: (name: string, fn: Function) => handlers.set(name, fn) },
     Element, window: { addEventListener() {}, scrollTo() {} }, location: { hash: '' }, history: { replaceState() {} },
-    setTimeout, clearTimeout, structuredClone, URL, URLSearchParams, console,
+    setTimeout, clearTimeout, structuredClone, URL, URLSearchParams, TextDecoder, console,
+    FileReader: class { result?: ArrayBuffer; onload?: () => void; readAsArrayBuffer(file: { buffer: ArrayBuffer }) { this.result=file.buffer; this.onload?.(); } },
     fetch: async (path: string) => new Response(JSON.stringify(path.endsWith('/templates') ? FINANCIAL_SECTORS.map(financialTemplate) : path.endsWith('/history') ? { revision: 1, historical: withHistory ? { inputHash: 'a'.repeat(64), updatedAt: '2026-10-28', analysis: analyzeFinancialHistory(historicalInput) } : null } : [model]), { headers: { 'content-type': 'application/json' } }),
   });
   // boot() termina depois das respostas JSON e da montagem inicial.
@@ -59,5 +60,11 @@ describe('runtime do protótipo ligado à API', () => {
   it('a pré-visualização do relatório histórico funciona num projecto com projecção incompleta', async () => {
     const ui = await mount('comercio', true, true, true); await ui.sub('rep', 'analise');
     const html = await ui.go('relatorios'); expect(html).toContain('Empresa de teste'); expect(html).toContain('Relatório de análise económico-financeira'); expect(html).not.toContain('Pressupostos por rever');
+  });
+  it('os ficheiros de Excel em Windows-1252 conservam acentos e valores no formulário', async () => {
+    const ui = await mount('comercio'); await ui.go('analise');
+    const text = 'Conta;Designação;Saldo\n43;Depósito;100,25', bytes = Uint8Array.from([...text].map(c=>c.charCodeAt(0)));
+    const file = { size: bytes.length, buffer: bytes.buffer }; ui.node('#anF2').files = [file]; ui.node('#anF2').onchange();
+    expect(ui.node('#anT2').value).toBe(text);
   });
 });

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { closeDb, companyModules, eq, getDb, modelingMembers, platformAdmins, sql, withTenant } from '@kianda/db';
+import { closeDb, companyModules, eq, getDb, modelingMembers, sql, withTenant } from '@kianda/db';
 import { financialTemplate } from '@kianda/core';
 import { historicalInput } from '../../../packages/core/test/fixtures/financial-history.js';
 import { buildApp } from '../src/app.js';
@@ -8,7 +8,7 @@ const app = testClient(buildApp({ rateLimit: false }));
 afterAll(async () => { await app.close(); if (process.env.DATABASE_URL) await closeDb(); });
 describe.skipIf(!process.env.DATABASE_URL)('Integra: balancetes por projecto e relatório histórico', () => {
   const stamp = `${Date.now()}history`, password = 'HistoricoSeguro2026abc';
-  let owner = '', other = '', viewer = '', company = '', otherCompany = '', modelId = '', versionId = '', emptyVersion = '', snapshot: Uint8Array;
+  let owner = '', other = '', viewer = '', company = '', otherCompany = '', otherModelId = '', modelId = '', versionId = '', emptyVersion = '', snapshot: Uint8Array;
   const req = (method: string, url: string, payload?: unknown, session = owner) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
   const history = (revision: number, input: unknown = historicalInput, session = owner) => req('PUT', `/v1/modeling/models/${modelId}/history`, { revision, input }, session);
   beforeAll(async () => {
@@ -26,6 +26,8 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: balancetes por projecto e r
     viewer = 'kianda_session=' + login.cookies.find(c => c.name === 'kianda_session')!.value;
     const m = await req('POST', '/v1/modeling/models', { name: 'Estudo histórico', sector: 'servicos', currency: 'Kz', assumptions: financialTemplate('servicos').assumptions });
     expect(m.statusCode).toBe(201); modelId = m.json().id;
+    const otherModel = await req('POST', '/v1/modeling/models', { name: 'Projecto de outra empresa', sector: 'servicos', currency: 'Kz', assumptions: {} }, other);
+    expect(otherModel.statusCode).toBe(201); otherModelId = otherModel.json().id;
     const version = await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'Sem histórico' });
     expect(version.statusCode).toBe(201); emptyVersion = version.json().id;
   });
@@ -47,7 +49,8 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: balancetes por projecto e r
     expect((await history(2, historicalInput, viewer)).statusCode).toBe(403);
     expect((await req('POST', `/v1/modeling/models/${modelId}/history/to-model`, { revision: 2 }, viewer)).statusCode).toBe(403);
     expect((await withTenant(otherCompany, () => getDb().execute(sql`select id from financial_historical_inputs where model_id=${modelId}`))).rows).toEqual([]);
-    await expect(withTenant(otherCompany, () => getDb().execute(sql`insert into financial_historical_inputs(company_id,model_id,input,input_hash,updated_by) values (${otherCompany},${modelId},'{}'::jsonb,'hash','test')`))).rejects.toThrow();
+    // Este projecto não tem histórico: a recusa testa a pertença à empresa, não um conflito UNIQUE.
+    await expect(withTenant(company, () => getDb().execute(sql`insert into financial_historical_inputs(company_id,model_id,input,input_hash,updated_by) values (${company},${otherModelId},'{}'::jsonb,'hash','test')`))).rejects.toThrow();
   });
   it('CSV inválido, comparativo inválido e revisão antiga não substituem os balancetes', async () => {
     expect((await history(2, { ...historicalInput, N: 'Conta;Designação;Saldo\n43;Banco;inválido' })).statusCode).toBe(422);

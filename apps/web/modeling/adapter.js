@@ -75,9 +75,10 @@ VIEWS.analise.after=()=>{
       const modelId=M().id;
       const reader=new FileReader();reader.onerror=()=>showError(Error('Não foi possível ler o ficheiro.'));
       reader.onload=()=>{
-        if(M()?.id!==modelId||VIEW!=='analise'||(SUB.at||'dados')!=='dados')return;
-        $(target).value=reader.result;historicalDirty.add(modelId);captureHistoricalDraft();
-      };reader.readAsText(file);
+        if(M()?.id!==modelId||VIEW!=='analise'||(SUB.at||'dados')!=='dados'||$(id)!==field||field.files?.[0]!==file)return;
+        let text;try{text=new TextDecoder('utf-8',{fatal:true}).decode(reader.result);}catch{text=new TextDecoder('windows-1252').decode(reader.result);}
+        $(target).value=text;historicalDirty.add(modelId);captureHistoricalDraft();
+      };reader.readAsArrayBuffer(file);
     };
   }
 };
