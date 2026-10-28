@@ -1,4 +1,4 @@
-import { FinancialModelError } from './types.js';
+import { FinancialModelError, type FinancialSector } from './types.js';
 import { financialTemplate } from './templates.js';
 import { validateFinancialAssumptions } from './validation.js';
 import { CLOSING_INCOME_KEYS, historicalAccountDescends, historicalClosingIncome } from './historical-closing.js';
@@ -231,7 +231,7 @@ export function analyzeFinancialHistory(value: unknown) {
 export type FinancialHistoricalAnalysis = ReturnType<typeof analyzeFinancialHistory>;
 
 /** Ponto de partida explícito. Não transforma hipóteses de crescimento/dívida em factos históricos. */
-export function financialModelFromHistory(value: unknown) {
+export function financialModelFromHistory(value: unknown, selectedSector?: FinancialSector) {
   const a = analyzeFinancialHistory(value), { B, P } = a.cN;
   if (!a.cN.income.complete) return fail('N', 'A modelagem exige o detalhe dos proveitos e custos, indisponível neste balancete apurado.');
   const period = periodOf(a.input, 'N');
@@ -240,7 +240,7 @@ export function financialModelFromHistory(value: unknown) {
   if (P.vn <= 0 || P.cev < 0 || P.cev > P.vn || P.pes < 0 || P.oCus < 0) return fail('N', 'A receita e os custos históricos não cabem no modelo simplificado. Reveja as contas.');
   if (B.invFin !== 0 || B.prov !== 0) return fail('N', 'A abertura simplificada não distingue investimentos financeiros e provisões de longo prazo. Prepare a modelagem específica destas rubricas.');
   if ([B.anc, B.exist, B.clientes, B.oAct, B.caixa, B.fornec, B.oPas, B.emprest].some((n) => n < 0)) return fail('N', 'A abertura contém saldos negativos que exigem reclassificação.');
-  const sector = P.cev / P.vn > 0.5 ? 'comercio' : 'servicos', template = financialTemplate(sector), m = template.assumptions;
+  const sector = selectedSector ?? (P.cev / P.vn > 0.5 ? 'comercio' : 'servicos'), template = financialTemplate(sector), m = template.assumptions;
   m.inicio = 'existente'; m.anoBase = Number(a.input.anos[1]); m.inicioOp = 1; m.cen = 'base';
   m.receitas = [{ nome: cNAccountSource(a), unid: 'índice', qtd: 1, preco: P.vn, cresc: 0, ramp: '100', esc: 0 }];
   m.cvar = P.cev / P.vn * 100; m.pessoal = P.pes; m.fst = P.fst; m.outros = round(P.oCus - P.fst); m.royalty = 0;

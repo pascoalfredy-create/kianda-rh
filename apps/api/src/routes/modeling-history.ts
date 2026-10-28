@@ -1,4 +1,4 @@
-import { analyzeFinancialHistory, financialModelFromHistory } from '@kianda/core';
+import { analyzeFinancialHistory, financialModelFromHistory, type FinancialSector } from '@kianda/core';
 import { and, auditLogs, eq, financialHistoricalInputs, financialModels, getDb } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -41,7 +41,7 @@ export function modelingHistoryRoutes() {
     await lockModelingCompany(db, actor.companyId);
     const source = await lockedModel(c, input.revision), historical = await financialHistoryOf(db, source);
     if (!historical) throw new DomainError('historico_em_falta', 'Analise os balancetes antes de criar o modelo.', 422);
-    const { notes, ...values } = financialModelFromHistory(historical.analysis.input);
+    const { notes, ...values } = financialModelFromHistory(historical.analysis.input, source.sector as FinancialSector);
     await requireProjectCapacity(db, actor.companyId);
     const [model] = await db.insert(financialModels).values({ ...values, companyId: actor.companyId, createdBy: actor.actorId }).returning();
     await db.insert(financialHistoricalInputs).values({ companyId: actor.companyId, modelId: model!.id, input: historical.analysis.input, inputHash: historical.inputHash, updatedBy: actor.actorId });

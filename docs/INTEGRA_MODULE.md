@@ -48,11 +48,12 @@ Testes de core para adesão explícita, tolerância, suspensão, cancelamento, e
 
 ## Modelo comercial aprovado — projectos e acessos
 
-Modelagem tem preço próprio, independente do número de funcionários e dos escalões RH. Os montantes comerciais ainda não foram definidos: nenhum preço foi inventado, nenhum cliente foi cobrado e nenhum plano pago foi activado nesta alteração.
+Modelagem tem preço próprio, independente do número de funcionários e dos escalões RH. A tabela comercial aprovada e o fluxo comum de registo, contratação e pagamento estão em [MODULOS-LICENCAS.md](MODULOS-LICENCAS.md).
 
-- `projectLimit`: número de projectos activos contratados, configurado pela plataforma. O valor técnico por omissão é 1 e pode ser ajustado por empresa; não constitui uma tabela comercial aprovada.
+- `projectLimit`: 2 (PME), 5 (Corporate), 10 (Grandes Empresas) ou `null` (Ilimitado). Os contratos personalizados anteriores são conservados.
+- Sectores são um limite separado: PME escolhe o principal do registo e 1 adicional; Corporate escolhe o principal e 3 adicionais; ambos os planos Grandes Empresas têm os 8. A API filtra modelos-tipo e projectos e verifica o sector também nas ligações directas. Arquivar preserva dados; projectos de sectores retirados só voltam a abrir com acesso ao sector.
 - Até **5 utilizadores autorizados no Integra**, incluindo o proprietário da empresa cliente. Cinco acessos não significam cinco empregados no RH. O proprietário gere os participantes e as permissões `editor`/`viewer`; uma pessoa sem ficha de funcionário também pode participar.
-- `extraUsers`: acessos adicionais contratados explicitamente para equipas maiores. Só a plataforma os altera. O valor unitário por participante e a periodicidade de cobrança ficam por definir.
+- `extraUsers`: acessos adicionais contratados explicitamente por 35.000 Kz por mês e utilizador. A confirmação de pagamento altera a quota; escolher um plano ou criar um pedido não concede lugares. Os extras são multiplicados pelos meses do ciclo, sem desconto.
 - Um projecto corresponde ao registo `financial_models`. Alterar pressupostos não consome outro projecto. Versões/cenários futuros devem pertencer ao mesmo projecto, sem consumir quotas adicionais.
 - Arquivar liberta quota de projectos e mantém histórico e consulta. Projectos arquivados não podem ser editados nem receber importações. Restaurar exige vaga. Criação/restauro e admissão de utilizadores são serializados por empresa para impedir ultrapassagem por pedidos concorrentes.
 - O número de utilizadores autorizados conta os membros com `enabled=true`. Desactivar o acesso no Integra liberta lugar. A suspensão do utilizador no RH não altera automaticamente o contrato de acessos Integra.

@@ -7,11 +7,11 @@ import { renderFinancialPdf } from '../lib/financial-pdf.js';
 import { renderFinancialXlsx } from '../lib/financial-xlsx.js';
 import { FINANCIAL_SECTORS, financialBreakEvenPrice, financialScenarios, financialSensitivity, financialTemplate, runFinancialModel } from '@kianda/core';
 import { financialCalculationSource, financialFingerprint, financialModelOf } from '../services/modeling-calculation.js';
-import { modelingExportOptions, modelingUsage, lockModelingCompany, requireProjectCapacity } from '../services/modeling-policy.js';
-import { moduleLicence } from '../services/modules.js';
+import { modelingExportOptions, modelingUsage, lockModelingCompany, requireProjectCapacity, requireModelingSector } from '../services/modeling-policy.js';
+import { companyModulesOverview, moduleLicence } from '../services/modules.js';
 import { DomainError } from '../services/payroll.js';
 import { body, requireCompany, requireRole, type AppEnv } from '../plugins/tenant.js';
-import { and, auditLogs, companies, desc, eq, financialModelVersions, financialModels, financialPersonnelImports, getDb, gte, inArray, lte, payrollLines, payrollRuns, personnelBudgetLines, personnelBudgets, modelingMembers, users } from '@kianda/db';
+import { and, auditLogs, companies, companyModules, desc, eq, financialModelVersions, financialModels, financialPersonnelImports, getDb, gte, inArray, lte, payrollLines, payrollRuns, personnelBudgetLines, personnelBudgets, modelingMembers, users } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
@@ -43,6 +43,12 @@ export function modelingRoutes() {
     }
     if (!member?.enabled) return c.json({ error: 'sem_permissao', message: 'Solicite ao proprietário acesso à Modelagem.' }, 403);
     if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && member.permission !== 'editor') return c.json({ error: 'sem_permissao', message: 'O seu acesso permite apenas consulta.' }, 403);
+    const encodedId = /^\/v1\/modeling\/models\/([^/]+)(?:\/|$)/.exec(c.req.path)?.[1];
+    const projectId = encodedId ? decodeURIComponent(encodedId) : null;
+    if (projectId) {
+      const [project] = await db.select({ sector: financialModels.sector }).from(financialModels).where(and(eq(financialModels.id, projectId), eq(financialModels.companyId, a.companyId)));
+      if (project) await requireModelingSector(db, a.companyId, project.sector);
+    }
     await next();
   });
 
@@ -57,8 +63,15 @@ export function modelingRoutes() {
   app.route('/', modelingCurrencyRoutes());
 
   const scenarioQuery = z.object({ scenario: z.enum(['base', 'otim', 'pess']).optional(), revision: z.coerce.number().int().positive().optional() });
-  app.get('/v1/modeling/templates', async (c) => c.json(FINANCIAL_SECTORS.map(financialTemplate)));
-  app.get('/v1/modeling/templates/:sector', async (c) => c.json(financialTemplate(sector.parse(c.req.param('sector')))));
+  app.get('/v1/modeling/templates', async (c) => {
+    const [grant] = await getDb().select().from(companyModules).where(and(eq(companyModules.companyId, c.get('actor').companyId), eq(companyModules.module, 'modeling')));
+    return c.json(FINANCIAL_SECTORS.filter(s => grant?.modelingSectors.includes(s)).map(financialTemplate));
+  });
+  app.get('/v1/modeling/templates/:sector', async (c) => {
+    const selected = sector.parse(c.req.param('sector'));
+    await requireModelingSector(getDb(), c.get('actor').companyId, selected);
+    return c.json(financialTemplate(selected));
+  });
   app.post('/v1/modeling/simulate', async (c) => {
     const input = z.object({ assumptions, overrides: z.object({ cen: z.enum(['base', 'otim', 'pess']).optional(), preco: z.number().optional(), volume: z.number().optional(), cvar: z.number().optional(), fixos: z.number().optional(), capex: z.number().optional(), wacc: z.number().optional() }).default({}) }).parse(await body(c));
     return c.json(runFinancialModel(input.assumptions, input.overrides));
@@ -147,11 +160,16 @@ export function modelingRoutes() {
   });
 
 
-  app.get('/v1/modeling/models', async (c) => c.json(await getDb().select().from(financialModels).where(eq(financialModels.companyId, c.get('actor').companyId)).orderBy(desc(financialModels.updatedAt))));
+  app.get('/v1/modeling/models', async (c) => {
+    const db = getDb(), companyId = c.get('actor').companyId;
+    const [grant] = await db.select().from(companyModules).where(and(eq(companyModules.companyId, companyId), eq(companyModules.module, 'modeling')));
+    return c.json(await db.select().from(financialModels).where(and(eq(financialModels.companyId, companyId), inArray(financialModels.sector, grant?.modelingSectors ?? []))).orderBy(desc(financialModels.updatedAt)));
+  });
   app.post('/v1/modeling/models', async (c) => {
     const a = c.get('actor'), db = getDb(), input = modelSchema.parse(await body(c));
     delete input.assumptions.currencyConversion; // A identificação de uma conversão é emitida pelo servidor.
     await requireProjectCapacity(db, a.companyId);
+    await requireModelingSector(db, a.companyId, input.sector);
     const [model] = await db.insert(financialModels).values({ ...input, companyId: a.companyId, createdBy: a.actorId }).returning();
     await db.insert(auditLogs).values({ companyId: a.companyId, actorId: a.actorId, action: 'create', entity: 'financial_model', entityId: model!.id, after: { revision: 1 } });
     return c.json(model, 201);
@@ -177,6 +195,8 @@ export function modelingRoutes() {
   app.put('/v1/modeling/models/:id', async (c) => {
     const a = c.get('actor'), db = getDb(), input = modelSchema.extend({ revision }).parse(await body(c));
     const { revision: expected, ...values } = input;
+    await lockModelingCompany(db, a.companyId);
+    await requireModelingSector(db, a.companyId, values.sector);
     const [current] = await db.select().from(financialModels).where(and(eq(financialModels.companyId, a.companyId), eq(financialModels.id, c.req.param('id')))).for('update');
     if (current?.archivedAt) throw new DomainError('projecto_arquivado', 'Restaure o projecto antes de o alterar.', 409);
     if (current && values.currency !== current.currency) throw new DomainError('conversao_obrigatoria', 'A mudança de moeda requer a conversão dos montantes com taxa, data e fonte. Utilize a alteração de moeda nos Pressupostos.', 409);
@@ -249,9 +269,9 @@ export function modelingRoutes() {
 export function moduleRoutes() {
   const app = new Hono<AppEnv>();
   app.use('/v1/modules', requireCompany);
-  app.get('/v1/modules', requireRole('finance'), async (c) => {
-    const db = getDb(), { companyId } = c.get('actor');
-    return c.json({ hr: await moduleLicence(db, companyId, 'hr'), modeling: await moduleLicence(db, companyId, 'modeling') });
+  app.get('/v1/modules', async (c) => {
+    const { companyId, actorId, role } = c.get('actor');
+    return c.json(await companyModulesOverview(getDb(), companyId, actorId, role));
   });
   return app;
 }

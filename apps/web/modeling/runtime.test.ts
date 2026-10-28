@@ -6,7 +6,7 @@ import { historicalInput } from '../../../packages/core/test/fixtures/financial-
 const runtime = readFileSync(new URL('../public/modeling-runtime.js', import.meta.url), 'utf8');
 const views = ['painel', 'pressupostos', 'demonstracoes', 'avaliacao', 'credito', 'sensibilidade', 'relatorios'];
 /** Teste do código distribuído e das vistas, sem simular um motor de layout de navegador. */
-async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, incomplete = false, withHistory = false, deferRead = false, historyInput:FinancialHistoricalInput=historicalInput) {
+async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, incomplete = false, withHistory = false, deferRead = false, historyInput:FinancialHistoricalInput=historicalInput, allowedSectors: readonly typeof FINANCIAL_SECTORS[number][] = FINANCIAL_SECTORS) {
   const template = financialTemplate(sector), handlers = new Map<string, Function>();
   const nodes = new Map<string, any>();
   const node = (selector: string) => {
@@ -32,7 +32,7 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
       if(path.includes('/exchange-rate?')){const q=new URLSearchParams(path.split('?')[1]);data={from:q.get('from'),to:q.get('to'),rate:q.get('from')==='Kz'?0.001:1000,rateDate:'2026-10-27',source:'Referência do teste',stale:false};}
       else if(path.endsWith('/convert-currency')){model.currency=payload.to;model.assumptions={...convertFinancialCurrency(model.assumptions as unknown as Record<string,unknown>,payload.from,payload.to,payload.rate),currencyConversion:payload} as any;model.revision++;data=model;}
       else if(path.endsWith('/history')&&init?.method==='PUT'){model.revision++;data={model,historical:{inputHash:'a'.repeat(64),updatedAt:'2026-10-28',analysis:analyzeFinancialHistory(payload.input)}};}
-      else data=path.endsWith('/templates')?FINANCIAL_SECTORS.map(financialTemplate):path.endsWith('/history')?{revision:1,historical:withHistory?{inputHash:'a'.repeat(64),updatedAt:'2026-10-28',analysis:analyzeFinancialHistory(historyInput)}:null}:[model];
+      else data=path.endsWith('/templates')?allowedSectors.map(financialTemplate):path.endsWith('/history')?{revision:1,historical:withHistory?{inputHash:'a'.repeat(64),updatedAt:'2026-10-28',analysis:analyzeFinancialHistory(historyInput)}:null}:[model];
       return new Response(JSON.stringify(data),{headers:{'content-type':'application/json'}});
     },
   });
@@ -41,6 +41,15 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
   return { node, field, baseScenario, requests, model, pendingReads, edit(id:string,value:string){node('#'+id).value=value;handlers.get('input')!({target:{id}});}, async currency(to:string){currencyField.value=to;await currencyField.onchange();},async act(act:string){await handlers.get('click')!({target:new Element({act}),preventDefault(){}});}, async go(view: string) { await handlers.get('click')!({ target: new Element({ go: view }), preventDefault() {} }); return node('#view').innerHTML as string; }, async sub(k = 'pt', v = 'custos') { await handlers.get('click')!({ target: new Element({ act: 'sub', k, v }), preventDefault() {} }); return node('#view').innerHTML as string; } };
 }
 describe('runtime do protótipo ligado à API', () => {
+  it('o selector de novos modelos mostra apenas os sectores licenciados, sem confundir sectores e projectos', async () => {
+    const ui = await mount('mineracao', true, false, false, false, historicalInput, ['mineracao', 'servicos']);
+    await ui.act('newM');
+    const html = ui.node('#modal').innerHTML;
+    expect(html.match(/name="nmS"/g)).toHaveLength(2);
+    expect(html).toContain('value="mineracao"'); expect(html).toContain('value="servicos"'); expect(html).not.toContain('value="petroleo"');
+    const corporate = await mount('mineracao', true, false, false, false, historicalInput, ['mineracao', 'servicos', 'comercio', 'agro']);
+    await corporate.act('newM'); expect(corporate.node('#modal').innerHTML.match(/name="nmS"/g)).toHaveLength(4);
+  });
   for (const sector of FINANCIAL_SECTORS) it(`renderiza sete vistas com o motor partilhado: ${sector}`, async () => {
     const ui = await mount(sector);
     expect(ui.node('#mSel').innerHTML).toContain('m1');

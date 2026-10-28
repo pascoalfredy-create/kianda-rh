@@ -1,15 +1,21 @@
-import { formatKz } from '@kianda/core';
+import { MODELING_SECTOR_LABELS, formatKz, type CompanyModulesOverview, type FinancialSector } from '@kianda/core';
 import { redirect } from 'next/navigation';
 import { api, currentUser } from '@/lib/api';
-import { ExtraSeatsForm, NewReference, ReferenceForm, RenewForm } from './forms';
+import { ExtraSeatsForm, ModelingPlanForm, NewReference, ReferenceForm, RenewForm } from './forms';
+import { ModuleCards } from '@/components/module-cards';
+import { ModelingMembers, type ModelingMember } from './modeling-members';
 
 export const dynamic = 'force-dynamic';
 
-interface Req { id: string; number: string; kind: string; tierKey: string | null; cycle: string | null; seats: number | null; periodStart: string | null; periodEnd: string | null; amountMinor: number; status: string; payerReference: string | null; invoiceRef: string | null; createdAt: string; gatewayEntity: string | null; gatewayReference: string | null; gatewayExpiresAt: string | null; gatewayError: string | null; invoiceProvider: string | null; confirmedVia: string | null }
+interface Req { id: string; number: string; kind: string; tierKey: string | null; cycle: string | null; seats: number | null; projectLimit: number | null; extraUsers: number | null; modelingSectors: FinancialSector[] | null; periodStart: string | null; periodEnd: string | null; amountMinor: number; status: string; payerReference: string | null; invoiceRef: string | null; createdAt: string; gatewayEntity: string | null; gatewayReference: string | null; gatewayExpiresAt: string | null; gatewayError: string | null; invoiceProvider: string | null; confirmedVia: string | null }
 interface Billing {
   status: string; statusLabel: string; canWrite: boolean; tier: { key: string; label: string }; cycle: string; limit: number | null; activeEmployees: number;
   trialEndsAt: string | null; paidUntil: string | null; extraSeats: number; prices: { key: string; label: string; maxEmployees: number | null; prices: Record<string, { totalMinor: number; discountMinor: number } | null> }[];
   cycles: Record<string, { label: string }>; extraSeatMinor: number | null; bank: { holder: string; bankName: string; iban: string } | null; supportEmail: string | null; supportPhone: string | null; requests: Req[]; multicaixa: boolean; invoicesOnline: boolean;
+  modules: CompanyModulesOverview;
+  modelingPlans: { key: string; label: string; projectLimit: number | null; sectorLimit: number; prices: Record<string, number | null> }[];
+  modelingExtraUserMinor: number;
+  modelingUsage: { activeProjects: number; projectLimit: number | null; enabledUsers: number; userLimit: number };
 }
 const pt = (d: string) => d.split('-').reverse().join('/');
 const ST: Record<string, string> = { trial: 'st pending', active: 'st approved', past_due: 'st pending', suspended: 'st rejected', cancelled: 'tag' };
@@ -18,18 +24,23 @@ export default async function Licenca() {
   const me = (await currentUser())!;
   if (!['owner', 'finance'].includes(me.user.role)) redirect('/');
   const b = await api<Billing>('/v1/billing');
+  const canManageMembers = me.user.role === 'owner' && b.modules.modeling.canAccess && b.modules.modeling.canWrite;
+  const [users, members] = canManageMembers ? await Promise.all([api<{ id: string; name: string }[]>('/v1/users'), api<ModelingMember[]>('/v1/modeling/members')]) : [[], []];
   const pending = b.requests.filter((r) => r.status === 'pending');
   const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
   const daysLeft = b.trialEndsAt && b.status === 'trial' ? Math.max(0, Math.ceil((Date.parse(b.trialEndsAt) - Date.now()) / 86_400_000)) : null;
   const usage = b.limit ? Math.min(100, Math.round((b.activeEmployees / b.limit) * 100)) : 0;
   return (
     <>
-      <h1>Licença</h1>
+      <h1>Módulos e licenças</h1>
       {(b.supportEmail || b.supportPhone) && <p className="muted" style={{ float: 'right', marginTop: 4 }}>Suporte: {b.supportEmail && <a href={`mailto:${b.supportEmail}`}>{b.supportEmail}</a>}{b.supportEmail && b.supportPhone ? ' · ' : ''}{b.supportPhone && <a href={`tel:${b.supportPhone.replace(/\s/g, '')}`}>{b.supportPhone}</a>}</p>}
-      <p className="sub">Escalão, pagamentos e colaboradores incluídos · código da empresa <b>{me.company?.code ?? '—'}</b></p>
-      {!b.canWrite && <div className="alert">A conta está em <b>modo de consulta</b>: pode ver e exportar tudo, mas não gravar alterações até a licença ser regularizada.</div>}
+      <p className="sub">Uma conta, planos e pagamentos por módulo · código da empresa <b>{me.company?.code ?? '—'}</b></p>
+      <ModuleCards modules={b.modules} />
+      <h2 id="hr">Recursos Humanos · Kianda RH</h2>
+      {!b.modules.hr.subscribed && <div className="warn">RH não subscrito. Pode escolher um plano abaixo; o acesso é activado após confirmação do pagamento.</div>}
+      {b.modules.hr.subscribed && !b.canWrite && <div className="alert">O módulo RH está em <b>modo de consulta</b> até a licença do RH ser regularizada.</div>}
       <div className="grid">
-        <div className="card kpi"><div className="l">Estado</div><div className="v" style={{ fontSize: 18 }}><span className={ST[b.status]}>{b.statusLabel}</span></div><div className="muted">{daysLeft !== null ? `${daysLeft} dia(s) de experimental (até ${pt(b.trialEndsAt!)})` : b.paidUntil ? `pago até ${pt(b.paidUntil)}` : ''}</div></div>
+        <div className="card kpi"><div className="l">Estado RH</div><div className="v" style={{ fontSize: 18 }}><span className={ST[b.status]}>{b.modules.hr.subscribed ? b.statusLabel : 'Não subscrito'}</span></div><div className="muted">{b.modules.hr.subscribed ? daysLeft !== null ? `${daysLeft} dia(s) de experimental (até ${pt(b.trialEndsAt!)})` : b.paidUntil ? `pago até ${pt(b.paidUntil)}` : '' : ''}</div></div>
         <div className="card kpi"><div className="l">Escalão</div><div className="v" style={{ fontSize: 18 }}>{b.tier.label}</div><div className="muted">pagamento {b.cycles[b.cycle]?.label.toLowerCase()}</div></div>
         <div className="card kpi"><div className="l">Colaboradores activos</div><div className="v">{b.activeEmployees}{b.limit ? <span className="muted" style={{ fontSize: 14 }}> de {b.limit}</span> : null}</div>
           {b.limit ? <div style={{ height: 6, background: '#eef0f3', borderRadius: 3, marginTop: 6 }}><div style={{ width: `${usage}%`, height: 6, borderRadius: 3, background: usage >= 90 ? 'var(--amber)' : 'var(--brand)' }} /></div> : null}
@@ -40,7 +51,8 @@ export default async function Licenca() {
           <h2>Pagamentos por concluir</h2>
           {pending.map((r) => (
             <div key={r.id} style={{ padding: '6px 16px 14px', display: 'grid', gap: 8 }}>
-              <div><b>{r.number}</b> · {r.kind === 'subscription' ? `${b.prices.find((x) => x.key === r.tierKey)?.label} · ${b.cycles[r.cycle!]?.label} · ${pt(r.periodStart!)} a ${pt(r.periodEnd!)}` : `${r.seats} colaborador(es) extra`} · <b>{formatKz(r.amountMinor)}</b></div>
+              <div><b>{r.number}</b> · {r.kind === 'modeling_subscription' ? `Modelagem · ${b.modelingPlans.find(p => p.key === r.tierKey)?.label} · ${r.projectLimit === null ? 'projectos ilimitados' : `até ${r.projectLimit} projectos`} · ${5 + (r.extraUsers ?? 0)} utilizadores · ${b.cycles[r.cycle!]?.label} · ${pt(r.periodStart!)} a ${pt(r.periodEnd!)}` : r.kind === 'subscription' ? `RH · ${b.prices.find((x) => x.key === r.tierKey)?.label} · ${b.cycles[r.cycle!]?.label} · ${pt(r.periodStart!)} a ${pt(r.periodEnd!)}` : `RH · ${r.seats} colaborador(es) extra`} · <b>{formatKz(r.amountMinor)}</b></div>
+              {r.kind === 'modeling_subscription' && <div className="muted">Sectores contratados: {r.modelingSectors?.map(s => MODELING_SECTOR_LABELS[s]).join(' · ')}</div>}
               {r.gatewayReference && r.gatewayExpiresAt! >= today && (
                 <div className="card" style={{ padding: 14, borderColor: 'var(--brand)', background: 'var(--brand-soft)' }}>
                   <div style={{ fontWeight: 700, marginBottom: 8 }}>Pagar por referência Multicaixa (activação automática)</div>
@@ -63,19 +75,29 @@ export default async function Licenca() {
           ))}
         </div>
       )}
-      <div className="card section"><h2>Renovar ou mudar de escalão</h2><RenewForm prices={b.prices} currentTier={b.tier.key} currentCycle={b.cycle} activeEmployees={b.activeEmployees} cycles={b.cycles} /></div>
+      <div className="card section"><h2>RH: subscrever, renovar ou mudar de escalão</h2><RenewForm prices={b.prices} currentTier={b.tier.key} currentCycle={b.cycle} activeEmployees={b.activeEmployees} cycles={b.cycles} /></div>
       {b.limit !== null && <div className="card section"><h2>Colaboradores acima do limite</h2><div style={{ padding: '0 16px 6px' }}><ExtraSeatsForm priceMinor={b.extraSeatMinor} /></div></div>}
       <div className="card section">
-        <h2>Tabela de licenças</h2>
+        <h2>Tabela de preços · Recursos Humanos</h2>
         <table className="dense">
           <thead><tr><th>Escalão</th>{Object.values(b.cycles).map((c) => <th key={c.label} className="num">{c.label}</th>)}</tr></thead>
           <tbody>{b.prices.map((x) => <tr key={x.key} style={x.key === b.tier.key ? { background: 'var(--brand-soft)' } : undefined}><td>{x.label}</td>{Object.keys(b.cycles).map((c) => <td key={c} className="num">{x.prices[c] ? formatKz(x.prices[c]!.totalMinor) : 'sob consulta'}</td>)}</tr>)}</tbody>
         </table>
       </div>
+      <h2 id="modeling">Modelagem Financeira · Kianda Integra</h2>
+      <p className="sub">{b.modelingUsage.activeProjects} projecto(s) activo(s){b.modules.modeling.subscribed ? ` de ${b.modelingUsage.projectLimit === null ? 'ilimitados' : b.modelingUsage.projectLimit} · ${b.modelingUsage.enabledUsers} de ${b.modelingUsage.userLimit} utilizadores autorizados` : ' · módulo não subscrito'}. Clientes exportam apenas PDF.</p>
+      {b.modules.modeling.subscribed && <p className="muted">Sectores disponíveis: {b.modules.modeling.sectors.map(s => MODELING_SECTOR_LABELS[s]).join(' · ')}</p>}
+      <div className="card section"><h2>Modelagem: subscrever, renovar ou mudar de plano</h2><ModelingPlanForm currentPlan={b.modules.modeling.planKey} currentCycle={b.modules.modeling.cycle} extraUsers={b.modules.modeling.extraUsers} activeProjects={b.modelingUsage.activeProjects} enabledUsers={b.modelingUsage.enabledUsers} primarySector={b.modules.modeling.primarySector ?? 'servicos'} currentSectors={b.modules.modeling.sectors} /></div>
+      <div className="card section">
+        <h2>Tabela de preços · Modelagem Financeira</h2>
+        <table className="dense"><thead><tr><th>Plano / projectos activos</th>{Object.values(b.cycles).map(c => <th key={c.label} className="num">{c.label}</th>)}</tr></thead><tbody>{b.modelingPlans.map(p => <tr key={p.key}><td>{p.label}<div className="muted">{p.projectLimit === null ? 'Projectos ilimitados' : `Até ${p.projectLimit} projectos`} · {p.sectorLimit} sectores · 5 utilizadores incluídos</div></td>{Object.keys(b.cycles).map(c => <td key={c} className="num">{p.prices[c] === null ? 'Não disponível' : formatKz(p.prices[c]!)}</td>)}</tr>)}</tbody></table>
+        <p className="muted" style={{ padding: '0 16px 12px' }}>Utilizadores extra: {formatKz(b.modelingExtraUserMinor)}/mês por acesso além dos 5 incluídos. Cobrados durante os meses do ciclo, sem desconto nos extras. Pagamentos semestrais e anuais à vista.</p>
+      </div>
+      {canManageMembers && <div className="card section"><h2>Utilizadores autorizados na Modelagem</h2><ModelingMembers users={users} members={members} self={me.user.sub} /></div>}
       {b.requests.some((r) => r.status !== 'pending') && (
         <div className="card section">
           <h2>Histórico</h2>
-          <table className="dense"><tbody>{b.requests.filter((r) => r.status !== 'pending').map((r) => <tr key={r.id}><td>{r.number}</td><td>{r.kind === 'subscription' ? `${pt(r.periodStart!)} a ${pt(r.periodEnd!)}` : `${r.seats} extra`}</td><td className="num">{formatKz(r.amountMinor)}</td><td>{r.status === 'paid' ? <span className="st approved">Pago</span> : <span className="tag">Cancelado</span>}</td><td className="muted">{r.invoiceRef ? (r.invoiceProvider === 'vendus' ? <a href={`/api/v1/billing/requests/${r.id}/invoice`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand)', textDecoration: 'underline' }}>Factura {r.invoiceRef} (PDF)</a> : `Factura ${r.invoiceRef}`) : r.status === 'paid' ? 'factura em emissão' : ''}{r.confirmedVia === 'gateway' ? ' · Multicaixa' : ''}</td></tr>)}</tbody></table>
+          <table className="dense"><tbody>{b.requests.filter((r) => r.status !== 'pending').map((r) => <tr key={r.id}><td>{r.number}<div className="muted">{r.kind === 'modeling_subscription' ? 'Modelagem Financeira' : 'Recursos Humanos'}</div></td><td>{r.kind !== 'extra_seats' ? `${pt(r.periodStart!)} a ${pt(r.periodEnd!)}` : `${r.seats} extra`}</td><td className="num">{formatKz(r.amountMinor)}</td><td>{r.status === 'paid' ? <span className="st approved">Pago</span> : <span className="tag">Cancelado</span>}</td><td className="muted">{r.invoiceRef ? (r.invoiceProvider === 'vendus' ? <a href={`/api/v1/billing/requests/${r.id}/invoice`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand)', textDecoration: 'underline' }}>Factura {r.invoiceRef} (PDF)</a> : `Factura ${r.invoiceRef}`) : r.status === 'paid' ? 'factura em emissão' : ''}{r.confirmedVia === 'gateway' ? ' · Multicaixa' : ''}</td></tr>)}</tbody></table>
         </div>
       )}
     </>

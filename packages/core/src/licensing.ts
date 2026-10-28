@@ -5,16 +5,18 @@ import { kz, type Minor } from './money.js';
  * colaboradores extra (pagamento único) e estado da subscrição.
  */
 
-export interface Tier { key: string; label: string; minEmployees: number; maxEmployees: number | null; monthlyMinor: Minor | null }
+export interface Tier { key: string; label: string; minEmployees: number; maxEmployees: number | null; monthlyMinor: Minor | null; cycleTotals?: Partial<Record<BillingCycle, Minor>> }
 
 /** Tabela comercial por omissão (Kz/mês). Acima do último escalão: proposta à medida. */
 export const DEFAULT_TIERS: Tier[] = [
-  { key: 't1', label: 'Até 100 colaboradores', minEmployees: 0, maxEmployees: 100, monthlyMinor: kz(99_999) },
+  { key: 't1', label: '1 a 100 colaboradores', minEmployees: 0, maxEmployees: 100, monthlyMinor: kz(99_999), cycleTotals: { semiannual: kz(540_000), annual: kz(959_990) } },
   { key: 't2', label: '101 a 250 colaboradores', minEmployees: 101, maxEmployees: 250, monthlyMinor: kz(200_000) },
-  { key: 't3', label: '251 a 500 colaboradores', minEmployees: 251, maxEmployees: 500, monthlyMinor: kz(380_000) },
-  { key: 't4', label: '501 a 1 500 colaboradores', minEmployees: 501, maxEmployees: 1500, monthlyMinor: kz(550_000) },
-  { key: 'custom', label: 'Mais de 1 500 colaboradores (à medida)', minEmployees: 1501, maxEmployees: null, monthlyMinor: null },
+  { key: 't3', label: '251 a 500 colaboradores', minEmployees: 251, maxEmployees: 500, monthlyMinor: kz(280_000) },
+  { key: 't4', label: '501 a 1 000 colaboradores', minEmployees: 501, maxEmployees: 1000, monthlyMinor: kz(380_000) },
+  { key: 't5', label: 'Mais de 1 000 colaboradores', minEmployees: 1001, maxEmployees: null, monthlyMinor: kz(450_000) },
 ];
+/** Contratos personalizados anteriores continuam válidos, sem os oferecer na tabela pública. */
+export const LEGACY_CUSTOM_TIER: Tier = { key: 'custom', label: 'Contrato personalizado', minEmployees: 0, maxEmployees: null, monthlyMinor: null };
 
 export type BillingCycle = 'monthly' | 'semiannual' | 'annual';
 export const CYCLES: Record<BillingCycle, { label: string; months: number; discountBps: number }> = {
@@ -34,7 +36,7 @@ export function cyclePrice(tier: Tier, cycle: BillingCycle): { grossMinor: Minor
   if (tier.monthlyMinor === null) return null;
   const c = CYCLES[cycle];
   const gross = tier.monthlyMinor * c.months;
-  const total = Math.round((gross * (10_000 - c.discountBps)) / 10_000 / 100) * 100;
+  const total = tier.cycleTotals?.[cycle] ?? Math.round((gross * (10_000 - c.discountBps)) / 10_000 / 100) * 100;
   return { grossMinor: gross, discountMinor: gross - total, totalMinor: total };
 }
 

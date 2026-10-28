@@ -12,6 +12,7 @@ export async function GET(request: Request) {
     if (res.status === 401) return new Response(null, { status: 303, headers: { location: new URL('/login?voltar=/modelagem', request.url).toString(), 'cache-control': 'private, no-store' } });
     if (!res.ok) {
       const error = await res.json().catch(() => ({}));
+      if (res.status === 403 && ['modulo_nao_subscrito', 'sem_permissao'].includes(error.error)) return new Response(null, { status: 303, headers: { location: new URL('/modulos', request.url).toString(), 'cache-control': 'private, no-store' } });
       return new Response(modelingPage(null, nonce, error.message || 'Não foi possível abrir a Modelagem.'), { status: res.status, headers: modelingHeaders(nonce) });
     }
     return new Response(modelingPage(await res.json() as ModelingSession, nonce), { headers: modelingHeaders(nonce) });

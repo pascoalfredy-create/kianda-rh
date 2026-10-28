@@ -6,16 +6,21 @@ describe('licenças', () => {
     expect(tierFor(0).key).toBe('t1');
     expect(tierFor(100).key).toBe('t1');
     expect(tierFor(101).key).toBe('t2');
-    expect(tierFor(1500).key).toBe('t4');
-    expect(tierFor(2000).key).toBe('custom');
+    expect(tierFor(1000).key).toBe('t4');
+    expect(tierFor(1001).key).toBe('t5');
+    expect(tierFor(2000).key).toBe('t5');
   });
   it('preço por ciclo com desconto, arredondado ao kwanza', () => {
     const t1 = DEFAULT_TIERS[0]!;
     expect(cyclePrice(t1, 'monthly')!.totalMinor).toBe(kz(99_999));
-    expect(cyclePrice(t1, 'semiannual')!.totalMinor).toBe(kz(539_995));
+    expect(cyclePrice(t1, 'semiannual')!.totalMinor).toBe(kz(540_000));
     expect(cyclePrice(t1, 'annual')).toEqual({ grossMinor: kz(1_199_988), discountMinor: kz(239_998), totalMinor: kz(959_990) });
-    expect(cyclePrice(DEFAULT_TIERS[3]!, 'annual')!.totalMinor).toBe(kz(5_280_000));
-    expect(cyclePrice(DEFAULT_TIERS[4]!, 'monthly')).toBeNull();
+    expect(cyclePrice(DEFAULT_TIERS[3]!, 'annual')!.totalMinor).toBe(kz(3_648_000));
+    expect(cyclePrice(DEFAULT_TIERS[4]!, 'monthly')!.totalMinor).toBe(kz(450_000));
+  });
+  it('reproduz todos os montantes comerciais aprovados para o RH', () => {
+    const expected = [[99999, 540000, 959990], [200000, 1080000, 1920000], [280000, 1512000, 2688000], [380000, 2052000, 3648000], [450000, 2430000, 4320000]];
+    DEFAULT_TIERS.forEach((tier, i) => expect((['monthly', 'semiannual', 'annual'] as const).map(c => cyclePrice(tier, c)!.totalMinor)).toEqual(expected[i]!.map(kz)));
   });
   it('fim do período', () => {
     expect(periodEnd('2026-01-15', 1)).toBe('2026-02-14');

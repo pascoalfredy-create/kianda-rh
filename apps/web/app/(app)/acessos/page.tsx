@@ -35,11 +35,11 @@ export default async function Acessos() {
       <div className="page-head">
         <div>
           <h1>Utilizadores e acessos</h1>
-          <p className="sub">Convide cada colaborador por ligação (WhatsApp, SMS ou email). Quem não tem email entra com o código da empresa <b>{me.company?.code}</b> + n.º ou telefone + PIN.</p>
+          <p className="sub">{me.modules.hr.canAccess ? <>Convide cada colaborador por ligação (WhatsApp, SMS ou email). Quem não tem email entra com o código da empresa <b>{me.company?.code}</b> + n.º ou telefone + PIN.</> : <>Convide utilizadores para a conta da empresa. O proprietário atribui depois os lugares de Modelagem em <a href="/licenca#modeling">Módulos e licenças</a>.</>}</p>
         </div>
         <InviteStaff roles={d.roles} company={company} isOwner={isOwner} />
       </div>
-      <div className="card" style={{ overflowX: 'auto' }}>
+      {me.modules.hr.canAccess && <div className="card" style={{ overflowX: 'auto' }}>
         <table className="dense">
           <thead><tr><th>Colaborador</th><th>Contacto</th><th>Acesso</th><th>Perfil</th><th /></tr></thead>
           <tbody>
@@ -58,7 +58,7 @@ export default async function Acessos() {
             ))}
           </tbody>
         </table>
-      </div>
+      </div>}
       {(d.staff.length > 0 || d.staffInvites.length > 0) && (
         <div className="card section" style={{ marginTop: 16 }}>
           <h2>Utilizadores sem ficha de colaborador</h2>

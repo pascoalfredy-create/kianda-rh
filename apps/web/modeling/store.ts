@@ -10,7 +10,7 @@ export interface UiModel extends Record<string, any> { id: string; nome: string;
 export interface ModelingSession {
   user: { id: string; name: string; role: string }; company: { id: string; name: string };
   permission: 'editor' | 'viewer'; canWrite: boolean; formats: { pdf: boolean; xlsx: boolean; csv: boolean };
-  usage: { activeProjects: number; projectLimit: number; canCreateProject: boolean; userLimit: number; enabledUsers: number };
+  usage: { activeProjects: number; projectLimit: number | null; canCreateProject: boolean; userLimit: number; enabledUsers: number };
 }
 export class ModelingApiError extends Error {
   constructor(public status: number, message: string) { super(message); }

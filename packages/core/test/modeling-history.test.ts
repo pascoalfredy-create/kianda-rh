@@ -105,6 +105,12 @@ describe('balancetes históricos PGC', () => {
     expect(r.checks.balance).toBe(true); expect(r.bookEq).toBe(1108); expect(derived.assumptions.receitas[0]).toMatchObject({ preco: 1200, cresc: 0, esc: 0 });
     expect(derived.assumptions.pessoal).toBe(120); expect(derived.assumptions.historicalBasis.year).toBe('2025'); expect(raw).toEqual(historicalInput);
   });
+  it('mantém o sector do projecto quando o balancete é usado como base', () => {
+    const derived = financialModelFromHistory(historicalInput, 'mineracao');
+    expect(derived.sector).toBe('mineracao');
+    expect(derived.assumptions.receitas[0]!.unid).toBe('índice');
+    expect(runFinancialModel(derived.assumptions).k.check.every(v => Math.abs(v) <= 0.01)).toBe(true);
+  });
   it('não amortiza investimentos financeiros como se fossem imobilizado operacional', () => {
     const input = { ...historicalInput, N: historyCsv([...currentHistory, ['13', 10], ['58', -10]]) };
     expect(analyzeFinancialHistory(input).pN.diff).toBe(0); expect(() => financialModelFromHistory(input)).toThrow();

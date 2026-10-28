@@ -1,6 +1,6 @@
-import { CYCLES, DEFAULT_TIERS, formatKz, luandaDate, type BillingCycle } from '@kianda/core';
+import { CYCLES, DEFAULT_TIERS, MODELING_PLANS, MODELING_SECTOR_LABELS, formatKz, luandaDate, type BillingCycle, type FinancialSector } from '@kianda/core';
 import {
-  and, auditLogs, companies, desc, eq, gatewayEvents, inArray, isNull, paymentRequests, platformAdmins, platformSettings, subscriptions, users, type Db,
+  and, auditLogs, companies, companyModules, desc, eq, gatewayEvents, inArray, isNull, paymentRequests, platformAdmins, platformSettings, subscriptions, users, type Db,
 } from '@kianda/db';
 import {
   acknowledgePayment, appBaseUrl, createReference, deleteReference, pendingPayments, proxypayConfig, vendusConfig, vendusIssueInvoice,
@@ -9,6 +9,7 @@ import {
 import { platformSettingsGet } from './licence.js';
 import { sendMail } from './mail.js';
 import { DomainError } from './payroll.js';
+import { requireModelingPlanUsage, validateModelingSectors } from './modeling-policy.js';
 
 type Request = typeof paymentRequests.$inferSelect;
 const pt = (d: string) => d.split('-').reverse().join('/');
@@ -24,6 +25,10 @@ export async function invoiceSettingsGet(db: Pick<Db, 'select'>): Promise<Invoic
 
 /** Descrição do que se paga (pró-forma, email e factura). */
 export function requestDescription(r: Request) {
+  if (r.kind === 'modeling_subscription') {
+    const label = MODELING_PLANS.find(p => p.key === r.tierKey)?.label ?? r.tierKey;
+    return `Licença Kianda Integra — ${label} — ${r.projectLimit === null ? 'projectos ilimitados' : `até ${r.projectLimit} projectos`} — sectores: ${(r.modelingSectors ?? []).map(s => MODELING_SECTOR_LABELS[s]).join(', ')} — ${5 + (r.extraUsers ?? 0)} utilizadores — ${CYCLES[r.cycle as BillingCycle]?.label ?? r.cycle} (${pt(r.periodStart!)} a ${pt(r.periodEnd!)})`;
+  }
   if (r.kind === 'subscription') {
     const tier = DEFAULT_TIERS.find((t) => t.key === r.tierKey)?.label ?? r.tierKey;
     return `Licença Kianda RH — ${tier} — ${CYCLES[r.cycle as BillingCycle]?.label ?? r.cycle} (${pt(r.periodStart!)} a ${pt(r.periodEnd!)})`;
@@ -90,13 +95,24 @@ export async function emailPaymentInstructions(db: Db, r: Request) {
  */
 export async function confirmPaymentRequest(db: Db, id: string, o: { actorId: string; via: 'manual' | 'gateway'; invoiceRef?: string | null }) {
   return db.transaction(async (tx) => {
+    const [candidate] = await tx.select().from(paymentRequests).where(eq(paymentRequests.id, id));
+    if (!candidate) throw new DomainError('nao_encontrado', 'Pedido inexistente ou já tratado', 404);
+    // A mesma ordem de bloqueio é usada na criação de projectos e gestão de acessos.
+    await tx.select({ id: companies.id }).from(companies).where(eq(companies.id, candidate.companyId)).for('update');
     const [r] = await tx.select().from(paymentRequests).where(eq(paymentRequests.id, id)).for('update');
     if (!r || r.status !== 'pending') throw new DomainError('nao_encontrado', 'Pedido inexistente ou já tratado', 404);
     const [sub] = await tx.select().from(subscriptions).where(eq(subscriptions.companyId, r.companyId));
-    if (r.kind === 'subscription') {
+    if (r.kind === 'modeling_subscription') {
+      const sectors = validateModelingSectors(r.tierKey!, r.primarySector as FinancialSector, r.modelingSectors ?? []);
+      await requireModelingPlanUsage(tx, r.companyId, { projectLimit: r.projectLimit, extraUsers: r.extraUsers ?? 0, sectors });
+      const [before] = await tx.select().from(companyModules).where(and(eq(companyModules.companyId, r.companyId), eq(companyModules.module, 'modeling')));
+      const values = { enabled: true, status: 'active', paidUntil: before?.paidUntil && before.paidUntil > r.periodEnd! ? before.paidUntil : r.periodEnd!, projectLimit: r.projectLimit, extraUsers: r.extraUsers ?? 0, planKey: r.tierKey, cycle: r.cycle, primarySector: r.primarySector, modelingSectors: sectors, updatedAt: new Date() };
+      await tx.insert(companyModules).values({ companyId: r.companyId, module: 'modeling', ...values }).onConflictDoUpdate({ target: [companyModules.companyId, companyModules.module], set: values });
+    } else if (r.kind === 'subscription') {
       const values = { status: 'active', tierKey: r.tierKey!, cycle: r.cycle!, paidUntil: r.periodEnd!, updatedAt: new Date() };
       if (sub) await tx.update(subscriptions).set(values).where(eq(subscriptions.companyId, r.companyId));
       else await tx.insert(subscriptions).values({ companyId: r.companyId, ...values });
+      await tx.insert(companyModules).values({ companyId: r.companyId, module: 'hr', enabled: true }).onConflictDoUpdate({ target: [companyModules.companyId, companyModules.module], set: { enabled: true, updatedAt: new Date() } });
     } else {
       await tx.update(subscriptions).set({ extraSeats: (sub?.extraSeats ?? 0) + (r.seats ?? 0), updatedAt: new Date() }).where(eq(subscriptions.companyId, r.companyId));
     }
@@ -119,7 +135,7 @@ export async function issueInvoice(db: Db, id: string, force = false): Promise<R
   try {
     const inv = await vendusIssueInvoice(cfg, settings, {
       number: r.number, client: { nif: co!.nif, name: co!.name, address: co!.address, email: owner ?? null },
-      item: { reference: r.kind === 'subscription' ? `KIANDA-${(r.tierKey ?? '').toUpperCase()}` : 'KIANDA-EXTRA', title: requestDescription(r), amountMinor: r.amountMinor },
+      item: { reference: r.kind === 'modeling_subscription' ? `INTEGRA-${(r.tierKey ?? '').toUpperCase()}` : r.kind === 'subscription' ? `KIANDA-${(r.tierKey ?? '').toUpperCase()}` : 'KIANDA-EXTRA', title: requestDescription(r), amountMinor: r.amountMinor },
     });
     const [u] = await db.update(paymentRequests).set({ invoiceProvider: 'vendus', invoiceExternalId: inv.id, invoiceRef: inv.number, invoiceIssuedAt: new Date(), invoiceError: null })
       .where(eq(paymentRequests.id, r.id)).returning();
@@ -137,7 +153,7 @@ export async function afterPayment(db: Db, id: string) {
   const settings = await platformSettingsGet(db);
   const base = appBaseUrl();
   const facts: [string, string][] = [['Pedido', r.number], ['Montante', formatKz(r.amountMinor)]];
-  if (r.kind === 'subscription') facts.push(['Licença activa até', pt(r.periodEnd!)]);
+  if (r.kind !== 'extra_seats') facts.push(['Licença activa até', pt(r.periodEnd!)]);
   if (r.invoiceRef) facts.push(['Factura', r.invoiceRef]);
   for (const to of await billingContacts(db, r.companyId)) {
     await sendMail(db, {

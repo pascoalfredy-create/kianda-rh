@@ -9,7 +9,7 @@ interface Link { path: string; expiresAt: string; emailed?: boolean }
 function SharePanel({ link, name, phone, email, kind, company }: { link: Link; name: string; phone?: string | null; email?: string | null; kind: 'invite' | 'reset'; company: string }) {
   const url = `${typeof window !== 'undefined' ? window.location.origin : ''}${link.path}`;
   const text = kind === 'invite'
-    ? `Olá ${name.split(' ')[0]}, foi convidado(a) para a plataforma de RH da ${company} (Kianda RH). Abra esta ligação para criar o seu acesso: ${url}`
+    ? `Olá ${name.split(' ')[0]}, foi convidado(a) para a plataforma Kianda da ${company}. Abra esta ligação para criar o seu acesso: ${url}`
     : `Olá ${name.split(' ')[0]}, use esta ligação para recuperar o seu acesso ao Kianda RH da ${company}: ${url}`;
   const digits = (phone ?? '').replace(/\D/g, '');
   const intl = digits.length === 9 ? `244${digits}` : digits;

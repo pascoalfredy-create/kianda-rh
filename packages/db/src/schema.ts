@@ -515,11 +515,15 @@ export const paymentRequests = pgTable('payment_requests', {
   id: id(),
   companyId: text('company_id').notNull().references(() => companies.id),
   number: text('number').notNull().unique(),
-  /** subscription | extra_seats */
+  /** subscription (RH) | extra_seats (RH) | modeling_subscription (proposta por projectos). */
   kind: text('kind').notNull(),
   tierKey: text('tier_key'),
   cycle: text('cycle'),
   seats: integer('seats'),
+  projectLimit: integer('project_limit'),
+  extraUsers: integer('extra_users'),
+  primarySector: text('primary_sector'),
+  modelingSectors: jsonb('modeling_sectors').$type<import('@kianda/core').FinancialSector[]>(),
   periodStart: date('period_start'),
   periodEnd: date('period_end'),
   grossMinor: money('gross_minor'),
@@ -955,8 +959,12 @@ export const absencesRelations = relations(absences, ({ one }) => ({
 export const companyModules = pgTable('company_modules', {
   id: id(),
   /** Projectos activos contratados; preço é definido separadamente do RH. */
-  projectLimit: integer('project_limit').notNull().default(1),
+  projectLimit: integer('project_limit').default(1),
   extraUsers: integer('extra_users').notNull().default(0),
+  planKey: text('plan_key'),
+  cycle: text('cycle'),
+  primarySector: text('primary_sector'),
+  modelingSectors: jsonb('modeling_sectors').$type<import('@kianda/core').FinancialSector[]>().notNull().default(['mineracao', 'petroleo', 'agro', 'comercio', 'servicos', 'industria', 'imobiliario', 'tecnologia']),
   companyId: text('company_id').notNull().references(() => companies.id),
   module: text('module').notNull(),
   enabled: boolean('enabled').notNull().default(false),

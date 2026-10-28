@@ -1,10 +1,31 @@
 'use client';
 
-import { formatKz } from '@kianda/core';
+import { CYCLES, FINANCIAL_SECTORS, MODELING_PLANS, MODELING_EXTRA_USER_MONTHLY_MINOR, modelingPlanPrice, formatKz, type BillingCycle, type FinancialSector } from '@kianda/core';
 import { useState } from 'react';
 import { useMutation } from '@/lib/client';
+import { ModelingSectors } from '@/components/modeling-sectors';
 
 interface PriceRow { key: string; label: string; maxEmployees: number | null; prices: Record<string, { totalMinor: number; discountMinor: number } | null> }
+
+export function ModelingPlanForm({ currentPlan, currentCycle, extraUsers, activeProjects, enabledUsers, primarySector, currentSectors }: { currentPlan: string | null; currentCycle: string | null; extraUsers: number; activeProjects: number; enabledUsers: number; primarySector: FinancialSector; currentSectors: FinancialSector[] }) {
+  const { busy, error, run } = useMutation();
+  const suitable = (p: typeof MODELING_PLANS[number]) => p.projectLimit === null || p.projectLimit >= activeProjects;
+  const initial = MODELING_PLANS.find(p => p.key === currentPlan && suitable(p)) ?? MODELING_PLANS.find(suitable)!;
+  const [plan, setPlan] = useState<string>(initial.key);
+  const [sectors, setSectors] = useState<FinancialSector[]>(initial.sectorLimit === 8 ? [...FINANCIAL_SECTORS] : [primarySector, ...currentSectors.filter(s => s !== primarySector)].slice(0, initial.sectorLimit));
+  const [cycle, setCycle] = useState<BillingCycle>(initial.key === 'unlimited' && (!currentCycle || currentCycle === 'monthly') ? 'semiannual' : (currentCycle as BillingCycle) || 'monthly');
+  const [extras, setExtras] = useState(Math.max(extraUsers, enabledUsers - 5, 0));
+  const price = modelingPlanPrice(plan, cycle, extras);
+  return <div className="form" style={{ alignItems: 'end' }}>
+    <label>Plano de Modelagem<select value={plan} onChange={e => { setPlan(e.target.value); setSectors(MODELING_PLANS.find(p => p.key === e.target.value)!.sectorLimit === 8 ? [...FINANCIAL_SECTORS] : [primarySector]); if (e.target.value === 'unlimited' && cycle === 'monthly') setCycle('semiannual'); }}>{MODELING_PLANS.map(p => <option key={p.key} value={p.key} disabled={!suitable(p)}>{p.label} · {p.sectorLimit} sectores</option>)}</select></label>
+    <label>Pagamento<select value={cycle} onChange={e => setCycle(e.target.value as BillingCycle)}>{Object.entries(CYCLES).map(([key, c]) => <option key={key} value={key} disabled={plan === 'unlimited' && key === 'monthly'}>{c.label}</option>)}</select></label>
+    <label>Utilizadores extra além dos 5 incluídos<input type="number" min={Math.max(0, enabledUsers - 5)} max={100000} value={extras} onChange={e => setExtras(Math.max(0, Number(e.target.value) || 0))} /></label>
+    <ModelingSectors planKey={plan} primary={primarySector} selected={sectors} onChange={setSectors} />
+    <div className="wide">{price ? <>Total do ciclo: <b>{formatKz(price.totalMinor)}</b>{price.discountMinor ? <span className="muted"> · desconto do plano: {formatKz(price.discountMinor)}</span> : null}{extras > 0 && <div className="muted">Inclui {formatKz(price.extraMinor)} por {extras} utilizador(es) extra, a {formatKz(MODELING_EXTRA_USER_MONTHLY_MINOR)}/mês durante {CYCLES[cycle].months} mês(es), sem desconto nos extras.</div>}</> : 'Este plano não está disponível no ciclo escolhido.'}</div>
+    <p className="muted wide">A quota só muda após confirmação do pagamento. O efectivo do RH não altera o número de acessos da Modelagem. Pode reduzir o plano depois de arquivar projectos ou retirar acessos excedentes.</p>
+    <div className="form-actions wide">{error && <span className="err">{error}</span>}<button className="btn" disabled={busy || !price || extras < enabledUsers - 5 || sectors.length !== MODELING_PLANS.find(p => p.key === plan)!.sectorLimit} onClick={() => run('/v1/billing/requests', 'POST', { kind: 'modeling_subscription', planKey: plan, cycle, extraUsers: extras, sectors })}>Gerar pedido de pagamento da Modelagem</button></div>
+  </div>;
+}
 
 export function RenewForm({ prices, currentTier, currentCycle, activeEmployees, cycles }: { prices: PriceRow[]; currentTier: string; currentCycle: string; activeEmployees: number; cycles: Record<string, { label: string }> }) {
   const { busy, error, run } = useMutation();
