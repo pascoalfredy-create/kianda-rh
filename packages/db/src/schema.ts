@@ -950,3 +950,75 @@ export const journalLinesRelations = relations(journalLines, ({ one }) => ({
 export const absencesRelations = relations(absences, ({ one }) => ({
   employee: one(employees, { fields: [absences.employeeId], references: [employees.id] }),
 }));
+
+/** Direitos por módulo. Sem linha RH, preserva-se a subscrição histórica; Modelagem exige adesão explícita. */
+export const companyModules = pgTable('company_modules', {
+  id: id(),
+  /** Projectos activos contratados; preço é definido separadamente do RH. */
+  projectLimit: integer('project_limit').notNull().default(1),
+  extraUsers: integer('extra_users').notNull().default(0),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  module: text('module').notNull(),
+  enabled: boolean('enabled').notNull().default(false),
+  status: text('status').notNull().default('trial'),
+  trialEndsAt: date('trial_ends_at'),
+  paidUntil: date('paid_until'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex('company_modules_company_module').on(t.companyId, t.module)]);
+
+/** Rascunho independente do RH. Moeda explícita; pressupostos no formato versionado do Integra. */
+export const financialModels = pgTable('financial_models', {
+  id: id(),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  name: text('name').notNull(),
+  sector: text('sector').notNull(),
+  currency: text('currency').notNull(),
+  assumptions: jsonb('assumptions').notNull().default({}),
+  revision: integer('revision').notNull().default(1),
+  createdBy: text('created_by').notNull(),
+  createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('financial_models_company').on(t.companyId)]);
+
+/** Cópia imutável dos dados agregados importados, sem nomes nem remunerações individuais. */
+export const financialPersonnelImports = pgTable('financial_personnel_imports', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  modelId: text('model_id').notNull().references(() => financialModels.id, { onDelete: 'cascade' }),
+  source: text('source').notNull(),
+  sourceId: text('source_id'),
+  fromPeriod: text('from_period').notNull(),
+  toPeriod: text('to_period').notNull(),
+  snapshot: jsonb('snapshot').notNull(),
+  importedBy: text('imported_by').notNull(),
+  importedAt: createdAt(),
+}, (t) => [index('financial_personnel_imports_model').on(t.modelId)]);
+
+/** Utilizadores autorizados no Integra; o proprietário da empresa ocupa um dos cinco acessos. */
+export const modelingMembers = pgTable('modeling_members', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  userId: text('user_id').notNull().references(() => users.id),
+  enabled: boolean('enabled').notNull().default(true),
+  permission: text('permission').notNull().default('editor'),
+  addedBy: text('added_by').notNull(),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex('modeling_members_company_user').on(t.companyId, t.userId)]);
+
+/** Versão aprovada: pressupostos, cálculos e relatórios congelados, sem edição posterior. */
+export const financialModelVersions = pgTable('financial_model_versions', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  modelId: text('model_id').notNull().references(() => financialModels.id),
+  versionNumber: integer('version_number').notNull(),
+  label: text('label').notNull(),
+  sourceRevision: integer('source_revision').notNull(),
+  sourceHash: text('source_hash').notNull(),
+  payloadHash: text('payload_hash').notNull(),
+  engineVersion: text('engine_version').notNull(),
+  reportVersion: text('report_version').notNull(),
+  payload: jsonb('payload').$type<import('@kianda/core').FinancialReportBundle>().notNull(),
+  approvedBy: text('approved_by').notNull(),
+  approvedAt: createdAt(),
+}, (t) => [uniqueIndex('financial_versions_model_number').on(t.modelId, t.versionNumber), uniqueIndex('financial_versions_model_revision_label').on(t.modelId, t.sourceRevision, t.label), index('financial_versions_company_model').on(t.companyId, t.modelId)]);

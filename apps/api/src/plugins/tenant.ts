@@ -2,6 +2,8 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { verify } from 'hono/jwt';
 import { getDb, withTenant } from '@kianda/db';
+import { moduleForPath } from '@kianda/core';
+import { moduleLicence } from '../services/modules.js';
 import { licenceBlocks } from '../services/licence.js';
 
 export type Role = 'owner' | 'hr_admin' | 'payroll' | 'finance' | 'manager' | 'employee';
@@ -51,7 +53,16 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
   }
   c.set('actor', { companyId: claims.companyId, actorId: claims.sub, role: claims.role, employeeId: claims.employeeId, session: claims });
   // Licença inactiva: só consulta (excepto tratar da licença).
-  const blocked = await licenceBlocks(getDb(), claims.companyId, c.req.method, c.req.path);
+  const module = moduleForPath(c.req.path);
+  let blocked: string | null = null;
+  if (module) {
+    const access = await moduleLicence(getDb(), claims.companyId, module);
+    if (!access.canRead) return c.json({ error: 'modulo_nao_subscrito', message: 'A empresa não subscreveu este módulo.' }, 403);
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && !access.canWrite) blocked = 'A licença deste módulo está em modo de consulta.';
+  } else {
+    blocked = await licenceBlocks(getDb(), claims.companyId, c.req.method, c.req.path);
+    if (blocked && (await moduleLicence(getDb(), claims.companyId, 'modeling')).canWrite) blocked = null;
+  }
   if (blocked) return c.json({ error: 'licenca_inactiva', message: blocked }, 402);
   // A consola da plataforma vê todas as empresas (o acesso é verificado a seguir: só administradores Kianda).
   if (c.req.path.startsWith('/v1/platform/')) return next();

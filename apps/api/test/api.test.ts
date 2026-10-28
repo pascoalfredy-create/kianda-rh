@@ -1859,3 +1859,333 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     expect(r.cookies.find((c) => c.name === 'kianda_session')?.value).toBe('');
   });
 });
+
+describe.skipIf(!process.env.DATABASE_URL)('Integra: módulos e importação opcional de pessoal', () => {
+  const stamp = String(Date.now()) + 'mf';
+  const password = 'IntegraSegura2026';
+  let cookie = '', other = '', companyId = '', modelId = '', budgetId = '';
+  const request = (method: string, url: string, payload?: unknown, session = cookie) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
+  beforeAll(async () => {
+    for (const [i, name] of ['Integra A', 'Integra B'].entries()) {
+      const nif = String(Date.now() + i + 200).slice(-10);
+      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name, nif }, name, email: `${stamp}${i}@integra.ao`, password } });
+      expect(r.statusCode).toBe(201);
+      if (i === 0) cookie = cookieOf(r); else other = cookieOf(r);
+    }
+    companyId = (await request('GET', '/v1/auth/me')).json().company.id;
+  });
+  it('não concede Modelagem através da licença RH e protege a consola', async () => {
+    expect((await request('GET', '/v1/modeling/models')).statusCode).toBe(403);
+    expect((await request('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 })).statusCode).toBe(403);
+    await getDb().insert(platformAdmins).values({ email: `${stamp}0@integra.ao` });
+    expect((await request('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 })).statusCode).toBe(200);
+    expect((await request('GET', '/v1/modules')).json().modeling.canWrite).toBe(true);
+  });
+  it('cria modelo com pressupostos manuais e impede sobrescrita concorrente', async () => {
+    const values = { name: 'Estudo independente', sector: 'servicos', currency: 'Kz', assumptions: { pessoal: 123, receitas: [] } };
+    const r = await request('POST', '/v1/modeling/models', values);
+    expect(r.statusCode).toBe(201); modelId = r.json().id;
+    expect((await request('PUT', `/v1/modeling/models/${modelId}`, { ...values, revision: 1 })).json().revision).toBe(2);
+    expect((await request('PUT', `/v1/modeling/models/${modelId}`, { ...values, revision: 1 })).statusCode).toBe(409);
+  });
+  it('isola modelos entre empresas, incluindo a pesquisa por identificador', async () => {
+    await request('PUT', `/v1/platform/companies/${(await request('GET', '/v1/auth/me', undefined, other)).json().company.id}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 });
+    expect((await request('GET', `/v1/modeling/models/${modelId}`, undefined, other)).statusCode).toBe(404);
+    expect((await request('GET', '/v1/modeling/models', undefined, other)).json()).toEqual([]);
+  });
+  it('recusa orçamento por aprovar e importa o custo anual com INSS incluído', async () => {
+    const [{ id }] = (await getDb().execute(sql`insert into personnel_budgets(company_id,year,created_by) values (${companyId}, 2026, 'test') returning id`)).rows as { id: string }[];
+    budgetId = id;
+    expect((await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'budget', budgetId, revision: 2 })).statusCode).toBe(409);
+    await getDb().execute(sql`update personnel_budgets set status='approved' where id=${budgetId}`);
+    await getDb().execute(sql`insert into personnel_budget_lines(company_id,budget_id,period,headcount,gross_minor,cost_minor) values (${companyId},${budgetId},'2026-01',2,100000,108000)`);
+    const r = await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'budget', budgetId, revision: 2 });
+    expect(r.statusCode).toBe(201);
+    expect(r.json().model.assumptions.pessoal).toBe(1080);
+    expect(r.json().model.assumptions.receitas).toEqual([]);
+    expect(r.json().import.snapshot.months).toHaveLength(12);
+  });
+  it('alterações no RH não alteram o modelo nem a cópia importada', async () => {
+    await getDb().execute(sql`update personnel_budget_lines set cost_minor=999999 where budget_id=${budgetId}`);
+    const r = (await request('GET', `/v1/modeling/models/${modelId}`)).json();
+    expect(r.assumptions.pessoal).toBe(1080);
+    expect(r.imports[0].snapshot.totalMinor).toBe(108000);
+    await expect(withTenant(companyId, () => getDb().execute(sql`update financial_personnel_imports set source='actual' where model_id=${modelId}`))).rejects.toThrow();
+  });
+  it('exige doze meses fechados e câmbio explícito para moeda estrangeira', async () => {
+    expect((await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'actual', from: '2026-01', to: '2026-12', revision: 3 })).statusCode).toBe(409);
+    await request('PUT', `/v1/modeling/models/${modelId}`, { name: 'USD', sector: 'servicos', currency: 'USD', assumptions: { pessoal: 1080 }, revision: 3 });
+    expect((await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'budget', budgetId, revision: 4 })).statusCode).toBe(400);
+    const r = await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'budget', budgetId, revision: 4, exchangeRate: 0.001 });
+    expect(r.statusCode).toBe(201);
+    expect(r.json().model.assumptions.pessoal).toBeCloseTo(9.99999);
+  });
+  it('Modelagem continua activa com RH desligado; importação opcional fica bloqueada', async () => {
+    await request('PUT', `/v1/platform/companies/${companyId}/modules/hr`, { enabled: false });
+    await getDb().execute(sql`update subscriptions set status='suspended' where company_id=${companyId}`);
+    expect((await request('GET', '/v1/employees')).statusCode).toBe(403);
+    expect((await request('POST', '/v1/payroll-runs', {})).statusCode).toBe(403);
+    const values = { name: 'Sem RH', sector: 'servicos', currency: 'Kz', assumptions: { pessoal: 700 } };
+    expect((await request('POST', '/v1/modeling/models', values)).statusCode).toBe(201);
+    expect((await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'budget', budgetId, revision: 5, exchangeRate: 0.001 })).statusCode).toBe(403);
+  });
+  it('suspender Modelagem mantém consulta e bloqueia alterações; empresa não altera direitos', async () => {
+    await request('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'suspended' });
+    expect((await request('GET', `/v1/modeling/models/${modelId}`)).statusCode).toBe(200);
+    expect((await request('POST', '/v1/modeling/models', {})).statusCode).toBe(402);
+    await expect(withTenant(companyId, () => getDb().execute(sql`update company_modules set enabled=true where company_id=${companyId}`))).rejects.toThrow();
+  });
+});
+
+describe.skipIf(!process.env.DATABASE_URL)('Integra: projectos, cinco acessos e exportações', () => {
+  const stamp = String(Date.now()) + 'plans';
+  let cookie = '', companyId = '', ownerId = '', first = '', second = '';
+  const memberIds: string[] = [];
+  const req = (method: string, url: string, payload?: unknown, session = cookie) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
+  const grant = (extraUsers = 0, projectLimit = 2) => req('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit, extraUsers });
+  const model = { name: 'Projecto', sector: 'servicos', currency: 'Kz', assumptions: { pessoal: 100 } };
+  beforeAll(async () => {
+    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Projectos Integra', nif: String(Date.now() + 700).slice(-10) }, name: 'Gestor', email: `${stamp}@plans.ao`, password: 'Projectos2026Seguros' } });
+    expect(r.statusCode).toBe(201); cookie = cookieOf(r);
+    const me = (await req('GET', '/v1/auth/me')).json();
+    companyId = me.company.id; ownerId = me.user.sub;
+    expect(ownerId).toBeTypeOf('string');
+    await getDb().insert(platformAdmins).values({ email: `${stamp}@plans.ao` });
+    expect((await grant()).statusCode).toBe(200);
+  });
+  it('serializa criações concorrentes e não permite ultrapassar a quota', async () => {
+    const responses = await Promise.all([req('POST', '/v1/modeling/models', model), req('POST', '/v1/modeling/models', model), req('POST', '/v1/modeling/models', model)]);
+    expect(responses.map((r) => r.statusCode).sort()).toEqual([201, 201, 409]);
+    const created = responses.filter((r) => r.statusCode === 201);
+    first = created[0]!.json().id; second = created[1]!.json().id;
+    expect((await req('GET', '/v1/modeling/usage')).json()).toMatchObject({ activeProjects: 2, enabledUsers: 1, userLimit: 5, projectLimit: 2 });
+  });
+  it('arquiva sem apagar histórico e sujeita o restauro à quota', async () => {
+    expect((await req('POST', `/v1/modeling/models/${first}/archive`, { archived: true, revision: 1 })).statusCode).toBe(200);
+    expect((await req('GET', `/v1/modeling/models/${first}`)).statusCode).toBe(200);
+    expect((await req('PUT', `/v1/modeling/models/${first}`, { ...model, revision: 2 })).json().error).toBe('projecto_arquivado');
+    const created = await req('POST', '/v1/modeling/models', model);
+    expect(created.statusCode).toBe(201);
+    expect((await req('POST', `/v1/modeling/models/${first}/archive`, { archived: false, revision: 2 })).json().error).toBe('limite_projectos');
+    expect((await req('POST', `/v1/modeling/models/${second}/archive`, { archived: true, revision: 1 })).statusCode).toBe(200);
+    expect((await req('POST', `/v1/modeling/models/${first}/archive`, { archived: false, revision: 2 })).statusCode).toBe(200);
+  });
+  it('inclui o proprietário nos cinco acessos e não limita o número de funcionários RH', async () => {
+    for (let i = 0; i < 5; i++) {
+      const r = await req('POST', '/v1/users', { name: `Participante ${i}`, email: `${stamp}${i}@plans.ao`, password: 'Projectos2026Seguros', role: 'finance' });
+      expect(r.statusCode).toBe(201); memberIds.push(r.json().id);
+    }
+    const responses = await Promise.all(memberIds.map((id) => req('PUT', `/v1/modeling/members/${id}`, { enabled: true, permission: 'editor' })));
+    expect(responses.map((r) => r.statusCode).sort()).toEqual([200, 200, 200, 200, 409]);
+    const deniedIndex = responses.findIndex((r) => r.statusCode === 409);
+    const deniedId = memberIds[deniedIndex]!;
+    const user = (await getDb().execute(sql`select email from users where id=${deniedId}`)).rows[0] as { email: string };
+    const login = await app.inject({ method: 'POST', url: '/v1/auth/login', payload: { email: user.email, password: 'Projectos2026Seguros' } });
+    expect((await req('GET', '/v1/modeling/models', undefined, cookieOf(login))).statusCode).toBe(403);
+    expect((await grant(1)).statusCode).toBe(200);
+    expect((await req('PUT', `/v1/modeling/members/${deniedId}`, { enabled: true, permission: 'viewer' })).statusCode).toBe(200);
+    expect((await req('GET', '/v1/modeling/models', undefined, cookieOf(login))).statusCode).toBe(200);
+    expect((await req('POST', '/v1/modeling/models', model, cookieOf(login))).statusCode).toBe(403);
+    expect((await req('GET', '/v1/modeling/usage')).json().userLimit).toBe(6);
+    expect((await grant(0)).json().error).toBe('limite_inferior_uso');
+  });
+  it('não concede Excel a um proprietário cliente ou administrador sem configuração exclusiva', async () => {
+    const previous = process.env.KIANDA_MODELING_OWNER_USER_ID;
+    try {
+      delete process.env.KIANDA_MODELING_OWNER_USER_ID;
+      expect((await req('GET', '/v1/modeling/export-options')).json()).toEqual({ pdf: true, xlsx: false, csv: false });
+      process.env.KIANDA_MODELING_OWNER_USER_ID = ownerId;
+      expect((await req('GET', '/v1/modeling/export-options')).json().xlsx).toBe(true);
+      process.env.KIANDA_MODELING_OWNER_USER_ID = 'outro-utilizador';
+      expect((await req('GET', '/v1/modeling/export-options')).json().xlsx).toBe(false);
+    } finally {
+      if (previous === undefined) delete process.env.KIANDA_MODELING_OWNER_USER_ID; else process.env.KIANDA_MODELING_OWNER_USER_ID = previous;
+    }
+  });
+});
+
+describe.skipIf(!process.env.DATABASE_URL)('Integra: motor financeiro e modelos sectoriais', () => {
+  const stamp = String(Date.now()) + 'engine';
+  let cookie = '', other = '', companyId = '', modelId = '', draftId = '';
+  let assumptions: Record<string, unknown>;
+  let inputHash = '';
+  const req = (method: string, url: string, payload?: unknown, session = cookie) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
+  beforeAll(async () => {
+    for (const i of [0, 1]) {
+      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Motor Integra', nif: String(Date.now() + 1400 + i).slice(-10) }, name: 'Gestor', email: `${stamp}${i}@engine.ao`, password: 'MotorSeguro2026abc' } });
+      expect(r.statusCode).toBe(201);
+      if (i === 0) cookie = cookieOf(r); else other = cookieOf(r);
+    }
+    companyId = (await req('GET', '/v1/auth/me')).json().company.id;
+    await getDb().insert(platformAdmins).values({ email: `${stamp}0@engine.ao` });
+    for (const id of [companyId, (await req('GET', '/v1/auth/me', undefined, other)).json().company.id]) {
+      expect((await req('PUT', `/v1/platform/companies/${id}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 })).statusCode).toBe(200);
+    }
+  });
+  it('fornece oito templates demonstrativos sem consumir quota de projectos', async () => {
+    const templates = await req('GET', '/v1/modeling/templates');
+    expect(templates.statusCode).toBe(200); expect(templates.json()).toHaveLength(8);
+    expect(templates.json().every((t: { sampleOnly: boolean }) => t.sampleOnly)).toBe(true);
+    assumptions = (await req('GET', '/v1/modeling/templates/servicos')).json().assumptions;
+    expect((await req('GET', '/v1/modeling/usage')).json().activeProjects).toBe(0);
+  });
+  it('simula sem gravar e devolve validação financeira estruturada', async () => {
+    const r = await req('POST', '/v1/modeling/simulate', { assumptions });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toMatchObject({ engineVersion: 'integra-1.0.0', checks: { balance: true, cashFlow: true } });
+    expect((await req('GET', '/v1/modeling/usage')).json().activeProjects).toBe(0);
+    const invalid = await req('POST', '/v1/modeling/simulate', { assumptions: { ...assumptions, tv: { metodo: 'gordon', g: 100, mult: 6 } } });
+    expect(invalid.statusCode).toBe(422); expect(invalid.json().error).toBe('pressupostos_invalidos'); expect(invalid.json().issues[0].path).toBe('tv.g');
+  });
+  it('calcula a revisão guardada, com origem verificável, e recusa rascunho incompleto', async () => {
+    const model = { name: 'Estudo de serviços', sector: 'servicos', currency: 'Kz', assumptions };
+    const saved = await req('POST', '/v1/modeling/models', model);
+    expect(saved.statusCode).toBe(201); modelId = saved.json().id;
+    const calc = await req('GET', `/v1/modeling/models/${modelId}/calculation?revision=1`);
+    expect(calc.statusCode).toBe(200); expect(calc.json().sourceRevision).toBe(1);
+    expect(calc.json().result.checks.balance).toBe(true); inputHash = calc.json().sourceAssumptionsHash; expect(inputHash).toMatch(/^[a-f0-9]{64}$/);
+    const repeated = await req('GET', `/v1/modeling/models/${modelId}/calculation`); expect(repeated.json()).toEqual(calc.json());
+    const draft = await req('POST', '/v1/modeling/models', { ...model, assumptions: { pessoal: 123 } });
+    expect(draft.statusCode).toBe(201); draftId = draft.json().id;
+    expect((await req('GET', `/v1/modeling/models/${draftId}/calculation`)).statusCode).toBe(422);
+    const reversed = Object.fromEntries(Object.entries(assumptions).reverse());
+    expect((await req('PUT', `/v1/modeling/models/${modelId}`, { ...model, assumptions: reversed, revision: 1 })).statusCode).toBe(200);
+    expect((await req('GET', `/v1/modeling/models/${modelId}/calculation?revision=1`)).statusCode).toBe(409);
+    expect((await req('GET', `/v1/modeling/models/${modelId}/calculation?revision=2`)).json().sourceAssumptionsHash).toBe(inputHash);
+  });
+  it('cenários e sensibilidade usam o mesmo modelo sem criar projectos ou alterar pressupostos', async () => {
+    const scenarios = await req('GET', `/v1/modeling/models/${modelId}/scenarios`);
+    expect(scenarios.statusCode).toBe(200); expect(scenarios.json().results.pess.npv).toBeLessThan(scenarios.json().results.base.npv);
+    const sensitivity = await req('GET', `/v1/modeling/models/${modelId}/sensitivity`);
+    expect(sensitivity.statusCode).toBe(200); expect(sensitivity.json().rows).toHaveLength(6); expect(sensitivity.json().breakEvenPriceMultiplier).toBeGreaterThan(0);
+    expect((await req('GET', `/v1/modeling/models/${modelId}`)).json().revision).toBe(2);
+    expect((await req('GET', '/v1/modeling/usage')).json().activeProjects).toBe(2);
+  });
+  it('outra empresa não calcula nem obtém cenários de projectos alheios', async () => {
+    for (const route of ['calculation', 'scenarios', 'sensitivity']) expect((await req('GET', `/v1/modeling/models/${modelId}/${route}`, undefined, other)).statusCode).toBe(404);
+    expect((await req('POST', '/v1/modeling/simulate', { assumptions }, '')).statusCode).toBe(401);
+  });
+  it('projectos arquivados e licença em consulta mantêm cálculo; novas simulações ficam bloqueadas', async () => {
+    expect((await req('POST', `/v1/modeling/models/${modelId}/archive`, { archived: true, revision: 2 })).statusCode).toBe(200);
+    expect((await req('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'suspended' })).statusCode).toBe(200);
+    const calc = await req('GET', `/v1/modeling/models/${modelId}/calculation`);
+    expect(calc.statusCode).toBe(200); expect(calc.json().model.archived).toBe(true); expect(calc.json().sourceAssumptionsHash).toBe(inputHash);
+    expect((await req('POST', '/v1/modeling/simulate', { assumptions })).statusCode).toBe(402);
+  });
+});
+
+describe.skipIf(!process.env.DATABASE_URL)('Integra: versões aprovadas e downloads privados', () => {
+  const stamp = String(Date.now()) + 'versions';
+  let owner = '', other = '', finance = '', viewer = '', companyId = '', otherCompany = '', ownerId = '', modelId = '', versionId = '';
+  let assumptions: Record<string, any>, snapshotPdf: Uint8Array;
+  const req = (method: string, url: string, payload?: unknown, session = owner) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
+  const report = (format = 'pdf', version = versionId, session = owner) => req('GET', `/v1/modeling/models/${modelId}/reports/sumario?format=${format}${version ? '&version=' + version : ''}`, undefined, session);
+  beforeAll(async () => {
+    for (const i of [0, 1]) {
+      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Empresa de versões', nif: String(Date.now() + 2400 + i).slice(-10) }, name: 'Proprietário', email: `${stamp}${i}@versions.ao`, password: 'VersoesSeguras2026abc' } });
+      expect(r.statusCode).toBe(201); if (!i) owner = cookieOf(r); else other = cookieOf(r);
+    }
+    const me = (await req('GET', '/v1/auth/me')).json(); companyId = me.company.id; ownerId = me.user.sub;
+    otherCompany = (await req('GET', '/v1/auth/me', undefined, other)).json().company.id;
+    await getDb().insert(platformAdmins).values({ email: `${stamp}0@versions.ao` });
+    for (const id of [companyId, otherCompany]) expect((await req('PUT', `/v1/platform/companies/${id}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 })).statusCode).toBe(200);
+    for (const [i, permission] of ['editor', 'viewer'].entries()) {
+      const email = `${stamp}user${i}@versions.ao`;
+      const user = await req('POST', '/v1/users', { name: permission, email, password: 'VersoesSeguras2026abc', role: 'finance' });
+      expect(user.statusCode).toBe(201);
+      expect((await req('PUT', `/v1/modeling/members/${user.json().id}`, { enabled: true, permission })).statusCode).toBe(200);
+      const login = await app.inject({ method: 'POST', url: '/v1/auth/login', payload: { email, password: 'VersoesSeguras2026abc' } });
+      if (!i) finance = cookieOf(login); else viewer = cookieOf(login);
+    }
+    assumptions = (await req('GET', '/v1/modeling/templates/mineracao')).json().assumptions;
+    assumptions.promotor = 'Promotor externo'; assumptions.promotorNif = '0012345678';
+    const model = await req('POST', '/v1/modeling/models', { name: 'Estudo aprovado', sector: 'mineracao', currency: 'USD', assumptions });
+    expect(model.statusCode).toBe(201); modelId = model.json().id;
+  });
+  it('a interface recebe a permissão efectiva da Modelagem e formatos sem expor outra empresa', async () => {
+    const editor = (await req('GET', '/v1/modeling/session', undefined, finance)).json();
+    expect(editor).toMatchObject({ company: { id: companyId }, permission: 'editor', canWrite: true, formats: { pdf: true, xlsx: false, csv: false }, usage: { userLimit: 5 } });
+    const reader = (await req('GET', '/v1/modeling/session', undefined, viewer)).json();
+    expect(reader).toMatchObject({ company: { id: companyId }, permission: 'viewer', canWrite: false });
+    expect((await req('GET', '/v1/modeling/session', undefined, other)).json().company.id).toBe(otherCompany);
+    expect((await app.inject({ method: 'GET', url: '/v1/modeling/session' })).statusCode).toBe(401);
+  });
+  it('só o proprietário aprova uma revisão completa e identificada', async () => {
+    for (const session of [finance, viewer]) expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'V comité' }, session)).statusCode).toBe(403);
+    expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 99, label: 'V comité' })).statusCode).toBe(409);
+    const approved = await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'V comité' });
+    expect(approved.statusCode).toBe(201); versionId = approved.json().id;
+    const version = (await req('GET', `/v1/modeling/models/${modelId}/versions/${versionId}`)).json();
+    expect(version.payload.source).toMatchObject({ state: 'approved', versionNumber: 1, revision: 1, promoter: 'Promotor externo', promoterNif: '0012345678' });
+    expect(version.payload.inputAssumptions.promotor).toBe('Promotor externo');
+    expect(version.payloadHash).toMatch(/^[a-f0-9]{64}$/);
+    expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'V comité' })).statusCode).toBe(200);
+  });
+  it('numera versões concorrentes sem duplicar pedidos nem consumir projectos', async () => {
+    const attempts = await Promise.all([req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'V banco' }), req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'V banco' })]);
+    expect(attempts.map((r) => r.statusCode).sort()).toEqual([200, 201]);
+    const list = (await req('GET', `/v1/modeling/models/${modelId}/versions`)).json();
+    expect(list.map((v: { versionNumber: number }) => v.versionNumber)).toEqual([2, 1]);
+    expect((await req('GET', '/v1/modeling/usage')).json().activeProjects).toBe(1);
+  });
+  it('clientes descarregam PDF e não conseguem obter Excel ou CSV por URL directa', async () => {
+    const catalogue = (await req('GET', `/v1/modeling/models/${modelId}/reports`)).json();
+    expect(catalogue.reports.filter((r: { available: boolean }) => r.available)).toHaveLength(7);
+    expect(catalogue.reports.find((r: { key: string }) => r.key === 'analise').available).toBe(false);
+    for (const session of [owner, finance, viewer]) {
+      const pdf = await report('pdf', versionId, session);
+      expect(pdf.statusCode).toBe(200); expect(pdf.headers['content-type']).toBe('application/pdf');
+      expect(pdf.headers['cache-control']).toContain('no-store'); expect(pdf.headers['content-disposition']).toContain('.pdf');
+      expect(new TextDecoder().decode(pdf.bytes.slice(0, 8))).toBe('%PDF-1.7');
+      expect((await report('xlsx', versionId, session)).statusCode).toBe(403);
+    }
+    expect((await report('csv')).statusCode).toBe(400);
+    expect((await req('GET', `/v1/modeling/models/${modelId}/reports/analise`)).json().error).toBe('historico_em_falta');
+    snapshotPdf = (await report()).bytes;
+  });
+  it('o PDF de consulta respeita o cenário escolhido sem escrever nem modificar versões aprovadas', async () => {
+    const path = `/v1/modeling/models/${modelId}/reports/sumario?format=pdf&revision=1&scenario=pess`;
+    const draft = await req('GET', path, undefined, viewer);
+    expect(draft.statusCode).toBe(200); expect(draft.headers['x-source-scenario']).toBe('pess');
+    const current = (await req('GET', `/v1/modeling/models/${modelId}`)).json();
+    expect(current.revision).toBe(1); expect(current.assumptions.cen).toBe('base');
+    expect((await req('GET', path + `&version=${versionId}`, undefined, viewer)).statusCode).toBe(400);
+  });
+  it('Excel exige o ID exacto do proprietário do produto e o estatuto de administrador', async () => {
+    const previous = process.env.KIANDA_MODELING_OWNER_USER_ID;
+    try {
+      process.env.KIANDA_MODELING_OWNER_USER_ID = ownerId;
+      const file = await report('xlsx'); expect(file.statusCode).toBe(200);
+      expect(file.headers['content-type']).toContain('spreadsheetml'); expect(new TextDecoder().decode(file.bytes.slice(0, 2))).toBe('PK');
+      expect((await report('xlsx', versionId, finance)).statusCode).toBe(403);
+      process.env.KIANDA_MODELING_OWNER_USER_ID = 'conta-diferente'; expect((await report('xlsx')).statusCode).toBe(403);
+    } finally { if (previous === undefined) delete process.env.KIANDA_MODELING_OWNER_USER_ID; else process.env.KIANDA_MODELING_OWNER_USER_ID = previous; }
+  });
+  it('o PDF aprovado fica igual byte a byte depois de alterar o rascunho e os dados da empresa', async () => {
+    const updated = { ...assumptions, pessoal: assumptions.pessoal + 1000000 };
+    expect((await req('PUT', `/v1/modeling/models/${modelId}`, { name: 'Novo rascunho', sector: 'mineracao', currency: 'USD', revision: 1, assumptions: updated })).statusCode).toBe(200);
+    await getDb().execute(sql`update companies set name='Empresa alterada' where id=${companyId}`);
+    const frozen = await report(); expect(frozen.statusCode).toBe(200); expect(frozen.bytes).toEqual(snapshotPdf); expect(frozen.headers['x-source-revision']).toBe('1');
+    const draft = await report('pdf', ''); expect(draft.statusCode).toBe(200); expect(draft.bytes).not.toEqual(snapshotPdf); expect(draft.headers['x-source-revision']).toBe('2');
+  });
+  it('a base de dados impede editar versões aprovadas, mesmo fora das rotas', async () => {
+    await expect(getDb().execute(sql`update financial_model_versions set label='Alterada' where id=${versionId}`)).rejects.toThrow();
+    await expect(withTenant(companyId, () => getDb().execute(sql`delete from financial_model_versions where id=${versionId}`))).rejects.toThrow();
+    const r = await withTenant(otherCompany, () => getDb().execute(sql`select id from financial_model_versions where id=${versionId}`)); expect(r.rows).toEqual([]);
+    for (const path of [`versions/${versionId}`, `reports/sumario?version=${versionId}`]) expect((await req('GET', `/v1/modeling/models/${modelId}/${path}`, undefined, other)).statusCode).toBe(404);
+  });
+  it('rascunhos incompletos não geram versões aprovadas nem ficheiros vazios', async () => {
+    expect((await req('PUT', `/v1/modeling/models/${modelId}`, { name: 'Incompleto', sector: 'mineracao', currency: 'USD', revision: 2, assumptions: { pessoal: 1 } })).statusCode).toBe(200);
+    expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 3, label: 'Inválida' })).statusCode).toBe(422);
+    expect((await report('pdf', '')).statusCode).toBe(422);
+    expect((await req('GET', `/v1/modeling/models/${modelId}/versions`)).json()).toHaveLength(2);
+    expect((await report()).bytes).toEqual(snapshotPdf);
+  });
+  it('arquivo e licença em consulta conservam downloads aprovados e bloqueiam novas aprovações', async () => {
+    expect((await req('POST', `/v1/modeling/models/${modelId}/archive`, { archived: true, revision: 3 })).statusCode).toBe(200);
+    expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 4, label: 'Arquivo' })).statusCode).toBe(409);
+    expect((await req('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'suspended' })).statusCode).toBe(200);
+    expect((await report('pdf', versionId, viewer)).bytes).toEqual(snapshotPdf);
+    expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 4, label: 'Suspensa' })).statusCode).toBe(402);
+  });
+});

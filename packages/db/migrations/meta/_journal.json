@@ -197,6 +197,27 @@
       "when": 1793140858908,
       "tag": "0027_ponto_offline",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1793143741852,
+      "tag": "0028_integra_modules",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1793144801037,
+      "tag": "0029_integra_project_plans",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1793147198862,
+      "tag": "0030_integra_approved_versions",
+      "breakpoints": true
     }
   ]
 }

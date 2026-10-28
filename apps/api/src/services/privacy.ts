@@ -11,6 +11,7 @@ import { sql, type Db } from '@kianda/db';
 type Scope = { table: string; via?: { column: string; parent: string } };
 
 export const COMPANY_TABLES_PURGE_ORDER: Scope[] = [
+  { table: 'financial_model_versions' }, { table: 'modeling_members' }, { table: 'financial_personnel_imports' }, { table: 'financial_models' }, { table: 'company_modules' },
   { table: 'candidate_events', via: { column: 'candidate_id', parent: 'candidates' } },
   { table: 'candidates' }, { table: 'job_openings' },
   { table: 'reviews' }, { table: 'review_cycles' },

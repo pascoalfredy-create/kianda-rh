@@ -23,7 +23,7 @@ interface Env {
 
 /** Secrets e variáveis do Worker → process.env, lidos pela app (mesmo código que em Node). */
 const SETTINGS = [
-  'API_JWT_SECRET', 'APP_BASE_URL', 'KIANDA_HOSTNAME',
+  'API_JWT_SECRET', 'APP_BASE_URL', 'KIANDA_HOSTNAME', 'KIANDA_MODELING_OWNER_USER_ID',
   'PROXYPAY_API_KEY', 'PROXYPAY_ENV', 'PROXYPAY_ENTITY', 'RESEND_API_KEY', 'MAIL_FROM', 'VENDUS_API_KEY', 'VENDUS_MODE',
 ];
 function loadEnv(env: Env) {

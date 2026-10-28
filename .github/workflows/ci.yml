@@ -128,10 +128,11 @@ jobs:
         run: |
           ../../scripts/ci-run.sh "wrangler deploy (API)" npx wrangler deploy --config wrangler.deploy.json
           # Só seguem as integrações configuradas (secret/variável vazia = integração desligada).
-          node -e 'const k=["API_JWT_SECRET","PROXYPAY_API_KEY","PROXYPAY_ENV","PROXYPAY_ENTITY","RESEND_API_KEY","MAIL_FROM","VENDUS_API_KEY","VENDUS_MODE","APP_BASE_URL"];const o={};for(const n of k){const v=(process.env[n]||"").trim();if(v)o[n]=v}require("fs").writeFileSync("/tmp/secrets.json",JSON.stringify(o));console.log("Configuração do Worker:",Object.keys(o).join(", "))'
+          node -e 'const k=["API_JWT_SECRET","PROXYPAY_API_KEY","PROXYPAY_ENV","PROXYPAY_ENTITY","RESEND_API_KEY","MAIL_FROM","VENDUS_API_KEY","VENDUS_MODE","APP_BASE_URL","KIANDA_MODELING_OWNER_USER_ID"];const o={};for(const n of k){const v=(process.env[n]||"").trim();if(v)o[n]=v}require("fs").writeFileSync("/tmp/secrets.json",JSON.stringify(o));console.log("Configuração do Worker:",Object.keys(o).join(", "))'
           ../../scripts/ci-run.sh "wrangler secret bulk (API)" npx wrangler secret bulk /tmp/secrets.json --config wrangler.deploy.json
           rm -f /tmp/secrets.json
         env:
+          KIANDA_MODELING_OWNER_USER_ID: ${{ vars.KIANDA_MODELING_OWNER_USER_ID }}
           API_JWT_SECRET: ${{ secrets.KIANDA_JWT_SECRET }}
           PROXYPAY_API_KEY: ${{ secrets.KIANDA_PROXYPAY_API_KEY }}
           PROXYPAY_ENV: ${{ vars.KIANDA_PROXYPAY_ENV }}
