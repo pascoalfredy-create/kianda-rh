@@ -2003,3 +2003,73 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: projectos, cinco acessos e 
     }
   });
 });
+
+describe.skipIf(!process.env.DATABASE_URL)('Integra: motor financeiro e modelos sectoriais', () => {
+  const stamp = String(Date.now()) + 'engine';
+  let cookie = '', other = '', companyId = '', modelId = '', draftId = '';
+  let assumptions: Record<string, unknown>;
+  let inputHash = '';
+  const req = (method: string, url: string, payload?: unknown, session = cookie) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
+  beforeAll(async () => {
+    for (const i of [0, 1]) {
+      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Motor Integra', nif: String(Date.now() + 1400 + i).slice(-10) }, name: 'Gestor', email: `${stamp}${i}@engine.ao`, password: 'MotorSeguro2026abc' } });
+      expect(r.statusCode).toBe(201);
+      if (i === 0) cookie = cookieOf(r); else other = cookieOf(r);
+    }
+    companyId = (await req('GET', '/v1/auth/me')).json().company.id;
+    await getDb().insert(platformAdmins).values({ email: `${stamp}0@engine.ao` });
+    for (const id of [companyId, (await req('GET', '/v1/auth/me', undefined, other)).json().company.id]) {
+      expect((await req('PUT', `/v1/platform/companies/${id}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 })).statusCode).toBe(200);
+    }
+  });
+  it('fornece oito templates demonstrativos sem consumir quota de projectos', async () => {
+    const templates = await req('GET', '/v1/modeling/templates');
+    expect(templates.statusCode).toBe(200); expect(templates.json()).toHaveLength(8);
+    expect(templates.json().every((t: { sampleOnly: boolean }) => t.sampleOnly)).toBe(true);
+    assumptions = (await req('GET', '/v1/modeling/templates/servicos')).json().assumptions;
+    expect((await req('GET', '/v1/modeling/usage')).json().activeProjects).toBe(0);
+  });
+  it('simula sem gravar e devolve validação financeira estruturada', async () => {
+    const r = await req('POST', '/v1/modeling/simulate', { assumptions });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toMatchObject({ engineVersion: 'integra-1.0.0', checks: { balance: true, cashFlow: true } });
+    expect((await req('GET', '/v1/modeling/usage')).json().activeProjects).toBe(0);
+    const invalid = await req('POST', '/v1/modeling/simulate', { assumptions: { ...assumptions, tv: { metodo: 'gordon', g: 100, mult: 6 } } });
+    expect(invalid.statusCode).toBe(422); expect(invalid.json().error).toBe('pressupostos_invalidos'); expect(invalid.json().issues[0].path).toBe('tv.g');
+  });
+  it('calcula a revisão guardada, com origem verificável, e recusa rascunho incompleto', async () => {
+    const model = { name: 'Estudo de serviços', sector: 'servicos', currency: 'Kz', assumptions };
+    const saved = await req('POST', '/v1/modeling/models', model);
+    expect(saved.statusCode).toBe(201); modelId = saved.json().id;
+    const calc = await req('GET', `/v1/modeling/models/${modelId}/calculation?revision=1`);
+    expect(calc.statusCode).toBe(200); expect(calc.json().sourceRevision).toBe(1);
+    expect(calc.json().result.checks.balance).toBe(true); inputHash = calc.json().sourceAssumptionsHash; expect(inputHash).toMatch(/^[a-f0-9]{64}$/);
+    const repeated = await req('GET', `/v1/modeling/models/${modelId}/calculation`); expect(repeated.json()).toEqual(calc.json());
+    const draft = await req('POST', '/v1/modeling/models', { ...model, assumptions: { pessoal: 123 } });
+    expect(draft.statusCode).toBe(201); draftId = draft.json().id;
+    expect((await req('GET', `/v1/modeling/models/${draftId}/calculation`)).statusCode).toBe(422);
+    const reversed = Object.fromEntries(Object.entries(assumptions).reverse());
+    expect((await req('PUT', `/v1/modeling/models/${modelId}`, { ...model, assumptions: reversed, revision: 1 })).statusCode).toBe(200);
+    expect((await req('GET', `/v1/modeling/models/${modelId}/calculation?revision=1`)).statusCode).toBe(409);
+    expect((await req('GET', `/v1/modeling/models/${modelId}/calculation?revision=2`)).json().sourceAssumptionsHash).toBe(inputHash);
+  });
+  it('cenários e sensibilidade usam o mesmo modelo sem criar projectos ou alterar pressupostos', async () => {
+    const scenarios = await req('GET', `/v1/modeling/models/${modelId}/scenarios`);
+    expect(scenarios.statusCode).toBe(200); expect(scenarios.json().results.pess.npv).toBeLessThan(scenarios.json().results.base.npv);
+    const sensitivity = await req('GET', `/v1/modeling/models/${modelId}/sensitivity`);
+    expect(sensitivity.statusCode).toBe(200); expect(sensitivity.json().rows).toHaveLength(6); expect(sensitivity.json().breakEvenPriceMultiplier).toBeGreaterThan(0);
+    expect((await req('GET', `/v1/modeling/models/${modelId}`)).json().revision).toBe(2);
+    expect((await req('GET', '/v1/modeling/usage')).json().activeProjects).toBe(2);
+  });
+  it('outra empresa não calcula nem obtém cenários de projectos alheios', async () => {
+    for (const route of ['calculation', 'scenarios', 'sensitivity']) expect((await req('GET', `/v1/modeling/models/${modelId}/${route}`, undefined, other)).statusCode).toBe(404);
+    expect((await req('POST', '/v1/modeling/simulate', { assumptions }, '')).statusCode).toBe(401);
+  });
+  it('projectos arquivados e licença em consulta mantêm cálculo; novas simulações ficam bloqueadas', async () => {
+    expect((await req('POST', `/v1/modeling/models/${modelId}/archive`, { archived: true, revision: 2 })).statusCode).toBe(200);
+    expect((await req('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'suspended' })).statusCode).toBe(200);
+    const calc = await req('GET', `/v1/modeling/models/${modelId}/calculation`);
+    expect(calc.statusCode).toBe(200); expect(calc.json().model.archived).toBe(true); expect(calc.json().sourceAssumptionsHash).toBe(inputHash);
+    expect((await req('POST', '/v1/modeling/simulate', { assumptions })).statusCode).toBe(402);
+  });
+});

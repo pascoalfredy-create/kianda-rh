@@ -1,4 +1,4 @@
-import { PackNotFoundError } from '@kianda/core';
+import { FinancialModelError, PackNotFoundError } from '@kianda/core';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { ZodError } from 'zod';
@@ -47,6 +47,7 @@ export function buildApp(opts: { logger?: boolean; rateLimit?: boolean } = {}) {
   }
 
   app.onError((err, c) => {
+    if (err instanceof FinancialModelError) return c.json({ error: 'pressupostos_invalidos', message: err.message, issues: err.issues }, 422);
     if (err instanceof ZodError) return c.json({ error: 'dados_invalidos', issues: err.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) }, 400);
     if (err instanceof DomainError) return c.json({ error: err.code, message: err.message }, err.status as 400);
     if (err instanceof PackNotFoundError) return c.json({ error: 'pacote_inexistente', message: err.message }, 422);

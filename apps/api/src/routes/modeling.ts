@@ -1,3 +1,5 @@
+import { FINANCIAL_SECTORS, financialBreakEvenPrice, financialScenarios, financialSensitivity, financialTemplate, runFinancialModel } from '@kianda/core';
+import { financialCalculationSource, financialModelOf } from '../services/modeling-calculation.js';
 import { modelingExportOptions, modelingUsage, lockModelingCompany, requireProjectCapacity } from '../services/modeling-policy.js';
 import { moduleLicence } from '../services/modules.js';
 import { DomainError } from '../services/payroll.js';
@@ -19,6 +21,7 @@ export function modelingRoutes() {
   app.use('/v1/modeling', requireCompany);
   app.use('/v1/modeling/*', requireCompany);
   app.use('/v1/modeling/*', async (c, next) => {
+    c.header('Cache-Control', 'private, no-store');
     const a = c.get('actor'), db = getDb();
     let [member] = await db.select().from(modelingMembers).where(and(eq(modelingMembers.companyId, a.companyId), eq(modelingMembers.userId, a.actorId)));
     if (!member && a.role === 'owner') {
@@ -34,6 +37,29 @@ export function modelingRoutes() {
     if (!member?.enabled) return c.json({ error: 'sem_permissao', message: 'Solicite ao proprietário acesso à Modelagem.' }, 403);
     if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && member.permission !== 'editor') return c.json({ error: 'sem_permissao', message: 'O seu acesso permite apenas consulta.' }, 403);
     await next();
+  });
+
+  const scenarioQuery = z.object({ scenario: z.enum(['base', 'otim', 'pess']).optional(), revision: z.coerce.number().int().positive().optional() });
+  app.get('/v1/modeling/templates', async (c) => c.json(FINANCIAL_SECTORS.map(financialTemplate)));
+  app.get('/v1/modeling/templates/:sector', async (c) => c.json(financialTemplate(sector.parse(c.req.param('sector')))));
+  app.post('/v1/modeling/simulate', async (c) => {
+    const input = z.object({ assumptions, overrides: z.object({ cen: z.enum(['base', 'otim', 'pess']).optional(), preco: z.number().optional(), volume: z.number().optional(), cvar: z.number().optional(), fixos: z.number().optional(), capex: z.number().optional(), wacc: z.number().optional() }).default({}) }).parse(await body(c));
+    return c.json(runFinancialModel(input.assumptions, input.overrides));
+  });
+  app.get('/v1/modeling/models/:id/calculation', async (c) => {
+    const query = scenarioQuery.parse(c.req.query()), model = await financialModelOf(c);
+    if (query.revision !== undefined && query.revision !== model.revision) throw new DomainError('revisao_invalida', 'Projecto alterado. Volte a carregá-lo antes de calcular.', 409);
+    return c.json({ ...financialCalculationSource(model), result: runFinancialModel(model.assumptions, { cen: query.scenario }) });
+  });
+  app.get('/v1/modeling/models/:id/scenarios', async (c) => {
+    const query = scenarioQuery.parse(c.req.query()), model = await financialModelOf(c);
+    if (query.revision !== undefined && query.revision !== model.revision) throw new DomainError('revisao_invalida', 'Projecto alterado. Volte a carregá-lo antes de calcular.', 409);
+    return c.json({ ...financialCalculationSource(model), results: financialScenarios(model.assumptions) });
+  });
+  app.get('/v1/modeling/models/:id/sensitivity', async (c) => {
+    const query = scenarioQuery.parse(c.req.query()), model = await financialModelOf(c);
+    if (query.revision !== undefined && query.revision !== model.revision) throw new DomainError('revisao_invalida', 'Projecto alterado. Volte a carregá-lo antes de calcular.', 409);
+    return c.json({ ...financialCalculationSource(model), rows: financialSensitivity(model.assumptions, query.scenario), breakEvenPriceMultiplier: financialBreakEvenPrice(model.assumptions, query.scenario) });
   });
 
   app.get('/v1/modeling/usage', async (c) => c.json(await modelingUsage(getDb(), c.get('actor').companyId)));
