@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeFinancialHistory, buildFinancialHistoricalReport, buildFinancialReportBundle, FINANCIAL_REPORT_KEYS, financialTemplate } from '@kianda/core';
+import { analyzeFinancialHistory, buildFinancialHistoricalReport, buildFinancialReportBundle, convertFinancialCurrency, FINANCIAL_REPORT_KEYS, financialTemplate } from '@kianda/core';
 import { historicalInput } from '../../../packages/core/test/fixtures/financial-history.js';
 import { financialPdfLayout, renderFinancialPdf } from '../src/lib/financial-pdf.js';
 import { renderFinancialXlsx } from '../src/lib/financial-xlsx.js';
+import { FINANCIAL_FONTS } from '../src/lib/financial-fonts.js';
 const bundle = buildFinancialReportBundle(financialTemplate('mineracao').assumptions, { modelId: 'm', projectName: 'Estudo de mineração', sector: 'Mineração', currency: 'USD', companyName: 'Empresa ÁÉÍÓÚ / Пример', companyNif: '0012345678', revision: 1, sourceHash: 'a'.repeat(64), asOf: '2026-10-28T12:00:00.000Z', state: 'approved', versionNumber: 1, versionLabel: 'V comité' });
 const decode = (v: Uint8Array) => new TextDecoder().decode(v);
 function unzip(data: Uint8Array) {
@@ -58,5 +59,19 @@ describe('downloads financeiros', () => {
     }
     expect(decode(renderFinancialPdf(document, 'analise')).startsWith('%PDF-1.7')).toBe(true);
     expect(unzip(renderFinancialXlsx(document, 'analise')).get('xl/worksheets/sheet1.xml')).toContain('Empresa de teste');
+  });
+  for(const currency of ['USD','EUR']as const)it(`os sete PDFs e livros de resultados identificam ${currency} e contêm os montantes convertidos`,()=>{
+    const original=financialTemplate('mineracao').assumptions,rate=currency==='USD'?1:0.9;
+    const converted=convertFinancialCurrency(original as unknown as Record<string,unknown>,'USD',currency,rate);
+    const current=buildFinancialReportBundle(converted,{...bundle.source,currency,state:'draft'});
+    const heading=[...`Montantes em milhões de ${currency}`].map(c=>FINANCIAL_FONTS.sans.map[String(c.codePointAt(0))]!.toString(16).padStart(4,'0')).join('');
+    for(const key of FINANCIAL_REPORT_KEYS){
+      expect(decode(renderFinancialPdf(current,key)),key).toContain(heading);
+      const workbook=unzip(renderFinancialXlsx(current,key));expect(workbook.get('xl/worksheets/sheet1.xml'),key).toContain(currency);
+    }
+    const sheet=unzip(renderFinancialXlsx(current,'demonstracoes')).get('xl/worksheets/sheet2.xml')!;
+    expect(sheet).toContain(`<v>${current.result.k.rev[1]}</v>`);expect(sheet).toContain(`<v>${current.result.k.rl[1]}</v>`);
+    const investment=current.reports.comite.blocks.find(b=>b.kind==='table'&&b.title==='Investimento e financiamento');
+    expect(investment?.kind==='table'&&investment.rows[0]!.cells[1]!.value).toBe(original.capex.reduce((s,c)=>s+c.valor,0)*rate);
   });
 });

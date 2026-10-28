@@ -32,6 +32,14 @@ replace("m.moeda==='USD'?2:0", "m.moeda==='Kz'?0:2");
 replace('Projectos com receitas em USD (petróleo, minérios) modelam-se em USD', 'Ao mudar de moeda, indique ou confirme o câmbio para converter os montantes');
 replace("'Ao mudar de moeda, indique ou confirme o câmbio para converter os montantes'", 'currencyConversionHint(m)');
 replace("'USD: inflação internacional'", "cur+': inflação esperada nesta moeda'");
+replace("'Moeda do modelo'", "'Moeda do projecto e dos mapas'");
+replace('<div class="sub">${s}</div>', '<div class="sub">${s}${mapCurrencyContext()}</div>');
+// Os valores editáveis do investimento são unidades; totais e amortizações do mesmo quadro também.
+replace('money(c.valor/c.vida)', 'assumptionMoney(c.valor/c.vida)');
+replace('money(m.capex.reduce((s,c)=>s+ +c.valor,0))', 'assumptionMoney(m.capex.reduce((s,c)=>s+ +c.valor,0))');
+replace("'Financiamento em USD'", "'Financiamento em '+cur");
+replace("cur==='USD'?'US Treasury 10 anos':'Obrigações do Tesouro em Kz'", "cur==='Kz'?'Obrigações do Tesouro em Kz':'Taxa sem risco em '+cur");
+replace("cur==='USD'?'Risco Angola sobre activos em USD':'0 se a taxa sem risco já é em Kz'", "cur==='Kz'?'0 se a taxa sem risco já incorpora o risco país':'Prémio de risco país coerente com '+cur");
 replace("const closeModal=()=>$('#ov').classList.remove('on');", "function closeModal(){currencyDialog=null;$('#ov').classList.remove('on');}");
 replace('data-act="copyFS">${ico(\'copy\')}Copiar (CSV)', 'data-act="downloadFS">${ico(\'doc\')}Descarregar PDF');
 replace('data-act="repCopy">${ico(\'copy\')}Copiar texto', 'data-act="downloadReport">${ico(\'doc\')}Descarregar PDF');
