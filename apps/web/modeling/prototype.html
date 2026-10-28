@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Integra — Modelagem e Análise Financeira</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f4f6f9;--panel:#fff;--ink:#121826;--ink2:#475166;--ink3:#8791a5;--line:#e3e7ee;--line2:#eef1f5;
+--brand:#1d3557;--brand2:#28507f;--brandSoft:#e8eef6;--acc:#d9772b;--accSoft:#fcefe3;
+--green:#23845a;--greenSoft:#e4f3ec;--red:#c0392b;--redSoft:#fbe8e6;--amber:#b7791f;--amberSoft:#fdf3df;--blue:#2f5fb3;--blueSoft:#e8eefa;
+--s1:#1d4e89;--s2:#2a9d8f;--s3:#e9a23b;--s4:#c44536;--s5:#7b8794}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+.app{display:grid;grid-template-columns:236px 1fr;min-height:100vh}
+.side{background:#0f1c2e;color:#c9d4e3;position:sticky;top:0;height:100vh;overflow:auto;display:flex;flex-direction:column}
+.logo{display:flex;gap:10px;align-items:center;padding:18px}
+.logo .mk{width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,#3d7cc9,#1d3557);display:grid;place-items:center;color:#fff;font-weight:700}
+.logo b{color:#fff;font-size:15.5px;display:block}.logo small{color:#7f93ad;font-size:11px}
+.crumb{margin:0 12px 8px;padding:9px 12px;background:#162a44;border-radius:9px;font-size:11.5px;color:#8fa3bd}
+.crumb b{color:#fff;font-size:12.5px;display:block}
+.nav{padding:4px 8px;flex:1}
+.nav .grp{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:#5f7593;padding:14px 10px 6px}
+.nav a{display:flex;gap:10px;align-items:center;padding:8px 10px;border-radius:8px;color:#c9d4e3;cursor:pointer;font-weight:500;font-size:13.5px}
+.nav a:hover{background:#162a44;color:#fff}.nav a.on{background:#24416a;color:#fff}
+.nav a svg{width:17px;height:17px;flex:none}
+.sidefoot{padding:12px 16px;font-size:11px;color:#5f7593;border-top:1px solid #1a2f4b}
+.main{min-width:0}
+.top{height:60px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:0 22px;position:sticky;top:0;z-index:20}
+.top .mdl{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+.top .mdl select{max-width:360px}
+.tag{display:inline-flex;align-items:center;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;white-space:nowrap}
+.tag.n{background:var(--line2);color:var(--ink2)}.tag.b{background:var(--brandSoft);color:var(--brand)}.tag.g{background:var(--greenSoft);color:var(--green)}.tag.r{background:var(--redSoft);color:var(--red)}.tag.a{background:var(--amberSoft);color:var(--amber)}.tag.o{background:var(--accSoft);color:var(--acc)}
+.content{padding:22px 26px 70px;max-width:1400px}
+h1{font-size:21px;letter-spacing:-.3px}
+.sub{color:var(--ink2);margin-top:2px}
+.ph{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.btn{height:35px;padding:0 13px;border-radius:9px;border:1px solid var(--line);background:#fff;cursor:pointer;font-weight:600;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.btn:hover{background:var(--bg)}.btn.pri{background:var(--brand);border-color:var(--brand);color:#fff}.btn.pri:hover{background:var(--brand2)}
+.btn.sm{height:29px;padding:0 10px;font-size:12.5px;border-radius:8px}.btn.red{color:var(--red)}.btn.ghost{border-color:transparent;background:transparent}
+.btn svg{width:15px;height:15px}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.card .hd{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line2);flex-wrap:wrap}
+.card .hd h3{font-size:14.5px}
+.card .bd{padding:16px}
+.grid{display:grid;gap:16px}.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:1fr 1fr}.g21{grid-template-columns:2fr 1fr}.g5{grid-template-columns:repeat(5,1fr)}
+.kpi{padding:14px 16px}.kpi .l{font-size:12.5px;color:var(--ink2);font-weight:500}.kpi .v{font-size:22px;font-weight:700;margin-top:5px;letter-spacing:-.3px;font-variant-numeric:tabular-nums}.kpi .d{font-size:12px;color:var(--ink3);margin-top:2px}
+table{width:100%;border-collapse:collapse}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink3);font-weight:600;text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);background:#fafbfc;white-space:nowrap}
+td{padding:8px 12px;border-bottom:1px solid var(--line2);font-variant-numeric:tabular-nums}
+.ft td{font-size:13px}
+.ft td:first-child{white-space:nowrap;position:sticky;left:0;background:#fff;z-index:1;min-width:260px}
+.ft th:first-child{position:sticky;left:0;z-index:2}
+.ft tr.tot td{font-weight:700;background:#f7f9fc}.ft tr.tot td:first-child{background:#f7f9fc}
+.ft tr.sec td{font-weight:700;color:var(--brand);background:#fff;font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;padding-top:14px}
+.ft tr.sub td:first-child{padding-left:26px;color:var(--ink2)}
+.ft tr.kp td{color:var(--ink2);font-style:italic}
+.num{text-align:right;white-space:nowrap}
+.neg{color:var(--red)}
+.tblwrap{overflow:auto}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:16px;overflow:auto}
+.tabs a{padding:9px 14px;cursor:pointer;color:var(--ink2);font-weight:600;border-bottom:2px solid transparent;white-space:nowrap}
+.tabs a.on{color:var(--brand);border-color:var(--brand)}
+.inp,.sel{height:34px;border:1px solid var(--line);border-radius:8px;padding:0 9px;background:#fff;outline:none;min-width:0}
+.inp:focus,.sel:focus{border-color:var(--brand2)}
+.inp.n{text-align:right}
+.form{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 14px}
+.form .f{display:flex;flex-direction:column;gap:4px}
+.form .f.w2{grid-column:span 2}.form .f.full{grid-column:1/-1}
+.form label{font-size:12px;font-weight:600;color:var(--ink2)}
+.form .hint{font-size:11.5px;color:var(--ink3)}
+.alert{display:flex;gap:10px;padding:10px 12px;border-radius:9px;font-size:13px;margin-bottom:8px;align-items:flex-start}
+.alert svg{width:17px;height:17px;flex:none;margin-top:1px}
+.alert.r{background:var(--redSoft);color:#86281d}.alert.a{background:var(--amberSoft);color:#73500f}.alert.b{background:var(--blueSoft);color:#1f3f7a}.alert.g{background:var(--greenSoft);color:#1b5e3f}
+.verdict{padding:16px;border-radius:12px;display:flex;gap:14px;align-items:flex-start}
+.verdict .ic{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;flex:none;font-size:20px;font-weight:700;color:#fff}
+.muted{color:var(--ink3)}
+.strip{display:flex;gap:18px;flex-wrap:wrap;padding:10px 16px;background:#fff;border:1px solid var(--line);border-radius:12px;margin-bottom:16px;align-items:center}
+.strip div{font-size:12px;color:var(--ink2)}.strip b{display:block;font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums}
+.ov{position:fixed;inset:0;background:rgba(10,18,30,.45);z-index:50;display:none;align-items:center;justify-content:center;padding:20px}
+.ov.on{display:flex}
+.modal{background:#fff;border-radius:14px;width:100%;max-width:820px;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.modal .mh{padding:15px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.modal .mb{padding:18px 20px;overflow:auto}.modal .mf{padding:12px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
+.x{width:32px;height:32px;border:0;background:transparent;border-radius:8px;cursor:pointer;font-size:20px;color:var(--ink3)}
+.sect{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.sect label{border:1px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;display:block}
+.sect label:has(input:checked){border-color:var(--brand2);background:var(--brandSoft)}
+.sect input{display:none}.sect b{display:block;font-size:13.5px}.sect small{color:var(--ink3);font-size:12px}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:#121826;color:#fff;padding:11px 18px;border-radius:10px;opacity:0;transition:.2s;z-index:99;pointer-events:none;font-weight:500}
+.toast.on{opacity:1;transform:translateX(-50%)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink2);margin-bottom:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+svg text{font-family:Inter,system-ui,sans-serif}
+.hm td{text-align:center;font-size:12.5px;padding:7px 6px}
+.rowact{display:flex;gap:6px;align-items:center}
+.sm-in{height:30px;width:100%}
+.ratio{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line2);gap:10px}
+.ratio:last-child{border-bottom:0}
+.ratio>span:first-child{flex:1}
+textarea.inp{height:auto;padding:8px;resize:vertical;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+
+.docv{display:flex;flex-direction:column;align-items:center;gap:16px;min-width:0}
+.docv .dnote{background:#fff8ea;border:1px solid #f1dfb8;color:#6b4e12;border-radius:8px;padding:8px 12px;font-size:12.5px;width:100%;max-width:794px}
+.docv .page{width:794px;max-width:100%;min-height:1080px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.08);padding:50px 58px 24px;display:flex;flex-direction:column;font-family:'Source Serif 4',Georgia,serif;font-size:13px;line-height:1.6;color:#1b1f27}
+.docv .page.land{width:100%;max-width:1120px;min-height:700px;padding:36px 40px 20px}
+.docv h1{font-family:Inter,sans-serif;font-size:16.5px;letter-spacing:.4px;text-align:center;margin:20px 0 4px;text-transform:uppercase}
+.docv .subt{text-align:center;color:#5b6270;font-size:12.5px;margin-bottom:14px;font-family:Inter,sans-serif}
+.docv h3{font-family:Inter,sans-serif;font-size:11.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--brand);margin:14px 0 6px}
+.docv p{margin:0 0 8px;text-align:justify}
+.docv .lh{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--brand);padding-bottom:12px;font-family:Inter,sans-serif}
+.docv .lh .lhco{display:flex;gap:10px;align-items:center}.docv .lh .mk{width:38px;height:38px;border-radius:9px;background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:700}
+.docv .lh b{font-size:14px;display:block}.docv .lh small{color:#6a7180;font-size:11px;display:block;line-height:1.45}.docv .lh .rt{text-align:right;font-size:11px;color:#6a7180;line-height:1.5}
+.docv .foot{margin-top:auto;border-top:1px solid #e3e6ea;padding-top:6px;font-family:Inter,sans-serif;font-size:9.5px;color:#8a92a1;display:flex;justify-content:space-between}
+.docv .page>*:nth-last-child(2){margin-bottom:26px}
+.docv table.t{width:100%;border-collapse:collapse;font-family:Inter,sans-serif;font-size:11.2px;margin:6px 0 10px}
+.docv table.t th{background:#f1f4f8;color:#475166;text-transform:uppercase;font-size:9.6px;letter-spacing:.3px;text-align:left;padding:6px 7px;border-bottom:1px solid #d9dee6}
+.docv table.t td{padding:5px 7px;border-bottom:1px solid #edf0f4;vertical-align:top}
+.docv table.t .n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.docv table.t tr.tot td{font-weight:700;border-top:1.5px solid #1b1f27;background:#f9fafc}
+.docv .box{border:1px solid #d9dee6;border-radius:6px;padding:9px 12px;font-family:Inter,sans-serif;font-size:11.3px;margin:6px 0}
+.docv .sig{display:grid;grid-template-columns:1fr 1fr;gap:46px;margin-top:36px;font-family:Inter,sans-serif;font-size:11.3px;text-align:center}
+.docv .sig div{border-top:1px solid #1b1f27;padding-top:6px}.docv .sig small{display:block;color:#7a8190}
+.docv .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.docv .legend{font-family:Inter,sans-serif}
+.docv .tg{display:inline-block;padding:1px 7px;border-radius:10px;font-family:Inter,sans-serif;font-size:10px;font-weight:600;background:#e4f3ec;color:#23845a}.docv .tg.a{background:#fdf3df;color:#b7791f}.docv .tg.r{background:#fbe8e6;color:#c0392b}.docv .tg.n{background:#eef1f5;color:#475166}
+@media(max-width:1150px){.g4,.g5{grid-template-columns:repeat(2,1fr)}.g21,.g3{grid-template-columns:1fr}.form{grid-template-columns:repeat(2,1fr)}.sect{grid-template-columns:1fr 1fr}}
+@media(max-width:820px){.app{grid-template-columns:1fr}.side{display:none}.g2{grid-template-columns:1fr}.content{padding:14px}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="side">
+  <div class="logo"><div class="mk">I</div><div><b>Integra</b><small>Desempenho empresarial</small></div></div>
+  <div class="crumb">Finanças ›<b>Modelagem Financeira</b></div>
+  <nav class="nav" id="nav"></nav>
+  <div class="sidefoot">Classificação PGC Angola (Decreto n.º 82/2001) · Classe 6 Proveitos · Classe 7 Custos. Submódulo independente do Orçamento.</div>
+</aside>
+<div class="main">
+  <header class="top">
+    <div class="mdl"><span class="muted" style="font-size:12.5px">Modelo</span><select class="sel" id="mSel"></select><span id="mTags"></span></div>
+    <button class="btn" data-act="dupM">Duplicar</button>
+    <button class="btn pri" data-act="newM">+ Novo modelo</button>
+  </header>
+  <main class="content" id="view"></main>
+</div>
+</div>
+<div class="ov" id="ov"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+<script>
+/* =================================================================
+   INTEGRA · MODELAGEM FINANCEIRA — motor integrado
+   Pressupostos → DR / Balanço / Fluxos → DCF → Crédito → Sensibilidade
+   ================================================================= */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clone=o=>JSON.parse(JSON.stringify(o));
+const uid=()=>Math.random().toString(36).slice(2,9);
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),2400)}
+const pct=(v,d=1)=>v==null||!isFinite(v)?'—':(v*100).toFixed(d).replace('.',',')+'%';
+const xf=(v,d=2)=>v==null||!isFinite(v)?'—':v.toFixed(d).replace('.',',')+'×';
+const nf=(v,d=0)=>(v??0).toLocaleString('pt-PT',{minimumFractionDigits:d,maximumFractionDigits:d});
+const I={
+  dash:'<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+  sliders:'<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+  table:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16"/>',
+  value:'<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+  bank:'<path d="M3 21h18M4 10h16M6 10v8M10 10v8M14 10v8M18 10v8M12 3l9 5H3z"/>',
+  tornado:'<path d="M3 5h18M6 10h12M9 15h6M11 20h2"/>',
+  scan:'<path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/><path d="M8 12h8M8 9h5M8 15h6"/>',
+  info:'<circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/>',alert:'<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',check:'<path d="m5 12 5 5L20 7"/>',doc:'<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',copy:'<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>'
+};
+const ico=(n,s=16)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${I[n]}</svg>`;
+
+/* ---------------- Modelos sectoriais ---------------- */
+const BASE={horizonte:10,inicioOp:1,preOp:25,inflacao:3,ii:25,royalty:0,cvar:30,pessoal:0,fst:0,outros:0,manut:2,vidaManut:5,dso:30,dio:30,dpo:45,
+  capitalInicial:0,payout:30,caixaMin:0,divida:{montante:0,taxa:9,prazo:7,carencia:2,ano:0},
+  wacc:{modo:'capm',rf:4.3,erp:5.5,beta:1,crp:7,kd:9,wd:40,manual:14},tv:{metodo:'gordon',g:2,mult:6},
+  cov:{dscr:1.30,ndEbitda:3.5,icr:3},mult:{lo:4,hi:7},sens:20,
+  cenarios:{base:{preco:1,volume:1,opex:1,capex:1},otim:{preco:1.1,volume:1.1,opex:0.95,capex:0.95},pess:{preco:0.85,volume:0.85,opex:1.1,capex:1.15}},cen:'base',
+  inicio:'greenfield',abertura:{imob:0,vidaRem:8,exist:0,clientes:0,caixa:0,fornec:0,divida:0,divTaxa:12,divPrazo:4},anoBase:2026};
+const SECT={
+  mineracao:{t:'Mineração',d:'Diamantes, ouro, minerais — produção, preço internacional, royalties',moeda:'USD',
+    m:{nome:'Projecto mineiro — diamantes aluvionares',horizonte:12,inicioOp:1,inflacao:2.5,ii:25,royalty:5,cvar:12,pessoal:3.2e6,fst:2.8e6,outros:0.6e6,manut:3,dso:30,dio:45,dpo:60,capitalInicial:16e6,payout:40,caixaMin:1.5e6,
+      receitas:[{nome:'Diamantes',unid:'quilates',qtd:150000,cresc:1,ramp:'40,75,100',preco:180,esc:1.5}],
+      capex:[{nome:'Planta de tratamento (DMS)',ano:0,valor:14e6,vida:10},{nome:'Infra-estruturas e acampamento',ano:0,valor:4.5e6,vida:12},{nome:'Prospecção e sondagens',ano:0,valor:3e6,vida:5},{nome:'Frota e equipamento móvel',ano:1,valor:9e6,vida:6}],
+      divida:{montante:15e6,taxa:9,prazo:7,carencia:2,ano:0},wacc:{modo:'capm',rf:4.3,erp:5.5,beta:1.3,crp:7.5,kd:9,wd:45,manual:16},tv:{metodo:'nenhum',g:0,mult:4.5}}},
+  petroleo:{t:'Petróleo & Gás',d:'Upstream — produção em declínio, preço Brent, IRP e IPP',moeda:'USD',
+    m:{nome:'Bloco offshore — desenvolvimento de campo',horizonte:15,inicioOp:2,inflacao:2.5,ii:50,royalty:20,cvar:8,pessoal:6e6,fst:14e6,outros:3e6,manut:4,dso:30,dio:15,dpo:45,capitalInicial:260e6,payout:50,caixaMin:10e6,
+      receitas:[{nome:'Crude',unid:'barris',qtd:4380000,cresc:-8,ramp:'60,100',preco:75,esc:0}],
+      capex:[{nome:'Estudos sísmicos e engenharia',ano:0,valor:25e6,vida:5},{nome:'Perfuração e completação de poços',ano:0,valor:180e6,vida:10},{nome:'Instalações de produção (FPSO)',ano:1,valor:220e6,vida:15}],
+      divida:{montante:200e6,taxa:9.5,prazo:8,carencia:2,ano:1},wacc:{modo:'capm',rf:4.3,erp:5.5,beta:1.1,crp:7.5,kd:9.5,wd:40,manual:15},tv:{metodo:'nenhum',g:0,mult:4}}},
+  agro:{t:'Agro-indústria',d:'Culturas, produção pecuária, agro-processamento',moeda:'Kz',
+    m:{nome:'Fazenda de cereais com irrigação',horizonte:10,inicioOp:1,inflacao:18,ii:10,royalty:0,cvar:45,pessoal:280e6,fst:190e6,outros:60e6,manut:2.5,dso:45,dio:90,dpo:60,capitalInicial:1.6e9,payout:30,caixaMin:150e6,
+      receitas:[{nome:'Milho',unid:'toneladas',qtd:6000,cresc:6,ramp:'50,80,100',preco:260000,esc:12},{nome:'Feijão',unid:'toneladas',qtd:800,cresc:5,ramp:'50,80,100',preco:900000,esc:12}],
+      capex:[{nome:'Preparação de terras e pivots de rega',ano:0,valor:1.6e9,vida:15},{nome:'Tractores e alfaias',ano:0,valor:950e6,vida:8},{nome:'Armazém e secador',ano:1,valor:700e6,vida:20}],
+      divida:{montante:1.8e9,taxa:7.5,prazo:8,carencia:2,ano:0},wacc:{modo:'capm',rf:17,erp:6,beta:0.9,crp:0,kd:7.5,wd:50,manual:18},tv:{metodo:'gordon',g:8,mult:5}}},
+  comercio:{t:'Comércio & Distribuição',d:'Grosso, retalho, distribuição — margem e fundo de maneio',moeda:'Kz',
+    m:{nome:'Distribuidora de bens alimentares',horizonte:7,inicioOp:1,inflacao:18,ii:25,cvar:74,pessoal:520e6,fst:640e6,outros:120e6,manut:1,dso:35,dio:60,dpo:45,capitalInicial:1.6e9,payout:35,caixaMin:200e6,
+      receitas:[{nome:'Vendas de mercadorias',unid:'toneladas',qtd:12000,cresc:8,ramp:'70,100',preco:850000,esc:14}],
+      capex:[{nome:'Armazém (obras e equipamento)',ano:0,valor:900e6,vida:15},{nome:'Frota de distribuição',ano:0,valor:750e6,vida:5},{nome:'Sistemas e equipamento',ano:0,valor:120e6,vida:4}],
+      divida:{montante:1.2e9,taxa:19,prazo:5,carencia:1,ano:0},wacc:{modo:'capm',rf:17,erp:6,beta:1,crp:0,kd:19,wd:40,manual:22},tv:{metodo:'gordon',g:8,mult:6}}},
+  servicos:{t:'Serviços & Consultoria',d:'Horas facturadas, avenças — intensivo em pessoal',moeda:'Kz',
+    m:{nome:'Empresa de consultoria e manutenção',horizonte:7,inicioOp:1,inflacao:18,ii:25,cvar:10,pessoal:520e6,fst:160e6,outros:40e6,manut:1.5,dso:75,dio:0,dpo:30,capitalInicial:450e6,payout:40,caixaMin:60e6,
+      receitas:[{nome:'Horas de consultoria',unid:'horas',qtd:18000,cresc:10,ramp:'60,85,100',preco:45000,esc:12},{nome:'Contratos de manutenção',unid:'contratos/ano',qtd:40,cresc:15,ramp:'50,100',preco:9.6e6,esc:12}],
+      capex:[{nome:'Escritório e equipamento',ano:0,valor:180e6,vida:5},{nome:'Software e licenças',ano:0,valor:90e6,vida:3}],
+      divida:{montante:0,taxa:19,prazo:4,carencia:0,ano:0},wacc:{modo:'capm',rf:17,erp:6,beta:1.1,crp:0,kd:19,wd:15,manual:22},tv:{metodo:'gordon',g:8,mult:6}}},
+  industria:{t:'Indústria transformadora',d:'Unidade fabril — capacidade, custo variável, PRODESI',moeda:'Kz',
+    m:{nome:'Fábrica de água mineral e bebidas',horizonte:10,inicioOp:1,inflacao:18,ii:25,cvar:52,pessoal:380e6,fst:420e6,outros:80e6,manut:3,dso:30,dio:45,dpo:60,capitalInicial:2.2e9,payout:30,caixaMin:200e6,
+      receitas:[{nome:'Garrafas (1,5 L)',unid:'unidades',qtd:24e6,cresc:6,ramp:'45,75,100',preco:150,esc:12}],
+      capex:[{nome:'Construção da unidade fabril',ano:0,valor:1.5e9,vida:25},{nome:'Linha de enchimento',ano:0,valor:2.2e9,vida:12},{nome:'Equipamento auxiliar e frota',ano:1,valor:600e6,vida:6}],
+      divida:{montante:2.4e9,taxa:7.5,prazo:7,carencia:2,ano:0},wacc:{modo:'capm',rf:17,erp:6,beta:1,crp:0,kd:7.5,wd:50,manual:18},tv:{metodo:'gordon',g:8,mult:6}}},
+  imobiliario:{t:'Imobiliário',d:'Arrendamento — ocupação, renda por m², construção faseada',moeda:'USD',
+    m:{nome:'Edifício de escritórios para arrendamento',horizonte:15,inicioOp:2,inflacao:2.5,ii:25,cvar:5,pessoal:0.18e6,fst:0.35e6,outros:0.12e6,manut:1.5,dso:30,dio:0,dpo:30,capitalInicial:7e6,payout:60,caixaMin:0.3e6,
+      receitas:[{nome:'Rendas de escritórios',unid:'m² arrendáveis',qtd:8000,cresc:0,ramp:'55,80,92',preco:385,esc:2.5}],
+      capex:[{nome:'Construção — fase 1',ano:0,valor:9e6,vida:40},{nome:'Construção — fase 2',ano:1,valor:6e6,vida:40},{nome:'AVAC, elevadores e sistemas',ano:1,valor:2.2e6,vida:15}],
+      divida:{montante:9e6,taxa:8,prazo:10,carencia:2,ano:1},wacc:{modo:'capm',rf:4.3,erp:5.5,beta:0.8,crp:7.5,kd:8,wd:50,manual:12},tv:{metodo:'multiplo',g:2,mult:9}}},
+  tecnologia:{t:'Tecnologia & Telecom',d:'SaaS, subscritores, crescimento acelerado',moeda:'Kz',
+    m:{nome:'Plataforma digital B2B (SaaS)',horizonte:7,inicioOp:1,inflacao:18,ii:25,cvar:15,pessoal:420e6,fst:180e6,outros:60e6,manut:4,dso:30,dio:0,dpo:30,capitalInicial:900e6,payout:0,caixaMin:80e6,
+      receitas:[{nome:'Subscrições empresariais',unid:'clientes',qtd:300,cresc:35,ramp:'100',preco:1.2e6,esc:12}],
+      capex:[{nome:'Desenvolvimento da plataforma',ano:0,valor:350e6,vida:4},{nome:'Infra-estrutura e equipamento',ano:0,valor:80e6,vida:4}],
+      divida:{montante:0,taxa:19,prazo:4,carencia:0,ano:0},wacc:{modo:'capm',rf:17,erp:6,beta:1.4,crp:0,kd:19,wd:10,manual:25},tv:{metodo:'gordon',g:8,mult:8}}},
+};
+function newModel(sk,over={}){const s=SECT[sk];const m=Object.assign(clone(BASE),clone(s.m),{id:uid(),sector:sk,moeda:s.moeda,criado:new Date().toISOString().slice(0,10)},over);
+  m.wacc=Object.assign(clone(BASE.wacc),s.m.wacc||{});m.tv=Object.assign(clone(BASE.tv),s.m.tv||{});m.divida=Object.assign(clone(BASE.divida),s.m.divida||{});return m;}
+
+/* ---------------- Estado ---------------- */
+let S;
+function load(){try{S=JSON.parse(localStorage.getItem('integra_mf_v1'))}catch(e){}if(!S||!S.models||!S.models.length){S={models:[newModel('mineracao'),newModel('agro'),newModel('comercio')],active:null,unit:'M',an:null};S.active=S.models[0].id;}}
+function save(){try{localStorage.setItem('integra_mf_v1',JSON.stringify(S))}catch(e){}}
+load();
+const M=()=>S.models.find(m=>m.id===S.active)||S.models[0];
+
+/* ---------------- Motor ---------------- */
+function waccOf(m,mult=1){const w=m.wacc;if(w.modo==='manual')return w.manual/100*mult;const t=m.ii/100;const ke=(w.rf+w.beta*w.erp+w.crp)/100;const kd=w.kd/100*(1-t);const wd=w.wd/100;return ((1-wd)*ke+wd*kd)*mult;}
+function keOf(m){const w=m.wacc;return (w.rf+w.beta*w.erp+w.crp)/100;}
+function parseRamp(s){return String(s||'100').split(/[,;\s]+/).map(Number).filter(n=>!isNaN(n)).map(n=>n/100);}
+function npv(r,cf){return cf.reduce((s,v,t)=>s+v/Math.pow(1+r,t),0);}
+function irr(cf){const f=r=>npv(r,cf);let lo=-0.95,hi=5,flo=f(lo),fhi=f(hi);if(!cf.some(v=>v<0)||!cf.some(v=>v>0))return null;if(flo*fhi>0){hi=50;fhi=f(hi);if(flo*fhi>0)return null;}
+  for(let i=0;i<200;i++){const mid=(lo+hi)/2,fm=f(mid);if(Math.abs(fm)<1e-7)return mid;if(flo*fm<0){hi=mid;fhi=fm}else{lo=mid;flo=fm}}return (lo+hi)/2;}
+function payback(cf){let c=0;for(let t=0;t<cf.length;t++){const p=c;c+=cf[t];if(c>=0&&t>0&&p<0)return t-1+(-p)/cf[t];}return null;}
+
+function run(m,ov={}){
+  const sc=Object.assign({preco:1,volume:1,opex:1,capex:1},m.cenarios[ov.cen||m.cen]||{});
+  const pM=sc.preco*(ov.preco||1),vM=sc.volume*(ov.volume||1),cvM=sc.opex*(ov.cvar||1),fM=sc.opex*(ov.fixos||1),kM=sc.capex*(ov.capex||1);
+  const H=+m.horizonte,T=H+1,Z=()=>Array(T).fill(0);const inf=m.inflacao/100,tax=m.ii/100;const ex=m.inicio==='existente';const st=ex?1:Math.max(1,+m.inicioOp);
+  const R={H,years:[...Array(T)].map((_,t)=>(m.anoBase||2026)+t),lines:{}};
+  const k={rev:Z(),cv:Z(),roy:Z(),pes:Z(),fst:Z(),out:Z(),ebitda:Z(),da:Z(),ebit:Z(),jur:Z(),ebt:Z(),imp:Z(),rl:Z(),
+    capex:Z(),capexExp:Z(),capexMan:Z(),ar:Z(),inv:Z(),ap:Z(),nwc:Z(),dnwc:Z(),cfo:Z(),cfi:Z(),draw:Z(),princ:Z(),eqInj:Z(),eqAuto:Z(),div:Z(),cff:Z(),cash:Z(),
+    debt:Z(),imobB:Z(),depAc:Z(),imob:Z(),cap:Z(),res:Z(),assets:Z(),le:Z(),check:Z(),fcff:Z(),fcfe:Z(),cfads:Z(),ds:Z(),dscr:Array(T).fill(null),taxU:Z(),qty:Z()};
+  // receitas
+  (m.receitas||[]).forEach((r,i)=>{const ramp=parseRamp(r.ramp);const L=Z();for(let t=st;t<=H;t++){const j=t-st;const rp=ex?1:(ramp[j]??1);const q=r.qtd*rp*Math.pow(1+r.cresc/100,j)*vM;const p=r.preco*Math.pow(1+r.esc/100,t-1)*pM;L[t]=q*p;k.rev[t]+=q*p;if(i===0)k.qty[t]=q;}R.lines[i]=L;});
+  for(let t=1;t<=H;t++){const e=Math.pow(1+inf,t-1);const f=t>=st?1:(m.preOp/100);
+    k.cv[t]=k.rev[t]*m.cvar/100*cvM;k.roy[t]=k.rev[t]*m.royalty/100;k.pes[t]=m.pessoal*e*fM*f;k.fst[t]=m.fst*e*fM*f;k.out[t]=m.outros*e*fM*f;
+    k.ebitda[t]=k.rev[t]-k.cv[t]-k.roy[t]-k.pes[t]-k.fst[t]-k.out[t];}
+  // capex e amortizações
+  const dep=Z();(m.capex||[]).forEach(c=>{const a=+c.ano;if(a>H)return;const v=c.valor*kM;k.capexExp[a]+=v;const b=Math.max(a+1,st);for(let t=b;t<b+ +c.vida&&t<=H;t++)dep[t]+=v/c.vida;});
+  for(let t=1;t<=H;t++){k.capexMan[t]=k.rev[t]*m.manut/100;const v=k.capexMan[t];for(let u=t+1;u<t+1+ +m.vidaManut&&u<=H;u++)dep[u]+=v/m.vidaManut;}
+  const ab=m.abertura;if(ex&&ab.imob>0){for(let t=1;t<=Math.min(H,ab.vidaRem);t++)dep[t]+=ab.imob/ab.vidaRem;}
+  for(let t=0;t<=H;t++){k.capex[t]=k.capexExp[t]+k.capexMan[t];k.da[t]=dep[t];k.ebit[t]=k.ebitda[t]-dep[t];}
+  // dívida
+  const d=m.divida,A=+d.montante,da=+d.ano,nr=Math.max(1,d.prazo-d.carencia);const loanB=Z(),opB=Z();
+  let bal=0,obal=ex?ab.divida:0;const opN=Math.max(1,ab.divPrazo);
+  for(let t=0;t<=H;t++){let jur=0,pr=0,dr=0;
+    if(A>0){if(t===da){dr=A;jur+=A*d.taxa/100*0.5;}else jur+=bal*d.taxa/100;
+      if(t>da+ +d.carencia&&t<=da+ +d.prazo){pr=Math.min(bal,A/nr);}bal+=dr-pr;}
+    if(ex&&t>=1&&obal>0){jur+=obal*ab.divTaxa/100;const p2=Math.min(obal,ab.divida/opN);pr+=p2;obal-=p2;}
+    k.jur[t]=jur;k.princ[t]=pr;k.draw[t]=dr;k.debt[t]=bal+(ex?obal:0);k.ds[t]=jur+pr;}
+  // impostos com reporte de prejuízos (5 anos)
+  const taxCalc=base=>{const pool=[];return base.map((b,t)=>{pool.forEach(p=>{});if(b<0){pool.push({v:-b,exp:t+5});return 0;}let tx=b;for(const p of pool){if(p.exp<t||p.v<=0)continue;const u=Math.min(p.v,tx);p.v-=u;tx-=u;if(!tx)break;}return tx*tax;});};
+  for(let t=0;t<=H;t++)k.ebt[t]=k.ebit[t]-k.jur[t];
+  k.imp=taxCalc(k.ebt);k.taxU=taxCalc(k.ebit);
+  for(let t=0;t<=H;t++)k.rl[t]=k.ebt[t]-k.imp[t];
+  // fundo de maneio
+  for(let t=0;t<=H;t++){if(t===0&&ex){k.ar[0]=ab.clientes;k.inv[0]=ab.exist;k.ap[0]=ab.fornec;}else{k.ar[t]=k.rev[t]*m.dso/365;k.inv[t]=k.cv[t]*m.dio/365;k.ap[t]=(k.cv[t]+k.fst[t])*m.dpo/365;}
+    k.nwc[t]=k.ar[t]+k.inv[t]-k.ap[t];k.dnwc[t]=t?k.nwc[t]-k.nwc[t-1]:(ex?0:k.nwc[0]);}
+  // caixa, capital, dividendos
+  const cap0=ex?(ab.imob+ab.exist+ab.clientes+ab.caixa-ab.fornec-ab.divida):0;let cash=ex?ab.caixa:0,capital=cap0,res=0;
+  for(let t=0;t<=H;t++){
+    k.cfo[t]=k.rl[t]+k.da[t]-k.dnwc[t];k.cfi[t]=-k.capex[t];
+    const inj=t===0&&!ex?+m.capitalInicial:0;k.eqInj[t]=inj;
+    let c=cash+k.cfo[t]+k.cfi[t]+k.draw[t]-k.princ[t]+inj;
+    let dv=0;if(t>=1&&k.rl[t]>0&&res+k.rl[t]>0){dv=Math.max(0,Math.min(m.payout/100*k.rl[t],c-m.caixaMin));}
+    c-=dv;let auto=0;if(c<m.caixaMin-0.5){auto=m.caixaMin-c;c+=auto;}
+    k.div[t]=dv;k.eqAuto[t]=auto;k.cff[t]=k.draw[t]-k.princ[t]+inj+auto-dv;cash=c;k.cash[t]=c;capital+=inj+auto;res+=k.rl[t]-dv;k.cap[t]=capital;k.res[t]=res;
+    k.imobB[t]=(t?k.imobB[t-1]:(ex?ab.imob:0))+k.capex[t];k.depAc[t]=(t?k.depAc[t-1]:0)+k.da[t];k.imob[t]=k.imobB[t]-k.depAc[t];
+    k.assets[t]=k.imob[t]+k.inv[t]+k.ar[t]+k.cash[t];k.le[t]=k.cap[t]+k.res[t]+k.debt[t]+k.ap[t];k.check[t]=k.assets[t]-k.le[t];
+    k.fcff[t]=k.ebitda[t]-k.taxU[t]-k.capex[t]-k.dnwc[t];k.fcfe[t]=k.cfo[t]+k.cfi[t]+k.draw[t]-k.princ[t];
+    k.cfads[t]=k.ebitda[t]-k.imp[t]-k.dnwc[t]-k.capexMan[t];if(k.ds[t]>1&&t>=st)k.dscr[t]=k.cfads[t]/k.ds[t];}
+  if(ex){k.fcff[0]=0;k.fcfe[0]=0;}
+  // avaliação
+  const w=waccOf(m,ov.wacc||1);R.wacc=w;R.ke=keOf(m);const g=m.tv.g/100;
+  let tv=0;if(m.tv.metodo==='gordon'&&w>g)tv=k.fcff[H]*(1+g)/(w-g);else if(m.tv.metodo==='multiplo')tv=Math.max(0,k.ebitda[H]*m.tv.mult);
+  R.tv=tv;R.pvTv=tv/Math.pow(1+w,H);
+  const cfT=k.fcff.slice();cfT[H]+=tv;R.npv=npv(w,cfT);R.npvSemTv=npv(w,k.fcff);R.irr=irr(cfT);
+  const eqT=k.fcfe.slice();const eqTv=Math.max(0,tv-k.debt[H]);eqT[H]+=eqTv;if(ex)eqT[0]=-(cap0>0?cap0:0);R.irrEq=irr(eqT);
+  if(ex){R.irr=null;R.irrEq=null;}
+  R.pb=ex?null:payback(k.fcff);const disc=k.fcff.map((v,t)=>v/Math.pow(1+w,t));R.pbD=ex?null:payback(disc);
+  const pvCap=k.capex.reduce((s,v,t)=>s+v/Math.pow(1+w,t),0);R.pvCapex=pvCap;R.pi=pvCap?(R.npv+pvCap)/pvCap:null;
+  R.ev=R.npv;R.netDebt0=ex?ab.divida-ab.caixa:0;R.eqVal=R.ev-R.netDebt0;
+  R.fundingGap=k.eqAuto.reduce((s,v)=>s+v,0);R.totalCapex=k.capexExp.reduce((s,v)=>s+v,0);
+  // crédito
+  const repY=[...Array(T).keys()].filter(t=>k.princ[t]>0&&t>=st);R.repY=repY;
+  const ds=repY.map(t=>k.dscr[t]).filter(v=>v!=null);R.minDscr=ds.length?Math.min(...ds):null;R.avgDscr=ds.length?ds.reduce((a,b)=>a+b,0)/ds.length:null;
+  const kd=(d.taxa||9)/100;if(repY.length){const r0=repY[0];const end=repY[repY.length-1];let pv=0;for(let t=r0;t<=end;t++)pv+=k.cfads[t]/Math.pow(1+kd,t-r0+1);const ob=k.debt[r0-1]||A;R.llcr=ob?pv/ob:null;}else R.llcr=null;
+  R.ndE=k.ebitda.map((e,t)=>e>0&&t>=st?(k.debt[t]-k.cash[t])/e:null);R.icr=k.ebitda.map((e,t)=>k.jur[t]>1&&t>=st?e/k.jur[t]:null);
+  if(A>0){let cap=0;for(let t=da+ +d.carencia+1;t<=Math.min(H,da+ +d.prazo);t++)cap+=Math.max(0,k.cfads[t])/m.cov.dscr/Math.pow(1+kd,t-da);R.debtCap=cap;}else R.debtCap=null;
+  R.bookEq=cap0;R.hasDebt=A>0||(ex&&ab.divida>0);R.k=k;R.sc=sc;R.wd=A>0?A/(A+(+m.capitalInicial||1)):0;
+  return R;
+}
+function breakEvenPrice(m){const f=p=>run(m,{preco:p}).npv;let lo=0.05,hi=4;if(f(lo)>0)return lo;if(f(hi)<0)return null;for(let i=0;i<60;i++){const mid=(lo+hi)/2;f(mid)>0?hi=mid:lo=mid;}return (lo+hi)/2;}
+
+/* ---------------- Formatação monetária ---------------- */
+const UNITS={U:[1,''],K:[1e3,'mil'],M:[1e6,'M']};
+function mv(v,dd){const [div]=UNITS[S.unit];const m=M();const d=dd??(S.unit==='M'?(m.moeda==='USD'?2:1):0);if(v==null||!isFinite(v))return '—';const x=v/div;const s=Math.abs(x).toLocaleString('pt-PT',{minimumFractionDigits:d,maximumFractionDigits:d});return x<-1e-9?`(${s})`:s;}
+const unitLbl=()=>`${M().moeda==='USD'?'USD':'Kz'}${UNITS[S.unit][1]?' · '+(S.unit==='M'?'milhões':'milhares'):''}`;
+const money=(v,d)=>`${mv(v,d)} ${UNITS[S.unit][1]?UNITS[S.unit][1]+' ':''}${M().moeda==='USD'?'USD':'Kz'}`;
+
+/* ---------------- Gráficos SVG ---------------- */
+function barChart({labels,series,line,h=230,ref,fmt=v=>mv(v)}){
+  const W=620,P={l:62,r:10,t:12,b:28};const all=[...series.flatMap(s=>s.data),...(line?line.data:[]),0,...(ref!=null?[ref]:[])].filter(v=>v!=null&&isFinite(v));
+  let mx=Math.max(...all),mn=Math.min(...all);if(mx===mn)mx=mn+1;const pad=(mx-mn)*.08;mx+=pad;if(mn<0)mn-=pad;
+  const y=v=>P.t+(mx-v)/(mx-mn)*(h-P.t-P.b);const n=labels.length,gw=(W-P.l-P.r)/n,bw=Math.min(28,gw*0.75/series.length);
+  let s=`<svg viewBox="0 0 ${W} ${h}" width="100%" style="display:block">`;
+  for(let i=0;i<=4;i++){const v=mn+(mx-mn)*i/4;s+=`<line x1="${P.l}" x2="${W-P.r}" y1="${y(v)}" y2="${y(v)}" stroke="#eef1f5"/><text x="${P.l-6}" y="${y(v)+4}" font-size="12" text-anchor="end" fill="#8791a5">${fmt(v)}</text>`;}
+  s+=`<line x1="${P.l}" x2="${W-P.r}" y1="${y(0)}" y2="${y(0)}" stroke="#b7c0cf"/>`;
+  labels.forEach((l,i)=>{const cx=P.l+gw*i+gw/2;series.forEach((se,j)=>{const v=se.data[i];if(v==null)return;const x=cx-bw*series.length/2+bw*j;const y0=y(0),y1=y(v);s+=`<rect x="${x+1}" y="${Math.min(y0,y1)}" width="${bw-2}" height="${Math.max(1,Math.abs(y1-y0))}" rx="2" fill="${(se.colorFn?se.colorFn(v,i):se.color)}"><title>${esc(se.name)} ${l}: ${fmt(v)}</title></rect>`;});
+    if(n<=12||i%2===0)s+=`<text x="${cx}" y="${h-8}" font-size="11.5" text-anchor="middle" fill="#8791a5">${l}</text>`;});
+  if(line){const pts=line.data.map((v,i)=>v==null?null:`${P.l+gw*i+gw/2},${y(v)}`).filter(Boolean);s+=`<polyline points="${pts.join(' ')}" fill="none" stroke="${line.color}" stroke-width="2.2"/>`;line.data.forEach((v,i)=>{if(v!=null)s+=`<circle cx="${P.l+gw*i+gw/2}" cy="${y(v)}" r="3" fill="#fff" stroke="${line.color}" stroke-width="2"><title>${esc(line.name)} ${labels[i]}: ${fmt(v)}</title></circle>`});}
+  if(ref!=null)s+=`<line x1="${P.l}" x2="${W-P.r}" y1="${y(ref)}" y2="${y(ref)}" stroke="#c0392b" stroke-dasharray="5 4" stroke-width="1.5"/><text x="${W-P.r-4}" y="${y(ref)-5}" font-size="10.5" text-anchor="end" fill="#c0392b">mínimo ${fmt(ref)}</text>`;
+  return s+'</svg>';}
+const legend=items=>`<div class="legend">${items.map(([n,c,l])=>`<span><i style="background:${c};${l?'height:3px;vertical-align:3px':''}"></i>${n}</span>`).join('')}</div>`;
+function hBars(rows,{center=0,fmt=v=>mv(v),h0=30}){const W=640,L=200,R=14;const all=rows.flatMap(r=>[r.lo,r.hi,center]);const mn=Math.min(...all),mx=Math.max(...all);const x=v=>L+(v-mn)/((mx-mn)||1)*(W-L-R-130);const H=rows.length*h0+30;
+  let s=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:880px;display:block">`;s+=`<line x1="${x(center)}" x2="${x(center)}" y1="4" y2="${H-20}" stroke="#121826" stroke-width="1.2"/><text x="${x(center)}" y="${H-6}" font-size="10.5" text-anchor="middle" fill="#475166">${fmt(center)}</text>`;
+  rows.forEach((r,i)=>{const yy=8+i*h0;s+=`<text x="${L-10}" y="${yy+15}" font-size="12.5" text-anchor="end" fill="#121826">${esc(r.name)}</text>`;
+    const a=Math.min(r.lo,r.hi),b=Math.max(r.lo,r.hi);
+    if(r.range){s+=`<rect x="${x(a)}" y="${yy+3}" width="${Math.max(2,x(b)-x(a))}" height="18" rx="3" fill="${r.color||'#28507f'}"/>`;}
+    else{s+=`<rect x="${Math.min(x(r.lo),x(center))}" y="${yy+3}" width="${Math.abs(x(r.lo)-x(center))}" height="18" fill="#c44536" opacity=".85"/><rect x="${Math.min(x(r.hi),x(center))}" y="${yy+3}" width="${Math.abs(x(r.hi)-x(center))}" height="18" fill="#2a9d8f" opacity=".9"/>`;}
+    s+=`<text x="${x(b)+6}" y="${yy+16}" font-size="11.5" fill="#475166">${r.range?fmt(a)+' – '+fmt(b):fmt(r.lo)+' | '+fmt(r.hi)}</text>`;});return s+'</svg>';}
+
+/* ---------------- Navegação ---------------- */
+let VIEW='painel',SUB={};
+const NAV=[['g','Modelo'],['painel','Painel executivo','dash'],['pressupostos','Pressupostos','sliders'],['demonstracoes','Demonstrações projectadas','table'],
+  ['g','Decisão'],['avaliacao','Avaliação (DCF e múltiplos)','value'],['credito','Financiamento & crédito','bank'],['sensibilidade','Cenários & sensibilidade','tornado'],['relatorios','Relatórios','doc'],
+  ['g','Histórico'],['analise','Análise de demonstrações','scan']];
+const VIEWS={};
+function render(){const m=M();
+  $('#nav').innerHTML=NAV.map(n=>n[0]==='g'?`<div class="grp">${n[1]}</div>`:`<a class="${VIEW===n[0]?'on':''}" data-go="${n[0]}">${ico(n[2],17)}<span>${n[1]}</span></a>`).join('');
+  $('#mSel').innerHTML=S.models.map(x=>`<option value="${x.id}" ${x.id===m.id?'selected':''}>${esc(x.nome)}</option>`).join('');
+  $('#mTags').innerHTML=`<span class="tag b">${SECT[m.sector]?.t||'Personalizado'}</span> <span class="tag n">${m.moeda}</span> <span class="tag ${m.inicio==='existente'?'o':'n'}">${m.inicio==='existente'?'Empresa existente':'Projecto novo'}</span>`;
+  const f=VIEWS[VIEW]||VIEWS.painel;$('#view').innerHTML=f();if(f.after)f.after();}
+function go(v){VIEW=v;try{history.replaceState(null,'','#'+v)}catch(e){}render();window.scrollTo(0,0);}
+const ph=(t,s,a='')=>`<div class="ph"><div><h1>${t}</h1><div class="sub">${s}</div></div><div class="rowact" style="flex-wrap:wrap">${a}</div></div>`;
+const unitSel=()=>`<select class="sel" id="unitSel" title="Unidade de apresentação">${Object.entries({U:'Unidades',K:'Milhares',M:'Milhões'}).map(([k,v])=>`<option value="${k}" ${S.unit===k?'selected':''}>${v}</option>`).join('')}</select>`;
+const cenSel=()=>{const m=M();return `<select class="sel" id="cenSel" title="Cenário activo">${[['base','Cenário base'],['otim','Optimista'],['pess','Pessimista']].map(([k,v])=>`<option value="${k}" ${m.cen===k?'selected':''}>${v}</option>`).join('')}</select>`};
+function bindCommon(){const u=$('#unitSel');if(u)u.onchange=()=>{S.unit=u.value;save();render()};const c=$('#cenSel');if(c)c.onchange=()=>{M().cen=c.value;save();render()};}
+
+/* ---------------- Painel executivo ---------------- */
+function verdict(m,R){if(m.inicio==='existente'){const pb=R.bookEq>0?R.eqVal/R.bookEq:null;const c=R.eqVal>R.bookEq?'g':R.eqVal>0?'a':'r';
+  return {inv:{c,t:c==='g'?'O valor económico supera o valor contabilístico':c==='a'?'Valor económico abaixo dos capitais próprios contabilísticos':'Capital próprio sem valor económico positivo',d:`Enterprise value de ${money(R.ev)} (WACC ${pct(R.wacc)}); dívida líquida ${money(R.netDebt0)}; valor do capital próprio ${money(R.eqVal)} vs. ${money(R.bookEq)} contabilísticos (P/VC ${xf(pb)}). EV/EBITDA implícito ${xf(R.k.ebitda[1]?R.ev/R.k.ebitda[1]:null)}.`},bank:R.hasDebt?bankV(m,R):null,be:null};}
+  const ok=R.npv>0&&R.irr!=null&&R.irr>R.wacc;const be=breakEvenPrice(m);const marg=be!=null?1-be:null;
+  const inv={c:ok?(marg>0.15?'g':'a'):'r',t:ok?(marg>0.15?'Cria valor para o accionista':'Cria valor, mas com margem de segurança curta'):'Destrói valor nas condições actuais',
+    d:`VAL de ${money(R.npv)} a um WACC de ${pct(R.wacc)}; TIR do projecto ${pct(R.irr)}${R.irrEq!=null?`, TIR do accionista ${pct(R.irrEq)} (Ke ${pct(R.ke)})`:''}. ${be!=null?`O VAL anula-se se o preço cair ${pct(1-be,0)} face ao cenário base.`:''}${R.fundingGap>0?` Necessidade adicional de capital/suprimentos: ${money(R.fundingGap)}.`:''}`};
+  return {inv,bank:R.hasDebt?bankV(m,R):null,be};}
+function bankV(m,R){const okB=R.minDscr!=null&&R.minDscr>=m.cov.dscr;const near=R.minDscr!=null&&R.minDscr>=1.1;
+    return {c:okB?'g':near?'a':'r',t:okB?'Bancável — cumpre o DSCR mínimo':near?'Bancável com reforço (garantias, prazo ou carência)':'Não bancável na estrutura proposta',
+      d:`DSCR mínimo ${xf(R.minDscr)} (covenant ${xf(m.cov.dscr)}), médio ${xf(R.avgDscr)}; LLCR ${xf(R.llcr)}.${m.divida.montante>0?` Capacidade de endividamento ao DSCR alvo: ${money(R.debtCap)} vs. ${money(m.divida.montante)} pedidos.`:' Dívida existente no balanço de abertura.'}`};}
+const vbox=(v,who)=>`<div class="verdict" style="background:var(--${v.c==='g'?'greenSoft':v.c==='a'?'amberSoft':'redSoft'})"><div class="ic" style="background:var(--${v.c==='g'?'green':v.c==='a'?'amber':'red'})">${v.c==='g'?'✓':v.c==='a'?'!':'×'}</div><div><div class="muted" style="font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;font-weight:600">${who}</div><b style="font-size:15px">${v.t}</b><div style="margin-top:4px;color:var(--ink2);font-size:13px">${v.d}</div></div></div>`;
+VIEWS.painel=()=>{const m=M(),R=run(m),k=R.k,V=verdict(m,R);const yrs=R.years.map(String);const bad=k.check.some(v=>Math.abs(v)>1);
+  return ph(esc(m.nome),`${SECT[m.sector]?.t} · horizonte ${m.horizonte} anos · ${R.years[0]}–${R.years[R.H]} · valores em ${unitLbl()}`,`${cenSel()}${unitSel()}`)+
+  `<div class="grid ${V.bank?'g2':''}" style="margin-bottom:16px">${vbox(V.inv,'Perspectiva do investidor')}${V.bank?vbox(V.bank,'Perspectiva do financiador'):''}</div>
+  <div class="grid g5" style="margin-bottom:16px">
+   <div class="card kpi"><div class="l">VAL (NPV)</div><div class="v" style="color:${R.npv>=0?'var(--green)':'var(--red)'}">${mv(R.npv)}</div><div class="d">${m.tv.metodo==='nenhum'?'sem valor terminal':'incl. valor terminal '+pct(R.pvTv/(R.npv||1),0)}</div></div>
+   ${m.inicio==='existente'?`<div class="card kpi"><div class="l">EV / EBITDA implícito</div><div class="v">${xf(k.ebitda[1]?R.ev/k.ebitda[1]:null)}</div><div class="d">WACC ${pct(R.wacc)} · g ${m.tv.g}%</div></div><div class="card kpi"><div class="l">Capital próprio: económico vs contab.</div><div class="v">${xf(R.bookEq>0?R.eqVal/R.bookEq:null)}</div><div class="d">${mv(R.eqVal)} vs ${mv(R.bookEq)}</div></div>`:`<div class="card kpi"><div class="l">TIR projecto / accionista</div><div class="v">${pct(R.irr)}</div><div class="d">accionista ${pct(R.irrEq)} · WACC ${pct(R.wacc)}</div></div>
+   <div class="card kpi"><div class="l">Payback simples / desc.</div><div class="v">${R.pb!=null?R.pb.toFixed(1).replace('.',',')+' a':'—'}</div><div class="d">descontado ${R.pbD!=null?R.pbD.toFixed(1).replace('.',',')+' anos':'> horizonte'}</div></div>`}
+   <div class="card kpi"><div class="l">${m.inicio==='existente'?'Valor da empresa (EV)':'Investimento total'}</div><div class="v">${mv(m.inicio==='existente'?R.ev:R.totalCapex)}</div><div class="d">${m.inicio==='existente'?'equity '+mv(R.eqVal):'índice de rendibilidade '+xf(R.pi)}</div></div>
+   <div class="card kpi"><div class="l">DSCR mínimo</div><div class="v" style="color:${R.minDscr==null?'inherit':R.minDscr>=m.cov.dscr?'var(--green)':'var(--red)'}">${xf(R.minDscr)}</div><div class="d">${R.hasDebt?'LLCR '+xf(R.llcr):'sem dívida no modelo'}</div></div>
+  </div>
+  ${bad?`<div class="alert r">${ico('alert',17)}Balanço não equilibra num ou mais anos — rever pressupostos.</div>`:''}
+  <div class="grid g2">
+   <div class="card"><div class="hd"><h3>Receitas, EBITDA e resultado líquido</h3><span class="muted">${unitLbl()}</span></div><div class="bd">${legend([['Receitas','var(--s1)'],['EBITDA','var(--s2)'],['Resultado líquido','var(--s3)']])}${barChart({labels:yrs,series:[{name:'Receitas',data:k.rev,color:'#1d4e89'},{name:'EBITDA',data:k.ebitda,color:'#2a9d8f'},{name:'Resultado líquido',data:k.rl,color:'#e9a23b'}]})}</div></div>
+   <div class="card"><div class="hd"><h3>Fluxo de caixa livre (FCFF) e acumulado</h3><span class="muted">${unitLbl()}</span></div><div class="bd">${legend([['FCFF anual','var(--s1)'],['Acumulado','#c44536',1]])}${barChart({labels:yrs,series:[{name:'FCFF',data:k.fcff,colorFn:v=>v<0?'#c44536':'#1d4e89'}],line:{name:'Acumulado',data:k.fcff.reduce((a,v,i)=>(a.push((a[i-1]||0)+v),a),[]),color:'#c44536'}})}</div></div>
+   <div class="card"><div class="hd"><h3>Estrutura de financiamento</h3></div><div class="bd">${legend([['Dívida','var(--s4)'],['Caixa','var(--s2)'],['Capitais próprios','var(--s1)']])}${barChart({labels:yrs,series:[{name:'Dívida',data:k.debt,color:'#c44536'},{name:'Caixa',data:k.cash,color:'#2a9d8f'},{name:'Capitais próprios',data:k.cap.map((c,i)=>c+k.res[i]),color:'#1d4e89'}],h:210})}</div></div>
+   <div class="card"><div class="hd"><h3>Margens</h3></div><div class="bd"><table><thead><tr><th>Indicador</th>${[1,Math.min(3,R.H),R.H].filter((v,i,a)=>a.indexOf(v)===i).map(t=>`<th class="num">${R.years[t]}</th>`).join('')}</tr></thead><tbody>${[['Margem EBITDA',t=>k.rev[t]?k.ebitda[t]/k.rev[t]:null],['Margem operacional',t=>k.rev[t]?k.ebit[t]/k.rev[t]:null],['Margem líquida',t=>k.rev[t]?k.rl[t]/k.rev[t]:null],['ROE',t=>{const e=k.cap[t]+k.res[t];return e>0?k.rl[t]/e:null}],['Dívida líquida / EBITDA',t=>R.ndE[t],1]].map(([n,f,x])=>`<tr><td>${n}</td>${[1,Math.min(3,R.H),R.H].filter((v,i,a)=>a.indexOf(v)===i).map(t=>`<td class="num">${x?xf(f(t)):pct(f(t))}</td>`).join('')}</tr>`).join('')}</tbody></table>
+   <div class="muted" style="font-size:12px;margin-top:10px">Imposto Industrial ${m.ii}%${m.royalty?` · royalties/imposto sobre a produção ${m.royalty}% das receitas`:''} · reporte de prejuízos fiscais por 5 anos.</div></div></div>
+  </div>`;};
+VIEWS.painel.after=bindCommon;
+
+/* ---------------- Pressupostos ---------------- */
+function getP(o,p){return p.split('.').reduce((a,k)=>a?.[k],o)}
+function setP(o,p,v){const ks=p.split('.');const last=ks.pop();const t=ks.reduce((a,k)=>a[k],o);t[last]=v;}
+const F=(p,l,h='',type='n',cls='')=>{const v=getP(M(),p);return `<div class="f ${cls}"><label>${l}</label>${type==='t'?`<input class="inp" data-p="${p}" data-t="t" value="${esc(v)}">`:`<input class="inp n" data-p="${p}" type="number" step="any" value="${v}">`}${h?`<span class="hint">${h}</span>`:''}</div>`;};
+const SelF=(p,l,opts,h='',cls='')=>{const v=getP(M(),p);return `<div class="f ${cls}"><label>${l}</label><select class="sel" data-p="${p}" data-t="t">${opts.map(([k,n])=>`<option value="${k}" ${String(v)===String(k)?'selected':''}>${n}</option>`).join('')}</select>${h?`<span class="hint">${h}</span>`:''}</div>`;};
+function liveStrip(){const m=M(),R=run(m);return `<div class="strip" id="live"><div>VAL<b style="color:${R.npv>=0?'var(--green)':'var(--red)'}">${money(R.npv)}</b></div><div>TIR projecto<b>${pct(R.irr)}</b></div><div>TIR accionista<b>${pct(R.irrEq)}</b></div><div>WACC<b>${pct(R.wacc)}</b></div><div>Payback<b>${R.pb!=null?R.pb.toFixed(1).replace('.',',')+' anos':'—'}</b></div><div>DSCR mín.<b>${xf(R.minDscr)}</b></div><div>Capital adicional<b style="color:${R.fundingGap>0?'var(--red)':'inherit'}">${money(R.fundingGap)}</b></div><div style="margin-left:auto">${cenSel()}</div></div>`;}
+VIEWS.pressupostos=()=>{const m=M();const tab=SUB.pt||'geral';const cur=m.moeda;
+  const T={
+   geral:`<div class="card"><div class="hd"><h3>Identificação e horizonte</h3></div><div class="bd"><div class="form">
+     ${F('nome','Nome do modelo','','t','w2')}${F('promotor','Entidade promotora / mutuário','Aparece nos relatórios e memorandos','t','w2')}${SelF('moeda','Moeda do modelo',[['Kz','Kwanza (Kz)'],['USD','Dólar (USD)']],'Projectos com receitas em USD (petróleo, minérios) modelam-se em USD')}${F('anoBase','Ano 0 (base)')}
+     ${F('horizonte','Horizonte (anos)','Ano 0 + n anos de projecção')}${m.inicio==='existente'?'':F('inicioOp','Ano de início da operação','Anos anteriores = construção/pré-operação')}${m.inicio==='existente'?'':F('preOp','Custos fixos na pré-operação (%)','% dos custos fixos suportados antes de operar')}${F('inflacao','Inflação / escalada de custos (% a.a.)',cur==='Kz'?'Kz: usar inflação esperada (INE/BNA)':'USD: inflação internacional')}
+     ${SelF('inicio','Ponto de partida',[['greenfield','Projecto novo (greenfield)'],['existente','Empresa existente (com balanço de abertura)']],'','w2')}
+   </div></div></div>
+   ${m.inicio==='existente'?`<div class="card" style="margin-top:16px"><div class="hd"><h3>Balanço de abertura (ano ${m.anoBase})</h3><span class="muted">${cur}</span></div><div class="bd"><div class="form">
+     ${F('abertura.imob','Imobilizado líquido (classe 1)')}${F('abertura.vidaRem','Vida útil remanescente (anos)')}${F('abertura.exist','Existências (classe 2)')}${F('abertura.clientes','Clientes (31)')}
+     ${F('abertura.caixa','Meios monetários (classe 4)')}${F('abertura.fornec','Fornecedores (32)')}${F('abertura.divida','Empréstimos obtidos (33)')}${F('abertura.divTaxa','Taxa da dívida existente (%)')}
+     ${F('abertura.divPrazo','Prazo remanescente da dívida (anos)')}<div class="f w2"><label>Capitais próprios implícitos</label><div class="inp" style="display:flex;align-items:center;background:#fafbfc">${money(m.abertura.imob+m.abertura.exist+m.abertura.clientes+m.abertura.caixa-m.abertura.fornec-m.abertura.divida)}</div></div>
+   </div></div></div>`:''}`,
+   receitas:`<div class="card"><div class="hd"><h3>Linhas de receita (classe 6 — Proveitos por natureza)</h3><button class="btn sm" data-act="addRev">+ Linha de receita</button></div><div class="tblwrap"><table><thead><tr><th>Produto / serviço</th><th>Unidade</th><th class="num">Quantidade anual (plena)</th><th class="num">Crescimento %</th><th>Rampa de arranque %</th><th class="num">Preço unitário (${cur})</th><th class="num">Escalada preço %</th><th></th></tr></thead><tbody>
+     ${m.receitas.map((r,i)=>`<tr><td><input class="inp sm-in" data-p="receitas.${i}.nome" data-t="t" value="${esc(r.nome)}" style="min-width:170px"></td><td><input class="inp sm-in" data-p="receitas.${i}.unid" data-t="t" value="${esc(r.unid)}" style="width:120px"></td><td><input class="inp n sm-in" type="number" step="any" data-p="receitas.${i}.qtd" value="${r.qtd}" style="width:130px"></td><td><input class="inp n sm-in" type="number" step="any" data-p="receitas.${i}.cresc" value="${r.cresc}" style="width:80px"></td><td><input class="inp sm-in" data-p="receitas.${i}.ramp" data-t="t" value="${esc(r.ramp)}" style="width:110px" title="% da capacidade nos primeiros anos, ex.: 40,75,100"></td><td><input class="inp n sm-in" type="number" step="any" data-p="receitas.${i}.preco" value="${r.preco}" style="width:120px"></td><td><input class="inp n sm-in" type="number" step="any" data-p="receitas.${i}.esc" value="${r.esc}" style="width:80px"></td><td>${m.receitas.length>1?`<button class="btn sm ghost red" data-act="delRev" data-i="${i}">×</button>`:''}</td></tr>`).join('')}
+   </tbody></table></div><div class="bd muted" style="font-size:12px">Rampa: % da capacidade nos primeiros anos de operação (ex.: 40,75,100). Crescimento negativo modela declínio (ex.: campos petrolíferos). ${m.inicio==='existente'?'Em empresa existente, a quantidade corresponde ao ano 1 e a rampa é ignorada.':''}</div></div>`,
+   custos:`<div class="card"><div class="hd"><h3>Estrutura de custos (classe 7 — Custos por natureza)</h3></div><div class="bd"><div class="form">
+     ${F('cvar','Custos variáveis — 71 (% receitas)','Custo das existências vendidas e consumidas')}${F('royalty','Royalties / imposto s/ produção (% receitas)','Mineração, petróleo; 0 se não aplicável')}
+     ${F('pessoal',`Custos com pessoal — 72 (${cur}/ano)`,'Valor do ano 1, escalado pela inflação')}${F('fst',`Fornecimentos e serviços de terceiros — 75.2 (${cur}/ano)`)}
+     ${F('outros',`Outros custos operacionais — 75 (${cur}/ano)`)}${F('ii','Imposto Industrial (%)','Taxa geral 25%; agricultura 10%; petróleo — IRP')}
+   </div></div></div>`,
+   capex:`<div class="card"><div class="hd"><h3>Plano de investimento (classe 1 — Meios fixos)</h3><button class="btn sm" data-act="addCap">+ Investimento</button></div><div class="tblwrap"><table><thead><tr><th>Investimento</th><th class="num">Ano</th><th class="num">Valor (${cur})</th><th class="num">Vida útil (anos)</th><th class="num">Amortização anual</th><th></th></tr></thead><tbody>
+     ${m.capex.map((c,i)=>`<tr><td><input class="inp sm-in" data-p="capex.${i}.nome" data-t="t" value="${esc(c.nome)}" style="min-width:240px"></td><td><input class="inp n sm-in" type="number" data-p="capex.${i}.ano" value="${c.ano}" style="width:70px"></td><td><input class="inp n sm-in" type="number" step="any" data-p="capex.${i}.valor" value="${c.valor}" style="width:150px"></td><td><input class="inp n sm-in" type="number" data-p="capex.${i}.vida" value="${c.vida}" style="width:80px"></td><td class="num">${money(c.valor/c.vida)}</td><td><button class="btn sm ghost red" data-act="delCap" data-i="${i}">×</button></td></tr>`).join('')}
+     <tr class="tot"><td><b>Total</b></td><td></td><td class="num"><b>${money(m.capex.reduce((s,c)=>s+ +c.valor,0))}</b></td><td></td><td></td><td></td></tr></tbody></table></div>
+     <div class="bd"><div class="form">${F('manut','CAPEX de manutenção (% receitas)','Reinvestimento para manter capacidade')}${F('vidaManut','Vida útil da manutenção (anos)')}<div class="f w2"><span class="hint" style="margin-top:20px">Amortização linear (quotas constantes), a partir do ano seguinte ao investimento ou do início da operação.</span></div></div></div></div>`,
+   fm:`<div class="card"><div class="hd"><h3>Fundo de maneio</h3></div><div class="bd"><div class="form">${F('dso','Prazo médio de recebimento (dias)','Clientes — 31')}${F('dio','Prazo médio de existências (dias)','Sobre custos variáveis — classe 2')}${F('dpo','Prazo médio de pagamento (dias)','Fornecedores — 32')}${F('caixaMin',`Caixa mínima (${cur})`,'Abaixo disto o modelo exige suprimentos')}</div></div></div>`,
+   fin:`<div class="card"><div class="hd"><h3>Estrutura de financiamento</h3></div><div class="bd"><div class="form">
+     ${m.inicio==='existente'?'':F('capitalInicial',`Capital social inicial (${cur})`,'Realizado no ano 0')}${F('payout','Distribuição de dividendos (% RL)','Só com resultados acumulados positivos')}
+     <div class="f full sec" style="font-size:11.5px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;margin-top:6px">Empréstimo ${m.inicio==='existente'?'novo':'bancário'}</div>
+     ${F('divida.montante',`Montante (${cur})`)}${F('divida.taxa','Taxa de juro (% a.a.)',cur==='Kz'?'Aviso 10/BDA/PRODESI vs. crédito comercial':'Financiamento em USD')}${F('divida.prazo','Prazo total (anos)')}${F('divida.carencia','Carência de capital (anos)')}
+     ${F('divida.ano','Ano de desembolso')}
+     <div class="f full sec" style="font-size:11.5px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;margin-top:6px">Covenants do financiador</div>
+     ${F('cov.dscr','DSCR mínimo (×)')}${F('cov.ndEbitda','Dívida líquida / EBITDA máx. (×)')}${F('cov.icr','Cobertura de juros mín. (×)')}
+   </div></div></div>`,
+   taxa:`<div class="card"><div class="hd"><h3>Taxa de desconto (WACC)</h3></div><div class="bd"><div class="form">
+     ${SelF('wacc.modo','Método',[['capm','CAPM + prémio de risco país'],['manual','Taxa definida manualmente']])}
+     ${m.wacc.modo==='manual'?F('wacc.manual','Taxa de desconto (%)'):`${F('wacc.rf','Taxa sem risco (%)',cur==='USD'?'US Treasury 10 anos':'Obrigações do Tesouro em Kz')}${F('wacc.beta','Beta (alavancado)','Referência sectorial')}${F('wacc.erp','Prémio de risco de mercado (%)')}${F('wacc.crp','Prémio de risco país (%)',cur==='USD'?'Risco Angola sobre activos em USD':'0 se a taxa sem risco já é em Kz')}${F('wacc.kd','Custo da dívida (% antes de imposto)')}${F('wacc.wd','Peso da dívida D/(D+E) (%)')}
+     <div class="f w2"><label>Resultado</label><div class="inp" style="display:flex;align-items:center;gap:14px;background:#fafbfc">Ke ${pct(keOf(m))} · Kd líquido ${pct(m.wacc.kd/100*(1-m.ii/100))} · <b>WACC ${pct(waccOf(m))}</b></div></div>`}
+   </div></div></div>
+   <div class="card" style="margin-top:16px"><div class="hd"><h3>Valor terminal e múltiplos</h3></div><div class="bd"><div class="form">
+     ${SelF('tv.metodo','Método do valor terminal',[['nenhum','Sem valor terminal (vida finita)'],['gordon','Crescimento perpétuo (Gordon)'],['multiplo','Múltiplo de saída (EV/EBITDA)']],'Recursos esgotáveis (minas, campos) → sem valor terminal')}
+     ${F('tv.g','Crescimento perpétuo g (%)','Nominal, na moeda do modelo')}${F('tv.mult','Múltiplo de saída EV/EBITDA (×)')}<div></div>
+     ${F('mult.lo','Múltiplo EV/EBITDA comparáveis — mínimo')}${F('mult.hi','Múltiplo EV/EBITDA comparáveis — máximo')}${F('sens','Amplitude da sensibilidade (± %)')}
+   </div></div></div>`
+  };
+  return ph('Pressupostos',`Todas as demonstrações, a avaliação e as métricas de crédito recalculam ao alterar qualquer valor · ${SECT[m.sector]?.d||''}`)+liveStrip()+
+  `<div class="tabs">${[['geral','Geral'],['receitas','Receitas'],['custos','Custos & impostos'],['capex','Investimento'],['fm','Fundo de maneio'],['fin','Financiamento'],['taxa','Taxa de desconto']].map(([k,n])=>`<a class="${tab===k?'on':''}" data-act="sub" data-k="pt" data-v="${k}">${n}</a>`).join('')}</div>${T[tab]}`;};
+VIEWS.pressupostos.after=()=>{bindCommon();document.querySelectorAll('[data-p]').forEach(i=>i.onchange=()=>{const m=M();const v=i.dataset.t==='t'?i.value:(i.value===''?0:Number(i.value));setP(m,i.dataset.p,v);save();
+  if(['inicio','wacc.modo','moeda','nome'].includes(i.dataset.p)||i.closest('table'))render();else{$('#live').outerHTML=liveStrip();bindCommon();}toast('Modelo recalculado');});};
+
+/* ---------------- Demonstrações projectadas ---------------- */
+function finRow(n,arr,cls='',fmt=v=>mv(v)){return `<tr class="${cls}"><td>${n}</td>${arr.map(v=>`<td class="num ${v<-1e-6&&!cls.includes('kp')?'neg':''}">${fmt(v)}</td>`).join('')}</tr>`;}
+VIEWS.demonstracoes=()=>{const m=M(),R=run(m),k=R.k;const tab=SUB.dt||'dr';const neg=a=>a.map(v=>-v);
+  const head=`<thead><tr><th>${unitLbl()}</th>${R.years.map((y,t)=>`<th class="num">${y}<div style="font-weight:400;text-transform:none;letter-spacing:0">Ano ${t}</div></th>`).join('')}</tr></thead>`;
+  let body='';
+  if(tab==='dr'){body=`<tr class="sec"><td colspan="${R.H+2}">Classe 6 — Proveitos e ganhos</td></tr>`+
+    m.receitas.map((r,i)=>finRow(`Vendas / prestações — ${esc(r.nome)}`,R.lines[i],'sub')).join('')+finRow('Volume de negócios',k.rev,'tot')+
+    `<tr class="sec"><td colspan="${R.H+2}">Classe 7 — Custos e perdas</td></tr>`+finRow('71 · Custo das existências vendidas e consumidas',neg(k.cv),'sub')+(m.royalty?finRow('75 · Royalties / imposto sobre a produção',neg(k.roy),'sub'):'')+finRow('72 · Custos com o pessoal',neg(k.pes),'sub')+finRow('75.2 · Fornecimentos e serviços de terceiros',neg(k.fst),'sub')+finRow('75 · Outros custos operacionais',neg(k.out),'sub')+
+    finRow('EBITDA',k.ebitda,'tot')+finRow('Margem EBITDA',k.ebitda.map((v,t)=>k.rev[t]?v/k.rev[t]:null),'kp',v=>pct(v))+finRow('73 · Amortizações do exercício',neg(k.da),'sub')+finRow('Resultado operacional (82)',k.ebit,'tot')+
+    finRow('76 · Custos e perdas financeiros (juros)',neg(k.jur),'sub')+finRow('Resultado antes de impostos',k.ebt,'tot')+finRow(`87 · Imposto sobre os lucros (${m.ii}%)`,neg(k.imp),'sub')+finRow('Resultado líquido do exercício (88)',k.rl,'tot')+finRow('Margem líquida',k.rl.map((v,t)=>k.rev[t]?v/k.rev[t]:null),'kp',v=>pct(v));}
+  if(tab==='bal'){body=`<tr class="sec"><td colspan="${R.H+2}">Activo</td></tr>`+finRow('Classe 1 · Imobilizado líquido',k.imob,'sub')+finRow('Classe 2 · Existências',k.inv,'sub')+finRow('31 · Clientes',k.ar,'sub')+finRow('Classe 4 · Meios monetários',k.cash,'sub')+finRow('Total do activo',k.assets,'tot')+
+    `<tr class="sec"><td colspan="${R.H+2}">Capital próprio e passivo</td></tr>`+finRow('51 · Capital (incl. suprimentos/aumentos)',k.cap,'sub')+finRow('81/88 · Resultados acumulados',k.res,'sub')+finRow('Total do capital próprio',k.cap.map((c,i)=>c+k.res[i]),'tot')+finRow('33 · Empréstimos obtidos',k.debt,'sub')+finRow('32 · Fornecedores',k.ap,'sub')+finRow('Total do passivo',k.debt.map((d,i)=>d+k.ap[i]),'tot')+finRow('Total do capital próprio e passivo',k.le,'tot')+
+    finRow('Verificação (Activo − CP − Passivo)',k.check,'kp',v=>Math.abs(v)<1?'✓ 0':mv(v));}
+  if(tab==='fc'){body=`<tr class="sec"><td colspan="${R.H+2}">Actividades operacionais</td></tr>`+finRow('Resultado líquido',k.rl,'sub')+finRow('+ Amortizações',k.da,'sub')+finRow('− Variação do fundo de maneio',neg(k.dnwc),'sub')+finRow('Fluxo de caixa operacional',k.cfo,'tot')+
+    `<tr class="sec"><td colspan="${R.H+2}">Actividades de investimento</td></tr>`+finRow('CAPEX de expansão',neg(k.capexExp),'sub')+finRow('CAPEX de manutenção',neg(k.capexMan),'sub')+finRow('Fluxo de caixa de investimento',k.cfi,'tot')+
+    `<tr class="sec"><td colspan="${R.H+2}">Actividades de financiamento</td></tr>`+finRow('Realização de capital',k.eqInj,'sub')+finRow('Suprimentos / aumento de capital necessários',k.eqAuto,'sub')+finRow('Desembolso de empréstimos',k.draw,'sub')+finRow('Reembolso de empréstimos',neg(k.princ),'sub')+finRow('Dividendos pagos',neg(k.div),'sub')+finRow('Fluxo de caixa de financiamento',k.cff,'tot')+
+    finRow('Variação de caixa',k.cash.map((c,i)=>c-(i?k.cash[i-1]:(m.inicio==='existente'?m.abertura.caixa:0))),'tot')+finRow('Caixa no fim do ano',k.cash,'tot')+
+    `<tr class="sec"><td colspan="${R.H+2}">Fluxos para avaliação</td></tr>`+finRow('FCFF — fluxo livre da empresa',k.fcff,'sub')+finRow('FCFE — fluxo livre do accionista',k.fcfe,'sub')+finRow('CFADS — disponível para serviço da dívida',k.cfads,'sub');}
+  return ph('Demonstrações projectadas',`Demonstração de resultados, balanço e fluxos de caixa integrados · classificação PGC Angola · ${unitLbl()}`,`<button class="btn" data-act="copyFS">${ico('copy')}Copiar (CSV)</button>${cenSel()}${unitSel()}`)+
+  `<div class="tabs">${[['dr','Demonstração de resultados'],['bal','Balanço'],['fc','Fluxos de caixa']].map(([a,n])=>`<a class="${tab===a?'on':''}" data-act="sub" data-k="dt" data-v="${a}">${n}</a>`).join('')}</div><div class="card"><div class="tblwrap"><table class="ft">${head}<tbody>${body}</tbody></table></div></div>`;};
+VIEWS.demonstracoes.after=bindCommon;
+
+/* ---------------- Avaliação ---------------- */
+VIEWS.avaliacao=()=>{const m=M(),R=run(m),k=R.k;const ex=m.inicio==='existente';
+  const mlo=k.ebitda[1]*m.mult.lo,mhi=k.ebitda[1]*m.mult.hi;
+  const gR=[-0.01,0.01].map(dg=>{const mm=clone(m);mm.tv.metodo='gordon';mm.tv.g+=dg*100;return run(mm).npv;});
+  const xR=[-1,1].map(dx=>{const mm=clone(m);mm.tv.metodo='multiplo';mm.tv.mult+=dx;return run(mm).npv;});
+  const wR=[1.1,0.9].map(f=>run(m,{wacc:f}).npv);
+  const adj=v=>ex?v-R.netDebt0:v;
+  const rows=[{name:'DCF — sensib. WACC ±10%',lo:adj(wR[0]),hi:adj(wR[1]),range:1,color:'#1d4e89'},{name:'DCF — Gordon (g ±1 p.p.)',lo:adj(Math.min(...gR)),hi:adj(Math.max(...gR)),range:1,color:'#28507f'},{name:'DCF — múltiplo de saída (±1×)',lo:adj(Math.min(...xR)),hi:adj(Math.max(...xR)),range:1,color:'#2a9d8f'},{name:`Múltiplos EV/EBITDA (${m.mult.lo}×–${m.mult.hi}×)`,lo:adj(mlo),hi:adj(mhi),range:1,color:'#e9a23b'}];
+  const disc=k.fcff.map((v,t)=>v/Math.pow(1+R.wacc,t));
+  return ph('Avaliação',`Fluxos de caixa descontados ao WACC, valor terminal e comparação com múltiplos · ${unitLbl()}`,`${cenSel()}${unitSel()}`)+
+  `<div class="grid g4" style="margin-bottom:16px"><div class="card kpi"><div class="l">Valor actual dos FCFF explícitos</div><div class="v">${mv(R.npvSemTv)}</div></div><div class="card kpi"><div class="l">Valor actual do valor terminal</div><div class="v">${mv(R.pvTv)}</div><div class="d">${m.tv.metodo==='gordon'?`Gordon, g = ${m.tv.g}%`:m.tv.metodo==='multiplo'?`${m.tv.mult}× EBITDA ${R.years[R.H]}`:'não aplicado'}</div></div><div class="card kpi"><div class="l">${ex?'Enterprise value (EV)':'VAL do projecto'}</div><div class="v" style="color:${R.ev>=0?'var(--green)':'var(--red)'}">${mv(R.ev)}</div><div class="d">WACC ${pct(R.wacc)}</div></div><div class="card kpi"><div class="l">${ex?'Valor do capital próprio':'TIR projecto'}</div><div class="v">${ex?mv(R.eqVal):pct(R.irr)}</div><div class="d">${ex?`EV − dívida líquida (${mv(R.netDebt0)})`:`índice de rendibilidade ${xf(R.pi)}`}</div></div></div>
+  <div class="grid g21"><div class="card"><div class="hd"><h3>Fluxos de caixa descontados</h3></div><div class="tblwrap"><table class="ft"><thead><tr><th>${unitLbl()}</th>${R.years.map(y=>`<th class="num">${y}</th>`).join('')}</tr></thead><tbody>
+    ${finRow('EBITDA',k.ebitda)}${finRow('− Imposto sobre o EBIT (desalavancado)',k.taxU.map(v=>-v))}${finRow('− CAPEX',k.capex.map(v=>-v))}${finRow('− Variação do fundo de maneio',k.dnwc.map(v=>-v))}${finRow('FCFF',k.fcff,'tot')}${finRow('Factor de desconto',k.fcff.map((_,t)=>1/Math.pow(1+R.wacc,t)),'kp',v=>v.toFixed(3).replace('.',','))}${finRow('FCFF descontado',disc,'tot')}
+  </tbody></table></div></div>
+  <div class="card"><div class="hd"><h3>Construção do WACC</h3></div><div class="bd">${m.wacc.modo==='manual'?`<div class="ratio"><span>Taxa definida manualmente</span><b>${pct(R.wacc)}</b></div>`:[['Taxa sem risco',m.wacc.rf/100],['Beta × prémio de mercado',m.wacc.beta*m.wacc.erp/100],['Prémio de risco país',m.wacc.crp/100],['Custo do capital próprio (Ke)',R.ke,1],['Custo da dívida líquido de imposto',m.wacc.kd/100*(1-m.ii/100)],['Peso da dívida',m.wacc.wd/100],['WACC',R.wacc,1]].map(([n,v,b])=>`<div class="ratio"><span>${b?'<b>'+n+'</b>':n}</span><b style="${b?'color:var(--brand)':'font-weight:500'}">${pct(v,2)}</b></div>`).join('')}
+  <div class="alert b" style="margin-top:12px">${ico('info',17)}<div>Coerência de moeda: em USD use taxa sem risco e prémio de risco país em USD; em Kz use a taxa das OT em Kz (já incorpora inflação e risco país).</div></div></div></div></div>
+  <div class="card" style="margin-top:16px"><div class="hd"><h3>Intervalo de avaliação ${ex?'do capital próprio':'(VAL)'} — football field</h3><span class="muted">${unitLbl()}</span></div><div class="bd">${hBars(rows,{center:ex?R.eqVal:R.npv})}<div class="muted" style="font-size:12px">Linha vertical = valor no cenário e método actuais. Múltiplos aplicados ao EBITDA do ano 1 (${mv(k.ebitda[1])}).</div></div></div>`;};
+VIEWS.avaliacao.after=bindCommon;
+
+/* ---------------- Crédito ---------------- */
+VIEWS.credito=()=>{const m=M(),R=run(m),k=R.k;const yrs=R.years.map(String);const has=R.hasDebt;
+  if(!has)return ph('Financiamento & crédito','Métricas para bancos e financiadores')+`<div class="card"><div class="bd"><div class="alert b">${ico('info',17)}<div>O modelo não tem dívida. Defina um empréstimo em <b>Pressupostos › Financiamento</b> para obter DSCR, LLCR, capacidade de endividamento e teste de covenants.</div></div><div class="ratio"><span>Capacidade indicativa de endividamento (Dívida líquida/EBITDA ${m.cov.ndEbitda}× sobre EBITDA ano 2)</span><b>${money(Math.max(0,k.ebitda[Math.min(2,R.H)]*m.cov.ndEbitda))}</b></div></div></div>`;
+  const brk=t=>{const f=[];if(k.dscr[t]!=null&&k.princ[t]>0&&k.dscr[t]<m.cov.dscr)f.push('DSCR');if(R.ndE[t]!=null&&R.ndE[t]>m.cov.ndEbitda)f.push('DL/EBITDA');if(R.icr[t]!=null&&R.icr[t]<m.cov.icr)f.push('ICR');return f;};
+  const nb=R.years.filter((_,t)=>t>=1&&k.debt[t-1]>0&&brk(t).length).length;
+  return ph('Financiamento & crédito','Perspectiva do financiador: capacidade de serviço da dívida, rácios de cobertura e covenants',`${cenSel()}${unitSel()}`)+
+  `<div class="grid g5" style="margin-bottom:16px"><div class="card kpi"><div class="l">DSCR mínimo</div><div class="v" style="color:${R.minDscr>=m.cov.dscr?'var(--green)':'var(--red)'}">${xf(R.minDscr)}</div><div class="d">covenant ≥ ${xf(m.cov.dscr)}</div></div><div class="card kpi"><div class="l">DSCR médio</div><div class="v">${xf(R.avgDscr)}</div></div><div class="card kpi"><div class="l">LLCR</div><div class="v">${xf(R.llcr)}</div><div class="d">VA do CFADS no prazo ÷ dívida</div></div><div class="card kpi"><div class="l">Capacidade de endividamento</div><div class="v">${mv(R.debtCap)}</div><div class="d">ao DSCR ${xf(m.cov.dscr)} · pedido ${mv(m.divida.montante)}</div></div><div class="card kpi"><div class="l">Anos com incumprimento</div><div class="v" style="color:${nb?'var(--red)':'var(--green)'}">${nb}</div><div class="d">de covenants</div></div></div>
+  <div class="grid g2"><div class="card"><div class="hd"><h3>DSCR por ano</h3></div><div class="bd">${barChart({labels:yrs,series:[{name:'DSCR',data:k.dscr.map((v,t)=>k.princ[t]>0||k.jur[t]>0?v:null),colorFn:v=>v<m.cov.dscr?'#c44536':'#2a9d8f'}],ref:m.cov.dscr,fmt:v=>v.toFixed(1).replace('.',',')+'×',h:220})}</div></div>
+  <div class="card"><div class="hd"><h3>CFADS vs serviço da dívida</h3><span class="muted">${unitLbl()}</span></div><div class="bd">${legend([['CFADS','var(--s2)'],['Serviço da dívida','var(--s4)']])}${barChart({labels:yrs,series:[{name:'CFADS',data:k.cfads,color:'#2a9d8f'},{name:'Serviço da dívida',data:k.ds,color:'#c44536'}],h:220})}</div></div></div>
+  <div class="card" style="margin-top:16px"><div class="hd"><h3>Quadro do serviço da dívida e covenants</h3></div><div class="tblwrap"><table class="ft"><thead><tr><th>${unitLbl()}</th>${R.years.map(y=>`<th class="num">${y}</th>`).join('')}</tr></thead><tbody>
+   ${finRow('Dívida no início do ano',k.debt.map((d,t)=>t?k.debt[t-1]:0))}${finRow('+ Desembolsos',k.draw)}${finRow('− Reembolsos de capital',k.princ.map(v=>-v))}${finRow('Dívida no fim do ano',k.debt,'tot')}${finRow('Juros',k.jur)}${finRow('Serviço da dívida',k.ds,'tot')}${finRow('CFADS',k.cfads)}
+   ${finRow('DSCR',k.dscr.map((v,t)=>k.ds[t]>1?v:null),'',v=>v==null?'—':xf(v))}${finRow('Dívida líquida / EBITDA',R.ndE,'',v=>v==null?'—':xf(v))}${finRow('Cobertura de juros (EBITDA/juros)',R.icr,'',v=>v==null?'—':xf(v))}
+   <tr><td><b>Teste de covenants</b></td>${R.years.map((_,t)=>{const f=t>=1&&k.debt[t-1]>0?brk(t):null;return `<td class="num">${f==null?'—':f.length?`<span class="tag r">${f.join(', ')}</span>`:'<span class="tag g">OK</span>'}</td>`}).join('')}</tr>
+  </tbody></table></div></div>`;};
+VIEWS.credito.after=bindCommon;
+
+/* ---------------- Cenários & sensibilidade ---------------- */
+VIEWS.sensibilidade=()=>{const m=M();const d=m.sens/100;const base=run(m);
+  const vars=[['preco','Preço de venda'],['volume','Volume / produção'],['cvar','Custos variáveis'],['fixos','Custos fixos'],['capex','CAPEX'],['wacc','WACC']];
+  const rows=vars.map(([k,n])=>{const lo=run(m,{[k]:1-d}).npv,hi=run(m,{[k]:1+d}).npv;return {name:`${n} (±${m.sens}%)`,lo,hi,sw:Math.abs(hi-lo)}}).sort((a,b)=>b.sw-a.sw);
+  const steps=[-0.2,-0.1,0,0.1,0.2];const grid=steps.map(v=>steps.map(p=>run(m,{volume:1+v,preco:1+p}).npv));const mx=Math.max(...grid.flat().map(Math.abs));
+  const cell=v=>{const a=Math.min(1,Math.abs(v)/mx);return v>=0?`rgba(35,132,90,${0.12+a*0.55})`:`rgba(192,57,43,${0.12+a*0.55})`};
+  const be=breakEvenPrice(m);const cens=[['base','Base'],['otim','Optimista'],['pess','Pessimista']].map(([k,n])=>[n,run(m,{cen:k}),k]);
+  return ph('Cenários & sensibilidade',`Impacto das variáveis críticas no VAL · cenário activo: ${({base:'Base',otim:'Optimista',pess:'Pessimista'})[m.cen]} · ${unitLbl()}`,`${cenSel()}${unitSel()}`)+
+  `<div class="card" style="margin-bottom:16px"><div class="hd"><h3>Comparação de cenários</h3><span class="muted">multiplicadores editáveis</span></div><div class="tblwrap"><table><thead><tr><th>Cenário</th><th class="num">Preço ×</th><th class="num">Volume ×</th><th class="num">Opex ×</th><th class="num">CAPEX ×</th><th class="num">VAL</th><th class="num">TIR</th><th class="num">TIR accionista</th><th class="num">Payback</th><th class="num">DSCR mín.</th><th class="num">Capital adicional</th></tr></thead><tbody>
+  ${cens.map(([n,R,k])=>`<tr style="${m.cen===k?'background:var(--brandSoft)':''}"><td><b>${n}</b></td>${['preco','volume','opex','capex'].map(f=>`<td class="num"><input class="inp n" type="number" step="0.01" data-cen="${k}.${f}" value="${m.cenarios[k][f]}" style="width:72px;height:28px" ${k==='base'?'disabled':''}></td>`).join('')}<td class="num" style="color:${R.npv>=0?'var(--green)':'var(--red)'}"><b>${mv(R.npv)}</b></td><td class="num">${pct(R.irr)}</td><td class="num">${pct(R.irrEq)}</td><td class="num">${R.pb!=null?R.pb.toFixed(1).replace('.',','):'—'}</td><td class="num">${xf(R.minDscr)}</td><td class="num">${mv(R.fundingGap)}</td></tr>`).join('')}
+  </tbody></table></div></div>
+  <div class="grid g2"><div class="card"><div class="hd"><h3>Gráfico tornado — VAL</h3></div><div class="bd">${legend([[`−${m.sens}%`,'#c44536'],[`+${m.sens}%`,'#2a9d8f']])}${hBars(rows,{center:base.npv})}</div></div>
+  <div class="card"><div class="hd"><h3>Pontos de equilíbrio</h3></div><div class="bd">
+   <div class="ratio"><span>Preço que anula o VAL</span><b>${be!=null?pct(be,0)+' do preço do cenário':'—'}</b></div>
+   <div class="ratio"><span>Margem de segurança no preço</span><b style="color:${be!=null&&be<0.85?'var(--green)':'var(--red)'}">${be!=null?pct(1-be,0):'—'}</b></div>
+   ${m.receitas.map(r=>`<div class="ratio"><span>${esc(r.nome)} — preço de equilíbrio</span><b>${be!=null?nf(r.preco*be*base.sc.preco,m.moeda==='USD'?2:0)+' '+m.moeda+'/'+esc(r.unid.replace(/s$/,'')):'—'}</b></div>`).join('')}
+   <div class="ratio"><span>Variável mais crítica</span><b>${rows[0].name.replace(/ \(.*/,'')}</b></div>
+   <div class="ratio"><span>VAL no pior caso do tornado</span><b class="${Math.min(...rows.map(r=>Math.min(r.lo,r.hi)))<0?'neg':''}">${mv(Math.min(...rows.map(r=>Math.min(r.lo,r.hi))))}</b></div>
+  </div></div></div>
+  <div class="card" style="margin-top:16px"><div class="hd"><h3>Matriz de sensibilidade — VAL (preço × volume)</h3><span class="muted">${unitLbl()}</span></div><div class="tblwrap"><table class="hm"><thead><tr><th>Volume \\ Preço</th>${steps.map(p=>`<th style="text-align:center">${p>0?'+':''}${p*100}%</th>`).join('')}</tr></thead><tbody>${grid.map((r,i)=>`<tr><td style="font-weight:600;text-align:left">${steps[i]>0?'+':''}${steps[i]*100}%</td>${r.map((v,j)=>`<td style="background:${cell(v)};${i===2&&j===2?'outline:2px solid #121826;font-weight:700':''}">${mv(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`;};
+VIEWS.sensibilidade.after=()=>{bindCommon();document.querySelectorAll('[data-cen]').forEach(i=>i.onchange=()=>{const [c,f]=i.dataset.cen.split('.');M().cenarios[c][f]=Number(i.value)||1;save();render();});};
+
+/* ================= ANÁLISE DE DEMONSTRAÇÕES (balancete PGC) ================= */
+const PGC={11:'Imobilizações corpóreas',12:'Imobilizações incorpóreas',13:'Investimentos financeiros',14:'Imobilizações em curso',18:'Amortizações acumuladas',19:'Provisões p/ investimentos financeiros',
+  21:'Compras',22:'Matérias-primas, subsidiárias e de consumo',23:'Produtos e trabalhos em curso',24:'Produtos acabados e intermédios',25:'Sub-produtos, desperdícios e refugos',26:'Mercadorias',27:'Matérias-primas e mercadorias em trânsito',28:'Adiantamentos por conta de compras',29:'Provisões p/ depreciação de existências',
+  31:'Clientes',32:'Fornecedores',33:'Empréstimos',34:'Estado',35:'Entidades participantes e participadas',36:'Pessoal',37:'Outros valores a receber e a pagar',38:'Provisões p/ cobranças duvidosas',39:'Provisões p/ outros riscos e encargos',
+  41:'Títulos negociáveis',42:'Depósitos a prazo',43:'Depósitos à ordem',44:'Outros depósitos',45:'Caixa',48:'Conta transitória',49:'Provisões p/ aplicações de tesouraria',
+  51:'Capital',52:'Acções/quotas próprias',53:'Prémios de emissão',54:'Prestações suplementares',55:'Reservas legais',56:'Reservas de reavaliação',57:'Reservas com fins especiais',58:'Reservas livres',
+  61:'Vendas',62:'Prestações de serviço',63:'Outros proveitos operacionais',64:'Variação nos inventários de produtos acabados e em vias',65:'Trabalhos para a própria empresa',66:'Proveitos e ganhos financeiros gerais',67:'Proveitos e ganhos financeiros em filiais e associadas',68:'Outros proveitos e ganhos não operacionais',69:'Proveitos e ganhos extraordinários',
+  71:'Custo das existências vendidas e consumidas',72:'Custos com o pessoal',73:'Amortizações do exercício',75:'Outros custos e perdas operacionais',76:'Custos e perdas financeiros gerais',77:'Custos e perdas financeiros em filiais e associadas',78:'Outros custos e perdas não operacionais',79:'Custos e perdas extraordinários',
+  81:'Resultados transitados',82:'Resultados operacionais',83:'Resultados financeiros',84:'Resultados em filiais e associadas',85:'Resultados não operacionais',86:'Resultados extraordinários',87:'Imposto sobre os lucros',88:'Resultado líquido do exercício',89:'Dividendos antecipados'};
+const DEMO_BAL={empresa:'Distribuidora Kwanza Sul, Lda.',anos:['2024','2025'],
+  N1:[['11','Imobilizações corpóreas',2180],['12','Imobilizações incorpóreas',70],['18','Amortizações acumuladas',-810],['26','Mercadorias',1250],['29','Provisões p/ depreciação de existências',-35],['31','Clientes',1440],['38','Provisões p/ cobranças duvidosas',-80],['37.1','Outros devedores',95],['32','Fornecedores',-1240],['33','Empréstimos bancários',-1600],['34','Estado',-160],['36','Pessoal',-38],['37.2','Outros credores',-150],['42','Depósitos a prazo',150],['43','Depósitos à ordem',474],['45','Caixa',9],['51','Capital',-500],['55','Reservas legais',-80],['58','Reservas livres',-250],['81','Resultados transitados',-526],['61','Vendas',-10300],['62','Prestações de serviço',-190],['63','Outros proveitos operacionais',-28],['66','Proveitos financeiros',-10],['71','Custo das mercadorias vendidas',7830],['72','Custos com o pessoal',870],['73','Amortizações do exercício',185],['75','Outros custos operacionais',1040],['76','Custos financeiros',290],['78','Outros custos não operacionais',15],['87','Imposto sobre os lucros',99]],
+  N:[['11','Imobilizações corpóreas',2450],['12','Imobilizações incorpóreas',85],['18','Amortizações acumuladas',-1020],['26','Mercadorias',1380],['29','Provisões p/ depreciação de existências',-40],['31','Clientes',1640],['38','Provisões p/ cobranças duvidosas',-95],['37.1','Outros devedores',120],['32','Fornecedores',-1520],['33','Empréstimos bancários',-1350],['34','Estado',-210],['36','Pessoal',-45],['37.2','Outros credores',-180],['42','Depósitos a prazo',300],['43','Depósitos à ordem',410],['45','Caixa',12],['51','Capital',-500],['55','Reservas legais',-100],['58','Reservas livres',-350],['81','Resultados transitados',-525],['61','Vendas',-11850],['62','Prestações de serviço',-240],['63','Outros proveitos operacionais',-35],['66','Proveitos financeiros',-18],['71','Custo das mercadorias vendidas',8890],['72','Custos com o pessoal',980],['73','Amortizações do exercício',210],['75','Outros custos operacionais',1180],['76','Custos financeiros',245],['78','Outros custos não operacionais',22],['87','Imposto sobre os lucros',154]]};
+function demoCSV(arr){return 'Conta;Designação;Saldo Devedor;Saldo Credor\n'+arr.map(([c,n,v])=>`${c};${n};${v>0?(v*1e6).toFixed(2).replace('.',','):''};${v<0?(-v*1e6).toFixed(2).replace('.',','):''}`).join('\n');}
+function pNum(v){v=String(v||'').replace(/\s|Kz|AOA|USD/gi,'').trim();if(!v)return 0;const neg=/^\(.*\)$/.test(v)||v.startsWith('-');v=v.replace(/[()\-+]/g,'');if(v.includes(',')&&v.includes('.'))v=v.lastIndexOf(',')>v.lastIndexOf('.')?v.replace(/\./g,'').replace(',','.'):v.replace(/,/g,'');else if(v.includes(','))v=v.replace(',','.');const n=parseFloat(v)||0;return neg?-n:n;}
+function parseBal(text){const rows=text.split(/\r?\n/).map(r=>r.trim()).filter(Boolean);if(!rows.length)return {err:'Sem dados'};
+  const dl=(rows[0].match(/;/g)||[]).length>=(rows[0].match(/,/g)||[]).length?';':(rows[0].includes('\t')?'\t':',');const sp=r=>r.split(dl).map(c=>c.replace(/^"|"$/g,'').trim());
+  const nrm=s=>s.normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase();const hasH=/conta/i.test(rows[0]);const H=hasH?sp(rows[0]).map(nrm):[];
+  const ix=re=>H.findIndex(h=>re.test(h));const c={conta:hasH?ix(/CONTA|CODIGO/):0,nome:hasH?ix(/DESIGN|DESCR|NOME/):1,sd:hasH?ix(/SALDO DEV|DEVEDOR/):-1,sc:hasH?ix(/SALDO CRED|CREDOR/):-1,d:hasH?ix(/^DEBITO|^MOV.*DEB|^DEB/):-1,cr:hasH?ix(/^CREDITO|^MOV.*CRED|^CRED/):-1,s:hasH?ix(/^SALDO$/):-1};
+  const out=[];rows.slice(hasH?1:0).forEach(r=>{const x=sp(r);const code=(x[c.conta]||'').replace(/\s/g,'');if(!/^\d/.test(code))return;let v;
+    if(c.sd>=0||c.sc>=0)v=pNum(x[c.sd])-pNum(x[c.sc]);else if(c.s>=0)v=pNum(x[c.s]);else if(c.d>=0)v=pNum(x[c.d])-pNum(x[c.cr]);else v=pNum(x[2])-pNum(x[3]);
+    out.push({code,g:code.replace(/\D/g,'').slice(0,2),nome:x[c.nome]||PGC[code.slice(0,2)]||'',v});});
+  // evitar duplicação: se houver contas-mãe e filhas, manter apenas o nível mais detalhado
+  const codes=out.map(o=>o.code);const leaf=out.filter(o=>!codes.some(c2=>c2!==o.code&&c2.startsWith(o.code)&&c2.length>o.code.length));
+  if(!leaf.length)return {err:'Nenhuma conta válida encontrada'};const tot=leaf.reduce((s,o)=>s+o.v,0);return {lines:leaf,diff:tot};}
+function classify(lines,pctCP){const G=g=>lines.filter(l=>l.g===String(g)).reduce((s,l)=>s+l.v,0);const Gs=(...gs)=>gs.reduce((s,g)=>s+G(g),0);
+  const cls3=lines.filter(l=>['34','35','36','37'].includes(l.g));const oAct=cls3.filter(l=>l.v>0).reduce((s,l)=>s+l.v,0),oPas=-cls3.filter(l=>l.v<0).reduce((s,l)=>s+l.v,0);
+  const B={};B.imobB=Gs(11,12,14);B.invFin=G(13)+G(19);B.amort=G(18);B.anc=B.imobB+B.amort+B.invFin;
+  B.exist=Gs(21,22,23,24,25,26,27,28)+G(29);B.clientes=Math.max(0,G(31)+G(38));B.oAct=oAct+Math.max(0,-G(32)<0?G(32):0);B.caixa=Gs(41,42,43,44,45,48)+G(49);B.ac=B.exist+B.clientes+B.oAct+B.caixa;B.activo=B.anc+B.ac;
+  B.fornec=Math.max(0,-G(32));B.emprest=-G(33);B.estado=-Math.min(0,G(34));B.oPas=oPas;B.prov=-G(39);B.empCP=B.emprest*pctCP;B.empLP=B.emprest-B.empCP;B.pnc=B.empLP+B.prov;B.pc=B.fornec+B.empCP+B.oPas;B.passivo=B.pnc+B.pc;
+  const P={vendas:-G(61),prest:-G(62),oProv:-Gs(63,64,65),cev:G(71),pes:G(72),amort:G(73),oCus:G(75),pFin:-Gs(66,67),cFin:Gs(76,77),pNop:-G(68),cNop:G(78),pExt:-G(69),cExt:G(79),imp:G(87)};
+  P.vn=P.vendas+P.prest;P.mb=P.vn-P.cev;P.ro=P.vn+P.oProv-P.cev-P.pes-P.amort-P.oCus;P.ebitda=P.ro+P.amort;P.rf=P.pFin-P.cFin;P.rnop=P.pNop-P.cNop;P.rext=P.pExt-P.cExt;P.rai=P.ro+P.rf+P.rnop+P.rext;P.rl=P.rai-P.imp;
+  const hasPL=Math.abs(P.vn)+Math.abs(P.cev)>0;if(!hasPL&&G(88))P.rl=-G(88);
+  B.capital=-Gs(51,53,54)-G(52);B.reservas=-Gs(55,56,57,58);B.rt=-G(81)+(-G(89));B.rl=P.rl;B.cp=B.capital+B.reservas+B.rt+B.rl;B.cpp=B.cp+B.passivo;B.check=B.activo-B.cpp;
+  return {B,P};}
+function ratios(A,Bp){const {B,P}=A;const r={};const avg=(a,b)=>Bp?(a+b)/2:a;
+  r.lg=B.ac/B.pc;r.lr=(B.ac-B.exist)/B.pc;r.li=B.caixa/B.pc;r.af=B.cp/B.activo;r.end=B.passivo/B.activo;r.solv=B.cp/B.passivo;
+  r.dle=P.ebitda>0?(B.emprest-B.caixa)/P.ebitda:null;r.icr=P.cFin>0?P.ebitda/P.cFin:null;r.mb=P.vn?P.mb/P.vn:null;r.me=P.vn?P.ebitda/P.vn:null;r.mo=P.vn?P.ro/P.vn:null;r.ml=P.vn?P.rl/P.vn:null;
+  r.roa=P.ro/avg(B.activo,Bp?.B.activo);r.roe=P.rl/avg(B.cp,Bp?.B.cp);r.rot=P.vn/B.activo;
+  const compras=P.cev+(Bp?B.exist-Bp.B.exist:0);r.pmr=P.vn?B.clientes/P.vn*365:null;r.pme=P.cev?B.exist/P.cev*365:null;r.pmp=compras+P.oCus?B.fornec/(compras+P.oCus*0.5)*365:null;r.cc=(r.pmr||0)+(r.pme||0)-(r.pmp||0);
+  r.fm=B.cp+B.pnc-B.anc;r.nfm=(B.exist+B.clientes+B.oAct)-(B.fornec+B.oPas);r.tl=r.fm-r.nfm;return r;}
+const RDEF=[['Liquidez','lg','Liquidez geral','x',[1.2,1]],['Liquidez','lr','Liquidez reduzida','x',[1,0.7]],['Liquidez','li','Liquidez imediata','x',[0.2,0.1]],
+  ['Estrutura','af','Autonomia financeira','%',[0.35,0.2]],['Estrutura','end','Endividamento','%i',[0.65,0.8]],['Estrutura','solv','Solvabilidade','x',[0.5,0.25]],['Estrutura','dle','Dívida líquida / EBITDA','xi',[2.5,4]],['Estrutura','icr','Cobertura de juros','x',[4,2]],
+  ['Rendibilidade','mb','Margem bruta','%',[0.2,0.1]],['Rendibilidade','me','Margem EBITDA','%',[0.1,0.05]],['Rendibilidade','mo','Margem operacional','%',[0.07,0.03]],['Rendibilidade','ml','Margem líquida','%',[0.04,0.01]],['Rendibilidade','roa','ROA (RO/activo)','%',[0.08,0.04]],['Rendibilidade','roe','ROE','%',[0.15,0.08]],['Rendibilidade','rot','Rotação do activo','x',[1.5,0.8]],
+  ['Actividade','pmr','Prazo médio de recebimento','di',[45,75]],['Actividade','pme','Prazo médio de existências','di',[45,90]],['Actividade','pmp','Prazo médio de pagamento','d',[45,25]],['Actividade','cc','Ciclo de conversão de caixa','di',[30,60]]];
+function rStatus(v,t,inv){if(v==null||!isFinite(v))return 'n';const [good,bad]=t;if(inv)return v<=good?'g':v<=bad?'a':'r';return v>=good?'g':v>=bad?'a':'r';}
+const rFmt=(v,f)=>v==null||!isFinite(v)?'—':f.startsWith('%')?pct(v):f.startsWith('d')?nf(v)+' dias':xf(v);
+const fmtA=v=>v==null||!isFinite(v)?'—':(Math.abs(v)<0.5e6&&Math.abs(v)>0?nf(v/1e6,2):nf(v/1e6,1)).replace(/^-/,'(')+(v<0?')':'');
+function analyze(){const a=S.an;if(!a||!a.N)return null;const pN=parseBal(a.N),p1=a.N1?parseBal(a.N1):null;if(pN.err)return {err:pN.err};
+  const cN=classify(pN.lines,a.pctCP/100),c1=p1&&!p1.err?classify(p1.lines,a.pctCP/100):null;return {pN,p1,cN,c1,rN:ratios(cN,c1),r1:c1?ratios(c1,null):null};}
+VIEWS.analise=()=>{const a=S.an;const tab=SUB.at||'dados';const A=analyze();
+  const tabs=`<div class="tabs">${[['dados','Balancetes'],['balanco','Balanço'],['dr','Demonstração de resultados'],['fc','Fluxo de caixa'],['racios','Rácios & diagnóstico']].map(([k,n])=>`<a class="${tab===k?'on':''}" data-act="sub" data-k="at" data-v="${k}">${n}</a>`).join('')}</div>`;
+  const head=ph('Análise de demonstrações financeiras',`Balancete PGC Angola → Balanço, DR, fluxo de caixa e rácios, com diagnóstico de investidor/financiador${a?.empresa?' · '+esc(a.empresa):''}`,`<button class="btn" data-act="anDemo">Exemplo (distribuidora)</button>${A&&!A.err?'<button class="btn pri" data-act="anToModel">Usar como base de um modelo →</button>':''}`);
+  if(tab==='dados'||!A||A.err){return head+tabs+`${A?.err?`<div class="alert r">${ico('alert',17)}${A.err}</div>`:''}<div class="card"><div class="bd"><div class="form" style="margin-bottom:12px"><div class="f w2"><label>Empresa</label><input class="inp" id="anEmp" value="${esc(a?.empresa||'')}"></div><div class="f"><label>Ano N−1</label><input class="inp" id="anY1" value="${esc(a?.anos?.[0]||'2024')}"></div><div class="f"><label>Ano N</label><input class="inp" id="anY2" value="${esc(a?.anos?.[1]||'2025')}"></div><div class="f"><label>% dos empréstimos de curto prazo</label><input class="inp n" id="anCP" type="number" value="${a?.pctCP??30}"><span class="hint">A conta 33 não distingue maturidade</span></div><div class="f"><label>Moeda</label><select class="sel" id="anMo"><option ${a?.moeda==='Kz'||!a?'selected':''}>Kz</option><option ${a?.moeda==='USD'?'selected':''}>USD</option></select></div></div>
+  <div class="grid g2"><div><label style="font-size:12px;font-weight:600;color:var(--ink2)">Balancete N−1 (opcional — necessário para fluxo de caixa e variações)</label><textarea class="inp" id="anT1" rows="12" style="width:100%;margin-top:4px" placeholder="Conta;Designação;Saldo Devedor;Saldo Credor">${esc(a?.N1||'')}</textarea><input type="file" id="anF1" accept=".csv,.txt" style="margin-top:6px;font-size:12px"></div>
+  <div><label style="font-size:12px;font-weight:600;color:var(--ink2)">Balancete N (obrigatório)</label><textarea class="inp" id="anT2" rows="12" style="width:100%;margin-top:4px" placeholder="Conta;Designação;Saldo Devedor;Saldo Credor">${esc(a?.N||'')}</textarea><input type="file" id="anF2" accept=".csv,.txt" style="margin-top:6px;font-size:12px"></div></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:10px;flex-wrap:wrap"><span class="muted" style="font-size:12px">Aceita colunas Saldo Devedor/Credor, Débito/Crédito ou Saldo (com sinal) · separador ; , ou tabulação · contas a 2 dígitos ou com subcontas (usa o nível mais detalhado) · balancete antes do apuramento de resultados.</span><button class="btn pri" data-act="anRun">Analisar</button></div>
+  ${A&&!A.err?`<div class="alert ${Math.abs(A.pN.diff)<1?'g':'a'}" style="margin-top:12px">${ico(Math.abs(A.pN.diff)<1?'check':'alert',17)}Balancete N: ${A.pN.lines.length} contas · ${Math.abs(A.pN.diff)<1?'débitos = créditos':'diferença débito − crédito de '+nf(A.pN.diff,2)}${A.p1&&!A.p1.err?` · Balancete N−1: ${A.p1.lines.length} contas`:''}</div>`:''}</div></div>`;}
+  const {cN,c1,rN,r1}=A;const y=a.anos;const two=!!c1;const th=`<thead><tr><th>${a.moeda} · milhões</th>${two?`<th class="num">${esc(y[0])}</th>`:''}<th class="num">${esc(y[1])}</th>${two?'<th class="num">Var. %</th>':''}</tr></thead>`;
+  const row=(n,f,cls='')=>{const vN=f(cN),v1=two?f(c1):null;return `<tr class="${cls}"><td>${n}</td>${two?`<td class="num">${fmtA(v1)}</td>`:''}<td class="num">${fmtA(vN)}</td>${two?`<td class="num ${v1&&vN/v1-1<0?'neg':''}">${v1?pct(vN/v1-1):'—'}</td>`:''}</tr>`;};
+  const sec=n=>`<tr class="sec"><td colspan="4">${n}</td></tr>`;
+  if(tab==='balanco')return head+tabs+`<div class="grid g2"><div class="card"><div class="tblwrap"><table class="ft">${th}<tbody>${sec('Activo não corrente')}${row('Imobilizações (11, 12, 14)',c=>c.B.imobB,'sub')}${row('Amortizações acumuladas (18)',c=>c.B.amort,'sub')}${row('Investimentos financeiros (13, 19)',c=>c.B.invFin,'sub')}${row('Total activo não corrente',c=>c.B.anc,'tot')}
+    ${sec('Activo corrente')}${row('Existências (classe 2, líq. 29)',c=>c.B.exist,'sub')}${row('Clientes (31, líq. 38)',c=>c.B.clientes,'sub')}${row('Outros activos correntes (34–37 devedores)',c=>c.B.oAct,'sub')}${row('Meios monetários (classe 4)',c=>c.B.caixa,'sub')}${row('Total activo corrente',c=>c.B.ac,'tot')}${row('TOTAL DO ACTIVO',c=>c.B.activo,'tot')}</tbody></table></div></div>
+    <div class="card"><div class="tblwrap"><table class="ft">${th}<tbody>${sec('Capital próprio')}${row('Capital e prémios (51–54)',c=>c.B.capital,'sub')}${row('Reservas (55–58)',c=>c.B.reservas,'sub')}${row('Resultados transitados (81, 89)',c=>c.B.rt,'sub')}${row('Resultado líquido do exercício',c=>c.B.rl,'sub')}${row('Total do capital próprio',c=>c.B.cp,'tot')}
+    ${sec('Passivo não corrente')}${row(`Empréstimos — médio/longo prazo (${100-a.pctCP}% da 33)`,c=>c.B.empLP,'sub')}${row('Provisões p/ riscos e encargos (39)',c=>c.B.prov,'sub')}${sec('Passivo corrente')}${row('Fornecedores (32)',c=>c.B.fornec,'sub')}${row(`Empréstimos — curto prazo (${a.pctCP}% da 33)`,c=>c.B.empCP,'sub')}${row('Estado, pessoal e outros credores (34–37)',c=>c.B.oPas,'sub')}${row('Total do passivo',c=>c.B.passivo,'tot')}${row('TOTAL CAPITAL PRÓPRIO E PASSIVO',c=>c.B.cpp,'tot')}
+    <tr class="kp"><td>Verificação</td>${two?`<td class="num">${Math.abs(c1.B.check)<1?'✓':fmtA(c1.B.check)}</td>`:''}<td class="num">${Math.abs(cN.B.check)<1?'✓':fmtA(cN.B.check)}</td>${two?'<td></td>':''}</tr></tbody></table></div></div></div>`;
+  if(tab==='dr')return head+tabs+`<div class="card"><div class="tblwrap"><table class="ft">${th}<tbody>${row('Vendas (61)',c=>c.P.vendas,'sub')}${row('Prestações de serviço (62)',c=>c.P.prest,'sub')}${row('Volume de negócios',c=>c.P.vn,'tot')}${row('Outros proveitos operacionais (63–65)',c=>c.P.oProv,'sub')}${row('Custo das existências vendidas e consumidas (71)',c=>-c.P.cev,'sub')}${row('Margem bruta',c=>c.P.mb,'tot')}${row('Custos com o pessoal (72)',c=>-c.P.pes,'sub')}${row('Outros custos e perdas operacionais (75)',c=>-c.P.oCus,'sub')}${row('EBITDA',c=>c.P.ebitda,'tot')}${row('Amortizações do exercício (73)',c=>-c.P.amort,'sub')}${row('Resultados operacionais',c=>c.P.ro,'tot')}${row('Resultados financeiros (66, 67 − 76, 77)',c=>c.P.rf,'sub')}${row('Resultados não operacionais (68 − 78)',c=>c.P.rnop,'sub')}${row('Resultados extraordinários (69 − 79)',c=>c.P.rext,'sub')}${row('Resultado antes de impostos',c=>c.P.rai,'tot')}${row('Imposto sobre os lucros (87)',c=>-c.P.imp,'sub')}${row('Resultado líquido do exercício',c=>c.P.rl,'tot')}
+    <tr class="kp"><td>Taxa efectiva de imposto</td>${two?`<td class="num">${pct(c1.P.imp/c1.P.rai)}</td>`:''}<td class="num">${pct(cN.P.imp/cN.P.rai)}</td>${two?'<td></td>':''}</tr></tbody></table></div></div>`;
+  if(tab==='fc'){if(!two)return head+tabs+`<div class="alert b">${ico('info',17)}Carregue o balancete N−1 para obter o fluxo de caixa (método indirecto).</div>`;
+    const B=cN.B,B1=c1.B,P=cN.P;const dEx=B.exist-B1.exist,dCl=B.clientes-B1.clientes,dOA=B.oAct-B1.oAct,dFo=B.fornec-B1.fornec,dOP=B.oPas-B1.oPas,dPr=B.prov-B1.prov;
+    const cfo=P.rl+P.amort-dEx-dCl-dOA+dFo+dOP+dPr;const capexA=(B.imobB-B1.imobB)+(B.invFin-B1.invFin);const cfi=-capexA;const dEmp=B.emprest-B1.emprest;const dCap=(B.capital-B1.capital);const div=-(B.cp-B1.cp-P.rl-dCap);const cff=dEmp+dCap-div;const dCx=B.caixa-B1.caixa;const res=dCx-(cfo+cfi+cff);
+    const R=(n,v,c='')=>`<tr class="${c}"><td>${n}</td><td class="num ${v<0?'neg':''}">${fmtA(v)}</td></tr>`;
+    return head+tabs+`<div class="grid g21"><div class="card"><div class="tblwrap"><table class="ft"><thead><tr><th>${a.moeda} · milhões · ${esc(y[1])}</th><th class="num">Valor</th></tr></thead><tbody>${sec('Actividades operacionais')}${R('Resultado líquido do exercício',P.rl,'sub')}${R('+ Amortizações (73)',P.amort,'sub')}${R('− Aumento de existências',-dEx,'sub')}${R('− Aumento de clientes',-dCl,'sub')}${R('− Aumento de outros activos correntes',-dOA,'sub')}${R('+ Aumento de fornecedores',dFo,'sub')}${R('+ Aumento de outros passivos correntes',dOP,'sub')}${R('+ Variação de provisões',dPr,'sub')}${R('Fluxo de caixa operacional',cfo,'tot')}
+      ${sec('Actividades de investimento')}${R('Aquisições líquidas de imobilizado e investimentos',-capexA,'sub')}${R('Fluxo de caixa de investimento',cfi,'tot')}${sec('Actividades de financiamento')}${R('Variação de empréstimos',dEmp,'sub')}${R('Aumentos de capital',dCap,'sub')}${R('Dividendos / distribuições (implícitos)',-div,'sub')}${R('Fluxo de caixa de financiamento',cff,'tot')}${R('Variação de meios monetários',cfo+cfi+cff,'tot')}${Math.abs(res)>0.5?R('Diferença de reconciliação',res,'kp'):''}${R('Meios monetários no início',B1.caixa,'sub')}${R('Meios monetários no fim',B.caixa,'tot')}</tbody></table></div></div>
+      <div class="card"><div class="hd"><h3>Leitura</h3></div><div class="bd" style="font-size:13px;color:var(--ink2)"><div class="ratio"><span>Conversão de EBITDA em caixa</span><b>${pct(cfo/P.ebitda)}</b></div><div class="ratio"><span>Fluxo livre (CFO + CFI)</span><b class="${cfo+cfi<0?'neg':''}">${fmtA(cfo+cfi)}</b></div><div class="ratio"><span>Consumo de fundo de maneio</span><b>${fmtA(dEx+dCl+dOA-dFo-dOP)}</b></div><div class="ratio"><span>CAPEX / amortizações</span><b>${xf(capexA/P.amort)}</b></div><p style="margin-top:10px">${cfo>0?'A actividade operacional gera caixa':'A actividade operacional consome caixa'}${cfo+cfi>0?' e financia o investimento sem recurso a dívida adicional.':', sendo o investimento financiado por dívida ou capitais próprios.'} ${dEmp<0?`A empresa reduziu o endividamento em ${fmtA(-dEmp)} M.`:''}</p></div></div></div>`;}
+  // rácios
+  const groups=[...new Set(RDEF.map(r=>r[0]))];
+  const diag=[];const st=k=>{const d=RDEF.find(r=>r[1]===k);return rStatus(rN[k],d[4],d[3].includes('i'))};
+  if(st('lg')==='r')diag.push(['r','Liquidez insuficiente: activo corrente não cobre o passivo corrente — risco de tensão de tesouraria.']);else if(st('lg')==='g')diag.push(['g','Liquidez confortável no curto prazo.']);
+  if(st('af')==='r')diag.push(['r','Autonomia financeira baixa: estrutura muito dependente de capitais alheios.']);else if(st('af')==='g')diag.push(['g',`Autonomia financeira sólida (${pct(rN.af)}).`]);
+  if(rN.dle!=null)diag.push([st('dle'),`Dívida líquida/EBITDA de ${xf(rN.dle)} — ${rN.dle<=2.5?'margem para novo financiamento':rN.dle<=4?'endividamento no limite habitual dos bancos':'acima do aceitável para novo crédito'}.`]);
+  if(rN.cc!=null)diag.push([st('cc'),`Ciclo de conversão de caixa de ${nf(rN.cc)} dias (PMR ${nf(rN.pmr)} + PME ${nf(rN.pme)} − PMP ${nf(rN.pmp)}).`]);
+  if(r1){const g=cN.P.vn/c1.P.vn-1;diag.push([g>0?'g':'a',`Volume de negócios ${g>0?'cresceu':'caiu'} ${pct(Math.abs(g))}; margem EBITDA ${rN.me>r1.me?'melhorou':'deteriorou'} de ${pct(r1.me)} para ${pct(rN.me)}.`]);if(rN.pmr>r1.pmr+5)diag.push(['a',`Prazo de recebimento aumentou ${nf(rN.pmr-r1.pmr)} dias — rever política de crédito e cobranças.`]);}
+  diag.push([st('roe'),`ROE de ${pct(rN.roe)}${rN.roe<0.17?' — abaixo de um custo de capital típico em Kz; o accionista pode obter mais em OT.':' — remunera o risco accionista.'}`]);
+  return head+tabs+`<div class="grid g4" style="margin-bottom:16px">${[['Volume de negócios',fmtA(cN.P.vn)+' M',r1?pct(cN.P.vn/c1.P.vn-1)+' vs N−1':''],['EBITDA',fmtA(cN.P.ebitda)+' M','margem '+pct(rN.me)],['Resultado líquido',fmtA(cN.P.rl)+' M','margem '+pct(rN.ml)],['Fundo de maneio / NFM',fmtA(rN.fm)+' / '+fmtA(rN.nfm)+' M','tesouraria líquida '+fmtA(rN.tl)+' M']].map(([l,v,d])=>`<div class="card kpi"><div class="l">${l}</div><div class="v" style="font-size:19px">${v}</div><div class="d">${d}</div></div>`).join('')}</div>
+  <div class="grid g21"><div class="grid g2" style="align-content:start">${groups.map(gp=>`<div class="card"><div class="hd"><h3>${gp}</h3></div><div class="bd" style="padding:6px 16px">${RDEF.filter(r=>r[0]===gp).map(([_,k,n,f,t])=>{const s=rStatus(rN[k],t,f.includes('i'));return `<div class="ratio"><span>${n}</span><span style="display:flex;gap:8px;align-items:center">${r1?`<span class="muted" style="font-size:12px">${rFmt(r1[k],f)} →</span>`:''}<b>${rFmt(rN[k],f)}</b><span class="tag ${s}" style="min-width:14px;padding:2px 5px">${s==='g'?'●':s==='a'?'●':s==='r'?'●':'–'}</span></span></div>`}).join('')}</div></div>`).join('')}</div>
+  <div class="card" style="align-self:start"><div class="hd"><h3>Diagnóstico</h3></div><div class="bd">${diag.map(([c,t])=>`<div class="alert ${c==='n'?'b':c}">${ico(c==='g'?'check':c==='r'?'alert':'info',17)}<div>${t}</div></div>`).join('')}<div class="muted" style="font-size:12px;margin-top:6px">Limiares de referência indicativos (verde / âmbar / vermelho); ajustar ao sector. Prazos calculados sem IVA.</div></div></div></div>`;};
+VIEWS.analise.after=()=>{const rd=(id,tid)=>{const f=$(id);if(f)f.onchange=()=>{const r=new FileReader();r.onload=()=>{$(tid).value=r.result};r.readAsText(f.files[0])}};rd('#anF1','#anT1');rd('#anF2','#anT2');};
+
+/* ================= RELATÓRIOS (gerados do modelo activo) ================= */
+const RISCOS={
+ mineracao:[['Volatilidade do preço internacional (diamantes/minérios)','Contratos de venda com compradores de referência; cenário pessimista coberto pelo VAL'],['Teor e recuperação abaixo do estimado (risco geológico)','Campanha de sondagens e amostragem em grande volume antes da decisão final'],['Licenciamento e direitos mineiros','Acompanhamento junto do MIREMPET/ANRM; calendário de renovações'],['Logística e segurança em zona remota','Plano de segurança, stock de consumíveis e frota própria']],
+ petroleo:[['Preço do Brent','Hedging parcial e teste do VAL a preços baixos'],['Declínio de produção acima do previsto','Programa de perfuração de enchimento e gestão de reservatório'],['Regime fiscal petrolífero (IRP, IPP) e termos contratuais','Modelação do contrato de partilha; validação com a ANPG'],['Derrapagem de CAPEX offshore','Contratos EPC de preço fixo e contingência de 10–15%']],
+ agro:[['Clima e pluviosidade','Irrigação, seguro agrícola e diversificação de culturas'],['Câmbio e custo de insumos importados','Compras antecipadas e produção local de insumos'],['Escoamento e preços de mercado','Contratos com agro-indústria e armazenagem própria'],['Acesso a financiamento bonificado','Candidatura a linhas do BDA/Aviso BNA']],
+ comercio:[['Câmbio e disponibilidade de divisas para importação','Fornecedores locais alternativos e cobertura cambial'],['Risco de crédito de clientes','Limites de crédito, seguro de crédito e cobrança activa'],['Pressão concorrencial sobre margens','Mix de produtos e eficiência logística'],['Inflação e poder de compra','Revisão frequente de preços e gama de entrada']],
+ servicos:[['Concentração de clientes','Diversificação da carteira e contratos plurianuais'],['Retenção de quadros qualificados','Plano de carreira e incentivos'],['Prazos de recebimento (sector público)','Factoring e cláusulas de juros de mora'],['Inflação salarial','Indexação contratual dos preços']],
+ industria:[['Fornecimento de energia e água','Gerador próprio e reservatórios'],['Matérias-primas importadas e câmbio','Stock de segurança e fornecedores alternativos'],['Utilização da capacidade instalada','Rampa conservadora e contratos de distribuição'],['Concorrência de importações','Benefícios do PRODESI e diferenciação de marca']],
+ imobiliario:[['Taxa de ocupação','Pré-arrendamento a inquilinos âncora'],['Derrapagem de prazo e custo de construção','Empreitada de preço global e fiscalização independente'],['Capacidade dos inquilinos para rendas em USD','Mix de contratos em Kz indexados'],['Liquidez do activo na saída','Estrutura de veículo e múltiplos conservadores']],
+ tecnologia:[['Ritmo de aquisição de clientes','Parcerias de distribuição e pilotos pagos'],['Taxa de cancelamento (churn)','Customer success e contratos anuais'],['Infra-estrutura e conectividade','Redundância cloud e operação offline'],['Capital necessário até ao break-even','Ronda de financiamento por marcos']]};
+function modelRisks(m,R){const L=[];const be=breakEvenPrice(m);
+  if(be!=null&&1-be<0.2)L.push(['Margem de segurança no preço de apenas '+pct(1-be,0),'Reduzir CAPEX ou renegociar custos antes da decisão']);
+  if(R.fundingGap>0)L.push([`Necessidade adicional de capital de ${money(R.fundingGap)}`,'Garantir compromisso de suprimentos/aumento de capital dos sócios']);
+  if(R.minDscr!=null&&R.minDscr<m.cov.dscr)L.push([`DSCR mínimo (${xf(R.minDscr)}) abaixo do covenant (${xf(m.cov.dscr)})`,'Alargar prazo/carência ou reduzir o montante da dívida']);
+  if(m.tv.metodo!=='nenhum'&&R.npv>0&&R.pvTv/R.npv>0.6)L.push([`Valor terminal representa ${pct(R.pvTv/R.npv,0)} do VAL`,'Testar com múltiplos conservadores; não depender do valor residual']);
+  return L;}
+const LHM=(ref)=>{const m=M();return `<div class="lh"><div class="lhco"><div class="mk">I</div><div><b>${esc(m.promotor||'Integra · Modelagem Financeira')}</b><small>${esc(m.nome)}<br>${SECT[m.sector]?.t||''} · ${m.moeda} · cenário ${({base:'base',otim:'optimista',pess:'pessimista'})[m.cen]}</small></div></div><div class="rt">Ref.ª ${ref}<br>Luanda, ${new Date().toLocaleDateString('pt-PT',{day:'numeric',month:'long',year:'numeric'})}</div></div>`;};
+const FTM=t=>`<div class="foot"><span>Integra · Finanças › Modelagem Financeira</span><span>${t}</span></div>`;
+const SGM=(a,b)=>`<div class="sig"><div>${a[0]}<small>${a[1]}</small></div><div>${b[0]}<small>${b[1]}</small></div></div>`;
+const kcard=(l,v,d='')=>`<div class="box"><div class="muted" style="font-size:10.5px">${l}</div><b style="font-size:15px">${v}</b>${d?`<div class="muted" style="font-size:10.5px">${d}</div>`:''}</div>`;
+const pickY=R=>[...new Set([Math.min(1,R.H),Math.min(3,R.H),Math.min(5,R.H),R.H])];
+const rtable=(R,rows,ys)=>`<table class="t"><tr><th>${unitLbl()}</th>${ys.map(t=>`<th class="n">${R.years[t]}</th>`).join('')}</tr>${rows.map(([n,f,cls])=>`<tr class="${cls||''}"><td>${n}</td>${ys.map(t=>`<td class="n">${f(t)}</td>`).join('')}</tr>`).join('')}</table>`;
+const vtxt=v=>`<div class="box" style="border-left:4px solid var(--${v.c==='g'?'green':v.c==='a'?'amber':'red'})"><b style="font-size:13px">${v.t}</b><div style="margin-top:3px;color:#475166">${v.d}</div></div>`;
+function sourcesUses(m,R){const k=R.k;const pre=k.pes.concat().reduce((s,v,t)=>s+(t<(m.inicio==='existente'?1:m.inicioOp)?v+k.fst[t]+k.out[t]:0),0);const capex=R.totalCapex;const nwc=Math.max(0,...k.nwc.slice(0,Math.min(3,R.H+1)));
+  const eq=m.inicio==='existente'?0:+m.capitalInicial;const debt=+m.divida.montante;const gap=R.fundingGap;
+  return {apl:[['Investimento (CAPEX de expansão)',capex],['Fundo de maneio (pico dos primeiros anos)',nwc],['Custos de pré-operação',pre]],fon:[['Capital social',eq],['Financiamento bancário',debt],['Suprimentos / capital adicional identificado',gap],['Autofinanciamento (fluxos operacionais)',Math.max(0,capex+nwc+pre-eq-debt-gap)]]};}
+const suTable=su=>{const ta=su.apl.reduce((s,r)=>s+r[1],0),tf=su.fon.reduce((s,r)=>s+r[1],0);return `<div class="two"><table class="t"><tr><th>Aplicações</th><th class="n">${unitLbl()}</th><th class="n">%</th></tr>${su.apl.map(r=>`<tr><td>${r[0]}</td><td class="n">${mv(r[1])}</td><td class="n">${pct(r[1]/ta,0)}</td></tr>`).join('')}<tr class="tot"><td>Total</td><td class="n">${mv(ta)}</td><td class="n">100%</td></tr></table>
+  <table class="t"><tr><th>Fontes</th><th class="n">${unitLbl()}</th><th class="n">%</th></tr>${su.fon.map(r=>`<tr><td>${r[0]}</td><td class="n">${mv(r[1])}</td><td class="n">${pct(r[1]/tf,0)}</td></tr>`).join('')}<tr class="tot"><td>Total</td><td class="n">${mv(tf)}</td><td class="n">100%</td></tr></table></div>`;};
+function tornadoRows(m){const d=m.sens/100;return [['preco','Preço de venda'],['volume','Volume / produção'],['cvar','Custos variáveis'],['fixos','Custos fixos'],['capex','CAPEX'],['wacc','WACC']].map(([k,n])=>{const lo=run(m,{[k]:1-d}).npv,hi=run(m,{[k]:1+d}).npv;return {name:`${n} (±${m.sens}%)`,lo,hi,sw:Math.abs(hi-lo)}}).sort((a,b)=>b.sw-a.sw);}
+const ph_=t=>t;
+
+const REPS={
+ sumario:{t:'Sumário executivo',d:'Uma página para investidores e administração',aud:'Investidores',f:(m,R)=>{const k=R.k,V=verdict(m,R),ys=pickY(R);const ex=m.inicio==='existente';
+  return `<div class="page">${LHM('SE-'+m.id.slice(0,5).toUpperCase())}<h1>Sumário executivo</h1><div class="subt">${esc(m.nome)}</div>
+  <p>${ex?`Avaliação de empresa existente no sector de ${SECT[m.sector]?.t.toLowerCase()}, com projecção a ${m.horizonte} anos a partir do balanço de ${m.anoBase}.`:`Projecto de investimento no sector de ${SECT[m.sector]?.t.toLowerCase()}, com investimento total de <b>${money(R.totalCapex)}</b>, início de operação no ano ${m.inicioOp} e horizonte de análise de ${m.horizonte} anos.`} ${m.divida.montante>0?`A estrutura de financiamento prevê ${money(m.capitalInicial)} de capital próprio e ${money(m.divida.montante)} de dívida bancária a ${m.divida.taxa}%, com ${m.divida.prazo} anos de prazo e ${m.divida.carencia} de carência.`:'O financiamento é integralmente assegurado por capitais próprios.'}</p>
+  <div class="two" style="grid-template-columns:repeat(3,1fr)">${ex?kcard('Enterprise value',money(R.ev),'WACC '+pct(R.wacc))+kcard('Valor do capital próprio',money(R.eqVal),'P/VC '+xf(R.bookEq>0?R.eqVal/R.bookEq:null))+kcard('EV/EBITDA implícito',xf(k.ebitda[1]?R.ev/k.ebitda[1]:null)):kcard('VAL',money(R.npv),'WACC '+pct(R.wacc))+kcard('TIR projecto / accionista',pct(R.irr)+' / '+pct(R.irrEq))+kcard('Payback',R.pb!=null?R.pb.toFixed(1).replace('.',',')+' anos':'—','descontado '+(R.pbD!=null?R.pbD.toFixed(1).replace('.',',')+' anos':'> horizonte'))}
+  ${kcard('DSCR mínimo',xf(R.minDscr),R.hasDebt?'covenant '+xf(m.cov.dscr):'sem dívida')+kcard('Margem EBITDA (ano '+Math.min(3,R.H)+')',pct(k.rev[Math.min(3,R.H)]?k.ebitda[Math.min(3,R.H)]/k.rev[Math.min(3,R.H)]:null))+kcard('Capital adicional necessário',money(R.fundingGap))}</div>
+  <h3>Evolução das receitas, EBITDA e resultado líquido</h3>${legend([['Receitas','#1d4e89'],['EBITDA','#2a9d8f'],['Resultado líquido','#e9a23b']])}${barChart({labels:R.years.map(String),series:[{name:'Receitas',data:k.rev,color:'#1d4e89'},{name:'EBITDA',data:k.ebitda,color:'#2a9d8f'},{name:'RL',data:k.rl,color:'#e9a23b'}],h:190})}
+  <h3>Indicadores-chave</h3>${rtable(R,[['Volume de negócios',t=>mv(k.rev[t])],['EBITDA',t=>mv(k.ebitda[t])],['Margem EBITDA',t=>pct(k.rev[t]?k.ebitda[t]/k.rev[t]:null)],['Resultado líquido',t=>mv(k.rl[t])],['Fluxo de caixa livre (FCFF)',t=>mv(k.fcff[t])],['Dívida líquida / EBITDA',t=>xf(R.ndE[t])]],ys)}
+  <h3>Conclusão</h3>${vtxt(V.inv)}${V.bank?vtxt(V.bank):''}${FTM('Sumário executivo · gerado do modelo')}</div>`;}},
+ comite:{t:'Memorando para comité de investimento',d:'Decisão de investimento: pressupostos, retorno, riscos e recomendação',aud:'Comité / Conselho',f:(m,R)=>{const k=R.k,V=verdict(m,R),ys=pickY(R),su=sourcesUses(m,R),tor=tornadoRows(m).slice(0,4);const risks=[...(RISCOS[m.sector]||[]),...modelRisks(m,R)];const be=V.be;
+  const rec=V.inv.c==='g'&&(!V.bank||V.bank.c!=='r')?'Aprovar':V.inv.c==='r'?'Não aprovar nas condições actuais':'Aprovar com condições';
+  const cond=[];if(R.fundingGap>0)cond.push(`compromisso firme dos sócios para ${money(R.fundingGap)} adicionais`);if(R.minDscr!=null&&R.minDscr<m.cov.dscr)cond.push('reestruturação do financiamento para cumprir o DSCR mínimo');if(be!=null&&1-be<0.2)cond.push('validação independente do preço de venda e dos volumes');
+  return `<div class="page">${LHM('CI-'+m.id.slice(0,5).toUpperCase())}<h1>Memorando para o comité de investimento</h1><div class="subt">${esc(m.nome)} · Para decisão</div>
+  <h3>1. Objecto e recomendação</h3><p>Submete-se à apreciação do comité ${m.inicio==='existente'?'a avaliação da empresa':'o projecto'} <b>${esc(m.nome)}</b>, no sector de ${SECT[m.sector]?.t.toLowerCase()}. <b>Recomendação: ${rec}</b>${cond.length?', sujeito a: '+cond.join('; '):''}.</p>
+  <h3>2. Pressupostos-chave</h3><table class="t"><tr><th>Pressuposto</th><th>Valor</th><th>Pressuposto</th><th>Valor</th></tr>
+   <tr><td>Horizonte / início da operação</td><td>${m.horizonte} anos / ano ${m.inicioOp}</td><td>Inflação / escalada</td><td>${String(m.inflacao).replace('.',',')}% a.a.</td></tr>
+   ${m.receitas.map(r=>`<tr><td>${esc(r.nome)} — volume pleno</td><td>${nf(r.qtd)} ${esc(r.unid)}</td><td>Preço / escalada</td><td>${nf(r.preco,m.moeda==='USD'?2:0)} ${m.moeda} / ${String(r.esc).replace('.',',')}%</td></tr>`).join('')}
+   <tr><td>Custos variáveis</td><td>${String(m.cvar).replace('.',',')}% das receitas</td><td>Royalties / imposto s/ produção</td><td>${String(m.royalty).replace('.',',')}%</td></tr><tr><td>Custos fixos (ano 1)</td><td>${money(m.pessoal+m.fst+m.outros)}</td><td>Imposto Industrial</td><td>${m.ii}%</td></tr>
+   <tr><td>Prazos (receb. / exist. / pag.)</td><td>${m.dso} / ${m.dio} / ${m.dpo} dias</td><td>Taxa de desconto (WACC)</td><td>${pct(R.wacc)}</td></tr></table>
+  <h3>3. Investimento e financiamento</h3>${suTable(su)}
+  <h3>4. Desempenho financeiro projectado</h3>${rtable(R,[['Volume de negócios',t=>mv(k.rev[t])],['EBITDA',t=>mv(k.ebitda[t])],['Resultado líquido',t=>mv(k.rl[t])],['FCFF',t=>mv(k.fcff[t])],['Caixa no fim do ano',t=>mv(k.cash[t])]],ys)}
+  <h3>5. Retorno e avaliação</h3><div class="two" style="grid-template-columns:repeat(4,1fr)">${kcard('VAL',money(R.npv))}${kcard('TIR projecto',pct(R.irr),'vs WACC '+pct(R.wacc))}${kcard('TIR accionista',pct(R.irrEq),'vs Ke '+pct(R.ke))}${kcard('Payback',R.pb!=null?R.pb.toFixed(1).replace('.',',')+' anos':'—')}</div>
+  <h3>6. Sensibilidade</h3><table class="t"><tr><th>Variável</th><th class="n">VAL (−)</th><th class="n">VAL (+)</th><th class="n">Amplitude</th></tr>${tor.map(r=>`<tr><td>${r.name}</td><td class="n">${mv(r.lo)}</td><td class="n">${mv(r.hi)}</td><td class="n">${mv(r.sw)}</td></tr>`).join('')}</table>${be!=null?`<p style="font-family:Inter;font-size:11.5px">O VAL anula-se com uma queda de <b>${pct(1-be,0)}</b> no preço face ao cenário analisado.</p>`:''}
+  <h3>7. Riscos e mitigação</h3><table class="t"><tr><th>Risco</th><th>Mitigação proposta</th></tr>${risks.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('')}</table>
+  <h3>8. Deliberação do comité</h3><div class="box" style="display:flex;gap:26px">☐ Aprovado &nbsp; ☐ Aprovado com condições &nbsp; ☐ Rejeitado &nbsp; ☐ Adiado para nova análise</div>
+  ${SGM(['Proposto por','Direcção Financeira'],['Presidente do comité','Data: ____/____/______'])}${FTM('Memorando ao comité de investimento')}</div>`;}},
+ credito:{t:'Memorando de crédito',d:'Pedido de financiamento ao banco: capacidade de reembolso e covenants',aud:'Bancos / financiadores',f:(m,R)=>{const k=R.k,d=m.divida;const su=sourcesUses(m,R);const V=verdict(m,R);
+  if(!R.hasDebt)return `<div class="page">${LHM('MC')}<h1>Memorando de crédito</h1><div class="subt">&nbsp;</div><div class="box">O modelo não inclui dívida. Defina o empréstimo em Pressupostos › Financiamento para gerar o memorando de crédito. Capacidade indicativa (Dívida líquida/EBITDA ${m.cov.ndEbitda}× sobre o EBITDA do ano 2): <b>${money(Math.max(0,k.ebitda[Math.min(2,R.H)]*m.cov.ndEbitda))}</b>.</div>${FTM('Memorando de crédito')}</div>`;
+  const yrs=[...Array(R.H+1).keys()].filter(t=>k.ds[t]>1);const maxND=Math.max(...R.ndE.filter(v=>v!=null)),minICR=Math.min(...R.icr.filter(v=>v!=null));
+  return `<div class="page">${LHM('MC-'+m.id.slice(0,5).toUpperCase())}<h1>Memorando de pedido de financiamento</h1><div class="subt">${esc(m.nome)}</div>
+  <h3>1. Mutuário e operação proposta</h3><table class="t"><tr><td style="width:34%">Mutuário</td><td><b>${m.promotor?esc(m.promotor):'<i style="color:#b7791f">[Entidade promotora — NIF]</i>'}</b></td></tr><tr><td>Finalidade</td><td>Financiamento ${m.inicio==='existente'?'da actividade e expansão':'do investimento'} — ${esc(m.nome)}</td></tr><tr><td>Montante</td><td><b>${money(d.montante)}</b> (${pct(d.montante/(d.montante+(+m.capitalInicial||0)),0)} das fontes de capital)</td></tr><tr><td>Prazo / carência</td><td>${d.prazo} anos, dos quais ${d.carencia} de carência de capital; reembolso em prestações anuais constantes de capital</td></tr><tr><td>Taxa de juro</td><td>${d.taxa}% a.a. · desembolso no ano ${d.ano} (${R.years[d.ano]})</td></tr></table>
+  <h3>2. Fontes e aplicações</h3>${suTable(su)}
+  <h3>3. Capacidade de reembolso</h3><table class="t"><tr><th>${unitLbl()}</th>${yrs.map(t=>`<th class="n">${R.years[t]}</th>`).join('')}</tr><tr><td>CFADS</td>${yrs.map(t=>`<td class="n">${mv(k.cfads[t])}</td>`).join('')}</tr><tr><td>Juros</td>${yrs.map(t=>`<td class="n">${mv(k.jur[t])}</td>`).join('')}</tr><tr><td>Capital</td>${yrs.map(t=>`<td class="n">${mv(k.princ[t])}</td>`).join('')}</tr><tr class="tot"><td>Serviço da dívida</td>${yrs.map(t=>`<td class="n">${mv(k.ds[t])}</td>`).join('')}</tr><tr><td>DSCR</td>${yrs.map(t=>`<td class="n" style="color:${k.dscr[t]!=null&&k.dscr[t]<m.cov.dscr?'#c0392b':'inherit'}">${xf(k.dscr[t])}</td>`).join('')}</tr><tr><td>Dívida no fim do ano</td>${yrs.map(t=>`<td class="n">${mv(k.debt[t])}</td>`).join('')}</tr></table>
+  ${barChart({labels:R.years.map(String),series:[{name:'CFADS',data:k.cfads,color:'#2a9d8f'},{name:'Serviço da dívida',data:k.ds,color:'#c44536'}],h:160})}
+  <h3>4. Rácios e covenants propostos</h3><table class="t"><tr><th>Rácio</th><th class="n">Covenant</th><th class="n">Projectado</th><th>Situação</th></tr><tr><td>DSCR mínimo</td><td class="n">≥ ${xf(m.cov.dscr)}</td><td class="n">${xf(R.minDscr)}</td><td>${R.minDscr>=m.cov.dscr?'<span class="tg">Cumpre</span>':'<span class="tg r">Não cumpre</span>'}</td></tr><tr><td>DSCR médio</td><td class="n">—</td><td class="n">${xf(R.avgDscr)}</td><td></td></tr><tr><td>LLCR</td><td class="n">≥ ${xf(m.cov.dscr)}</td><td class="n">${xf(R.llcr)}</td><td>${R.llcr>=m.cov.dscr?'<span class="tg">Cumpre</span>':'<span class="tg r">Não cumpre</span>'}</td></tr><tr><td>Dívida líquida / EBITDA (máximo)</td><td class="n">≤ ${xf(m.cov.ndEbitda)}</td><td class="n">${xf(maxND)}</td><td>${maxND<=m.cov.ndEbitda?'<span class="tg">Cumpre</span>':'<span class="tg a">Excede em algum ano</span>'}</td></tr><tr><td>Cobertura de juros (mínimo)</td><td class="n">≥ ${xf(m.cov.icr)}</td><td class="n">${xf(minICR)}</td><td>${minICR>=m.cov.icr?'<span class="tg">Cumpre</span>':'<span class="tg a">Abaixo em algum ano</span>'}</td></tr></table>
+  ${R.debtCap!=null?`<p style="font-family:Inter;font-size:11.5px">Capacidade de endividamento ao DSCR de ${xf(m.cov.dscr)}: <b>${money(R.debtCap)}</b> (pedido: ${money(d.montante)}).</p>`:''}
+  <h3>5. Garantias propostas</h3><p style="font-family:Inter;font-size:11.5px;color:#b7791f">[Hipoteca dos imóveis · penhor dos equipamentos financiados · consignação de receitas / conta de reserva do serviço da dívida (DSRA) · aval / carta de conforto dos sócios]</p>
+  <h3>6. Parecer</h3>${V.bank?vtxt(V.bank):''}${SGM(['Pelo mutuário','Gerência'],['Direcção Financeira','Responsável pelo modelo'])}${FTM('Memorando de crédito')}</div>`;}},
+ avaliacao:{t:'Relatório de avaliação',d:'DCF, WACC, valor terminal e múltiplos',aud:'Investidores / M&A',land:1,f:(m,R)=>{const k=R.k,ex=m.inicio==='existente';const disc=k.fcff.map((v,t)=>v/Math.pow(1+R.wacc,t));const mlo=k.ebitda[1]*m.mult.lo,mhi=k.ebitda[1]*m.mult.hi;const wR=[1.1,0.9].map(f=>run(m,{wacc:f}).npv);const adj=v=>ex?v-R.netDebt0:v;
+  return `<div class="page land">${LHM('AV-'+m.id.slice(0,5).toUpperCase())}<h1>Relatório de avaliação</h1><div class="subt">${esc(m.nome)} · método dos fluxos de caixa descontados (DCF) com verificação por múltiplos</div>
+  <div><div><h3>1. Fluxos de caixa livres da empresa (FCFF)</h3><table class="t"><tr><th>${unitLbl()}</th>${R.years.map(y=>`<th class="n">${y}</th>`).join('')}</tr>${[['EBITDA',k.ebitda],['− Imposto sobre EBIT',k.taxU.map(v=>-v)],['− CAPEX',k.capex.map(v=>-v)],['− Δ Fundo de maneio',k.dnwc.map(v=>-v)]].map(([n,a])=>`<tr><td>${n}</td>${a.map(v=>`<td class="n">${mv(v)}</td>`).join('')}</tr>`).join('')}<tr class="tot"><td>FCFF</td>${k.fcff.map(v=>`<td class="n">${mv(v)}</td>`).join('')}</tr><tr><td>FCFF descontado</td>${disc.map(v=>`<td class="n">${mv(v)}</td>`).join('')}</tr></table></div>
+  </div>
+  <div class="two" style="grid-template-columns:1fr 1fr 1.2fr"><div><h3>2. Taxa de desconto</h3><table class="t">${m.wacc.modo==='manual'?`<tr><td>Taxa definida</td><td class="n">${pct(R.wacc,2)}</td></tr>`:[['Taxa sem risco',m.wacc.rf/100],['Beta',null,m.wacc.beta],['Prémio de mercado',m.wacc.erp/100],['Prémio de risco país',m.wacc.crp/100],['Custo do capital próprio',R.ke],['Custo da dívida (líq.)',m.wacc.kd/100*(1-m.ii/100)],['Peso da dívida',m.wacc.wd/100]].map(([n,v,x])=>`<tr><td>${n}</td><td class="n">${x!=null?String(x).replace('.',','):pct(v,2)}</td></tr>`).join('')+`<tr class="tot"><td>WACC</td><td class="n">${pct(R.wacc,2)}</td></tr>`}</table></div><div><h3>3. Da avaliação da empresa ao capital próprio</h3><table class="t"><tr><td>VA dos FCFF explícitos</td><td class="n">${mv(R.npvSemTv)}</td></tr><tr><td>VA do valor terminal (${m.tv.metodo==='gordon'?'Gordon, g = '+m.tv.g+'%':m.tv.metodo==='multiplo'?m.tv.mult+'× EBITDA':'não aplicado'})</td><td class="n">${mv(R.pvTv)}</td></tr><tr class="tot"><td>${ex?'Enterprise value':'VAL do projecto'}</td><td class="n">${mv(R.ev)}</td></tr>${ex?`<tr><td>− Dívida líquida de abertura</td><td class="n">${mv(-R.netDebt0)}</td></tr><tr class="tot"><td>Valor do capital próprio</td><td class="n">${mv(R.eqVal)}</td></tr><tr><td>Capitais próprios contabilísticos</td><td class="n">${mv(R.bookEq)}</td></tr>`:''}</table></div>
+  <div><h3>4. Intervalo de valor</h3><table class="t"><tr><th>Método</th><th class="n">Mínimo</th><th class="n">Máximo</th></tr><tr><td>DCF (WACC ±10%)</td><td class="n">${mv(adj(wR[0]))}</td><td class="n">${mv(adj(wR[1]))}</td></tr><tr><td>EV/EBITDA ${m.mult.lo}×–${m.mult.hi}× (EBITDA ${R.years[1]})</td><td class="n">${mv(adj(mlo))}</td><td class="n">${mv(adj(mhi))}</td></tr><tr class="tot"><td>Valor central (DCF)</td><td class="n" colspan="2">${mv(ex?R.eqVal:R.npv)}</td></tr></table></div></div>
+  <p style="font-family:Inter;font-size:11.5px">Conclusão: ${ex?`o valor do capital próprio situa-se entre <b>${money(Math.min(adj(wR[0]),adj(mlo)))}</b> e <b>${money(Math.max(adj(wR[1]),adj(mhi)))}</b>, com valor central de <b>${money(R.eqVal)}</b>.`:`o projecto apresenta VAL de <b>${money(R.npv)}</b> (intervalo ${money(wR[0])} a ${money(wR[1])} com o WACC ±10%) e TIR de ${pct(R.irr)}.`} Estimativa baseada nos pressupostos do modelo; não constitui opinião de auditoria.</p>${FTM('Relatório de avaliação')}</div>`;}},
+ demonstracoes:{t:'Demonstrações financeiras projectadas',d:'Anexo: DR, Balanço e Fluxos de caixa (PGC Angola)',aud:'Anexo técnico',land:1,f:(m,R)=>{const k=R.k;const row=(n,a,c='')=>`<tr class="${c}"><td>${n}</td>${a.map(v=>`<td class="n">${mv(v)}</td>`).join('')}</tr>`;const th=`<tr><th>${unitLbl()}</th>${R.years.map(y=>`<th class="n">${y}</th>`).join('')}</tr>`;const n=a=>a.map(v=>-v);
+  const p1=`<div class="page land">${LHM('DF-1')}<h1>Demonstração de resultados projectada</h1><div class="subt">Classificação por natureza — PGC Angola (Decreto n.º 82/2001)</div><table class="t">${th}${row('Volume de negócios (classe 6)',k.rev,'tot')}${row('71 · Custo das existências vendidas e consumidas',n(k.cv))}${m.royalty?row('75 · Royalties / imposto sobre a produção',n(k.roy)):''}${row('72 · Custos com o pessoal',n(k.pes))}${row('75.2 · Fornecimentos e serviços de terceiros',n(k.fst))}${row('75 · Outros custos operacionais',n(k.out))}${row('EBITDA',k.ebitda,'tot')}${row('73 · Amortizações',n(k.da))}${row('Resultado operacional',k.ebit,'tot')}${row('76 · Custos financeiros',n(k.jur))}${row('Resultado antes de impostos',k.ebt,'tot')}${row('87 · Imposto sobre os lucros',n(k.imp))}${row('Resultado líquido do exercício',k.rl,'tot')}</table>${FTM('Demonstrações projectadas · 1/3')}</div>`;
+  const p2=`<div class="page land">${LHM('DF-2')}<h1>Balanço projectado</h1><div class="subt">${unitLbl()}</div><table class="t">${th}${row('Classe 1 · Imobilizado líquido',k.imob)}${row('Classe 2 · Existências',k.inv)}${row('31 · Clientes',k.ar)}${row('Classe 4 · Meios monetários',k.cash)}${row('Total do activo',k.assets,'tot')}${row('51 · Capital',k.cap)}${row('81/88 · Resultados acumulados',k.res)}${row('Total do capital próprio',k.cap.map((c,i)=>c+k.res[i]),'tot')}${row('33 · Empréstimos obtidos',k.debt)}${row('32 · Fornecedores',k.ap)}${row('Total do capital próprio e passivo',k.le,'tot')}<tr><td>Verificação</td>${k.check.map(v=>`<td class="n">${Math.abs(v)<1?'✓':mv(v)}</td>`).join('')}</tr></table>${FTM('Demonstrações projectadas · 2/3')}</div>`;
+  const p3=`<div class="page land">${LHM('DF-3')}<h1>Demonstração de fluxos de caixa projectada</h1><div class="subt">Método indirecto</div><table class="t">${th}${row('Resultado líquido',k.rl)}${row('+ Amortizações',k.da)}${row('− Variação do fundo de maneio',n(k.dnwc))}${row('Fluxo operacional',k.cfo,'tot')}${row('CAPEX',n(k.capex))}${row('Fluxo de investimento',k.cfi,'tot')}${row('Capital e suprimentos',k.eqInj.map((v,i)=>v+k.eqAuto[i]))}${row('Desembolsos de dívida',k.draw)}${row('Reembolsos de dívida',n(k.princ))}${row('Dividendos',n(k.div))}${row('Fluxo de financiamento',k.cff,'tot')}${row('Caixa no fim do ano',k.cash,'tot')}${row('FCFF',k.fcff)}${row('FCFE',k.fcfe)}${row('CFADS',k.cfads)}</table>${FTM('Demonstrações projectadas · 3/3')}</div>`;
+  return p1+p2+p3;}},
+ cenarios:{t:'Análise de cenários e sensibilidade',d:'Base, optimista, pessimista, tornado e pontos de equilíbrio',aud:'Investidores / comité',f:(m,R)=>{const tor=tornadoRows(m);const cs=[['base','Base'],['otim','Optimista'],['pess','Pessimista']].map(([c,n])=>[n,run(m,{cen:c}),m.cenarios[c]]);const be=breakEvenPrice(m);const steps=[-0.2,-0.1,0,0.1,0.2];
+  return `<div class="page">${LHM('CS-'+m.id.slice(0,5).toUpperCase())}<h1>Análise de cenários e sensibilidade</h1><div class="subt">${esc(m.nome)}</div>
+  <h3>1. Cenários</h3><table class="t"><tr><th>Cenário</th><th class="n">Preço</th><th class="n">Volume</th><th class="n">Opex</th><th class="n">CAPEX</th><th class="n">VAL</th><th class="n">TIR</th><th class="n">DSCR mín.</th><th class="n">Capital adic.</th></tr>${cs.map(([n,r,c])=>`<tr><td><b>${n}</b></td>${['preco','volume','opex','capex'].map(f=>`<td class="n">${String(c[f]).replace('.',',')}×</td>`).join('')}<td class="n">${mv(r.npv)}</td><td class="n">${pct(r.irr)}</td><td class="n">${xf(r.minDscr)}</td><td class="n">${mv(r.fundingGap)}</td></tr>`).join('')}</table>
+  <h3>2. Gráfico tornado — impacto no VAL (±${m.sens}%)</h3>${hBars(tor,{center:R.npv,h0:30})}
+  <h3>3. Matriz preço × volume — VAL</h3><table class="t"><tr><th>Volume \\ Preço</th>${steps.map(p=>`<th class="n">${p>0?'+':''}${p*100}%</th>`).join('')}</tr>${steps.map(v=>`<tr><td><b>${v>0?'+':''}${v*100}%</b></td>${steps.map(p=>{const x=run(m,{volume:1+v,preco:1+p}).npv;return `<td class="n" style="color:${x<0?'#c0392b':'inherit'};${v===0&&p===0?'font-weight:700':''}">${mv(x)}</td>`}).join('')}</tr>`).join('')}</table>
+  <h3>4. Pontos de equilíbrio</h3><table class="t"><tr><td>Preço que anula o VAL</td><td class="n">${be!=null?pct(be,0)+' do preço do cenário':'—'}</td></tr>${m.receitas.map(r=>`<tr><td>${esc(r.nome)} — preço de equilíbrio</td><td class="n">${be!=null?nf(r.preco*be*R.sc.preco,m.moeda==='USD'?2:0)+' '+m.moeda+'/'+esc(r.unid):'—'}</td></tr>`).join('')}<tr><td>Variável mais crítica</td><td class="n">${tor[0].name.replace(/ \(.*/,'')}</td></tr></table>${FTM('Cenários e sensibilidade')}</div>`;}},
+ divida:{t:'Quadro de serviço da dívida',d:'Plano de amortização, juros e cobertura ano a ano',aud:'Bancos / tesouraria',f:(m,R)=>{const k=R.k,d=m.divida;const ys=[...Array(R.H+1).keys()].filter(t=>k.debt[t]>0||k.ds[t]>0||(t&&k.debt[t-1]>0));
+  return `<div class="page">${LHM('SD-'+m.id.slice(0,5).toUpperCase())}<h1>Quadro de serviço da dívida</h1><div class="subt">${R.hasDebt?`Empréstimo de ${money(d.montante)} · ${d.taxa}% · ${d.prazo} anos (${d.carencia} de carência)`:'Sem dívida no modelo'}</div>
+  <table class="t"><tr><th>Ano</th><th class="n">Saldo inicial</th><th class="n">Desembolso</th><th class="n">Juros</th><th class="n">Capital</th><th class="n">Prestação</th><th class="n">Saldo final</th><th class="n">CFADS</th><th class="n">DSCR</th></tr>${ys.map(t=>`<tr><td>${R.years[t]}</td><td class="n">${mv(t?k.debt[t-1]:0)}</td><td class="n">${mv(k.draw[t])}</td><td class="n">${mv(k.jur[t])}</td><td class="n">${mv(k.princ[t])}</td><td class="n">${mv(k.ds[t])}</td><td class="n">${mv(k.debt[t])}</td><td class="n">${mv(k.cfads[t])}</td><td class="n">${xf(k.dscr[t])}</td></tr>`).join('')}
+  <tr class="tot"><td>Total</td><td></td><td class="n">${mv(k.draw.reduce((a,b)=>a+b,0))}</td><td class="n">${mv(k.jur.reduce((a,b)=>a+b,0))}</td><td class="n">${mv(k.princ.reduce((a,b)=>a+b,0))}</td><td class="n">${mv(k.ds.reduce((a,b)=>a+b,0))}</td><td></td><td></td><td></td></tr></table>
+  ${R.hasDebt?barChart({labels:R.years.map(String),series:[{name:'DSCR',data:k.dscr,colorFn:v=>v<m.cov.dscr?'#c44536':'#2a9d8f'}],ref:m.cov.dscr,fmt:v=>v.toFixed(1).replace('.',',')+'×',h:170}):''}
+  <p style="font-family:Inter;font-size:11.5px">Custo total do financiamento (juros): <b>${money(k.jur.reduce((a,b)=>a+b,0))}</b>. Juros no ano de desembolso calculados sobre metade do montante (desembolso a meio do ano).</p>${FTM('Quadro de serviço da dívida')}</div>`;}},
+ analise:{t:'Relatório de análise económico-financeira',d:'Histórico: balancetes PGC, rácios e diagnóstico',aud:'Investidores / bancos',hist:1,f:()=>{const A=analyze();if(!A||A.err)return `<div class="page">${LHM('AEF')}<h1>Relatório de análise económico-financeira</h1><div class="subt">&nbsp;</div><div class="box">Ainda não há balancetes analisados. Carregue-os em <b>Análise de demonstrações</b> (ou use o exemplo) para gerar este relatório.</div>${FTM('Análise económico-financeira')}</div>`;
+  const {cN,c1,rN,r1}=A;const a=S.an;const two=!!c1;const r=(n,f)=>`<tr><td>${n}</td>${two?`<td class="n">${fmtA(f(c1))}</td>`:''}<td class="n">${fmtA(f(cN))}</td>${two?`<td class="n">${f(c1)?pct(f(cN)/f(c1)-1):'—'}</td>`:''}</tr>`;const th=`<tr><th>${a.moeda} · milhões</th>${two?`<th class="n">${esc(a.anos[0])}</th>`:''}<th class="n">${esc(a.anos[1])}</th>${two?'<th class="n">Var.</th>':''}</tr>`;
+  const groups=[...new Set(RDEF.map(x=>x[0]))];
+  return `<div class="page"><div class="lh"><div class="lhco"><div class="mk">I</div><div><b>${esc(a.empresa||'Empresa analisada')}</b><small>Análise económico-financeira · PGC Angola</small></div></div><div class="rt">Exercícios ${two?esc(a.anos[0])+' e ':''}${esc(a.anos[1])}<br>Luanda, ${new Date().toLocaleDateString('pt-PT',{day:'numeric',month:'long',year:'numeric'})}</div></div><h1>Relatório de análise económico-financeira</h1><div class="subt">${esc(a.empresa||'')}</div>
+  <div class="two"><div><h3>Balanço (síntese)</h3><table class="t">${th}${r('Activo não corrente',c=>c.B.anc)}${r('Activo corrente',c=>c.B.ac)}${r('Total do activo',c=>c.B.activo)}${r('Capital próprio',c=>c.B.cp)}${r('Passivo não corrente',c=>c.B.pnc)}${r('Passivo corrente',c=>c.B.pc)}</table></div>
+  <div><h3>Demonstração de resultados (síntese)</h3><table class="t">${th}${r('Volume de negócios',c=>c.P.vn)}${r('Margem bruta',c=>c.P.mb)}${r('EBITDA',c=>c.P.ebitda)}${r('Resultado operacional',c=>c.P.ro)}${r('Resultados financeiros',c=>c.P.rf)}${r('Resultado líquido',c=>c.P.rl)}</table></div></div>
+  <h3>Rácios</h3><table class="t"><tr><th>Área</th><th>Rácio</th>${r1?`<th class="n">${esc(a.anos[0])}</th>`:''}<th class="n">${esc(a.anos[1])}</th><th>Avaliação</th></tr>${RDEF.map(([g,k,n,f,t])=>{const s=rStatus(rN[k],t,f.includes('i'));return `<tr><td>${g}</td><td>${n}</td>${r1?`<td class="n">${rFmt(r1[k],f)}</td>`:''}<td class="n">${rFmt(rN[k],f)}</td><td><span class="tg ${s==='g'?'':s==='a'?'a':s==='r'?'r':'n'}">${({g:'Favorável',a:'Atenção',r:'Desfavorável',n:'—'})[s]}</span></td></tr>`}).join('')}</table>
+  <h3>Diagnóstico e recomendações</h3><table class="t"><tr><th>Indicador</th><th>Leitura</th></tr><tr><td>Liquidez</td><td>Liquidez geral de ${xf(rN.lg)}; tesouraria líquida de ${fmtA(rN.tl)} M — ${rN.tl>0?'o fundo de maneio financia as necessidades cíclicas':'necessidades cíclicas financiadas a curto prazo'}.</td></tr><tr><td>Estrutura</td><td>Autonomia financeira de ${pct(rN.af)}; dívida líquida/EBITDA de ${xf(rN.dle)} — ${rN.dle!=null&&rN.dle<=2.5?'capacidade para novo endividamento':'margem reduzida para nova dívida'}.</td></tr><tr><td>Rendibilidade</td><td>Margem EBITDA de ${pct(rN.me)} e ROE de ${pct(rN.roe)}${r1?` (${pct(r1.roe)} no exercício anterior)`:''}.</td></tr><tr><td>Actividade</td><td>Ciclo de conversão de caixa de ${nf(rN.cc)} dias (PMR ${nf(rN.pmr)}, PME ${nf(rN.pme)}, PMP ${nf(rN.pmp)}).</td></tr></table>
+  ${SGM(['Elaborado por','Direcção Financeira'],['Revisto por','____________________'])}${FTM('Análise económico-financeira')}</div>`;}},
+};
+VIEWS.relatorios=()=>{const m=M();const R=run(m);const cur=SUB.rep||'sumario';const rp=REPS[cur];
+  return ph('Relatórios',`Documentos gerados do modelo activo (${esc(m.nome)}) e do cenário seleccionado · actualizam ao alterar pressupostos`,`${cenSel()}${unitSel()}<button class="btn" data-act="repCopy">${ico('copy')}Copiar texto</button>`)+
+  `<div style="display:grid;grid-template-columns:270px 1fr;gap:18px;align-items:start"><div class="card" style="position:sticky;top:76px"><div class="bd" style="padding:8px">${Object.entries(REPS).map(([k,r])=>`<div data-act="sub" data-k="rep" data-v="${k}" style="padding:9px 10px;border-radius:8px;cursor:pointer;${k===cur?'background:var(--brandSoft)':''}"><b style="font-size:13px;color:${k===cur?'var(--brand)':'inherit'}">${r.t}</b><div class="muted" style="font-size:11.5px">${r.aud}${r.hist?' · histórico':''}</div></div>`).join('')}</div></div>
+  <div class="docv">${!m.promotor&&['credito','comite'].includes(cur)?`<div class="dnote">Indique a <b>entidade promotora</b> em Pressupostos › Geral para a incluir no cabeçalho e no memorando.</div>`:''}${rp.f(m,R)}</div></div>`;};
+VIEWS.relatorios.after=bindCommon;
+
+/* ---------------- Modal ---------------- */
+function openModal(t,b,f,w){$('#modal').style.maxWidth=w||'820px';$('#modal').innerHTML=`<div class="mh"><h3>${t}</h3><button class="x" data-act="close">×</button></div><div class="mb">${b}</div>${f?`<div class="mf">${f}</div>`:''}`;$('#ov').classList.add('on');}
+const closeModal=()=>$('#ov').classList.remove('on');
+function fsCSV(){const m=M(),R=run(m),k=R.k;const L=[['Rubrica',...R.years]];const add=(n,a)=>L.push([n,...a.map(v=>v.toFixed(2).replace('.',','))]);
+  add('Volume de negócios',k.rev);add('Custos variáveis (71)',k.cv);add('Royalties',k.roy);add('Pessoal (72)',k.pes);add('FST (75.2)',k.fst);add('Outros custos (75)',k.out);add('EBITDA',k.ebitda);add('Amortizações (73)',k.da);add('Resultado operacional',k.ebit);add('Juros (76)',k.jur);add('RAI',k.ebt);add('Imposto (87)',k.imp);add('Resultado líquido',k.rl);
+  add('Imobilizado líquido',k.imob);add('Existências',k.inv);add('Clientes',k.ar);add('Caixa',k.cash);add('Capital',k.cap);add('Resultados acumulados',k.res);add('Empréstimos',k.debt);add('Fornecedores',k.ap);add('FC operacional',k.cfo);add('FC investimento',k.cfi);add('FC financiamento',k.cff);add('FCFF',k.fcff);add('FCFE',k.fcfe);add('CFADS',k.cfads);
+  return L.map(r=>r.join(';')).join('\n');}
+async function copyTxt(t,msg){try{await navigator.clipboard.writeText(t);toast(msg)}catch(e){openModal('Copiar',`<textarea class="inp" style="width:100%;height:300px">${esc(t)}</textarea>`,'<button class="btn pri" data-act="close">Fechar</button>')}}
+
+/* ---------------- Eventos ---------------- */
+document.addEventListener('click',ev=>{const g=ev.target.closest('[data-go]');if(g)return go(g.dataset.go);if(ev.target.id==='ov')return closeModal();
+  const a=ev.target.closest('[data-act]');if(!a)return;const d=a.dataset;const m=M();
+  const A={close:closeModal,sub:()=>{SUB[d.k]=d.v;render()},
+   newM:()=>openModal('Novo modelo financeiro',`<div class="form" style="margin-bottom:14px"><div class="f w2"><label>Nome</label><input class="inp" id="nmN" placeholder="ex.: Expansão da unidade de Benguela"></div><div class="f w2"><label>Ponto de partida</label><select class="sel" id="nmI"><option value="greenfield">Projecto novo (greenfield)</option><option value="existente">Empresa existente (avaliação / expansão)</option></select></div></div><label style="font-size:12px;font-weight:600;color:var(--ink2)">Core business — o modelo arranca com a estrutura típica do sector (tudo editável)</label><div class="sect" style="margin-top:8px">${Object.entries(SECT).map(([k,s],i)=>`<label><input type="radio" name="nmS" value="${k}" ${i===0?'checked':''}><b>${s.t}</b><small>${s.d}</small><div style="margin-top:6px"><span class="tag n">${s.moeda}</span></div></label>`).join('')}</div>`,`<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="createM">Criar modelo</button>`),
+   createM:()=>{const sk=document.querySelector('[name=nmS]:checked').value;const nm=newModel(sk);const n=$('#nmN').value.trim();if(n)nm.nome=n;nm.inicio=$('#nmI').value;if(nm.inicio==='existente'){nm.inicioOp=1;const k=run(nm).k;nm.abertura={imob:nm.capex.reduce((s,c)=>s+ +c.valor,0)*0.6,vidaRem:8,exist:k.inv[2]||0,clientes:k.ar[2]||0,caixa:nm.caixaMin*2,fornec:k.ap[2]||0,divida:nm.divida.montante*0.5,divTaxa:nm.divida.taxa,divPrazo:4};nm.capex=[];nm.divida.montante=0;nm.receitas.forEach(r=>r.ramp='100');if(nm.tv.metodo==='nenhum')nm.tv.metodo='gordon';}
+     S.models.push(nm);S.active=nm.id;save();closeModal();go('pressupostos');toast('Modelo criado a partir do sector '+SECT[sk].t);},
+   dupM:()=>{const c=clone(m);c.id=uid();c.nome=m.nome+' (cópia)';S.models.push(c);S.active=c.id;save();render();toast('Modelo duplicado')},
+   delM:()=>{if(S.models.length<2)return toast('Mantenha pelo menos um modelo');S.models=S.models.filter(x=>x.id!==m.id);S.active=S.models[0].id;save();render();},
+   addRev:()=>{m.receitas.push({nome:'Nova linha',unid:'unidades',qtd:1000,cresc:5,ramp:'100',preco:1000,esc:m.inflacao});save();render()},
+   delRev:()=>{m.receitas.splice(+d.i,1);save();render()},
+   addCap:()=>{m.capex.push({nome:'Novo investimento',ano:1,valor:0,vida:5});save();render()},
+   delCap:()=>{m.capex.splice(+d.i,1);save();render()},
+   copyFS:()=>copyTxt(fsCSV(),'Demonstrações copiadas (CSV)'),
+   repCopy:()=>copyTxt([...document.querySelectorAll('.docv .page')].map(p=>p.innerText).join('\n\n'),'Texto do relatório copiado'),
+   anDemo:()=>{S.an={empresa:DEMO_BAL.empresa,anos:DEMO_BAL.anos,N1:demoCSV(DEMO_BAL.N1),N:demoCSV(DEMO_BAL.N),pctCP:30,moeda:'Kz'};save();SUB.at='racios';render();toast('Balancetes de exemplo carregados')},
+   anRun:()=>{S.an={empresa:$('#anEmp').value,anos:[$('#anY1').value,$('#anY2').value],N1:$('#anT1').value.trim(),N:$('#anT2').value.trim(),pctCP:Number($('#anCP').value)||0,moeda:$('#anMo').value};save();const A=analyze();if(!A||A.err)return render();SUB.at='balanco';render();toast('Análise concluída')},
+   anToModel:()=>{const A=analyze();const {B,P}=A.cN;const sk=P.cev/P.vn>0.5?'comercio':'servicos';const nm=newModel(sk);nm.nome=`${S.an.empresa||'Empresa'} — avaliação`;nm.inicio='existente';nm.moeda=S.an.moeda;nm.anoBase=+S.an.anos[1]||2025;nm.inicioOp=1;
+     nm.receitas=[{nome:'Volume de negócios',unid:'índice',qtd:1,cresc:5,ramp:'100',preco:P.vn,esc:nm.inflacao>5?12:2}];nm.cvar=+(P.cev/P.vn*100).toFixed(2);nm.pessoal=P.pes;nm.fst=P.oCus*0.85;nm.outros=P.oCus*0.15;nm.capex=[];nm.manut=+Math.max(1,(P.amort/P.vn*100)).toFixed(2);
+     nm.dso=Math.round((B.clientes+B.oAct)/P.vn*365);nm.dio=Math.round(B.exist/P.cev*365);nm.dpo=Math.round((B.fornec+B.oPas+B.prov)/(P.cev+P.oCus*0.85)*365);nm.ii=P.rai>0?Math.round(P.imp/P.rai*100):25;
+     const avgD=A.c1?(B.emprest+A.c1.B.emprest)/2:B.emprest;nm.abertura={imob:B.anc,vidaRem:8,exist:B.exist,clientes:B.clientes+B.oAct,caixa:B.caixa,fornec:B.fornec+B.oPas+B.prov,divida:B.emprest,divTaxa:avgD?+(P.cFin/avgD*100).toFixed(1):12,divPrazo:4};
+     nm.divida.montante=0;nm.tv.metodo='gordon';nm.caixaMin=Math.round(B.caixa*0.3);nm.payout=40;S.models.push(nm);S.active=nm.id;save();go('painel');toast('Modelo de avaliação criado a partir das demonstrações');}
+  };
+  if(A[d.act]){ev.preventDefault();A[d.act]();}
+});
+$('#mSel').onchange=()=>{S.active=$('#mSel').value;save();render()};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+const h0=(location.hash||'').slice(1);if(VIEWS[h0])VIEW=h0;
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,105 @@
+/** Persistência do protótipo: sem localStorage, revisões serializadas e sem perder edições em curso. */
+export interface ModelRecord {
+  id: string; name: string; sector: string; currency: string; assumptions: Record<string, unknown>;
+  revision: number; createdAt: string; archivedAt: string | null;
+}
+export interface UiModel extends Record<string, any> { id: string; nome: string; sector: string; moeda: string; criado: string }
+export interface ModelingSession {
+  user: { id: string; name: string; role: string }; company: { id: string; name: string };
+  permission: 'editor' | 'viewer'; canWrite: boolean; formats: { pdf: boolean; xlsx: boolean; csv: boolean };
+  usage: { activeProjects: number; projectLimit: number; canCreateProject: boolean; userLimit: number; enabledUsers: number };
+}
+export class ModelingApiError extends Error {
+  constructor(public status: number, message: string) { super(message); }
+}
+export type ModelingTransport = <T>(path: string, method?: string, payload?: unknown) => Promise<T>;
+export const modelingRequest: ModelingTransport = async <T>(path: string, method = 'GET', payload?: unknown): Promise<T> => {
+  const res = await fetch(`/api/v1/modeling${path}`, {
+    method, credentials: 'same-origin', cache: 'no-store',
+    headers: payload === undefined ? {} : { 'content-type': 'application/json' },
+    body: payload === undefined ? undefined : JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    if (res.status === 401 && typeof location !== 'undefined') location.assign('/login?voltar=/modelagem');
+    throw new ModelingApiError(res.status, data.issues?.map((v: { path: string; message: string }) => `${v.path}: ${v.message}`).join(' · ') || data.message || `Erro ${res.status}`);
+  }
+  return data as T;
+};
+const copy = <T>(v: T): T => structuredClone(v);
+export function modelPayload(model: UiModel) {
+  const { id: _id, nome, sector, moeda, criado: _date, ...assumptions } = model;
+  return { name: nome, sector, currency: moeda, assumptions: copy(assumptions) };
+}
+/** Campos em falta ficam vazios nos formulários; não se completam pressupostos com exemplos. */
+export function presentModel(record: ModelRecord): UiModel {
+  const a = copy(record.assumptions), obj = (v: unknown): Record<string, any> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, any> : {};
+  const result = { ...a } as Record<string, any>;
+  for (const k of ['horizonte', 'anoBase', 'inicioOp', 'preOp', 'inflacao', 'ii', 'royalty', 'cvar', 'pessoal', 'fst', 'outros', 'manut', 'vidaManut', 'dso', 'dio', 'dpo', 'capitalInicial', 'payout', 'caixaMin', 'sens']) if (typeof result[k] !== 'number' || !Number.isFinite(result[k])) result[k] = undefined;
+  const nestedTextFields: Record<string, string[]> = { divida: [], abertura: [], cov: [], mult: [], wacc: ['modo'], tv: ['metodo'] };
+  for (const [key, text] of Object.entries(nestedTextFields)) {
+    result[key] = obj(result[key]);
+    for (const [k, v] of Object.entries(result[key])) if (!text.includes(k) && (typeof v !== 'number' || !Number.isFinite(v))) delete result[key][k];
+  }
+  result.cenarios = Object.fromEntries(['base', 'otim', 'pess'].map((key) => [key, Object.fromEntries(Object.entries(obj(obj(a.cenarios)[key])).filter(([, v]) => typeof v === 'number' && Number.isFinite(v)))]));
+  for (const [key, texts] of [['receitas', ['nome', 'unid', 'ramp']], ['capex', ['nome']]] as const) result[key] = (Array.isArray(a[key]) ? a[key] : []).map((v) => Object.fromEntries(Object.entries(obj(v)).map(([k, n]) => [k, (texts as readonly string[]).includes(k) ? typeof n === 'string' ? n : '' : typeof n === 'number' && Number.isFinite(n) ? n : undefined])));
+  return { ...result, id: record.id, nome: record.name, sector: record.sector, moeda: record.currency, criado: record.createdAt.slice(0, 10) };
+}
+interface Entry { revision: number; saved: string; desired: ReturnType<typeof modelPayload>; timer?: ReturnType<typeof setTimeout>; task?: Promise<void>; error?: Error }
+export class ModelingStore {
+  readonly models: UiModel[] = [];
+  private entries = new Map<string, Entry>();
+  constructor(readonly canWrite: boolean, private request: ModelingTransport = modelingRequest, private onError: (error: Error) => void = () => {}, private delay = 500) {}
+  load(records: ModelRecord[]) {
+    if (this.dirty) throw new Error('Há alterações por guardar.');
+    this.models.splice(0); this.entries.clear();
+    for (const r of records.filter((m) => !m.archivedAt)) this.accept(r);
+  }
+  private accept(record: ModelRecord) {
+    const model = presentModel(record), desired = modelPayload(model);
+    this.models.push(model); this.entries.set(model.id, { revision: record.revision, saved: JSON.stringify(desired), desired });
+    return model;
+  }
+  get dirty() { return [...this.entries.values()].some((s) => Boolean(s.task) || JSON.stringify(s.desired) !== s.saved); }
+  revision(id: string) { const s = this.entries.get(id); if (!s) throw new Error('Projecto inexistente.'); return s.revision; }
+  change(model: UiModel) {
+    if (!this.canWrite) return; // Cenário/unidade de consulta ficam só na memória da página.
+    const state = this.entries.get(model.id); if (!state) throw new Error('Projecto inexistente.');
+    state.desired = modelPayload(model);
+    clearTimeout(state.timer);
+    if (!state.error && JSON.stringify(state.desired) !== state.saved) state.timer = setTimeout(() => { this.flush(model.id).catch(() => {}); }, this.delay);
+  }
+  async flush(id?: string): Promise<void> {
+    if (!id) { await Promise.all([...this.entries.keys()].map((key) => this.flush(key))); return; }
+    const s = this.entries.get(id); if (!s) throw new Error('Projecto inexistente.');
+    clearTimeout(s.timer);
+    if (s.error) throw s.error;
+    if (!s.task && JSON.stringify(s.desired) !== s.saved) {
+      s.task = (async () => {
+        while (JSON.stringify(s.desired) !== s.saved) {
+          const payload = copy(s.desired), fingerprint = JSON.stringify(payload);
+          const updated = await this.request<ModelRecord>(`/models/${encodeURIComponent(id)}`, 'PUT', { ...payload, revision: s.revision });
+          s.revision = updated.revision; s.saved = fingerprint;
+        }
+      })().catch((err) => {
+        s.error = err instanceof Error ? err : new Error(String(err)); this.onError(s.error); throw s.error;
+      }).finally(() => { s.task = undefined; });
+    }
+    await s.task;
+  }
+  async create(model: UiModel) {
+    if (!this.canWrite) throw new ModelingApiError(403, 'O seu acesso permite apenas consulta.');
+    await this.flush();
+    return this.accept(await this.request<ModelRecord>('/models', 'POST', modelPayload(model)));
+  }
+  async download(model: UiModel, key: string, version?: string, format: 'pdf' | 'xlsx' = 'pdf') {
+    await this.flush(model.id);
+    const query = new URLSearchParams({ format, ...(version ? { version } : { revision: String(this.revision(model.id)), scenario: model.cen }) });
+    const response = await fetch(`/api/v1/modeling/models/${encodeURIComponent(model.id)}/reports/${encodeURIComponent(key)}?${query}`, { credentials: 'same-origin', cache: 'no-store' });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new ModelingApiError(response.status, data.message || data.issues?.map((v: { path: string; message: string }) => `${v.path}: ${v.message}`).join(' · ') || `Erro ${response.status}`);
+    }
+    return response;
+  }
+}

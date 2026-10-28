@@ -2,9 +2,9 @@
 
 ## Contrato do produto
 
-Mesmo repositório, autenticação e PostgreSQL. RH e Modelagem têm direitos independentes. A interface aprovada fica intacta: esta alteração não modifica `apps/web` nem o protótipo HTML.
+Mesmo repositório, autenticação e PostgreSQL. RH e Modelagem têm direitos independentes. A interface aprovada é reutilizada na rota autenticada `/modelagem`, sem redesenho: o CSS e a estrutura HTML do protótipo são preservados. Os ecrãs, menus e estilos RH existentes não são alterados.
 
-O backend disponibiliza persistência, direitos comerciais e o motor financeiro anual, com templates para os oito sectores. Já cria versões aprovadas e exporta relatórios; ainda não liga os ecrãs do protótipo à API nem automatiza a cobrança da Modelagem. Não confundir `revision` (controlo de concorrência) com versões de comité/banco.
+O backend disponibiliza persistência, direitos comerciais e o motor financeiro anual, com templates para os oito sectores. Os ecrãs de projecção estão ligados à API para carregar, criar, duplicar, gravar e exportar PDF. O backend também cria versões aprovadas; a selecção/aprovação de versões, a importação RH e a gestão de participantes ainda não têm novos controlos na interface. Não confundir `revision` (controlo de concorrência) com versões de comité/banco. A cobrança da Modelagem ainda não foi automatizada.
 
 ## Compatibilidade comercial
 
@@ -20,6 +20,7 @@ O backend disponibiliza persistência, direitos comerciais e o motor financeiro 
 | Método e rota | Contrato |
 | --- | --- |
 | GET `/v1/modules` | Estado de RH e Modelagem para proprietário/Finanças |
+| GET `/v1/modeling/session` | Empresa, identidade, permissão efectiva, possibilidade de escrita, limites e formatos para qualquer participante autorizado |
 | PUT `/v1/platform/companies/:id/modules/:module` | Administração técnica dos direitos; `module=hr|modeling`; `enabled`, `status`, `trialEndsAt`, `paidUntil` |
 | GET/POST `/v1/modeling/models` | Listar/criar modelos da empresa; participantes autorizados (escrita: editor) |
 | GET/PUT `/v1/modeling/models/:id` | Consultar/editar; edição exige `revision` actual, conflito devolve 409 |
@@ -131,17 +132,17 @@ A aprovação da versão é uma fixação de dados pelo proprietário da empresa
 | GET `/v1/modeling/models/:id/versions` | Metadados das versões aprovadas, por ordem decrescente |
 | GET `/v1/modeling/models/:id/versions/:versionId` | Conteúdo congelado, com verificação dos hashes |
 | GET `/v1/modeling/models/:id/reports` | Catálogo de relatórios e formatos permitidos para a conta |
-| GET `/v1/modeling/models/:id/reports/:reportKey?format=pdf` | Relatório do rascunho; pode exigir `revision` para impedir exportação desactualizada |
+| GET `/v1/modeling/models/:id/reports/:reportKey?format=pdf` | Relatório do rascunho; pode exigir `revision` para impedir exportação desactualizada e `scenario=base\|otim\|pess` para consulta sem escrita |
 | GET `/v1/modeling/models/:id/reports/:reportKey?format=pdf&version=:versionId` | Relatório a partir da versão aprovada, sem recalcular o rascunho nem consultar novamente o RH |
 | GET `/v1/modeling/models/:id/reports/:reportKey?format=xlsx&version=:versionId` | Excel de resultados, apenas para o ID exclusivo do proprietário do produto com estatuto de administrador da plataforma |
 
-Formatos diferentes de PDF/XLSX são recusados. Uma URL directa de Excel não contorna a autorização. PDF é permitido aos participantes com consulta; rascunhos incompletos não produzem ficheiros vazios, mas erro 422. Projectos arquivados e licenças em modo de consulta preservam downloads de versões aprovadas. As operações de aprovação e exportação têm registo de auditoria. Os ficheiros são respostas privadas, sem cache e sem ligações públicas estáticas.
+Formatos diferentes de PDF/XLSX são recusados. Uma URL directa de Excel não contorna a autorização. PDF é permitido aos participantes com consulta; rascunhos incompletos não produzem ficheiros vazios, mas erro 422. O cenário escolhido em consulta entra na cópia temporária de cálculo, sem gravar no projecto; o hash corresponde aos pressupostos com esse cenário e o cabeçalho `x-source-scenario` identifica-o. Uma versão aprovada não admite substituição do cenário. Projectos arquivados e licenças em modo de consulta preservam downloads de versões aprovadas. As operações de aprovação e exportação têm registo de auditoria. Os ficheiros são respostas privadas, sem cache e sem ligações públicas estáticas.
 
 A migração `0030_integra_approved_versions` cria `financial_model_versions` com RLS e chave estrangeira para o projecto. Um trigger impede actualizações, mesmo pelo utilizador dono das tabelas; o papel da aplicação também não pode apagar versões. A eliminação integral autorizada da empresa pela plataforma continua possível e elimina as versões antes do projecto. Não existe endpoint de edição ou eliminação individual de versões.
 
 ### Relatórios disponíveis
 
-Sete relatórios de projecção foram implementados: sumário executivo, memorando para comité, memorando de crédito, avaliação, demonstrações projectadas, cenários/sensibilidade e serviço da dívida. Os títulos, o papel A4, os destaques azuis, o corpo serifado e as tabelas seguem a estrutura do protótipo; os ficheiros HTML e os ecrãs existentes não foram alterados. DR, Balanço e Fluxos começam em páginas distintas. Tabelas extensas repartem os anos por bandas com rubricas e cabeçalhos repetidos; não se eliminam anos nem se reduz a fonte para encaixar quarenta períodos numa página.
+Sete relatórios de projecção foram implementados: sumário executivo, memorando para comité, memorando de crédito, avaliação, demonstrações projectadas, cenários/sensibilidade e serviço da dívida. Os títulos, o papel A4, os destaques azuis, o corpo serifado e as tabelas seguem a estrutura do protótipo. DR, Balanço e Fluxos começam em páginas distintas. Tabelas extensas repartem os anos por bandas com rubricas e cabeçalhos repetidos; não se eliminam anos nem se reduz a fonte para encaixar quarenta períodos numa página.
 
 O oitavo relatório do protótipo, `analise`, é histórico e exige balancetes analisados. O catálogo apresenta-o como indisponível e a rota devolve `historico_em_falta` (422). Não se apresentam projecções como se fossem demonstrações históricas.
 
@@ -153,4 +154,20 @@ A versão do formato dos relatórios é `integra-reports-1`. Novos formatos deve
 
 ### Validação desta entrega
 
-Testes de coerência das tabelas e resultados para os oito sectores; testes de estrutura PDF, fontes, paginação de quarenta anos e ausência de anexos editáveis; leitura independente dos PDFs e do XML/valores/tipos do Excel. Pré-visualizações temporárias não fazem parte da publicação. Os testes de API com PostgreSQL cobrem permissões de aprovação, repetição/concorrência, igualdade binária do PDF aprovado após alterações no rascunho/empresa, isolamento, formatos exclusivos, dados incompletos, arquivo e licença em consulta. O layout de `apps/web` permanece intacto.
+Testes de coerência das tabelas e resultados para os oito sectores; testes de estrutura PDF, fontes, paginação de quarenta anos e ausência de anexos editáveis; leitura independente dos PDFs e do XML/valores/tipos do Excel. Pré-visualizações temporárias não fazem parte da publicação. Os testes de API com PostgreSQL cobrem permissões de aprovação, repetição/concorrência, igualdade binária do PDF aprovado após alterações no rascunho/empresa, isolamento, formatos exclusivos, dados incompletos, arquivo e licença em consulta.
+
+## Ligação da interface aprovada
+
+`/modelagem` é um documento autenticado independente, servido por um Route Handler Next. Reutiliza a sessão Kianda e consulta os direitos efectivos do participante no servidor antes de devolver uma página executável. Sem sessão redirecciona para `/login?voltar=/modelagem`; sem licença ou adesão responde 403; falha do serviço responde 503. Não se altera a navegação RH para acrescentar uma entrada de menu sem autorização de layout.
+
+O original aprovado está em `apps/web/modeling/prototype.html`. `scripts/build-modeling-ui.mjs` preserva byte a byte o CSS e a estrutura anteriores ao JavaScript e monta a adaptação funcional com o motor de `packages/core`. O runtime é público mas não contém dados de empresas; a sessão e as respostas da API são privadas e sem cache. O HTML tem política CSP sem execução dinâmica de código. Não se utiliza `localStorage`, `sessionStorage`, clipboard ou exportação CSV na Modelagem ligada.
+
+Os projectos activos vêm exclusivamente da API; não se criam três demonstrações automaticamente na base de dados. O formulário existente cria projectos novos ou empresas existentes com os oito templates da API. Duplicar é uma criação confirmada pelo servidor e sujeita à quota; uma recusa não deixa um projecto fictício na lista. A selecção de projecto espera pela gravação anterior.
+
+As alterações são agrupadas e gravadas por projecto com revisão obrigatória. Uma edição feita durante uma gravação fica em fila com a revisão seguinte; a resposta anterior não substitui os valores que o utilizador está a escrever. Falhas e conflitos mantêm os dados na memória e bloqueiam novas gravações/downloads com essa origem até recarregar. Sair com alterações por guardar activa o aviso nativo do navegador. Não se afirma haver recuperação de rascunhos após fechar uma página sem rede.
+
+O motor puro partilhado fornece a pré-visualização imediata nos ecrãs; não existe uma segunda implementação do cálculo do protótipo. O servidor valida e calcula os downloads. Um rascunho incompleto pode abrir os pressupostos, mas não recebe projecções preenchidas com dados de exemplo. No modo de consulta os campos ficam bloqueados; cenário e unidade de apresentação são temporários. O download PDF espera pelas gravações e envia revisão/cenário, recusando origens desactualizadas.
+
+Os comandos de cópia das demonstrações e dos relatórios passam a descarregar PDF, conservando as posições e classes existentes. Excel continua exclusivamente na API do proprietário configurado. Não se acrescentaram botões, menus ou formulários de aprovação, RH, licenças ou participantes. A área histórica apresenta a dependência de balancetes persistidos e não guarda dados históricos locais como se fossem dados da empresa.
+
+Verificação: testes de fila/revisão, falha de rede, conflito, consulta, quota e origem do PDF; comparação exacta com o HTML aprovado; isolamento do JSON da sessão; montagem das sete vistas nos oito sectores com o código distribuído. Um teste HTTP local do Next com uma API de teste verificou redireccionamento, recusa de licença, cabeçalhos, proxy, gravação e PDF. Esse teste não substitui os testes PostgreSQL do CI. O navegador remoto não alcançou o servidor local, pelo que não se afirma uma inspecção visual desta integração num navegador real. `pnpm --filter @kianda/web modeling:generate` regenera os ficheiros; o teste web recusa runtime desactualizado.

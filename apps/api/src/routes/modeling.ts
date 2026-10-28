@@ -9,7 +9,7 @@ import { modelingExportOptions, modelingUsage, lockModelingCompany, requireProje
 import { moduleLicence } from '../services/modules.js';
 import { DomainError } from '../services/payroll.js';
 import { body, requireCompany, requireRole, type AppEnv } from '../plugins/tenant.js';
-import { and, auditLogs, desc, eq, financialModelVersions, financialModels, financialPersonnelImports, getDb, gte, inArray, lte, payrollLines, payrollRuns, personnelBudgetLines, personnelBudgets, modelingMembers, users } from '@kianda/db';
+import { and, auditLogs, companies, desc, eq, financialModelVersions, financialModels, financialPersonnelImports, getDb, gte, inArray, lte, payrollLines, payrollRuns, personnelBudgetLines, personnelBudgets, modelingMembers, users } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
@@ -42,6 +42,14 @@ export function modelingRoutes() {
     if (!member?.enabled) return c.json({ error: 'sem_permissao', message: 'Solicite ao proprietário acesso à Modelagem.' }, 403);
     if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && member.permission !== 'editor') return c.json({ error: 'sem_permissao', message: 'O seu acesso permite apenas consulta.' }, 403);
     await next();
+  });
+
+  app.get('/v1/modeling/session', async (c) => {
+    const a = c.get('actor'), db = getDb();
+    const [member] = await db.select().from(modelingMembers).where(and(eq(modelingMembers.companyId, a.companyId), eq(modelingMembers.userId, a.actorId)));
+    const [company] = await db.select({ id: companies.id, name: companies.name }).from(companies).where(eq(companies.id, a.companyId));
+    const licence = await moduleLicence(db, a.companyId, 'modeling');
+    return c.json({ user: { id: a.actorId, name: a.session.name, role: a.role }, company, permission: member!.permission, canWrite: member!.permission === 'editor' && licence.canWrite, formats: await modelingExportOptions(db, a.actorId), usage: await modelingUsage(db, a.companyId) });
   });
 
   const scenarioQuery = z.object({ scenario: z.enum(['base', 'otim', 'pess']).optional(), revision: z.coerce.number().int().positive().optional() });
@@ -99,18 +107,18 @@ export function modelingRoutes() {
   });
   app.get('/v1/modeling/models/:id/reports/:reportKey', async (c) => {
     const a = c.get('actor'), db = getDb();
-    const query = z.object({ format: z.enum(['pdf', 'xlsx']).default('pdf'), version: z.uuid().optional(), revision: z.coerce.number().int().positive().optional() }).parse(c.req.query());
+    const query = z.object({ format: z.enum(['pdf', 'xlsx']).default('pdf'), version: z.uuid().optional(), revision: z.coerce.number().int().positive().optional(), scenario: z.enum(['base', 'otim', 'pess']).optional() }).refine((q) => !q.version || !q.scenario, 'Uma versão aprovada não admite alteração de cenário.').parse(c.req.query());
     if (query.format === 'xlsx' && !(await modelingExportOptions(db, a.actorId)).xlsx) throw new DomainError('formato_nao_permitido', 'A exportação Excel é exclusiva da conta do proprietário da plataforma. Utilize PDF.', 403);
     const model = await financialModelOf(c);
     if (c.req.param('reportKey') === 'analise') throw new DomainError('historico_em_falta', 'Este relatório requer balancetes históricos analisados.', 422);
     const key = z.enum(FINANCIAL_REPORT_KEYS).parse(c.req.param('reportKey'));
     if (!query.version && query.revision !== undefined && model.revision !== query.revision) throw new DomainError('revisao_invalida', 'Projecto alterado. Volte a carregá-lo antes de exportar.', 409);
-    const bundle = query.version ? (await financialVersionOf(db, a.companyId, model.id, query.version)).payload : await financialReportBundle(db, model);
+    const bundle = query.version ? (await financialVersionOf(db, a.companyId, model.id, query.version)).payload : await financialReportBundle(db, query.scenario ? { ...model, assumptions: { ...(model.assumptions as Record<string, unknown>), cen: query.scenario } } : model);
     const data = query.format === 'pdf' ? renderFinancialPdf(bundle, key) : renderFinancialXlsx(bundle, key);
     const ref = bundle.source.versionNumber ? 'v' + bundle.source.versionNumber : 'r' + bundle.source.revision;
     const filename = `Integra-${model.id.slice(0, 8)}-${ref}-${key}.${query.format}`;
     await db.insert(auditLogs).values({ companyId: a.companyId, actorId: a.actorId, action: 'export_report', entity: 'financial_model', entityId: model.id, after: { report: key, format: query.format, versionId: bundle.source.versionId ?? null, sourceRevision: bundle.source.revision, sourceHash: bundle.source.sourceHash } });
-    return new Response(new Uint8Array(data), { headers: { 'content-type': query.format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'content-disposition': `attachment; filename="${filename}"`, 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff', 'x-source-revision': String(bundle.source.revision), 'x-source-hash': bundle.source.sourceHash } });
+    return new Response(new Uint8Array(data), { headers: { 'content-type': query.format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'content-disposition': `attachment; filename="${filename}"`, 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff', 'x-source-revision': String(bundle.source.revision), 'x-source-hash': bundle.source.sourceHash, 'x-source-scenario': bundle.result.scenario } });
   });
 
   app.get('/v1/modeling/usage', async (c) => c.json(await modelingUsage(getDb(), c.get('actor').companyId)));

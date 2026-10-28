@@ -2102,6 +2102,14 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: versões aprovadas e downlo
     const model = await req('POST', '/v1/modeling/models', { name: 'Estudo aprovado', sector: 'mineracao', currency: 'USD', assumptions });
     expect(model.statusCode).toBe(201); modelId = model.json().id;
   });
+  it('a interface recebe a permissão efectiva da Modelagem e formatos sem expor outra empresa', async () => {
+    const editor = (await req('GET', '/v1/modeling/session', undefined, finance)).json();
+    expect(editor).toMatchObject({ company: { id: companyId }, permission: 'editor', canWrite: true, formats: { pdf: true, xlsx: false, csv: false }, usage: { userLimit: 5 } });
+    const reader = (await req('GET', '/v1/modeling/session', undefined, viewer)).json();
+    expect(reader).toMatchObject({ company: { id: companyId }, permission: 'viewer', canWrite: false });
+    expect((await req('GET', '/v1/modeling/session', undefined, other)).json().company.id).toBe(otherCompany);
+    expect((await app.inject({ method: 'GET', url: '/v1/modeling/session' })).statusCode).toBe(401);
+  });
   it('só o proprietário aprova uma revisão completa e identificada', async () => {
     for (const session of [finance, viewer]) expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'V comité' }, session)).statusCode).toBe(403);
     expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 99, label: 'V comité' })).statusCode).toBe(409);
@@ -2134,6 +2142,14 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: versões aprovadas e downlo
     expect((await report('csv')).statusCode).toBe(400);
     expect((await req('GET', `/v1/modeling/models/${modelId}/reports/analise`)).json().error).toBe('historico_em_falta');
     snapshotPdf = (await report()).bytes;
+  });
+  it('o PDF de consulta respeita o cenário escolhido sem escrever nem modificar versões aprovadas', async () => {
+    const path = `/v1/modeling/models/${modelId}/reports/sumario?format=pdf&revision=1&scenario=pess`;
+    const draft = await req('GET', path, undefined, viewer);
+    expect(draft.statusCode).toBe(200); expect(draft.headers['x-source-scenario']).toBe('pess');
+    const current = (await req('GET', `/v1/modeling/models/${modelId}`)).json();
+    expect(current.revision).toBe(1); expect(current.assumptions.cen).toBe('base');
+    expect((await req('GET', path + `&version=${versionId}`, undefined, viewer)).statusCode).toBe(400);
   });
   it('Excel exige o ID exacto do proprietário do produto e o estatuto de administrador', async () => {
     const previous = process.env.KIANDA_MODELING_OWNER_USER_ID;

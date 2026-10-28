@@ -1,0 +1,60 @@
+/** Monta a interface aprovada sem alterar CSS/estrutura. O original fica reproduzível no repositório. */
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+const root = new URL('../', import.meta.url);
+const web = new URL('apps/web/', root);
+const { build } = createRequire(new URL('package.json', web))('esbuild');
+const original = await readFile(new URL('modeling/prototype.html', web), 'utf8');
+const begin = original.indexOf('<script>'), end = original.lastIndexOf('</script>');
+if (begin < 0 || end < begin) throw new Error('Estrutura inesperada do protótipo');
+const shell = original.slice(0, begin), suffix = original.slice(end + '</script>'.length);
+let source = original.slice(begin + '<script>'.length, end);
+function span(start, stop, replacement) {
+  const a = source.indexOf(start), b = source.indexOf(stop, a);
+  if (a < 0 || b < a) throw new Error('Bloco não encontrado: ' + start);
+  source = source.slice(0, a) + replacement + source.slice(b);
+}
+function replace(from, to) { if (!source.includes(from)) throw new Error('Expressão não encontrada: ' + from); source = source.replaceAll(from, to); }
+const dialogStart = source.indexOf('newM:()=>openModal('), dialogEnd = source.indexOf('   createM:', dialogStart);
+const dialog = source.slice(dialogStart + 'newM:'.length, dialogEnd).trim().replace(/,$/, '');
+span('function newModel(', '/* ---------------- Estado', `function newModel(sk,over={}){const t=templates.find(t=>t.sector===sk);if(!t)throw Error('Modelo-tipo indisponível');return Object.assign(clone(t.assumptions),{id:'',sector:sk,moeda:t.currency,nome:SECT[sk].m.nome||t.name,criado:new Date().toISOString().slice(0,10)},over);}\n\n`);
+span('let S;', '/* ---------------- Motor', `let S={models:[],active:null,unit:'M',an:null};\nconst M=()=>S.models.find(m=>m.id===S.active)||S.models[0];\n\n`);
+span('/* ---------------- Motor', '/* ---------------- Formatação', `function run(m,ov={}){return runFinancialModel(m,ov);}\nfunction breakEvenPrice(m){return financialBreakEvenPrice(m);}\nfunction waccOf(m){try{return run(m).wacc}catch{return null}}\nfunction keOf(m){try{return run(m).ke}catch{return null}}\n\n`);
+replace('function render(){', 'function renderPrototype(){');
+replace('function liveStrip(){', 'function liveStripPrototype(){');
+replace('value="${v}">', 'value="${esc(v??\'\')}">');
+replace("[['Kz','Kwanza (Kz)'],['USD','Dólar (USD)']]", "[['Kz','Kwanza (Kz)'],['USD','Dólar (USD)'],['EUR','Euro (EUR)']]");
+replace('data-act="copyFS">${ico(\'copy\')}Copiar (CSV)', 'data-act="downloadFS">${ico(\'doc\')}Descarregar PDF');
+replace('data-act="repCopy">${ico(\'copy\')}Copiar texto', 'data-act="downloadReport">${ico(\'doc\')}Descarregar PDF');
+replace("M().cenarios[c][f]=Number(i.value)||1", "const value=Number(i.value);if(!Number.isFinite(value)||value<0||value>10){i.value=M().cenarios[c][f];return toast('O multiplicador deve estar entre 0 e 10.')}M().cenarios[c][f]=value");
+replace('reporte de prejuízos fiscais por 5 anos.', 'reporte de prejuízos fiscais por ${m.prejuizosAnos??5} anos.');
+// Intervalos de stress inválidos (ex.: Gordon com g >= WACC) ficam indisponíveis, sem fabricar zero.
+replace('return run(mm).npv;', 'return optionalNpv(mm);');
+replace('const wR=[1.1,0.9].map(f=>run(m,{wacc:f}).npv);', 'const wR=[1.1,0.9].map(f=>optionalNpv(m,{wacc:f}));');
+replace('const mlo=k.ebitda[1]*m.mult.lo,mhi=k.ebitda[1]*m.mult.hi;', 'const mlo=R.multiples.enterpriseLow,mhi=R.multiples.enterpriseHigh;');
+replace('const adj=v=>ex?v-R.netDebt0:v;', 'const adj=v=>Number.isFinite(v)?(ex?v-R.netDebt0:v):null;');
+replace('Math.min(...gR)', 'validRange(gR,Math.min)'); replace('Math.max(...gR)', 'validRange(gR,Math.max)');
+replace('Math.min(...xR)', 'validRange(xR,Math.min)'); replace('Math.max(...xR)', 'validRange(xR,Math.max)');
+replace('hBars(rows,{center:ex?R.eqVal:R.npv})', 'hBars(rows.filter(r=>Number.isFinite(r.lo)&&Number.isFinite(r.hi)),{center:ex?R.eqVal:R.npv})');
+// O teste de crédito considera todos os anos com serviço, incluindo carência só de capital.
+replace("k.princ[t]>0&&k.dscr[t]<m.cov.dscr", "k.ds[t]>0&&k.dscr[t]<m.cov.dscr");
+replace("t>=1&&k.debt[t-1]>0&&brk(t).length", "t>=1&&(k.ds[t]>0||k.debt[t]>0)&&brk(t).length");
+replace("t>=1&&k.debt[t-1]>0?brk(t):null", "t>=1&&(k.ds[t]>0||k.debt[t]>0)?brk(t):null");
+span('function fsCSV(){', '/* ---------------- Eventos', '');
+source = source.slice(0, source.indexOf('/* ---------------- Eventos'));
+const adapter = (await readFile(new URL('modeling/adapter.js', web), 'utf8')).replace('__NEW_MODEL_DIALOG__', dialog);
+const imports = `import {runFinancialModel} from '${fileURLToPath(new URL('packages/core/src/modeling/engine.ts', root))}';\nimport {financialBreakEvenPrice} from '${fileURLToPath(new URL('packages/core/src/modeling/analysis.ts', root))}';\nimport {FinancialModelError} from '${fileURLToPath(new URL('packages/core/src/modeling/types.ts', root))}';\nimport {ModelingStore,modelingRequest} from '${fileURLToPath(new URL('modeling/store.ts', web))}';\n`;
+const result = await build({ stdin: { contents: imports + source + adapter, resolveDir: fileURLToPath(web), sourcefile: 'integra-ui.js' }, bundle: true, format: 'iife', platform: 'browser', target: 'es2022', minify: true, legalComments: 'none', write: false, logLevel: 'silent' });
+const js = result.outputFiles[0].text;
+const digest = (s) => createHash('sha256').update(s).digest('hex');
+const generated = `// Gerado por scripts/build-modeling-ui.mjs. CSS e estrutura são os do protótipo aprovado.\nexport const MODELING_SHELL = ${JSON.stringify(shell)};\nexport const MODELING_SUFFIX = ${JSON.stringify(suffix)};\nexport const MODELING_ASSET_HASH = '${digest(js).slice(0,16)}';\nexport const MODELING_REFERENCE_HASH = '${digest(original)}';\n`;
+await mkdir(new URL('lib/modeling/', web), { recursive: true });
+for (const [path, data] of [['lib/modeling/generated.ts', generated], ['public/modeling-runtime.js', js]]) {
+  const url = new URL(path, web);
+  if (process.argv.includes('--check')) {
+    if (await readFile(url, 'utf8').catch(() => '') !== data) throw new Error('Regenerar a interface: pnpm --filter @kianda/web modeling:generate (' + path + ')');
+  } else await writeFile(url, data);
+}
+console.log(process.argv.includes('--check') ? 'Integra: interface e motor gerados estão actualizados.' : 'Integra: interface gerada; CSS e estrutura preservados.');
