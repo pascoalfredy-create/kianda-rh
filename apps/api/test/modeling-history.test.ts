@@ -102,4 +102,17 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: balancetes por projecto e r
     expect((await history(5)).statusCode).toBe(402);
     expect((await req('GET', `/v1/modeling/models/${modelId}/reports/analise?version=${versionId}`, undefined, viewer)).bytes).toEqual(snapshot);
   });
+  it('analisa um documento externo apurado e intercalar sem pressupostos projectados e conserva a origem no PDF',async()=>{
+    const register=await req('POST','/v1/auth/register',{company:{name:'Consultora de exemplo',nif:String(Date.now()+39000).slice(-10)},name:'Analista',email:`${stamp}external@history.ao`,password});
+    expect(register.statusCode).toBe(201);const cookie='kianda_session='+register.cookies.find(c=>c.name==='kianda_session')!.value;
+    const me=(await req('GET','/v1/auth/me',undefined,cookie)).json();await getDb().insert(companyModules).values({companyId:me.company.id,module:'modeling',enabled:true,status:'active',paidUntil:'2099-12-31',projectLimit:1});
+    const model=await req('POST','/v1/modeling/models',{name:'Análise de entidade externa',sector:'servicos',currency:'USD',assumptions:{}},cookie);expect(model.statusCode).toBe(201);const id=model.json().id;
+    const input={empresa:'Entidade externa de exemplo',anos:['2025','2026'],N1:'',N:'Conta;Designação;Saldo\n11;Activo;850\n18;Amortização;-100\n51;Capital;-1000\n75;Regularização;10\n8207;Pessoal;100\n8208;Amortizações;100\n8209;Outros custos;40\n8219;Transferência;-240\n881;Resultado;240',pctCP:30,moeda:'Kz',periods:{N:{from:'2026-01-01',to:'2026-08-31'}}};
+    const saved=await req('PUT',`/v1/modeling/models/${id}/history`,{revision:1,input},cookie);expect(saved.statusCode).toBe(200);
+    expect(saved.json().historical.analysis).toMatchObject({input,cN:{income:{stage:'closing',complete:true},P:{pes:100,amort:100,rl:-250},B:{check:0}}});
+    const loaded=await req('GET',`/v1/modeling/models/${id}/history`,undefined,cookie);expect(loaded.json().historical.analysis.input).toEqual(input);
+    const pdf=await req('GET',`/v1/modeling/models/${id}/reports/analise?revision=2`,undefined,cookie);expect(pdf.statusCode).toBe(200);expect(pdf.headers['content-type']).toBe('application/pdf');expect(pdf.headers['x-source-currency']).toBe('Kz');
+    expect(pdf.headers['x-source-history-hash']).toBe(saved.json().historical.inputHash);
+    const unchanged=await req('GET',`/v1/modeling/models/${id}`,undefined,cookie);expect(unchanged.json().assumptions).toEqual({});expect(unchanged.json().currency).toBe('USD');
+  });
 });
