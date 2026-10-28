@@ -3,6 +3,7 @@ import type { App } from '../src/app.js';
 export interface InjectResponse {
   statusCode: number;
   body: string;
+  bytes: Uint8Array;
   json(): any;
   cookies: { name: string; value: string }[];
   headers: Record<string, string>;
@@ -24,13 +25,14 @@ export function testClient(app: App) {
         headers['content-type'] ??= 'application/json';
       }
       const res = await app.request(o.url, { method: o.method, headers, body });
-      const text = await res.text();
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      const text = new TextDecoder().decode(bytes);
       const cookies = res.headers.getSetCookie().map((c) => {
         const [pair] = c.split(';');
         const i = pair!.indexOf('=');
         return { name: pair!.slice(0, i), value: pair!.slice(i + 1) };
       });
-      return { statusCode: res.status, body: text, json: () => JSON.parse(text), cookies, headers: Object.fromEntries(res.headers) };
+      return { statusCode: res.status, body: text, bytes, json: () => JSON.parse(text), cookies, headers: Object.fromEntries(res.headers) };
     },
     async close() {},
   };

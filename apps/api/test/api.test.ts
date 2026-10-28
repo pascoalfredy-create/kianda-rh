@@ -2073,3 +2073,103 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: motor financeiro e modelos 
     expect((await req('POST', '/v1/modeling/simulate', { assumptions })).statusCode).toBe(402);
   });
 });
+
+describe.skipIf(!process.env.DATABASE_URL)('Integra: versões aprovadas e downloads privados', () => {
+  const stamp = String(Date.now()) + 'versions';
+  let owner = '', other = '', finance = '', viewer = '', companyId = '', otherCompany = '', ownerId = '', modelId = '', versionId = '';
+  let assumptions: Record<string, any>, snapshotPdf: Uint8Array;
+  const req = (method: string, url: string, payload?: unknown, session = owner) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
+  const report = (format = 'pdf', version = versionId, session = owner) => req('GET', `/v1/modeling/models/${modelId}/reports/sumario?format=${format}${version ? '&version=' + version : ''}`, undefined, session);
+  beforeAll(async () => {
+    for (const i of [0, 1]) {
+      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Empresa de versões', nif: String(Date.now() + 2400 + i).slice(-10) }, name: 'Proprietário', email: `${stamp}${i}@versions.ao`, password: 'VersoesSeguras2026abc' } });
+      expect(r.statusCode).toBe(201); if (!i) owner = cookieOf(r); else other = cookieOf(r);
+    }
+    const me = (await req('GET', '/v1/auth/me')).json(); companyId = me.company.id; ownerId = me.user.sub;
+    otherCompany = (await req('GET', '/v1/auth/me', undefined, other)).json().company.id;
+    await getDb().insert(platformAdmins).values({ email: `${stamp}0@versions.ao` });
+    for (const id of [companyId, otherCompany]) expect((await req('PUT', `/v1/platform/companies/${id}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 })).statusCode).toBe(200);
+    for (const [i, permission] of ['editor', 'viewer'].entries()) {
+      const email = `${stamp}user${i}@versions.ao`;
+      const user = await req('POST', '/v1/users', { name: permission, email, password: 'VersoesSeguras2026abc', role: 'finance' });
+      expect(user.statusCode).toBe(201);
+      expect((await req('PUT', `/v1/modeling/members/${user.json().id}`, { enabled: true, permission })).statusCode).toBe(200);
+      const login = await app.inject({ method: 'POST', url: '/v1/auth/login', payload: { email, password: 'VersoesSeguras2026abc' } });
+      if (!i) finance = cookieOf(login); else viewer = cookieOf(login);
+    }
+    assumptions = (await req('GET', '/v1/modeling/templates/mineracao')).json().assumptions;
+    assumptions.promotor = 'Promotor externo'; assumptions.promotorNif = '0012345678';
+    const model = await req('POST', '/v1/modeling/models', { name: 'Estudo aprovado', sector: 'mineracao', currency: 'USD', assumptions });
+    expect(model.statusCode).toBe(201); modelId = model.json().id;
+  });
+  it('só o proprietário aprova uma revisão completa e identificada', async () => {
+    for (const session of [finance, viewer]) expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'V comité' }, session)).statusCode).toBe(403);
+    expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 99, label: 'V comité' })).statusCode).toBe(409);
+    const approved = await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'V comité' });
+    expect(approved.statusCode).toBe(201); versionId = approved.json().id;
+    const version = (await req('GET', `/v1/modeling/models/${modelId}/versions/${versionId}`)).json();
+    expect(version.payload.source).toMatchObject({ state: 'approved', versionNumber: 1, revision: 1, promoter: 'Promotor externo', promoterNif: '0012345678' });
+    expect(version.payload.inputAssumptions.promotor).toBe('Promotor externo');
+    expect(version.payloadHash).toMatch(/^[a-f0-9]{64}$/);
+    expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'V comité' })).statusCode).toBe(200);
+  });
+  it('numera versões concorrentes sem duplicar pedidos nem consumir projectos', async () => {
+    const attempts = await Promise.all([req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'V banco' }), req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'V banco' })]);
+    expect(attempts.map((r) => r.statusCode).sort()).toEqual([200, 201]);
+    const list = (await req('GET', `/v1/modeling/models/${modelId}/versions`)).json();
+    expect(list.map((v: { versionNumber: number }) => v.versionNumber)).toEqual([2, 1]);
+    expect((await req('GET', '/v1/modeling/usage')).json().activeProjects).toBe(1);
+  });
+  it('clientes descarregam PDF e não conseguem obter Excel ou CSV por URL directa', async () => {
+    const catalogue = (await req('GET', `/v1/modeling/models/${modelId}/reports`)).json();
+    expect(catalogue.reports.filter((r: { available: boolean }) => r.available)).toHaveLength(7);
+    expect(catalogue.reports.find((r: { key: string }) => r.key === 'analise').available).toBe(false);
+    for (const session of [owner, finance, viewer]) {
+      const pdf = await report('pdf', versionId, session);
+      expect(pdf.statusCode).toBe(200); expect(pdf.headers['content-type']).toBe('application/pdf');
+      expect(pdf.headers['cache-control']).toContain('no-store'); expect(pdf.headers['content-disposition']).toContain('.pdf');
+      expect(new TextDecoder().decode(pdf.bytes.slice(0, 8))).toBe('%PDF-1.7');
+      expect((await report('xlsx', versionId, session)).statusCode).toBe(403);
+    }
+    expect((await report('csv')).statusCode).toBe(400);
+    expect((await req('GET', `/v1/modeling/models/${modelId}/reports/analise`)).json().error).toBe('historico_em_falta');
+    snapshotPdf = (await report()).bytes;
+  });
+  it('Excel exige o ID exacto do proprietário do produto e o estatuto de administrador', async () => {
+    const previous = process.env.KIANDA_MODELING_OWNER_USER_ID;
+    try {
+      process.env.KIANDA_MODELING_OWNER_USER_ID = ownerId;
+      const file = await report('xlsx'); expect(file.statusCode).toBe(200);
+      expect(file.headers['content-type']).toContain('spreadsheetml'); expect(new TextDecoder().decode(file.bytes.slice(0, 2))).toBe('PK');
+      expect((await report('xlsx', versionId, finance)).statusCode).toBe(403);
+      process.env.KIANDA_MODELING_OWNER_USER_ID = 'conta-diferente'; expect((await report('xlsx')).statusCode).toBe(403);
+    } finally { if (previous === undefined) delete process.env.KIANDA_MODELING_OWNER_USER_ID; else process.env.KIANDA_MODELING_OWNER_USER_ID = previous; }
+  });
+  it('o PDF aprovado fica igual byte a byte depois de alterar o rascunho e os dados da empresa', async () => {
+    const updated = { ...assumptions, pessoal: assumptions.pessoal + 1000000 };
+    expect((await req('PUT', `/v1/modeling/models/${modelId}`, { name: 'Novo rascunho', sector: 'mineracao', currency: 'USD', revision: 1, assumptions: updated })).statusCode).toBe(200);
+    await getDb().execute(sql`update companies set name='Empresa alterada' where id=${companyId}`);
+    const frozen = await report(); expect(frozen.statusCode).toBe(200); expect(frozen.bytes).toEqual(snapshotPdf); expect(frozen.headers['x-source-revision']).toBe('1');
+    const draft = await report('pdf', ''); expect(draft.statusCode).toBe(200); expect(draft.bytes).not.toEqual(snapshotPdf); expect(draft.headers['x-source-revision']).toBe('2');
+  });
+  it('a base de dados impede editar versões aprovadas, mesmo fora das rotas', async () => {
+    await expect(getDb().execute(sql`update financial_model_versions set label='Alterada' where id=${versionId}`)).rejects.toThrow();
+    await expect(withTenant(companyId, () => getDb().execute(sql`delete from financial_model_versions where id=${versionId}`))).rejects.toThrow();
+    const r = await withTenant(otherCompany, () => getDb().execute(sql`select id from financial_model_versions where id=${versionId}`)); expect(r.rows).toEqual([]);
+    for (const path of [`versions/${versionId}`, `reports/sumario?version=${versionId}`]) expect((await req('GET', `/v1/modeling/models/${modelId}/${path}`, undefined, other)).statusCode).toBe(404);
+  });
+  it('rascunhos incompletos não geram versões aprovadas nem ficheiros vazios', async () => {
+    expect((await req('PUT', `/v1/modeling/models/${modelId}`, { name: 'Incompleto', sector: 'mineracao', currency: 'USD', revision: 2, assumptions: { pessoal: 1 } })).statusCode).toBe(200);
+    expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 3, label: 'Inválida' })).statusCode).toBe(422);
+    expect((await report('pdf', '')).statusCode).toBe(422);
+    expect((await req('GET', `/v1/modeling/models/${modelId}/versions`)).json()).toHaveLength(2);
+    expect((await report()).bytes).toEqual(snapshotPdf);
+  });
+  it('arquivo e licença em consulta conservam downloads aprovados e bloqueiam novas aprovações', async () => {
+    expect((await req('POST', `/v1/modeling/models/${modelId}/archive`, { archived: true, revision: 3 })).statusCode).toBe(200);
+    expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 4, label: 'Arquivo' })).statusCode).toBe(409);
+    expect((await req('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'suspended' })).statusCode).toBe(200);
+    expect((await report('pdf', versionId, viewer)).bytes).toEqual(snapshotPdf);
+    expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 4, label: 'Suspensa' })).statusCode).toBe(402);
+  });
+});

@@ -31,3 +31,4 @@ export * from './modeling/validation.js';
 export * from './modeling/engine.js';
 export * from './modeling/templates.js';
 export * from './modeling/analysis.js';
+export * from './modeling/reports.js';

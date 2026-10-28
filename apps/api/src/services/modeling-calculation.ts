@@ -15,10 +15,14 @@ function canonical(value: unknown): unknown {
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)]));
   return value;
 }
+export function financialFingerprint(value: unknown): string {
+  return createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
+}
+
 export function financialCalculationSource(model: typeof financialModels.$inferSelect) {
   return {
     model: { id: model.id, name: model.name, sector: model.sector, currency: model.currency, archived: Boolean(model.archivedAt) },
     sourceRevision: model.revision,
-    sourceAssumptionsHash: createHash('sha256').update(JSON.stringify(canonical({ assumptions: model.assumptions, sector: model.sector, currency: model.currency }))).digest('hex'),
+    sourceAssumptionsHash: financialFingerprint({ assumptions: model.assumptions, sector: model.sector, currency: model.currency }),
   };
 }

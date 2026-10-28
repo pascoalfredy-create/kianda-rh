@@ -4,7 +4,7 @@
 
 Mesmo repositório, autenticação e PostgreSQL. RH e Modelagem têm direitos independentes. A interface aprovada fica intacta: esta alteração não modifica `apps/web` nem o protótipo HTML.
 
-O backend disponibiliza persistência, direitos comerciais e o motor financeiro anual, com templates para os oito sectores. Ainda não liga os ecrãs do protótipo à API, não cria versões aprovadas nem automatiza a cobrança da Modelagem. Não confundir `revision` (controlo de concorrência) com versões de comité/banco.
+O backend disponibiliza persistência, direitos comerciais e o motor financeiro anual, com templates para os oito sectores. Já cria versões aprovadas e exporta relatórios; ainda não liga os ecrãs do protótipo à API nem automatiza a cobrança da Modelagem. Não confundir `revision` (controlo de concorrência) com versões de comité/banco.
 
 ## Compatibilidade comercial
 
@@ -75,7 +75,7 @@ A política de exportação da Modelagem permite PDF aos clientes. Excel (`xlsx`
 
 Configuração de produção: definir a variável de repositório `KIANDA_MODELING_OWNER_USER_ID` com o ID da conta do proprietário do produto. O CI transmite essa configuração ao Worker. Não se infere identidade pelo nome, nem se concede a todos os administradores.
 
-**Os exportadores financeiros ainda não existem nesta entrega.** A política e o endpoint de capacidades estão preparados; quando os exportadores forem implementados, a rota de download deve usar `canExportModeling` no servidor e validar também acesso ao projecto. Nenhum Excel pode ser publicado em URL estática/pública. A exportação JSON de portabilidade dos dados da empresa continua separada dos relatórios comerciais e das fórmulas/modelos Excel do produto. As exportações RH existentes não são alteradas por esta regra do Integra.
+Os exportadores financeiros estão implementados e verificam a política de formatos e o acesso ao projecto no servidor. Nenhum Excel pode ser publicado em URL estática/pública. A exportação JSON de portabilidade dos dados da empresa continua separada dos relatórios comerciais e das fórmulas/modelos Excel do produto. As exportações RH existentes não são alteradas por esta regra do Integra.
 
 ## Motor financeiro anual — `integra-1.0.0`
 
@@ -94,7 +94,7 @@ Código puro em `packages/core/src/modeling/`. Não depende de RH, base de dados
 
 Os resultados calculados a partir de modelos guardados incluem metadados de origem (`sourceRevision`, hash SHA-256 canónico dos pressupostos/moeda/sector) e versão do motor. A ordem das chaves JSON não altera o hash. Uma revisão explicitamente pedida que já mudou devolve 409. Pressupostos financeiros inválidos devolvem 422 com campos e motivos; números fora do intervalo suportado não são convertidos silenciosamente em `null`.
 
-Calcular a revisão de um projecto arquivado não o restaura nem consome nova quota; licenças em consulta mantêm leitura/cálculo de dados guardados. Estes cálculos não são snapshots históricos imutáveis: serão congelados na entrega de versões aprovadas. As simulações novas por POST exigem escrita. Nenhum endpoint devolve ficheiros Excel nem fórmulas de Excel aos clientes.
+Calcular a revisão de um projecto arquivado não o restaura nem consome nova quota; licenças em consulta mantêm leitura/cálculo de dados guardados. Estes endpoints calculam o rascunho corrente; para um snapshot imutável deve utilizar-se uma versão aprovada e as respectivas rotas de relatório. As simulações novas por POST exigem escrita. Os endpoints de cálculo não exportam ficheiros Excel; a rota própria de exportação permite XLSX exclusivamente à conta proprietária do produto.
 
 ### Convenções e correcções do protótipo
 
@@ -118,3 +118,39 @@ Calcular a revisão de um projecto arquivado não o restaura nem consome nova qu
 ### Verificação do motor
 
 Referências analíticas independentes para VAL, TIR, payback, PI e retorno do accionista. Oito sectores × três cenários, em projecto novo e empresa existente, com reconciliação exacta de balanço e caixa. Testes de dívida/carência/juros zero, prejuízos e expiração, amortizações ao cêntimo, dividendos, défices, terminal/residual, entradas inválidas e precisão. Não foi fornecido um Excel de referência do proprietário: não se afirma confronto com um ficheiro externo não recebido.
+
+## Versões aprovadas e downloads
+
+Aprovar uma versão congela a revisão corrente, os pressupostos originais, a normalização usada pelo motor, os cálculos dos três cenários, as sensibilidades, as tabelas dos relatórios e os dados da entidade promotora. O hash da origem e o hash do conteúdo permitem conferir a proveniência e a integridade. O promotor pode ser indicado pelos campos opcionais `assumptions.promotor` e `assumptions.promotorNif`, já compatíveis com o conceito do protótipo; na ausência, utiliza-se a empresa do projecto.
+
+A aprovação da versão é uma fixação de dados pelo proprietário da empresa cliente. Não preenche nem substitui a deliberação do comité de investimento. O rascunho do projecto continua editável e poderá dar origem a outra versão. Versões não consomem novas quotas de projectos ou utilizadores.
+
+| Método e rota | Contrato |
+| --- | --- |
+| POST `/v1/modeling/models/:id/versions` | Só o proprietário cliente: `{revision, label}`. Recusa revisão desactualizada, projecto arquivado ou pressupostos incompletos. Mesmo rótulo e revisão devolvem a mesma versão, sem duplicar um pedido repetido |
+| GET `/v1/modeling/models/:id/versions` | Metadados das versões aprovadas, por ordem decrescente |
+| GET `/v1/modeling/models/:id/versions/:versionId` | Conteúdo congelado, com verificação dos hashes |
+| GET `/v1/modeling/models/:id/reports` | Catálogo de relatórios e formatos permitidos para a conta |
+| GET `/v1/modeling/models/:id/reports/:reportKey?format=pdf` | Relatório do rascunho; pode exigir `revision` para impedir exportação desactualizada |
+| GET `/v1/modeling/models/:id/reports/:reportKey?format=pdf&version=:versionId` | Relatório a partir da versão aprovada, sem recalcular o rascunho nem consultar novamente o RH |
+| GET `/v1/modeling/models/:id/reports/:reportKey?format=xlsx&version=:versionId` | Excel de resultados, apenas para o ID exclusivo do proprietário do produto com estatuto de administrador da plataforma |
+
+Formatos diferentes de PDF/XLSX são recusados. Uma URL directa de Excel não contorna a autorização. PDF é permitido aos participantes com consulta; rascunhos incompletos não produzem ficheiros vazios, mas erro 422. Projectos arquivados e licenças em modo de consulta preservam downloads de versões aprovadas. As operações de aprovação e exportação têm registo de auditoria. Os ficheiros são respostas privadas, sem cache e sem ligações públicas estáticas.
+
+A migração `0030_integra_approved_versions` cria `financial_model_versions` com RLS e chave estrangeira para o projecto. Um trigger impede actualizações, mesmo pelo utilizador dono das tabelas; o papel da aplicação também não pode apagar versões. A eliminação integral autorizada da empresa pela plataforma continua possível e elimina as versões antes do projecto. Não existe endpoint de edição ou eliminação individual de versões.
+
+### Relatórios disponíveis
+
+Sete relatórios de projecção foram implementados: sumário executivo, memorando para comité, memorando de crédito, avaliação, demonstrações projectadas, cenários/sensibilidade e serviço da dívida. Os títulos, o papel A4, os destaques azuis, o corpo serifado e as tabelas seguem a estrutura do protótipo; os ficheiros HTML e os ecrãs existentes não foram alterados. DR, Balanço e Fluxos começam em páginas distintas. Tabelas extensas repartem os anos por bandas com rubricas e cabeçalhos repetidos; não se eliminam anos nem se reduz a fonte para encaixar quarenta períodos numa página.
+
+O oitavo relatório do protótipo, `analise`, é histórico e exige balancetes analisados. O catálogo apresenta-o como indisponível e a rota devolve `historico_em_falta` (422). Não se apresentam projecções como se fossem demonstrações históricas.
+
+O PDF contém apenas páginas vectoriais e fontes incorporadas, com suporte a acentos e caracteres cirílicos, sem JavaScript ou anexos Excel. O renderizador funciona em Node/Cloudflare sem navegador, fontes de rede ou serviços externos. As fontes DejaVu e a licença acompanham o código; o script `scripts/build-financial-fonts.py` permite reproduzir os subconjuntos. Os recursos das fontes são reutilizados no processo para evitar descodificações repetidas.
+
+O XLSX é uma **exportação dos resultados**, com números e percentagens tipados, identificação da origem e notas. Não é apresentado como modelo financeiro Excel com fórmulas recalculáveis. A restrição exclusiva à conta proprietária é verificada no servidor. O gerador XLSX existente foi estendido com tipos explícitos, formatos percentuais e texto com quebra de linha, preservando os formatos dos mapas RH existentes.
+
+A versão do formato dos relatórios é `integra-reports-1`. Novos formatos devem manter o renderizador anterior para as versões já aprovadas; nunca se deve recalcular uma versão antiga com pressupostos ou regras novas para a descarregar.
+
+### Validação desta entrega
+
+Testes de coerência das tabelas e resultados para os oito sectores; testes de estrutura PDF, fontes, paginação de quarenta anos e ausência de anexos editáveis; leitura independente dos PDFs e do XML/valores/tipos do Excel. Pré-visualizações temporárias não fazem parte da publicação. Os testes de API com PostgreSQL cobrem permissões de aprovação, repetição/concorrência, igualdade binária do PDF aprovado após alterações no rascunho/empresa, isolamento, formatos exclusivos, dados incompletos, arquivo e licença em consulta. O layout de `apps/web` permanece intacto.

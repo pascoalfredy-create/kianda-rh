@@ -1005,3 +1005,20 @@ export const modelingMembers = pgTable('modeling_members', {
   addedBy: text('added_by').notNull(),
   createdAt: createdAt(),
 }, (t) => [uniqueIndex('modeling_members_company_user').on(t.companyId, t.userId)]);
+
+/** Versão aprovada: pressupostos, cálculos e relatórios congelados, sem edição posterior. */
+export const financialModelVersions = pgTable('financial_model_versions', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  modelId: text('model_id').notNull().references(() => financialModels.id),
+  versionNumber: integer('version_number').notNull(),
+  label: text('label').notNull(),
+  sourceRevision: integer('source_revision').notNull(),
+  sourceHash: text('source_hash').notNull(),
+  payloadHash: text('payload_hash').notNull(),
+  engineVersion: text('engine_version').notNull(),
+  reportVersion: text('report_version').notNull(),
+  payload: jsonb('payload').$type<import('@kianda/core').FinancialReportBundle>().notNull(),
+  approvedBy: text('approved_by').notNull(),
+  approvedAt: createdAt(),
+}, (t) => [uniqueIndex('financial_versions_model_number').on(t.modelId, t.versionNumber), uniqueIndex('financial_versions_model_revision_label').on(t.modelId, t.sourceRevision, t.label), index('financial_versions_company_model').on(t.companyId, t.modelId)]);
