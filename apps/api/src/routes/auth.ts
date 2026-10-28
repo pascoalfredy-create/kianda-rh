@@ -1,4 +1,4 @@
-import { DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, defaultModelingSector, isValidCompanyNif, luandaDate, SECTORS, tierFor, TRIAL_DAYS, verifyTotp } from '@kianda/core';
+import { DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, isValidCompanyNif, luandaDate, SECTORS, tierFor, TRIAL_DAYS, verifyTotp } from '@kianda/core';
 import { auditLogs, companies, companyModules, employees, getDb, modelingMembers, platformAdmins, hashPassword, passwordProblems, subscriptions, users, verifyPassword, type Db } from '@kianda/db';
 import { and, eq } from '@kianda/db';
 import { Hono } from 'hono';
@@ -92,7 +92,7 @@ export function authRoutes() {
       const [u] = await tx.insert(users).values({ companyId: co!.id, email: b.email.toLowerCase(), name: b.name, passwordHash, role: 'owner' }).returning();
       await tx.insert(companyModules).values([
         { companyId: co!.id, module: 'hr', enabled: hasHr, status: hasHr ? 'trial' : 'cancelled' },
-        { companyId: co!.id, module: 'modeling', enabled: hasModeling, status: hasModeling ? 'trial' : 'cancelled', trialEndsAt: hasModeling ? trialEnd : null, planKey: hasModeling ? modelingPlan.key : null, cycle: hasModeling ? modelingCycle : null, projectLimit: hasModeling ? modelingPlan.projectLimit : 1, primarySector: hasModeling ? b.modelingPlan!.primarySector : defaultModelingSector(b.company.sector), modelingSectors },
+        ...(hasModeling ? [{ companyId: co!.id, module: 'modeling', enabled: true, status: 'trial', trialEndsAt: trialEnd, planKey: modelingPlan.key, cycle: modelingCycle, projectLimit: modelingPlan.projectLimit, primarySector: b.modelingPlan!.primarySector, modelingSectors }] : []),
       ]);
       if (hasModeling) await tx.insert(modelingMembers).values({ companyId: co!.id, userId: u!.id, addedBy: u!.id });
       // Pré-configuração do sector: regimes de horário e subsídios sugeridos (a empresa ajusta depois).
