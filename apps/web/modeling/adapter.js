@@ -1,5 +1,48 @@
 /* Liga a interface aprovada à API. Este ficheiro é montado depois das vistas do protótipo. */
 let store, session, templates = [], notice = '', busy = false;
+let currencyDialog=null;
+const currencyFields=['fxFrom','fxRate','fxDate','fxSource'];
+const currentDate=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Luanda',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+function currencyConversionHint(model){
+  const c=model.currencyConversion;
+  return c&&typeof c==='object'?`Última conversão: 1 ${esc(c.from)} = ${esc(c.rate)} ${esc(c.to)} · ${esc(c.rateDate)} · ${esc(c.source)}`:'Ao mudar de moeda, indique ou confirme o câmbio para converter os montantes';
+}
+async function loadCurrencyQuote(){
+  const context=currencyDialog;if(!context)return;
+  const from=$('#fxFrom').value;context.quote=null;busy=true;protect();
+  $('#fxStatus').textContent='A obter a última referência BNA disponível…';
+  try{
+    const q=await modelingRequest('/exchange-rate?'+new URLSearchParams({from,to:context.to}));
+    if(currencyDialog!==context)return;
+    context.quote=q;$('#fxRate').value=q.rate;$('#fxDate').value=q.rateDate;$('#fxSource').value=q.source;
+    $('#fxStatus').textContent=`1 ${from} = ${q.rate} ${context.to} · ${q.rateDate} · ${q.source}${q.stale?' · Referência com mais de 7 dias; confirme a sua adequação.':''}`;
+  }catch(error){
+    if(currencyDialog!==context)return;
+    $('#fxRate').value='';$('#fxDate').value=currentDate();$('#fxSource').value='Pressuposto manual';$('#fxStatus').textContent=errorText(error);
+  }finally{busy=false;protect();}
+}
+async function openCurrencyConversion(model,to){
+  if(!session.canWrite||busy)return;
+  currencyDialog={modelId:model.id,to,quote:null};
+  openModal('Converter moeda',`<div class="alert b">${ico('info',17)}<div>Converter preços, custos, investimento, dívida e abertura para <b>${esc(to)}</b>. Quantidades, dias, anos e percentagens mantêm-se.</div></div><div class="form"><div class="f"><label>Moeda real dos valores actuais</label><select class="sel" id="fxFrom">${['Kz','USD','EUR'].map(c=>`<option ${model.moeda===c?'selected':''}>${c}</option>`).join('')}</select><span class="hint">Se anteriormente mudou apenas o símbolo, indique a moeda em que os valores foram introduzidos.</span></div><div class="f"><label>Taxa: 1 unidade da origem em ${esc(to)}</label><input class="inp n" id="fxRate" type="number" step="any" min="0"></div><div class="f"><label>Data da taxa</label><input class="inp" id="fxDate" type="date" value="${currentDate()}"></div><div class="f"><label>Fonte / pressuposto</label><input class="inp" id="fxSource" maxlength="160"></div></div><p class="hint" id="fxStatus"></p><p class="hint">A taxa fica fixada nesta conversão. Reveja inflação, juros e taxa de desconto para a moeda de análise; estes pressupostos não são alterados pelo câmbio.</p>`,`<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="applyCurrency">Aplicar conversão</button>`,'700px');
+  $('#fxFrom').onchange=loadCurrencyQuote;
+  for(const field of ['fxRate','fxDate','fxSource'])$('#'+field).oninput=()=>{if(currencyDialog?.quote){currencyDialog.quote=null;if(field!=='fxSource')$('#fxSource').value='Pressuposto manual';$('#fxStatus').textContent='Será utilizada a taxa indicada, com a data e fonte deste formulário.';}};
+  await loadCurrencyQuote();
+}
+const bindAssumptionsPrototype=VIEWS.pressupostos.after;
+VIEWS.pressupostos.after=()=>{
+  bindAssumptionsPrototype();
+  const field=document.querySelector('[data-p="moeda"]');
+  if(field)field.onchange=()=>{const model=M(),to=field.value;field.value=model.moeda;if(to!==model.moeda)return openCurrencyConversion(model,to);};
+};
+async function applyCurrency(){
+  const context=currencyDialog;if(!context||context.modelId!==M()?.id)throw Error('Seleccione novamente a moeda do projecto.');
+  const from=$('#fxFrom').value,rate=Number($('#fxRate').value),rateDate=$('#fxDate').value,source=$('#fxSource').value.trim();
+  if(!Number.isFinite(rate)||rate<=0||!rateDate||!source)throw Error('Indique taxa positiva, data e fonte para converter os valores.');
+  const q=context.quote,reference=!!q&&q.from===from&&q.rate===rate&&q.rateDate===rateDate&&q.source===source;
+  await store.convertCurrency(context.modelId,{from,to:context.to,rate,rateDate,source,reference});
+  closeModal();notice='';render();toast('Montantes convertidos e guardados. Reveja as taxas de inflação e desconto.');
+}
 const historicalDrafts=new Map(), historicalDirty=new Set();
 const historicalFields=['anEmp','anY1','anY2','anCP','anMo','anT1','anT2','anF1','anF2'];
 function captureHistoricalDraft(){
@@ -46,7 +89,8 @@ function protect() {
     else if(el.dataset.restoreDisabled!==undefined){el.disabled=el.dataset.restoreDisabled==='1';delete el.dataset.restoreDisabled;}
   });
   document.querySelectorAll(historicalFields.map(id=>'#'+id).join(',')).forEach(el=>{el.disabled=!writable;});
-  for(const action of ['newM','dupM','createM','addRev','delRev','addCap','delCap','anRun','anToModel','anDemo'])document.querySelectorAll(`[data-act="${action}"]`).forEach(el=>{
+  document.querySelectorAll(currencyFields.map(id=>'#'+id).join(',')).forEach(el=>{el.disabled=!writable;});
+  for(const action of ['newM','dupM','createM','addRev','delRev','addCap','delCap','anRun','anToModel','anDemo','applyCurrency'])document.querySelectorAll(`[data-act="${action}"]`).forEach(el=>{
     el.disabled=!writable||(action==='dupM'&&!M());
     if(!session?.canWrite)el.title='Acesso apenas de consulta.';
   });
@@ -114,11 +158,12 @@ document.addEventListener('click',async ev=>{
     addCap:()=>{m.capex.push({nome:'Novo investimento',ano:1,valor:0,vida:5});save();render();},
     delCap:()=>{m.capex.splice(+d.i,1);save();render();},
     downloadFS:()=>downloadReport('demonstracoes'),downloadReport:()=>downloadReport(SUB.rep||'sumario'),
+    applyCurrency,
     anRun:analyzeAndSave,anToModel:modelFromHistorical,
     anDemo:()=>{S.an={empresa:DEMO_BAL.empresa,anos:DEMO_BAL.anos,N1:demoCSV(DEMO_BAL.N1),N:demoCSV(DEMO_BAL.N),pctCP:30,moeda:'Kz'};historicalDrafts.set(m.id,S.an);historicalDirty.add(m.id);SUB.at='dados';render();toast('Exemplo carregado. Prima Analisar se o quiser guardar neste projecto.');},
   };
   const action=actions[d.act];if(!action)return;ev.preventDefault();
-  const mutation=['createM','dupM','addRev','delRev','addCap','delCap','anRun','anToModel','anDemo'].includes(d.act);
+  const mutation=['createM','dupM','addRev','delRev','addCap','delCap','anRun','anToModel','anDemo','applyCurrency'].includes(d.act);
   if(mutation&&!session.canWrite)return showError(Error('O seu acesso permite apenas consulta.'));
   busy=true;protect();
   try{await action();}catch(error){showError(error);}finally{busy=false;protect();}

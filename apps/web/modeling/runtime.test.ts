@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
-import { analyzeFinancialHistory, FINANCIAL_SECTORS, financialTemplate } from '@kianda/core';
+import { analyzeFinancialHistory, convertFinancialCurrency, FINANCIAL_SECTORS, financialTemplate } from '@kianda/core';
 import { historicalInput } from '../../../packages/core/test/fixtures/financial-history.js';
 const runtime = readFileSync(new URL('../public/modeling-runtime.js', import.meta.url), 'utf8');
 const views = ['painel', 'pressupostos', 'demonstracoes', 'avaliacao', 'credito', 'sensibilidade', 'relatorios'];
@@ -10,23 +10,33 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
   const template = financialTemplate(sector), handlers = new Map<string, Function>();
   const nodes = new Map<string, any>();
   const node = (selector: string) => {
-    if (!nodes.has(selector)) nodes.set(selector, { innerHTML: '', textContent: '', value: '', disabled: false, dataset: {}, classList: { add() {}, remove() {} }, insertAdjacentHTML(_position: string, html: string) { this.innerHTML = html + this.innerHTML; } });
+    if (!nodes.has(selector)) nodes.set(selector, { innerHTML: '', textContent: '', value: '', disabled: false, dataset: {}, style:{}, classList: { add() {}, remove() {} }, insertAdjacentHTML(_position: string, html: string) { this.innerHTML = html + this.innerHTML; } });
     return nodes.get(selector)!;
   };
   node('#integra-session').textContent = JSON.stringify({ canWrite, permission: canWrite ? 'editor' : 'viewer', formats: { pdf: true, xlsx: false, csv: false }, usage: {} });
   const model = { id: 'm1', name: template.name, sector, currency: template.currency, revision: 1, createdAt: '2026-10-28', archivedAt: null, assumptions: incomplete ? { pessoal: 1 } : template.assumptions };
+  const requests: { path: string; method?: string; payload?: any }[] = [];
+  const currencyField=node('[data-p="moeda"]');currencyField.dataset={p:'moeda',t:'t'};currencyField.value=model.currency;
+  node('#fxFrom').value=model.currency;
   const field = { disabled: false, dataset: { p: 'pessoal' } }, baseScenario = { disabled: true, dataset: { cen: 'base.preco' } };
   class Element { constructor(public dataset: Record<string, string>) {} closest(selector: string) { return selector === '[data-go]' && this.dataset.go || selector === '[data-act]' && this.dataset.act ? this : null; } }
   runInNewContext(runtime, {
-    document: { querySelector: node, querySelectorAll: (selector: string) => selector === '[data-p],[data-cen]' ? [field, baseScenario] : [], addEventListener: (name: string, fn: Function) => handlers.set(name, fn) },
+    document: { querySelector: node, querySelectorAll: (selector: string) => selector === '[data-p],[data-cen]' ? [field, baseScenario, currencyField] : selector === '[data-p]' ? [currencyField] : [], addEventListener: (name: string, fn: Function) => handlers.set(name, fn) },
     Element, window: { addEventListener() {}, scrollTo() {} }, location: { hash: '' }, history: { replaceState() {} },
     setTimeout, clearTimeout, structuredClone, URL, URLSearchParams, TextDecoder, console,
     FileReader: class { result?: ArrayBuffer; onload?: () => void; readAsArrayBuffer(file: { buffer: ArrayBuffer }) { this.result=file.buffer; this.onload?.(); } },
-    fetch: async (path: string) => new Response(JSON.stringify(path.endsWith('/templates') ? FINANCIAL_SECTORS.map(financialTemplate) : path.endsWith('/history') ? { revision: 1, historical: withHistory ? { inputHash: 'a'.repeat(64), updatedAt: '2026-10-28', analysis: analyzeFinancialHistory(historicalInput) } : null } : [model]), { headers: { 'content-type': 'application/json' } }),
+    fetch: async (path: string, init?: {method?:string;body?:string}) => {
+      const payload=init?.body?JSON.parse(init.body):undefined;requests.push({path,method:init?.method,payload});
+      let data:unknown;
+      if(path.includes('/exchange-rate?')){const q=new URLSearchParams(path.split('?')[1]);data={from:q.get('from'),to:q.get('to'),rate:1000,rateDate:'2026-10-27',source:'Referência do teste',stale:false};}
+      else if(path.endsWith('/convert-currency')){model.currency=payload.to;model.assumptions={...convertFinancialCurrency(model.assumptions as unknown as Record<string,unknown>,payload.from,payload.to,payload.rate),currencyConversion:payload} as any;model.revision++;data=model;}
+      else data=path.endsWith('/templates')?FINANCIAL_SECTORS.map(financialTemplate):path.endsWith('/history')?{revision:1,historical:withHistory?{inputHash:'a'.repeat(64),updatedAt:'2026-10-28',analysis:analyzeFinancialHistory(historicalInput)}:null}:[model];
+      return new Response(JSON.stringify(data),{headers:{'content-type':'application/json'}});
+    },
   });
   // boot() termina depois das respostas JSON e da montagem inicial.
   await new Promise<void>(resolve => setImmediate(resolve));
-  return { node, field, baseScenario, async go(view: string) { await handlers.get('click')!({ target: new Element({ go: view }), preventDefault() {} }); return node('#view').innerHTML as string; }, async sub(k = 'pt', v = 'custos') { await handlers.get('click')!({ target: new Element({ act: 'sub', k, v }), preventDefault() {} }); return node('#view').innerHTML as string; } };
+  return { node, field, baseScenario, requests, model, async currency(to:string){currencyField.value=to;await currencyField.onchange();},async act(act:string){await handlers.get('click')!({target:new Element({act}),preventDefault(){}});}, async go(view: string) { await handlers.get('click')!({ target: new Element({ go: view }), preventDefault() {} }); return node('#view').innerHTML as string; }, async sub(k = 'pt', v = 'custos') { await handlers.get('click')!({ target: new Element({ act: 'sub', k, v }), preventDefault() {} }); return node('#view').innerHTML as string; } };
 }
 describe('runtime do protótipo ligado à API', () => {
   for (const sector of FINANCIAL_SECTORS) it(`renderiza sete vistas com o motor partilhado: ${sector}`, async () => {
@@ -66,5 +76,17 @@ describe('runtime do protótipo ligado à API', () => {
     const text = 'Conta;Designação;Saldo\n43;Depósito;100,25', bytes = Uint8Array.from([...text].map(c=>c.charCodeAt(0)));
     const file = { size: bytes.length, buffer: bytes.buffer }; ui.node('#anF2').files = [file]; ui.node('#anF2').onchange();
     expect(ui.node('#anT2').value).toBe(text);
+  });
+  it('a mudança para EUR converte os valores e apresenta EUR nos montantes e nas instruções', async () => {
+    const ui=await mount('mineracao');await ui.go('pressupostos');const before=ui.model.assumptions.pessoal;
+    await ui.currency('EUR');expect(ui.node('[data-p="moeda"]').value).toBe('USD');expect(ui.model.currency).toBe('USD');
+    expect(ui.node('#modal').innerHTML).toContain('Moeda real dos valores actuais');
+    await ui.act('applyCurrency');expect(ui.model.currency).toBe('EUR');expect(ui.model.assumptions.pessoal).toBe(before!*1000);
+    expect(await ui.go('painel')).toContain('M EUR');const html=await ui.go('pressupostos');expect(html).toContain('EUR: inflação esperada nesta moeda');expect(html).toContain('Última conversão');
+    expect(ui.requests.filter(r=>r.path.endsWith('/convert-currency'))).toHaveLength(1);
+  });
+  it('cancelar a mudança de moeda mantém valores, moeda e revisão sem gravar', async () => {
+    const ui=await mount('mineracao');await ui.go('pressupostos');const before=structuredClone(ui.model);
+    await ui.currency('Kz');await ui.act('close');expect(ui.model).toEqual(before);expect(ui.requests.filter(r=>r.method==='POST'||r.method==='PUT')).toEqual([]);
   });
 });

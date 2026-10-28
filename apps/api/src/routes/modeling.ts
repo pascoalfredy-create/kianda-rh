@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { FINANCIAL_DOCUMENT_KEYS, FINANCIAL_REPORT_KEYS, FINANCIAL_REPORT_TITLES, type FinancialReportDocument } from '@kianda/core';
 import { financialHistoricalDocument, financialHistoryOf, financialReportBundle, financialVersionOf } from '../services/modeling-versions.js';
 import { modelingHistoryRoutes } from './modeling-history.js';
+import { modelingCurrencyRoutes } from './modeling-currency.js';
 import { renderFinancialPdf } from '../lib/financial-pdf.js';
 import { renderFinancialXlsx } from '../lib/financial-xlsx.js';
 import { FINANCIAL_SECTORS, financialBreakEvenPrice, financialScenarios, financialSensitivity, financialTemplate, runFinancialModel } from '@kianda/core';
@@ -53,6 +54,7 @@ export function modelingRoutes() {
     return c.json({ user: { id: a.actorId, name: a.session.name, role: a.role }, company, permission: member!.permission, canWrite: member!.permission === 'editor' && licence.canWrite, formats: await modelingExportOptions(db, a.actorId), usage: await modelingUsage(db, a.companyId) });
   });
   app.route('/', modelingHistoryRoutes());
+  app.route('/', modelingCurrencyRoutes());
 
   const scenarioQuery = z.object({ scenario: z.enum(['base', 'otim', 'pess']).optional(), revision: z.coerce.number().int().positive().optional() });
   app.get('/v1/modeling/templates', async (c) => c.json(FINANCIAL_SECTORS.map(financialTemplate)));
@@ -148,6 +150,7 @@ export function modelingRoutes() {
   app.get('/v1/modeling/models', async (c) => c.json(await getDb().select().from(financialModels).where(eq(financialModels.companyId, c.get('actor').companyId)).orderBy(desc(financialModels.updatedAt))));
   app.post('/v1/modeling/models', async (c) => {
     const a = c.get('actor'), db = getDb(), input = modelSchema.parse(await body(c));
+    delete input.assumptions.currencyConversion; // A identificação de uma conversão é emitida pelo servidor.
     await requireProjectCapacity(db, a.companyId);
     const [model] = await db.insert(financialModels).values({ ...input, companyId: a.companyId, createdBy: a.actorId }).returning();
     await db.insert(auditLogs).values({ companyId: a.companyId, actorId: a.actorId, action: 'create', entity: 'financial_model', entityId: model!.id, after: { revision: 1 } });
@@ -176,6 +179,10 @@ export function modelingRoutes() {
     const { revision: expected, ...values } = input;
     const [current] = await db.select().from(financialModels).where(and(eq(financialModels.companyId, a.companyId), eq(financialModels.id, c.req.param('id')))).for('update');
     if (current?.archivedAt) throw new DomainError('projecto_arquivado', 'Restaure o projecto antes de o alterar.', 409);
+    if (current && values.currency !== current.currency) throw new DomainError('conversao_obrigatoria', 'A mudança de moeda requer a conversão dos montantes com taxa, data e fonte. Utilize a alteração de moeda nos Pressupostos.', 409);
+    const conversion = (current?.assumptions as Record<string, unknown> | undefined)?.currencyConversion;
+    delete values.assumptions.currencyConversion;
+    if (conversion !== undefined) values.assumptions.currencyConversion = conversion;
     const [model] = await db.update(financialModels).set({ ...values, revision: expected + 1, updatedAt: new Date() })
       .where(and(eq(financialModels.companyId, a.companyId), eq(financialModels.id, c.req.param('id')), eq(financialModels.revision, expected))).returning();
     if (!model) throw new DomainError('revisao_invalida', 'Modelo inexistente ou alterado por outro utilizador. Volte a carregá-lo.', 409);

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { financialTemplate } from '@kianda/core';
+import { convertFinancialCurrency, financialTemplate } from '@kianda/core';
 import { ModelingApiError, ModelingStore, type ModelRecord, type ModelingTransport, type UiModel } from './store';
 import { historicalInput } from '../../../packages/core/test/fixtures/financial-history.js';
 const record = (id = 'm1', revision = 1): ModelRecord => ({ id, name: 'Projecto mineiro', sector: 'mineracao', currency: 'USD', assumptions: financialTemplate('mineracao').assumptions as unknown as Record<string, unknown>, revision, createdAt: '2026-10-28T00:00:00Z', archivedAt: null });
@@ -90,5 +90,21 @@ describe('persistência da interface Integra', () => {
     const request = vi.fn(), store = new ModelingStore(false, request); store.load([record()]);
     await store.download(store.models[0]!, 'analise'); expect(fetchFile.mock.calls[0]![0]).toBe('/api/v1/modeling/models/m1/reports/analise?format=pdf&revision=1');
     await expect(store.saveHistory('m1', historicalInput)).rejects.toThrow('consulta'); await expect(store.createFromHistory('m1')).rejects.toThrow('consulta'); expect(request).not.toHaveBeenCalled();
+  });
+  it('grava as edições antes de converter e substitui moeda e montantes pela resposta atómica', async () => {
+    const calls:any[]=[],original=record(),input={from:'USD' as const,to:'Kz' as const,rate:900,rateDate:'2026-10-27',source:'Teste',reference:false};
+    const request:ModelingTransport=async<T>(path:string,method?:string,payload?:any)=>{calls.push({path,method,payload});return(path.endsWith('/convert-currency')?{...original,currency:'Kz',revision:3,assumptions:convertFinancialCurrency({...original.assumptions,pessoal:100},'USD','Kz',900)}:{...original,...payload,revision:2})as T;};
+    const store=new ModelingStore(true,request);store.load([original]);const m=store.models[0]!;m.pessoal=100;store.change(m);await store.convertCurrency(m.id,input);
+    expect(calls.map(c=>c.payload.revision)).toEqual([1,2]);expect(m.moeda).toBe('Kz');expect(m.pessoal).toBe(90000);expect(store.revision(m.id)).toBe(3);expect(store.dirty).toBe(false);
+  });
+  it('uma conversão recusada não deixa a moeda ou os valores alterados só no browser', async () => {
+    const request=vi.fn().mockRejectedValue(new ModelingApiError(409,'Revisão alterada')),store=new ModelingStore(true,request);store.load([record()]);const before=structuredClone(store.models[0]);
+    await expect(store.convertCurrency('m1',{from:'USD',to:'EUR',rate:0.9,rateDate:'2026-10-27',source:'Teste',reference:false})).rejects.toThrow('Revisão alterada');expect(store.models[0]).toEqual(before);expect(store.revision('m1')).toBe(1);
+  });
+  it('duas conversões simultâneas não são enviadas sobre a mesma revisão', async () => {
+    let finish!:(v:ModelRecord)=>void;const request=vi.fn(()=>new Promise<ModelRecord>(r=>{finish=r;}))as unknown as ModelingTransport;
+    const store=new ModelingStore(true,request);store.load([record()]);const input={from:'USD' as const,to:'EUR' as const,rate:0.9,rateDate:'2026-10-27',source:'Teste',reference:false};
+    const one=store.convertCurrency('m1',input);await settle();await expect(store.convertCurrency('m1',input)).rejects.toThrow('Aguarde');expect(store.dirty).toBe(true);
+    finish({...record(),currency:'EUR',revision:2});await one;expect(request).toHaveBeenCalledTimes(1);expect(store.dirty).toBe(false);
   });
 });
