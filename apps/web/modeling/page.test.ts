@@ -22,6 +22,8 @@ describe('interface aprovada e documento autenticado', () => {
     const html = modelingPage(null, 'nonce', '<img onerror="bad">'); expect(html).toContain('&lt;img'); expect(html).not.toContain('/modeling-runtime.js');
     expect(modelingHeaders('nonce')).toMatchObject({ 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' });
     expect(modelingHeaders('nonce')['content-security-policy']).not.toContain("'unsafe-eval'");
+    expect(modelingHeaders('nonce')['content-security-policy']).toContain("worker-src 'self'");
+    expect(html).toContain('id="integra-space"');
   });
   it('o runtime distribuído não persiste dados ou exporta CSV/clipboard', () => {
     const js = readFileSync(new URL('../public/modeling-runtime.js', import.meta.url), 'utf8');

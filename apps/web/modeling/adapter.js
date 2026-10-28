@@ -53,6 +53,7 @@ async function applyCurrency(){
   closeModal();notice='';render();toast('Montantes convertidos e guardados. Reveja as taxas de inflação e desconto.');
 }
 const historicalDrafts=new Map(), historicalDirty=new Set();
+const historicalImports=new Map();
 const historicalFields=['anEmp','anY1','anY2','anCP','anMo','anT1','anT2','anF1','anF2'];
 function captureHistoricalDraft(){
   if(VIEW!=='analise'||(SUB.at||'dados')!=='dados'||!M()||!session.canWrite||!historicalDirty.has(M().id))return;
@@ -69,6 +70,7 @@ function analyze(){
   try{return analyzeFinancialHistory(S.an)}catch(error){return {err:esc(errorText(error))};}
 }
 async function analyzeAndSave(){
+  if(historicalImports.size)throw Error('Aguarde a leitura do ficheiro antes de analisar.');
   historicalDirty.add(M().id);captureHistoricalDraft();
   analyzeFinancialHistory(S.an);
   const historical=await store.saveHistory(M().id,S.an);
@@ -100,7 +102,7 @@ function protect() {
   document.querySelectorAll(historicalFields.map(id=>'#'+id).join(',')).forEach(el=>{el.disabled=!writable;});
   document.querySelectorAll(currencyFields.map(id=>'#'+id).join(',')).forEach(el=>{el.disabled=!writable;});
   for(const action of ['newM','dupM','createM','addRev','delRev','addCap','delCap','anRun','anToModel','anDemo','applyCurrency'])document.querySelectorAll(`[data-act="${action}"]`).forEach(el=>{
-    el.disabled=!writable||(action==='dupM'&&!M());
+    el.disabled=!writable||(action==='dupM'&&!M())||historicalImports.size>0&&['anRun','anToModel','anDemo'].includes(action);
     if(!session?.canWrite)el.title='Acesso apenas de consulta.';
   });
   $('#mSel').disabled=busy||!S.models.length;
@@ -108,6 +110,10 @@ function protect() {
 }
 function render() {
   if(!session)return;
+  for(const pending of historicalImports.values())pending.controller.abort();
+  historicalImports.clear();
+  $('#view').dataset.view=VIEW;
+  $('#view').dataset.wide=String(['demonstracoes','credito','sensibilidade','analise'].includes(VIEW)||VIEW==='pressupostos'&&['capex','receitas'].includes(SUB.pt));
   if(!M()) {
     $('#nav').innerHTML=NAV.map(n=>n[0]==='g'?`<div class="grp">${n[1]}</div>`:`<a data-go="${n[0]}">${ico(n[2],17)}<span>${n[1]}</span></a>`).join('');
     $('#mSel').innerHTML='';$('#mTags').innerHTML='';
@@ -124,13 +130,29 @@ VIEWS.analise.after=()=>{
   for(const [id,target] of [['#anF1','#anT1'],['#anF2','#anT2']]){
     const field=$(id);if(field)field.onchange=()=>{
       if(!session.canWrite||busy||!field.files?.[0])return;
-      const file=field.files[0];if(file.size>250000)return showError(Error('O balancete admite até 250 000 bytes.'));
-      const modelId=M().id;
-      const reader=new FileReader();reader.onerror=()=>showError(Error('Não foi possível ler o ficheiro.'));
-      reader.onload=()=>{
-        if(M()?.id!==modelId||VIEW!=='analise'||(SUB.at||'dados')!=='dados'||$(id)!==field||field.files?.[0]!==file)return;
-        let text;try{text=new TextDecoder('utf-8',{fatal:true}).decode(reader.result);}catch{text=new TextDecoder('windows-1252').decode(reader.result);}
-        $(target).value=text;historicalDirty.add(modelId);captureHistoricalDraft();
+      historicalImports.get(id)?.controller.abort();
+      const file=field.files[0],pdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name||'');
+      const status=$('#anStatus'+id.slice(-1)),targetField=$(target),modelId=M().id;
+      const pending={controller:new AbortController(),file};historicalImports.set(id,pending);
+      const current=()=>historicalImports.get(id)===pending&&M()?.id===modelId&&VIEW==='analise'&&(SUB.at||'dados')==='dados'&&$(id)===field&&field.files?.[0]===file;
+      const unchanged=targetField.value;
+      status.textContent=pdf?'A ler o PDF…':'A ler o ficheiro…';protect();
+      const done=()=>{if(historicalImports.get(id)===pending)historicalImports.delete(id);protect();};
+      const failed=error=>{if(current()&&!pending.controller.signal.aborted){status.textContent=errorText(error);toast(status.textContent);}done();};
+      if(file.size>(pdf?PDF_IMPORT_LIMIT:250000))return failed(Error(pdf?'O PDF admite até 10 MB.':'O balancete CSV/TXT admite até 250 000 bytes.'));
+      const reader=new FileReader();reader.onerror=()=>failed(Error('Não foi possível ler o ficheiro.'));
+      reader.onload=async()=>{
+        try{
+          if(!current())return;
+          let text,summary;
+          if(pdf){
+            const result=await extractPdfTrialBalance(reader.result,{signal:pending.controller.signal,progress:(page,total)=>{if(current())status.textContent=`A extrair o PDF: página ${page} de ${total}…`;}});
+            text=result.text;summary=`PDF: ${result.pages} página(s), ${result.accounts} contas · diferença débito − crédito: ${nf(result.difference,2)}. Confira moeda, exercício e contas; prima Analisar para guardar.`;
+          }else{try{text=new TextDecoder('utf-8',{fatal:true}).decode(reader.result);}catch{text=new TextDecoder('windows-1252').decode(reader.result);}summary='Ficheiro carregado. Confira os dados e prima Analisar para guardar.';}
+          if(!current())return;
+          if(targetField.value!==unchanged)throw Error('O texto foi editado durante a leitura. Seleccione o ficheiro novamente para substituir esses dados.');
+          targetField.value=text;historicalDirty.add(modelId);captureHistoricalDraft();status.textContent=summary;
+        }catch(error){failed(error);}finally{done();}
       };reader.readAsArrayBuffer(file);
     };
   }
@@ -184,7 +206,7 @@ $('#mSel').onchange=async()=>{
 document.addEventListener('input',e=>{if(session?.canWrite&&M()&&historicalFields.includes(e.target?.id))historicalDirty.add(M().id);});
 document.addEventListener('change',e=>{if(session?.canWrite&&M()&&historicalFields.includes(e.target?.id))historicalDirty.add(M().id);});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
-window.addEventListener('beforeunload',e=>{if(store?.dirty||historicalDirty.size){e.preventDefault();e.returnValue='';}});
+window.addEventListener('beforeunload',e=>{if(store?.dirty||historicalDirty.size||historicalImports.size){e.preventDefault();e.returnValue='';}});
 async function boot(){
   try {
     session=JSON.parse($('#integra-session').textContent);

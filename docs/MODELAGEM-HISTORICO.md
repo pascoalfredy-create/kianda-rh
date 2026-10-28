@@ -1,11 +1,11 @@
 # Análise histórica do Integra
 
-Usa o mesmo repositório, PostgreSQL e sessão do Kianda. O RH é independente. O HTML/CSS de referência não foi alterado; os controlos existentes do protótipo passam a usar a API.
+Usa o mesmo repositório, PostgreSQL e sessão do Kianda. O RH é independente. O HTML/CSS de referência permanece intacto; os controlos existentes do protótipo passam a usar a API. Os ajustes de espaço pedidos ficam isolados em `apps/web/modeling/space.css`: mapas extensos ocupam a largura disponível e os campos de balancetes têm altura útil, sem alterar a navegação ou o RH.
 
 ## Utilização
 
 1. Abra `/modelagem`, seleccione/crie um projecto e entre em **Análise de demonstrações**.
-2. Carregue ou cole o balancete N e, opcionalmente, N−1. Indique exercícios, moeda e a percentagem dos empréstimos de curto prazo.
+2. Carregue o balancete N e, opcionalmente, N−1 em **PDF com texto, CSV ou TXT**, ou cole os dados. Indique exercícios, moeda e a percentagem dos empréstimos de curto prazo. Depois de importar PDF, confira as contas e os montantes extraídos no formulário.
 3. Prima **Analisar**. A análise e a origem ficam guardadas neste projecto. Alterações ainda não analisadas permanecem apenas na memória da página, com aviso ao sair.
 4. Consulte os separadores existentes: Balanço, DR, fluxo de caixa estimado e rácios.
 5. Em **Relatórios**, seleccione o relatório de análise económico-financeira e descarregue o PDF.
@@ -16,6 +16,9 @@ O botão **Exemplo** apenas preenche o formulário. A origem só é gravada ao p
 ## Formato e cálculo
 
 - CSV/TXT em UTF-8 ou Windows-1252, com `;`, vírgula ou tabulação; aspas e separadores dentro das designações são suportados. Cada balancete admite 250 000 caracteres e até 5 000 contas. A selecção de ficheiros tem limite de 250 000 bytes.
+- PDF até **10 MB e 80 páginas**, com texto seleccionável, cabeçalhos `Conta`/`Designação` e saldos finais em todas as páginas. Aceita `Saldo Devedor`/`Saldo Credor`, `Saldo` com sinal ou `Saldo` e natureza `D/C`. Lê várias páginas por coordenadas e confronta contas-mãe e totais de classe. Débitos/créditos de movimentos não são confundidos com saldos finais. Exporte valores em unidades.
+- O PDF é lido **localmente no navegador**, por um worker PDF.js servido pelo Kianda, sem CDN e sem envio do documento a serviços externos. Apenas o texto estruturado, conferido e aprovado com **Analisar**, segue para a API; o PDF original não é arquivado. Importações falhadas preservam os dados anteriores. Mudar de vista ou projecto cancela a leitura; alterações ao texto durante a leitura não são substituídas. Há um limite de 45 segundos por leitura.
+- PDF digitalizados sem texto precisam de OCR antes de importar. Documentos protegidos exigem uma cópia sem palavra-passe. Cabeçalhos ambíguos, tabelas sem PGC, formatos não reconhecidos e páginas mistas sem texto são recusados explicitamente; não são aceites importações parciais. Extractos bancários de movimentos, sem balancete PGC completo, não geram Balanço/DR completos.
 - Colunas `Conta`, `Designação` e `Saldo Devedor`/`Saldo Credor`, ou `Saldo` com sinal. São aceites `Débito`/`Crédito` apenas como totais acumulados que incluam a abertura; movimentos isolados do período não são saldos finais. Sem cabeçalho: conta, designação, saldo; ou conta, designação, devedor, credor.
 - Montantes processados em cêntimos. Valores inválidos, contas repetidas ou sem classificação e comparativos de anos não consecutivos são recusados. O comparativo inválido nunca é ignorado.
 - Contas-mãe e filhas não se somam duas vezes. O total da mãe tem de corresponder à soma das subcontas fornecidas. Códigos compactos e com pontos são normalizados para detectar repetições.
