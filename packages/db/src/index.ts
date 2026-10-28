@@ -44,6 +44,7 @@ export async function closeDb(): Promise<void> {
   instance = undefined;
 }
 export * from './password.js';
+export * from './modeling-review.js';
 
 /** Operadores SQL re-exportados: as apps usam a mesma instância do drizzle-orm que o schema (evita tipos duplicados). */
 export { and, asc, desc, eq, gt, gte, inArray, isNull, like, lt, lte, ne, or, sql } from 'drizzle-orm';

@@ -94,6 +94,12 @@ npx wrangler dev -c apps/web/wrangler.jsonc -c apps/api/wrangler.jsonc   # web +
 
 Em **Settings → Secrets and variables → Actions → Variables**, crie `KIANDA_PLATFORM_ADMINS` com os emails (separados por vírgula) de quem administra a plataforma. Cada publicação sincroniza a lista. O email tem de corresponder a um utilizador que já exista (por exemplo, o proprietário de uma empresa criada em `/registo`); ao entrar, aparece o menu **Plataforma Kianda**.
 
+### Acompanhamento do Integra em produção
+
+A Modelagem está em `https://<domínio-principal>/modelagem`, com a mesma sessão. A publicação autorizada inclui `modeling:review`: quando há exactamente um email em `KIANDA_PLATFORM_ADMINS`, uma única conta activa de proprietário correspondente e estatuto de administrador já registado, activa uma licença interna apenas na empresa dessa conta, com 20 projectos e cinco utilizadores, sem facturação. É uma capacidade técnica para acompanhar o desenvolvimento, não uma tabela comercial para clientes. O proprietário é admitido como editor; nenhum outro participante é adicionado automaticamente.
+
+O script preserva qualquer licença já existente, incluindo suspensões e quotas, e não reactiva participações desactivadas ou ultrapassa cinco acessos. Uma configuração ambígua fica sem alterações e é indicada no log. As restantes empresas continuam a precisar de adesão explícita. O Excel continua a exigir `KIANDA_MODELING_OWNER_USER_ID` e estatuto de administrador: esta activação não o concede por inferência.
+
 ## Integrações (entrega 17) — activar quando houver contrato
 
 Cada integração liga-se sozinha quando o secret existir no GitHub (o deploy seguinte envia-o para o Worker da API). Sem secret, fica desligada e o Kianda usa o fluxo manual. O estado aparece na consola **Plataforma Kianda → Integrações**.
