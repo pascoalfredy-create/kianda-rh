@@ -26,6 +26,13 @@ replace('function render(){', 'function renderPrototype(){');
 replace('function liveStrip(){', 'function liveStripPrototype(){');
 replace('value="${v}">', 'value="${esc(v??\'\')}">');
 replace("[['Kz','Kwanza (Kz)'],['USD','Dólar (USD)']]", "[['Kz','Kwanza (Kz)'],['USD','Dólar (USD)'],['EUR','Euro (EUR)']]");
+replace("M().moeda==='USD'?'USD':'Kz'", 'M().moeda');
+replace("m.moeda==='USD'?2:1", "m.moeda==='Kz'?1:2");
+replace("m.moeda==='USD'?2:0", "m.moeda==='Kz'?0:2");
+replace('Projectos com receitas em USD (petróleo, minérios) modelam-se em USD', 'Ao mudar de moeda, indique ou confirme o câmbio para converter os montantes');
+replace("'Ao mudar de moeda, indique ou confirme o câmbio para converter os montantes'", 'currencyConversionHint(m)');
+replace("'USD: inflação internacional'", "cur+': inflação esperada nesta moeda'");
+replace("const closeModal=()=>$('#ov').classList.remove('on');", "function closeModal(){currencyDialog=null;$('#ov').classList.remove('on');}");
 replace('data-act="copyFS">${ico(\'copy\')}Copiar (CSV)', 'data-act="downloadFS">${ico(\'doc\')}Descarregar PDF');
 replace('data-act="repCopy">${ico(\'copy\')}Copiar texto', 'data-act="downloadReport">${ico(\'doc\')}Descarregar PDF');
 // A análise usa o mesmo core no browser/API; os formulários e tabelas originais são preservados.

@@ -1,5 +1,6 @@
 /** Persistência do protótipo: sem localStorage, revisões serializadas e sem perder edições em curso. */
-import type { FinancialHistoricalAnalysis, FinancialHistoricalInput } from '@kianda/core';
+import type { FinancialCurrency, FinancialHistoricalAnalysis, FinancialHistoricalInput } from '@kianda/core';
+export interface CurrencyConversionInput { from: FinancialCurrency; to: FinancialCurrency; rate: number; rateDate: string; source: string; reference: boolean }
 export interface HistoricalRecord { inputHash: string; updatedAt: string; analysis: FinancialHistoricalAnalysis }
 export interface ModelRecord {
   id: string; name: string; sector: string; currency: string; assumptions: Record<string, unknown>;
@@ -47,7 +48,7 @@ export function presentModel(record: ModelRecord): UiModel {
   for (const [key, texts] of [['receitas', ['nome', 'unid', 'ramp']], ['capex', ['nome']]] as const) result[key] = (Array.isArray(a[key]) ? a[key] : []).map((v) => Object.fromEntries(Object.entries(obj(v)).map(([k, n]) => [k, (texts as readonly string[]).includes(k) ? typeof n === 'string' ? n : '' : typeof n === 'number' && Number.isFinite(n) ? n : undefined])));
   return { ...result, id: record.id, nome: record.name, sector: record.sector, moeda: record.currency, criado: record.createdAt.slice(0, 10) };
 }
-interface Entry { revision: number; saved: string; desired: ReturnType<typeof modelPayload>; timer?: ReturnType<typeof setTimeout>; task?: Promise<void>; error?: Error }
+interface Entry { revision: number; saved: string; desired: ReturnType<typeof modelPayload>; timer?: ReturnType<typeof setTimeout>; task?: Promise<void>; error?: Error; converting?: boolean }
 export class ModelingStore {
   readonly models: UiModel[] = [];
   private entries = new Map<string, Entry>();
@@ -62,11 +63,12 @@ export class ModelingStore {
     this.models.push(model); this.entries.set(model.id, { revision: record.revision, saved: JSON.stringify(desired), desired });
     return model;
   }
-  get dirty() { return [...this.entries.values()].some((s) => Boolean(s.task) || JSON.stringify(s.desired) !== s.saved); }
+  get dirty() { return [...this.entries.values()].some((s) => Boolean(s.task) || s.converting || JSON.stringify(s.desired) !== s.saved); }
   revision(id: string) { const s = this.entries.get(id); if (!s) throw new Error('Projecto inexistente.'); return s.revision; }
   change(model: UiModel) {
     if (!this.canWrite) return; // Cenário/unidade de consulta ficam só na memória da página.
     const state = this.entries.get(model.id); if (!state) throw new Error('Projecto inexistente.');
+    if (state.converting) throw new ModelingApiError(409, 'Aguarde pela conversão da moeda.');
     state.desired = modelPayload(model);
     clearTimeout(state.timer);
     if (!state.error && JSON.stringify(state.desired) !== state.saved) state.timer = setTimeout(() => { this.flush(model.id).catch(() => {}); }, this.delay);
@@ -74,6 +76,7 @@ export class ModelingStore {
   async flush(id?: string): Promise<void> {
     if (!id) { await Promise.all([...this.entries.keys()].map((key) => this.flush(key))); return; }
     const s = this.entries.get(id); if (!s) throw new Error('Projecto inexistente.');
+    if (s.converting) throw new ModelingApiError(409, 'Aguarde pela conversão da moeda.');
     clearTimeout(s.timer);
     if (s.error) throw s.error;
     if (!s.task && JSON.stringify(s.desired) !== s.saved) {
@@ -93,6 +96,21 @@ export class ModelingStore {
     if (!this.canWrite) throw new ModelingApiError(403, 'O seu acesso permite apenas consulta.');
     await this.flush();
     return this.accept(await this.request<ModelRecord>('/models', 'POST', modelPayload(model)));
+  }
+  async convertCurrency(id: string, input: CurrencyConversionInput) {
+    if (!this.canWrite) throw new ModelingApiError(403, 'O seu acesso permite apenas consulta.');
+    await this.flush(id);
+    const state = this.entries.get(id)!, model = this.models.find(m => m.id === id)!;
+    // Duas selecções concorrentes não podem converter os mesmos valores duas vezes.
+    if (state.converting) throw new ModelingApiError(409, 'Aguarde pela conversão da moeda.');
+    state.converting = true;
+    try {
+      const record = await this.request<ModelRecord>(`/models/${encodeURIComponent(id)}/convert-currency`, 'POST', { ...input, revision: state.revision });
+      for (const key of Object.keys(model)) delete model[key];
+      Object.assign(model, presentModel(record));
+      state.revision = record.revision; state.desired = modelPayload(model); state.saved = JSON.stringify(state.desired);
+      return model;
+    } finally { state.converting = false; }
   }
   async history(id: string) {
     await this.flush(id);

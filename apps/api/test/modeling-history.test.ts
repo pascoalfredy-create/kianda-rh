@@ -89,7 +89,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: balancetes por projecto e r
     expect((await req('GET', '/v1/modeling/usage')).json().activeProjects).toBe(2);
   });
   it('o relatório histórico funciona com pressupostos de projecção incompletos', async () => {
-    expect((await req('PUT', `/v1/modeling/models/${modelId}`, { revision: 3, name: 'Rascunho incompleto', sector: 'servicos', currency: 'USD', assumptions: { pessoal: 1 } })).statusCode).toBe(200);
+    expect((await req('PUT', `/v1/modeling/models/${modelId}`, { revision: 3, name: 'Rascunho incompleto', sector: 'servicos', currency: 'Kz', assumptions: { pessoal: 1 } })).statusCode).toBe(200);
     const r = await req('GET', `/v1/modeling/models/${modelId}/reports/analise?revision=4`);
     expect(r.statusCode).toBe(200); expect(r.headers['content-type']).toBe('application/pdf');
     expect((await req('GET', `/v1/modeling/models/${modelId}/reports/sumario`)).statusCode).toBe(422);

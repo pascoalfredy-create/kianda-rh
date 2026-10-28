@@ -1914,7 +1914,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: módulos e importação opc
   });
   it('exige doze meses fechados e câmbio explícito para moeda estrangeira', async () => {
     expect((await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'actual', from: '2026-01', to: '2026-12', revision: 3 })).statusCode).toBe(409);
-    await request('PUT', `/v1/modeling/models/${modelId}`, { name: 'USD', sector: 'servicos', currency: 'USD', assumptions: { pessoal: 1080 }, revision: 3 });
+    expect((await request('POST', `/v1/modeling/models/${modelId}/convert-currency`, { revision: 3, from: 'Kz', to: 'USD', rate: 1, rateDate: '2026-10-28', source: 'Taxa sintética do teste' })).statusCode).toBe(200);
     expect((await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'budget', budgetId, revision: 4 })).statusCode).toBe(400);
     const r = await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'budget', budgetId, revision: 4, exchangeRate: 0.001 });
     expect(r.statusCode).toBe(201);

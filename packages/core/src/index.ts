@@ -34,3 +34,4 @@ export * from './modeling/analysis.js';
 export * from './modeling/reports.js';
 export * from './modeling/historical.js';
 export * from './modeling/historical-report.js';
+export * from './modeling/currency.js';
