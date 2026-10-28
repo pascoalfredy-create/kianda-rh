@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildFinancialReportBundle, FINANCIAL_REPORT_KEYS, financialTemplate } from '@kianda/core';
+import { analyzeFinancialHistory, buildFinancialHistoricalReport, buildFinancialReportBundle, FINANCIAL_REPORT_KEYS, financialTemplate } from '@kianda/core';
+import { historicalInput } from '../../../packages/core/test/fixtures/financial-history.js';
 import { financialPdfLayout, renderFinancialPdf } from '../src/lib/financial-pdf.js';
 import { renderFinancialXlsx } from '../src/lib/financial-xlsx.js';
 const bundle = buildFinancialReportBundle(financialTemplate('mineracao').assumptions, { modelId: 'm', projectName: 'Estudo de mineração', sector: 'Mineração', currency: 'USD', companyName: 'Empresa ÁÉÍÓÚ / Пример', companyNif: '0012345678', revision: 1, sourceHash: 'a'.repeat(64), asOf: '2026-10-28T12:00:00.000Z', state: 'approved', versionNumber: 1, versionLabel: 'V comité' });
@@ -48,5 +49,14 @@ describe('downloads financeiros', () => {
     const files = unzip(renderFinancialXlsx(bundle, 'sumario'));
     expect(files.get('xl/worksheets/sheet1.xml')).toContain(`t="n" s="3"><v>${bundle.result.irr}</v>`);
     expect(files.get('xl/styles.xml')).toContain('numFmtId="10"');
+  });
+  it('o oitavo relatório pagina Balanço, DR, caixa e diagnóstico sem cortar conteúdo', () => {
+    const document = { source: bundle.source, reports: { analise: buildFinancialHistoricalReport(analyzeFinancialHistory(historicalInput)) } };
+    const pages = financialPdfLayout(document, 'analise'); expect(pages.length).toBeGreaterThan(1);
+    for (const p of pages) for (const b of p.bounds) {
+      expect(b.x).toBeGreaterThanOrEqual(38); expect(b.x + b.width).toBeLessThanOrEqual(p.width - 38); expect(b.y).toBeGreaterThanOrEqual(17); expect(b.y + b.height).toBeLessThanOrEqual(p.height - 24);
+    }
+    expect(decode(renderFinancialPdf(document, 'analise')).startsWith('%PDF-1.7')).toBe(true);
+    expect(unzip(renderFinancialXlsx(document, 'analise')).get('xl/worksheets/sheet1.xml')).toContain('Empresa de teste');
   });
 });

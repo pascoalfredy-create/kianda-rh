@@ -1,4 +1,6 @@
 /** Persistência do protótipo: sem localStorage, revisões serializadas e sem perder edições em curso. */
+import type { FinancialHistoricalAnalysis, FinancialHistoricalInput } from '@kianda/core';
+export interface HistoricalRecord { inputHash: string; updatedAt: string; analysis: FinancialHistoricalAnalysis }
 export interface ModelRecord {
   id: string; name: string; sector: string; currency: string; assumptions: Record<string, unknown>;
   revision: number; createdAt: string; archivedAt: string | null;
@@ -92,9 +94,28 @@ export class ModelingStore {
     await this.flush();
     return this.accept(await this.request<ModelRecord>('/models', 'POST', modelPayload(model)));
   }
+  async history(id: string) {
+    await this.flush(id);
+    const result = await this.request<{ revision: number; historical: HistoricalRecord | null }>(`/models/${encodeURIComponent(id)}/history`);
+    if (result.revision !== this.revision(id)) throw new ModelingApiError(409, 'Projecto alterado. Volte a carregá-lo antes de analisar balancetes.');
+    return result.historical;
+  }
+  async saveHistory(id: string, input: FinancialHistoricalInput) {
+    if (!this.canWrite) throw new ModelingApiError(403, 'O seu acesso permite apenas consulta.');
+    await this.flush(id);
+    const result = await this.request<{ model: ModelRecord; historical: HistoricalRecord }>(`/models/${encodeURIComponent(id)}/history`, 'PUT', { revision: this.revision(id), input });
+    this.entries.get(id)!.revision = result.model.revision;
+    return result.historical;
+  }
+  async createFromHistory(id: string) {
+    if (!this.canWrite) throw new ModelingApiError(403, 'O seu acesso permite apenas consulta.');
+    await this.flush();
+    const result = await this.request<{ model: ModelRecord; historical: HistoricalRecord; notes: string[] }>(`/models/${encodeURIComponent(id)}/history/to-model`, 'POST', { revision: this.revision(id) });
+    return { model: this.accept(result.model), historical: result.historical, notes: result.notes };
+  }
   async download(model: UiModel, key: string, version?: string, format: 'pdf' | 'xlsx' = 'pdf') {
     await this.flush(model.id);
-    const query = new URLSearchParams({ format, ...(version ? { version } : { revision: String(this.revision(model.id)), scenario: model.cen }) });
+    const query = new URLSearchParams({ format, ...(version ? { version } : { revision: String(this.revision(model.id)), ...(key === 'analise' ? {} : { scenario: model.cen }) }) });
     const response = await fetch(`/api/v1/modeling/models/${encodeURIComponent(model.id)}/reports/${encodeURIComponent(key)}?${query}`, { credentials: 'same-origin', cache: 'no-store' });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));

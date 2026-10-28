@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { financialTemplate } from '@kianda/core';
 import { ModelingApiError, ModelingStore, type ModelRecord, type ModelingTransport, type UiModel } from './store';
+import { historicalInput } from '../../../packages/core/test/fixtures/financial-history.js';
 const record = (id = 'm1', revision = 1): ModelRecord => ({ id, name: 'Projecto mineiro', sector: 'mineracao', currency: 'USD', assumptions: financialTemplate('mineracao').assumptions as unknown as Record<string, unknown>, revision, createdAt: '2026-10-28T00:00:00Z', archivedAt: null });
 const settle = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
@@ -68,5 +69,26 @@ describe('persistência da interface Integra', () => {
   it('não apresenta dados de exemplo no lugar de pressupostos ausentes ou inválidos', () => {
     const store = new ModelingStore(true); store.load([{ ...record(), assumptions: { pessoal: '"><script>alert(1)</script>', capex: [{ nome: 'Obra', valor: '<img onerror=x>' }] } }]);
     const m = store.models[0]!; expect(m.pessoal).toBeUndefined(); expect(m.capex[0].valor).toBeUndefined(); expect(m.receitas).toEqual([]); expect(m.wacc).toEqual({}); expect(m.horizonte).toBeUndefined();
+  });
+  it('a importação histórica espera pelas edições e avança a revisão usada na gravação seguinte', async () => {
+    const historical = { inputHash: 'hash', analysis: { input: historicalInput } }, calls: any[] = [];
+    const request: ModelingTransport = async <T>(path: string, method?: string, payload?: any) => {
+      calls.push({ path, method, payload });
+      return (path.endsWith('/history') ? { model: record('m1', 3), historical } : record('m1', payload.revision + 1)) as T;
+    };
+    const store = new ModelingStore(true, request); store.load([record()]); const m = store.models[0]!;
+    m.pessoal = 100; store.change(m); await store.saveHistory(m.id, historicalInput);
+    expect(calls.map(c => c.payload.revision)).toEqual([1, 2]); expect(store.revision(m.id)).toBe(3);
+    m.pessoal = 200; store.change(m); await store.flush(); expect(calls.at(-1).payload.revision).toBe(3); expect(m.pessoal).toBe(200);
+  });
+  it('revisão histórica alterada por outro utilizador exige recarregar e nunca muda a revisão local', async () => {
+    const store = new ModelingStore(true, vi.fn().mockResolvedValue({ revision: 2, historical: null })); store.load([record()]);
+    await expect(store.history('m1')).rejects.toThrow('Projecto alterado'); expect(store.revision('m1')).toBe(1);
+  });
+  it('download histórico omite o cenário de projecção e consulta não pode importar', async () => {
+    const fetchFile = vi.fn().mockResolvedValue(new Response('%PDF-1.7')); vi.stubGlobal('fetch', fetchFile);
+    const request = vi.fn(), store = new ModelingStore(false, request); store.load([record()]);
+    await store.download(store.models[0]!, 'analise'); expect(fetchFile.mock.calls[0]![0]).toBe('/api/v1/modeling/models/m1/reports/analise?format=pdf&revision=1');
+    await expect(store.saveHistory('m1', historicalInput)).rejects.toThrow('consulta'); await expect(store.createFromHistory('m1')).rejects.toThrow('consulta'); expect(request).not.toHaveBeenCalled();
   });
 });

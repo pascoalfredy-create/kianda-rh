@@ -1,5 +1,5 @@
 /** PDF vectorial com fontes incorporadas, sem browser ou dependências de runtime. */
-import type { FinancialReportBundle, FinancialReportKey, ReportBlock, ReportCell, ReportChart, ReportTable, ReportTornado } from '@kianda/core';
+import type { FinancialReportDocument, FinancialDocumentKey, ReportBlock, ReportCell, ReportChart, ReportTable, ReportTornado } from '@kianda/core';
 import { FINANCIAL_FONTS } from './financial-fonts.js';
 
 type FontKey = keyof typeof FINANCIAL_FONTS;
@@ -32,13 +32,15 @@ function wrap(v: string, width: number, size: number, font: FontKey): string[] {
 }
 export interface PdfBound { x: number; y: number; width: number; height: number; kind: string }
 interface PdfPage { width: number; height: number; commands: string[]; bounds: PdfBound[] }
-export function financialPdfLayout(bundle: FinancialReportBundle, key: FinancialReportKey): PdfPage[] {
+export function financialPdfLayout(bundle: FinancialReportDocument, key: FinancialDocumentKey): PdfPage[] {
   const report = bundle.reports[key], pages: PdfPage[] = [];
+  if (!report) throw new Error('Relatório indisponível nesta versão.');
   const pageW = report.landscape ? 841.89 : 595.28, pageH = report.landscape ? 595.28 : 841.89, margin = 42, usable = pageW - margin * 2, bottom = 49;
   let page: PdfPage, y = 0;
   const allMoney = report.blocks.flatMap((b) => b.kind === 'table' ? b.rows.flatMap((r) => r.cells.filter((c) => c.format === 'money').map((c) => Number(c.value ?? 0))) : b.kind === 'metrics' ? b.items.filter((v) => v.cell.format === 'money').map((v) => Number(v.cell.value ?? 0)) : []);
   const scale = Math.max(0, ...allMoney.map(Math.abs)) >= 1e6 ? 1e6 : 1;
-  const unit = scale === 1 ? `Montantes em ${bundle.source.currency}` : `Montantes em milhões de ${bundle.source.currency}`;
+  const currency = report.currency ?? bundle.source.currency;
+  const unit = scale === 1 ? `Montantes em ${currency}` : `Montantes em milhões de ${currency}`;
   const decimal = new Intl.NumberFormat('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const integer = new Intl.NumberFormat('pt-PT', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   const format = (c: ReportCell): string => {
@@ -63,7 +65,7 @@ export function financialPdfLayout(bundle: FinancialReportBundle, key: Financial
     const top = pageH - 38;
     rect(margin, top, 27, 27, navy); drawText('I', margin + 13.5, top - 19, 18, 'bold', '#ffffff', 'center');
     let leftY = top - 8;
-    for (const value of wrap(bundle.source.promoter || bundle.source.companyName, usable * 0.6 - 40, 10, 'bold')) { drawText(value, margin + 36, leftY, 10, 'bold'); leftY -= 12; }
+    for (const value of wrap(report.entityName || bundle.source.promoter || bundle.source.companyName, usable * 0.6 - 40, 10, 'bold')) { drawText(value, margin + 36, leftY, 10, 'bold'); leftY -= 12; }
     const project = wrap(bundle.source.projectName, usable * 0.6 - 40, 8, 'sans');
     for (const value of project) { drawText(value, margin + 36, leftY, 8, 'sans', muted); leftY -= 10; }
     const state = bundle.source.state === 'approved' ? `VERSÃO V${bundle.source.versionNumber} - APROVADA` : 'RASCUNHO';
@@ -179,7 +181,8 @@ export function financialPdfLayout(bundle: FinancialReportBundle, key: Financial
       }
     }
   }
-  pages.forEach((p, i) => { page = p; line(margin, 35, pageW - margin, 35); drawText('Integra - Modelagem Financeira', margin, 23, 7, 'sans', muted); drawText(`${i + 1}/${pages.length} - Ref. ${bundle.source.sourceHash.slice(0, 12)}`, pageW - margin, 23, 7, 'sans', muted, 'right'); });
+  const reference = key === 'analise' ? bundle.source.historicalHash ?? bundle.source.sourceHash : bundle.source.sourceHash;
+  pages.forEach((p, i) => { page = p; line(margin, 35, pageW - margin, 35); drawText('Integra - Modelagem Financeira', margin, 23, 7, 'sans', muted); drawText(`${i + 1}/${pages.length} - Ref. ${reference.slice(0, 12)}`, pageW - margin, 23, 7, 'sans', muted, 'right'); });
   return pages;
 }
 
@@ -209,7 +212,7 @@ function fontResources() {
   return cachedFontResources;
 }
 /** Sérialise PDF 1.7. As únicas cadeias de texto no conteúdo são glifos hexadecimais, nunca código fornecido pelo utilizador. */
-export function renderFinancialPdf(bundle: FinancialReportBundle, key: FinancialReportKey): Uint8Array {
+export function renderFinancialPdf(bundle: FinancialReportDocument, key: FinancialDocumentKey): Uint8Array {
   const pages = financialPdfLayout(bundle, key), objects: Uint8Array[] = [];
   const add = (body: string | Uint8Array) => { objects.push(typeof body === 'string' ? bytes(body) : body); return objects.length; };
   const catalog = add(''), pageTree = add('');

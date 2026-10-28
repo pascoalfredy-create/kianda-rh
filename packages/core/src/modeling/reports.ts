@@ -6,6 +6,8 @@ import type { FinancialAssumptions, FinancialResult, FinancialScenario, Financia
 export const FINANCIAL_REPORT_VERSION = 'integra-reports-1';
 export const FINANCIAL_REPORT_KEYS = ['sumario', 'comite', 'credito', 'avaliacao', 'demonstracoes', 'cenarios', 'divida'] as const;
 export type FinancialReportKey = typeof FINANCIAL_REPORT_KEYS[number];
+export const FINANCIAL_DOCUMENT_KEYS = [...FINANCIAL_REPORT_KEYS, 'analise'] as const;
+export type FinancialDocumentKey = typeof FINANCIAL_DOCUMENT_KEYS[number];
 export type ReportFormat = 'money' | 'percent' | 'ratio' | 'integer' | 'text';
 export interface ReportCell { value: string | number | null; format: ReportFormat }
 export interface ReportTable { kind: 'table'; title: string; columns: string[]; rows: { cells: ReportCell[]; total?: boolean }[]; chronological?: boolean; startNewPage?: boolean }
@@ -14,17 +16,19 @@ export interface ReportParagraph { kind: 'paragraph'; title?: string; text: stri
 export interface ReportChart { kind: 'chart'; title: string; labels: string[]; series: { name: string; color: string; values: (number | null)[] }[]; format: 'money' | 'ratio'; reference?: number }
 export interface ReportTornado { kind: 'tornado'; title: string; center: number; rows: { label: string; low: number; high: number }[] }
 export type ReportBlock = ReportTable | ReportMetrics | ReportParagraph | ReportChart | ReportTornado;
-export interface FinancialReport { key: FinancialReportKey; title: string; subtitle: string; landscape: boolean; blocks: ReportBlock[] }
+export interface FinancialReport { key: FinancialDocumentKey; title: string; subtitle: string; landscape: boolean; currency?: string; entityName?: string; blocks: ReportBlock[] }
 export interface FinancialReportSource {
   modelId: string; projectName: string; sector: string; currency: string; companyName: string; companyNif: string;
-  promoter?: string; promoterNif?: string; revision: number; sourceHash: string; asOf: string; state: 'draft' | 'approved'; versionId?: string; versionNumber?: number; versionLabel?: string; approvedByName?: string;
+  promoter?: string; promoterNif?: string; revision: number; sourceHash: string; historicalHash?: string; asOf: string; state: 'draft' | 'approved'; versionId?: string; versionNumber?: number; versionLabel?: string; approvedByName?: string;
 }
+export interface FinancialReportDocument { source: FinancialReportSource; reports: Partial<Record<FinancialDocumentKey, FinancialReport>> }
 export interface FinancialReportBundle {
   schemaVersion: 1; reportVersion: string; source: FinancialReportSource; assumptions: FinancialAssumptions;
   inputAssumptions: Record<string, unknown>; result: FinancialResult; scenarios: Record<FinancialScenario, FinancialResult>;
   sensitivity: ReturnType<typeof financialSensitivity>; breakEvenPriceMultiplier: number | null;
   personnelSources: { source: string; fromPeriod: string; toPeriod: string; importedAt: string }[];
-  reports: Record<FinancialReportKey, FinancialReport>;
+  historical?: import('./historical.js').FinancialHistoricalAnalysis;
+  reports: Record<FinancialReportKey, FinancialReport> & Partial<Record<'analise', FinancialReport>>;
 }
 export const FINANCIAL_REPORT_TITLES: Record<FinancialReportKey, string> = {
   sumario: 'Sumário executivo', comite: 'Memorando para comité de investimento', credito: 'Memorando de crédito', avaliacao: 'Relatório de avaliação',

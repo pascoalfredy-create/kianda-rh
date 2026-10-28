@@ -1,12 +1,13 @@
-import type { FinancialReportBundle, FinancialReportKey, ReportCell } from '@kianda/core';
+import type { FinancialReportDocument, FinancialDocumentKey, ReportCell } from '@kianda/core';
 import { xlsx, type Cell, type Sheet } from './xlsx.js';
 const value = (c: ReportCell): Cell => c.value === null ? 'n/d' : c.format === 'text' ? { value: c.value, format: 'text', wrap: true } : { value: c.value, format: c.format };
 /** Exportação de resultados congelados. Não pretende ser um motor financeiro Excel recalculável. */
-export function renderFinancialXlsx(bundle: FinancialReportBundle, key: FinancialReportKey): Uint8Array {
+export function renderFinancialXlsx(bundle: FinancialReportDocument, key: FinancialDocumentKey): Uint8Array {
   const source = bundle.source, report = bundle.reports[key];
+  if (!report) throw new Error('Relatório indisponível nesta versão.');
   const summary: Sheet = { name: 'Resumo', numberFormat: '#,##0.00', boldRows: [0, 1], widths: [48, 95], rows: [
-    [{ value: report.title, format: 'text', wrap: true }], [{ value: source.projectName, format: 'text', wrap: true }], ['Empresa', source.promoter || source.companyName], ['NIF', source.promoter ? source.promoterNif || 'n/d' : source.companyNif], ['Moeda', source.currency],
-    ['Estado', source.state === 'approved' ? `V${source.versionNumber} - ${source.versionLabel}` : 'Rascunho'], ['Revisão de origem', { value: source.revision, format: 'integer' }], ['Data de referência', source.asOf], ['Identificação da origem', source.sourceHash],
+    [{ value: report.title, format: 'text', wrap: true }], [{ value: source.projectName, format: 'text', wrap: true }], ['Empresa', report.entityName || source.promoter || source.companyName], ['NIF', report.entityName ? 'n/d' : source.promoter ? source.promoterNif || 'n/d' : source.companyNif], ['Moeda', report.currency ?? source.currency],
+    ['Estado', source.state === 'approved' ? `V${source.versionNumber} - ${source.versionLabel}` : 'Rascunho'], ['Revisão de origem', { value: source.revision, format: 'integer' }], ['Data de referência', source.asOf], ['Identificação da origem', key === 'analise' ? source.historicalHash ?? source.sourceHash : source.sourceHash],
     ['Natureza da exportação', 'Resultados calculados pelo Integra, sem fórmulas de recálculo.'],
     ...report.blocks.flatMap((b): Cell[][] => b.kind === 'metrics' ? b.items.map((v) => [v.label, value(v.cell)]) : b.kind === 'paragraph' ? [[b.title ?? '', { value: b.text, format: 'text', wrap: true }]] : []),
   ] };
