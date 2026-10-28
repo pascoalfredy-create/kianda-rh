@@ -20,7 +20,62 @@ describe('balancetes históricos PGC', () => {
     expect(() => parseHistoricalTrialBalance('Conta;Designação;Saldo\n31;Clientes;300\n31.1;A;200')).toThrow();
     expect(() => parseHistoricalTrialBalance('Conta;Designação;Saldo\n31.1;A;200\n311;A;200')).toThrow();
   });
-  it.each(['Conta;Designação;Saldo\n43;Banco;erro', 'Conta;Designação;Saldo Devedor;Saldo Credor\n43;Banco;10;20', 'Conta;Débito;Débito;Crédito\n43;10;10;0', 'Conta;Designação;Saldo\n74;Sem classificação;100', 'Conta;Designação;Saldo\n88;Apurado;-100'])('não ignora linhas inválidas ou sem classificação', (csv) => { expect(() => parseHistoricalTrialBalance(csv)).toThrow(); });
+  it.each(['Conta;Designação;Saldo\n43;Banco;erro', 'Conta;Designação;Saldo Devedor;Saldo Credor\n43;Banco;10;20', 'Conta;Débito;Débito;Crédito\n43;10;10;0', 'Conta;Designação;Saldo\n74;Sem classificação;100'])('não ignora linhas inválidas ou sem classificação', (csv) => { expect(() => parseHistoricalTrialBalance(csv)).toThrow(); });
+  it('distingue campo vazio de excesso de texto na mensagem de erro', () => {
+    try{parseHistoricalTrialBalance('');throw Error('não recusou');}catch(error){expect(error).toMatchObject({issues:[{path:'N',message:expect.stringContaining('está vazio')}]});}
+    try{parseHistoricalTrialBalance('x'.repeat(250001));throw Error('não recusou');}catch(error){expect(error).toMatchObject({issues:[{path:'N',message:expect.stringContaining('excede 250 000')}]});}
+  });
+  it('reconstitui custos apurados, mantém regularizações e não duplica a conta 88', () => {
+    const N=historyCsv([['11',850],['18',-100],['51',-1000],['75',10],['82',0],['8207',100],['8208',100],['8209',40],['8219',-240],['88',240],['881',240]]);
+    const a=analyzeFinancialHistory({...historicalInput,N,N1:''});
+    expect(a.pN.diff).toBe(0);expect(a.cN.income).toMatchObject({stage:'closing',complete:true});
+    expect(a.cN.P).toMatchObject({pes:100,amort:100,oCus:50,ro:-250,rl:-250});
+    expect(a.cN.B).toMatchObject({activo:750,cp:750,rl:-250,check:0});expect(a.rN.pmp).toBeNull();
+    expect(a.warnings.join(' ')).toContain('regularizações posteriores');
+  });
+  it('82.19 é transferência irmã de 82.1, sem ser confundida com uma subconta das vendas', () => {
+    const N=historyCsv([['43',200],['51',-100],['82',0],['82.1',-100],['82.19',100],['88.1',-100]]);
+    const a=analyzeFinancialHistory({...historicalInput,N,N1:''});expect(a.pN.diff).toBe(0);
+    expect(a.cN.P).toMatchObject({vendas:100,vn:100,rl:100});expect(a.cN.B.check).toBe(0);
+  });
+  it('transfere para resultados transitados sem voltar a adicionar o lucro ao capital próprio', () => {
+    const N=historyCsv([['43',160],['51',-100],['81',-60],['821',-60],['8219',60],['881',-60],['889',60]]);
+    const a=analyzeFinancialHistory({...historicalInput,N,N1:''});expect(a.pN.diff).toBe(0);
+    expect(a.cN.P.rl).toBe(60);expect(a.cN.B).toMatchObject({rl:0,cp:160,check:0});expect(a.cN.income.complete).toBe(true);
+  });
+  it('reconcilia o mesmo resultado antes e depois do apuramento completo',()=>{
+    const before=analyzeFinancialHistory({...historicalInput,N1:''});
+    const stable=currentHistory.filter(([c])=>!['61','71','72','73','75.2','76','87'].includes(c));
+    const N=historyCsv([...stable,['821',-1200],['826',700],['827',120],['828',60],['829',110],['8219',210],['832',22],['839',-22],['871',38],['879',-38],['881',-210],['882',22],['885',38]]);
+    const after=analyzeFinancialHistory({...historicalInput,N,N1:''});
+    expect(after.cN.B).toEqual(before.cN.B);expect(after.cN.income.complete).toBe(true);
+    expect({...after.cN.P,fst:before.cN.P.fst}).toEqual(before.cN.P);
+  });
+  it('um balancete apurado só com resultado líquido permite Balanço, sem inventar EBITDA ou DR detalhada', () => {
+    const N=historyCsv([['43',100],['51',-120],['88',20]]),a=analyzeFinancialHistory({...historicalInput,N,N1:''});
+    expect(a.cN.income.complete).toBe(false);expect(a.cN.P.rl).toBe(-20);expect(a.cN.B.check).toBe(0);
+    expect(a.rN).toMatchObject({dle:null,icr:null,mb:null,me:null,mo:null,roa:null,rot:null});expect(a.cashFlow).toBeNull();
+    const report=buildFinancialHistoricalReport(a),dr=report.blocks.find(b=>b.kind==='table'&&b.title==='Demonstração de resultados histórica');
+    expect(dr?.kind==='table'&&dr.rows.find(r=>r.cells[0]!.value==='EBITDA')?.cells[1]!.value).toBeNull();
+    expect(()=>financialModelFromHistory({...historicalInput,N,N1:''})).toThrow();
+  });
+  it('preserva diferenças reais do documento e bloqueia a criação de um modelo desequilibrado', () => {
+    const N=historyCsv([['43',95],['51',-120],['88',20]]),a=analyzeFinancialHistory({...historicalInput,N,N1:''});
+    expect(a.pN.diff).toBe(-5);expect(a.cN.B.check).toBe(-5);expect(a.warnings.join(' ')).toContain('desequilibrado');
+  });
+  it('usa os dias do período intercalar sem anualizar receitas ou resultados', () => {
+    const input={...historicalInput,anos:['2025','2026'],periods:{N:{from:'2026-01-01',to:'2026-08-31'}}};
+    const a=analyzeFinancialHistory(input);expect(a.cN.P.vn).toBe(1200);expect(a.rN.pmr).toBeCloseTo(275/1200*243);expect(a.rN.dle).toBeNull();expect(a.cashFlow).not.toBeNull();
+    expect(()=>financialModelFromHistory(input)).toThrow();
+    expect(JSON.stringify(buildFinancialHistoricalReport(a))).toContain('01/01/2026 a 31/08/2026');
+  });
+  it('não estima fluxos com saldos comparativos fora da abertura do período', () => {
+    const a=analyzeFinancialHistory({...historicalInput,anos:['2025','2026'],periods:{N:{from:'2026-01-01',to:'2026-08-31'},N1:{from:'2025-01-01',to:'2025-08-31'}}});
+    expect(a.cashFlow).toBeNull();expect(a.warnings.join(' ')).toContain('início do período N');expect(a.rN.pmr).toBeCloseTo(300/1200*243);
+  });
+  it.each([{from:'2026-02-30',to:'2026-08-31'},{from:'2025-01-01',to:'2026-08-31'},{from:'2026-09-01',to:'2026-08-31'}])('recusa períodos inválidos ou de outro exercício', period => {
+    expect(()=>analyzeFinancialHistory({...historicalInput,anos:['2025','2026'],periods:{N:period}})).toThrow();
+  });
   it('preserva os adiantamentos de clientes e fornecedores sem compensar saldos de terceiros', () => {
     const a = analyzeFinancialHistory(historicalInput);
     expect(a.pN.diff).toBe(0); expect(a.cN.B).toMatchObject({ activo: 1703, cp: 1108, passivo: 595, check: 0, clientes: 300, fornec: 240, oAct: 23, oPas: 75, empCP: 70, empLP: 210 });

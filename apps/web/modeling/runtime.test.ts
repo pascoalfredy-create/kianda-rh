@@ -1,12 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
-import { analyzeFinancialHistory, convertFinancialCurrency, FINANCIAL_REPORT_KEYS, FINANCIAL_SECTORS, financialTemplate, runFinancialModel, type FinancialAssumptions } from '@kianda/core';
+import { analyzeFinancialHistory, convertFinancialCurrency, FINANCIAL_REPORT_KEYS, FINANCIAL_SECTORS, financialTemplate, runFinancialModel, type FinancialAssumptions, type FinancialHistoricalInput } from '@kianda/core';
 import { historicalInput } from '../../../packages/core/test/fixtures/financial-history.js';
 const runtime = readFileSync(new URL('../public/modeling-runtime.js', import.meta.url), 'utf8');
 const views = ['painel', 'pressupostos', 'demonstracoes', 'avaliacao', 'credito', 'sensibilidade', 'relatorios'];
 /** Teste do código distribuído e das vistas, sem simular um motor de layout de navegador. */
-async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, incomplete = false, withHistory = false, deferRead = false) {
+async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, incomplete = false, withHistory = false, deferRead = false, historyInput:FinancialHistoricalInput=historicalInput) {
   const template = financialTemplate(sector), handlers = new Map<string, Function>();
   const nodes = new Map<string, any>();
   const node = (selector: string) => {
@@ -31,13 +31,14 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
       let data:unknown;
       if(path.includes('/exchange-rate?')){const q=new URLSearchParams(path.split('?')[1]);data={from:q.get('from'),to:q.get('to'),rate:q.get('from')==='Kz'?0.001:1000,rateDate:'2026-10-27',source:'Referência do teste',stale:false};}
       else if(path.endsWith('/convert-currency')){model.currency=payload.to;model.assumptions={...convertFinancialCurrency(model.assumptions as unknown as Record<string,unknown>,payload.from,payload.to,payload.rate),currencyConversion:payload} as any;model.revision++;data=model;}
-      else data=path.endsWith('/templates')?FINANCIAL_SECTORS.map(financialTemplate):path.endsWith('/history')?{revision:1,historical:withHistory?{inputHash:'a'.repeat(64),updatedAt:'2026-10-28',analysis:analyzeFinancialHistory(historicalInput)}:null}:[model];
+      else if(path.endsWith('/history')&&init?.method==='PUT'){model.revision++;data={model,historical:{inputHash:'a'.repeat(64),updatedAt:'2026-10-28',analysis:analyzeFinancialHistory(payload.input)}};}
+      else data=path.endsWith('/templates')?FINANCIAL_SECTORS.map(financialTemplate):path.endsWith('/history')?{revision:1,historical:withHistory?{inputHash:'a'.repeat(64),updatedAt:'2026-10-28',analysis:analyzeFinancialHistory(historyInput)}:null}:[model];
       return new Response(JSON.stringify(data),{headers:{'content-type':'application/json'}});
     },
   });
   // boot() termina depois das respostas JSON e da montagem inicial.
   await new Promise<void>(resolve => setImmediate(resolve));
-  return { node, field, baseScenario, requests, model, pendingReads, async currency(to:string){currencyField.value=to;await currencyField.onchange();},async act(act:string){await handlers.get('click')!({target:new Element({act}),preventDefault(){}});}, async go(view: string) { await handlers.get('click')!({ target: new Element({ go: view }), preventDefault() {} }); return node('#view').innerHTML as string; }, async sub(k = 'pt', v = 'custos') { await handlers.get('click')!({ target: new Element({ act: 'sub', k, v }), preventDefault() {} }); return node('#view').innerHTML as string; } };
+  return { node, field, baseScenario, requests, model, pendingReads, edit(id:string,value:string){node('#'+id).value=value;handlers.get('input')!({target:{id}});}, async currency(to:string){currencyField.value=to;await currencyField.onchange();},async act(act:string){await handlers.get('click')!({target:new Element({act}),preventDefault(){}});}, async go(view: string) { await handlers.get('click')!({ target: new Element({ go: view }), preventDefault() {} }); return node('#view').innerHTML as string; }, async sub(k = 'pt', v = 'custos') { await handlers.get('click')!({ target: new Element({ act: 'sub', k, v }), preventDefault() {} }); return node('#view').innerHTML as string; } };
 }
 describe('runtime do protótipo ligado à API', () => {
   for (const sector of FINANCIAL_SECTORS) it(`renderiza sete vistas com o motor partilhado: ${sector}`, async () => {
@@ -99,6 +100,27 @@ describe('runtime do protótipo ligado à API', () => {
     ui.node('#anF2').files=[{name:'balancete.pdf',size:11*1024*1024}];ui.node('#anF2').onchange();
     expect(ui.node('#anStatus2').textContent).toContain('10 MB');expect(ui.node('#anT2').value).toBe('origem existente');
     expect(ui.requests.filter(r=>r.method==='PUT'||r.method==='POST')).toHaveLength(0);
+    await ui.act('anRun');expect(ui.node('#view').innerHTML).toContain('10 MB');expect(ui.node('#view').innerHTML).not.toContain('250 000 caracteres');
+  });
+  it('uma edição manual permite corrigir a origem depois de uma falha de importação', async()=>{
+    const ui=await mount('comercio');await ui.go('analise');ui.node('#anF2').files=[{name:'grande.pdf',size:11*1024*1024}];ui.node('#anF2').onchange();
+    for(const [id,value]of Object.entries({anEmp:'Externa',anY1:'2024',anY2:'2025',anCP:'25',anMo:'Kz',anT1:'',anT2:historicalInput.N}))ui.edit(id,value);
+    await ui.act('anRun');expect(ui.requests.filter(r=>r.method==='PUT')).toHaveLength(1);expect(ui.node('#view').innerHTML).not.toContain('10 MB');
+  });
+  it('mostra e conserva o período do documento externo ao analisar e guardar', async()=>{
+    const input:FinancialHistoricalInput={...historicalInput,anos:['2025','2026'],periods:{N:{from:'2026-01-01',to:'2026-08-31'}}};
+    const ui=await mount('comercio',true,false,true,false,input);await ui.go('analise');
+    for(const[id,value]of Object.entries({anEmp:input.empresa,anY1:'2025',anY2:'2026',anCP:'25',anMo:'Kz',anT1:input.N1,anT2:input.N}))ui.edit(id,value);
+    await ui.act('anRun');expect(ui.requests.find(r=>r.method==='PUT')?.payload.input.periods).toEqual(input.periods);
+    expect(ui.node('#view').innerHTML).toContain('01/01/2026 a 31/08/2026');
+  });
+  it('um resultado apurado sem detalhe não apresenta zeros como EBITDA confirmado nem inventa fluxos', async()=>{
+    const input={...historicalInput,N1:'',N:'Conta;Designação;Saldo\n43;Banco;100\n51;Capital;-120\n88;Resultado;20'};
+    const ui=await mount('comercio',true,false,true,false,input);await ui.go('analise');const html=await ui.sub('at','dr');
+    expect(html).toContain('detalhe suficiente');expect(html).not.toContain('Pressupostos por rever');
+    const ebitda=html.split('<td>EBITDA</td>')[1]!.split('</tr>')[0]!;expect(ebitda).toContain('—');
+    expect(await ui.sub('at','fc')).toContain('balancete de abertura coerente');
+    await ui.sub('rep','analise');expect(await ui.go('relatorios')).not.toMatch(/NaN|Pressupostos por rever/);
   });
   it('não substitui texto editado enquanto um ficheiro está a ser lido', async () => {
     const ui=await mount('comercio',true,false,false,true);await ui.go('analise');
