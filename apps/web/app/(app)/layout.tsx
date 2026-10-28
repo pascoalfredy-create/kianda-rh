@@ -83,8 +83,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </main>
       {/* Telemóvel: barra inferior com as acções do dia-a-dia */}
       <nav className="mobile-nav">
-        <Link href="/">Início</Link>
-        {!me.modules.hr.canAccess && <Link href="/modulos">Módulos</Link>}
+        <Link href="/modulos">Módulos</Link>
         {!me.modules.hr.canAccess && me.modules.modeling.canAccess && <Link href="/modelagem">Modelagem</Link>}
         {me.modules.hr.canAccess && <>
         <Link href="/assiduidade">Ponto</Link>
