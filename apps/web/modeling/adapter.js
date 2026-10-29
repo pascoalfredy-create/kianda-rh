@@ -67,6 +67,7 @@ async function applyCurrency(){
 const historicalDrafts=new Map(), historicalDirty=new Set();
 const historicalImports=new Map();
 const historicalReadErrors=new Map();
+const historicalSaved=new Set();
 const historicalFields=['anEmp','anY1','anY2','anCP','anMo','anT1','anT2','anF1','anF2'];
 function historicalReferenceField(input,key){return input?.periods?.[key]?.to?.split('-').reverse().join('/')||input?.anos?.[key==='N'?1:0]||String(new Date().getFullYear()-(key==='N'?0:1));}
 function captureHistoricalDraft(){
@@ -80,7 +81,30 @@ function captureHistoricalDraft(){
 async function selectHistorical(model){
   if(historicalDrafts.has(model.id)){S.an=historicalDrafts.get(model.id);return;}
   const historical=await store.history(model.id);S.an=historical?.analysis.input||null;
+  if(historical)historicalSaved.add(model.id);else historicalSaved.delete(model.id);
   historicalDrafts.set(model.id,S.an);
+}
+function historicalRemovalButton(){return historicalSaved.has(M()?.id)?'<button class="btn" data-act="anRemoveHistory">Remover análise guardada</button>':'';}
+function clearHistoricalDocument(number){
+  const id='#anF'+number,target='#anT'+number,key=number==='2'?'N':'N1',modelId=M().id,pending=historicalImports.get(id);
+  const failed=historicalReadErrors.has(modelId+target);
+  pending?.controller.abort();historicalImports.delete(id);$(id).value='';historicalReadErrors.delete(modelId+target);notice='';document.querySelector('#integra-notice')?.remove?.();
+  if(pending||failed){$('#anStatus'+number).textContent='Selecção cancelada. Os dados anteriores foram conservados.';protect();return;}
+  $(target).value='';S.an={...S.an,periods:{...S.an?.periods}};delete S.an.periods[key];
+  historicalDirty.add(modelId);captureHistoricalDraft();
+  $('#anStatus'+number).textContent='Documento removido desta edição. Pode escolher outro ficheiro. Para apagar a análise já guardada, use Remover análise guardada.';protect();
+}
+function confirmHistoricalRemoval(){
+  projectDialog={kind:'removeHistory',id:M().id};
+  openModal('Remover análise guardada', '<p>Remover os balancetes N e N−1 e os resultados desta análise do projecto?</p><p class="muted">As versões aprovadas e os pressupostos de projecção são conservados.</p><div id="projectError" role="alert"></div>', '<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="anConfirmRemoval">Remover análise</button>','600px');
+}
+async function removeHistoricalAnalysis(){
+  const context=projectDialog;if(context?.kind!=='removeHistory'||context.id!==M()?.id)throw Error('Seleccione novamente a análise que pretende remover.');
+  await store.removeHistory(context.id);
+  for(const pending of historicalImports.values())pending.controller.abort();historicalImports.clear();
+  for(const target of ['#anT1','#anT2'])historicalReadErrors.delete(context.id+target);
+  historicalSaved.delete(context.id);historicalDirty.delete(context.id);historicalDrafts.set(context.id,null);S.an=null;SUB.at='dados';notice='';
+  closeModal();render();toast('Análise removida deste projecto. Pode importar novos documentos.');
 }
 function analyze(){
   if(!S.an?.N)return null;
@@ -103,13 +127,13 @@ async function analyzeAndSave(){
   historicalDirty.add(M().id);captureHistoricalDraft();
   analyzeFinancialHistory(S.an);
   const historical=await store.saveHistory(M().id,S.an);
-  S.an=historical.analysis.input;historicalDrafts.set(M().id,S.an);historicalDirty.delete(M().id);
+  S.an=historical.analysis.input;historicalDrafts.set(M().id,S.an);historicalDirty.delete(M().id);historicalSaved.add(M().id);
   SUB.at='balanco';notice='';render();toast('Balancetes analisados e guardados neste projecto.');
 }
 async function modelFromHistorical(){
   if(historicalDirty.has(M().id))throw Error('Prima Analisar para validar e guardar os balancetes antes de criar o modelo.');
   const result=await store.createFromHistory(M().id);
-  previewModel=null;S.active=result.model.id;S.an=result.historical.analysis.input;historicalDrafts.set(M().id,S.an);
+  previewModel=null;S.active=result.model.id;S.an=result.historical.analysis.input;historicalDrafts.set(M().id,S.an);historicalSaved.add(M().id);
   go('pressupostos');toast('Modelo criado. Reveja os pressupostos de projecção e financiamento.');
 }
 function errorText(error) {
@@ -152,7 +176,7 @@ async function refreshProjects(){
   await store.flush();const context=projectDialog,selected=M()?.id;
   const [records,usage]=await Promise.all([modelingRequest('/models'),modelingRequest('/usage')]);
   if(projectDialog!==context)return;
-  store.load(records);projectUsage=usage;historicalDrafts.clear();historicalReadErrors.clear();
+  store.load(records);projectUsage=usage;historicalDrafts.clear();historicalReadErrors.clear();historicalSaved.clear();
   const model=selected?store.project(selected):store.models[0];
   previewModel=model&&store.archivedAt(model.id)?model:null;S.active=model&&!previewModel?model.id:store.models[0]?.id||null;
   S.an=null;if(M())await selectHistorical(M());
@@ -188,10 +212,11 @@ function protect() {
   });
   document.querySelectorAll(historicalFields.map(id=>'#'+id).join(',')).forEach(el=>{el.disabled=!writable;});
   document.querySelectorAll(currencyFields.map(id=>'#'+id).join(',')).forEach(el=>{el.disabled=!writable;});
-  for(const action of ['addRev','delRev','addCap','delCap','anRun','anToModel','anDemo','applyCurrency'])document.querySelectorAll(`[data-act="${action}"]`).forEach(el=>{
+  for(const action of ['addRev','delRev','addCap','delCap','anRun','anToModel','anDemo','anClearImport','anRemoveHistory','anConfirmRemoval','applyCurrency'])document.querySelectorAll(`[data-act="${action}"]`).forEach(el=>{
     el.disabled=!writable||historicalImports.size>0&&['anRun','anToModel','anDemo'].includes(action);
     if(!session?.canWrite)el.title='Acesso apenas de consulta.';
   });
+  for(const number of ['1','2']){const button=document.querySelector(`[data-act="anClearImport"][data-number="${number}"]`);if(button){const pending=historicalImports.has('#anF'+number);button.textContent=pending?'Cancelar leitura':'Remover documento';button.disabled=!writable||!pending&&!$('#anT'+number)?.value?.trim()&&!$('#anF'+number)?.value;}}
   for(const action of ['newM','createM','dupM','archiveProject','confirmArchive','restoreProject'])document.querySelectorAll(`[data-act="${action}"]`).forEach(el=>{el.disabled=!companyWrite||action==='dupM'&&!M();});
   $('#mSel').disabled=busy;
   $('#mSel').title=notice||'Projectos da empresa. Escolha Gerir projectos… para consultar, arquivar ou restaurar.';
@@ -220,16 +245,17 @@ VIEWS.analise.after=()=>{
     const field=$(id);if(field){const previous=historicalReadErrors.get(M().id+target);if(previous)$('#anStatus'+id.slice(-1)).textContent=previous;field.onchange=()=>{
       if(!store.canEdit(M().id)||busy||!field.files?.[0])return;
       historicalImports.get(id)?.controller.abort();
-      const file=field.files[0],pdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name||'');
+      const file=field.files[0],format=documentFormat(file),pdf=format==='pdf',word=format==='word';
       const status=$('#anStatus'+id.slice(-1)),targetField=$(target),modelId=M().id;
       historicalReadErrors.delete(modelId+target);
       const pending={controller:new AbortController(),file};historicalImports.set(id,pending);
       const current=()=>historicalImports.get(id)===pending&&M()?.id===modelId&&VIEW==='analise'&&(SUB.at||'dados')==='dados'&&$(id)===field&&field.files?.[0]===file;
       const unchanged=targetField.value;
-      status.textContent=pdf?'A ler o PDF…':'A ler o ficheiro…';protect();
+      status.textContent=pdf?'A ler o PDF…':word?'A ler o Word…':'A ler o ficheiro…';protect();
       const done=()=>{if(historicalImports.get(id)===pending)historicalImports.delete(id);protect();};
       const failed=error=>{if(current()&&!pending.controller.signal.aborted){status.textContent='Leitura do balancete '+(target==='#anT2'?'N':'N−1')+': '+errorText(error);historicalReadErrors.set(modelId+target,status.textContent);toast(status.textContent);}done();};
-      if(file.size>(pdf?PDF_IMPORT_LIMIT:250000))return failed(Error(pdf?'O PDF admite até 10 MB.':'O balancete CSV/TXT admite até 250 000 bytes.'));
+      if(/\.doc$/i.test(file.name||''))return failed(Error('Guarde o Word antigo (.doc) como Word (.docx) ou PDF antes de importar.'));
+      if(file.size>((pdf||word)?PDF_IMPORT_LIMIT:250000))return failed(Error(pdf||word?'O documento admite até 10 MB.':'O balancete CSV/TXT admite até 250 000 bytes.'));
       const reader=new FileReader();reader.onerror=()=>failed(Error('Não foi possível ler o ficheiro.'));
       reader.onload=async()=>{
         try{
@@ -238,7 +264,8 @@ VIEWS.analise.after=()=>{
           if(pdf){
             const result=await extractPdfTrialBalance(reader.result,{signal:pending.controller.signal,progress:(page,total)=>{if(current())status.textContent=`A extrair o PDF: página ${page} de ${total}…`;}});
             pdfResult=result;text=result.text;summary=`PDF: ${result.pages} página(s), ${result.accounts} contas${result.scope==='accumulated'?' · saldos acumulados':''}${result.period?' · até '+result.period.to.split('-').reverse().join('/'):''} · diferença débito − crédito: ${nf(result.difference,2)}. Confira moeda, exercício e contas; prima Analisar para guardar.`;
-          }else{try{text=new TextDecoder('utf-8',{fatal:true}).decode(reader.result);}catch{text=new TextDecoder('windows-1252').decode(reader.result);}summary='Ficheiro carregado. Confira os dados e prima Analisar para guardar.';}
+          }else if(word){const result=await extractWordTrialBalance(reader.result,{signal:pending.controller.signal});text=result.text;summary=`Word: ${result.accounts} contas · diferença débito − crédito: ${nf(result.difference,2)}. Confira moeda, período e contas; prima Analisar para guardar.`;}
+          else{text=decodeDocumentText(reader.result);summary='Ficheiro carregado. Confira os dados e prima Analisar para guardar.';}
           if(!current())return;
           if(targetField.value!==unchanged)throw Error('O texto foi editado durante a leitura. Seleccione o ficheiro novamente para substituir esses dados.');
           const key=target==='#anT2'?'N':'N1',other=$(target==='#anT2'?'#anT1':'#anT2').value.trim();
@@ -294,13 +321,13 @@ document.addEventListener('click',async ev=>{
     delCap:()=>{m.capex.splice(+d.i,1);save();render();},
     downloadFS:()=>downloadReport('demonstracoes'),downloadReport:()=>downloadReport(SUB.rep||'sumario'),
     applyCurrency,
-    anRun:analyzeAndSave,anToModel:modelFromHistorical,
+    anRun:analyzeAndSave,anToModel:modelFromHistorical,anClearImport:()=>clearHistoricalDocument(d.number),anRemoveHistory:confirmHistoricalRemoval,anConfirmRemoval:removeHistoricalAnalysis,
     anDemo:()=>{S.an={empresa:DEMO_BAL.empresa,anos:DEMO_BAL.anos,N1:demoCSV(DEMO_BAL.N1),N:demoCSV(DEMO_BAL.N),pctCP:30,moeda:'Kz'};historicalDrafts.set(m.id,S.an);historicalDirty.add(m.id);SUB.at='dados';render();toast('Exemplo carregado. Prima Analisar se o quiser guardar neste projecto.');},
   };
   const action=actions[d.act];if(!action)return;ev.preventDefault();
-  const mutation=['createM','dupM','addRev','delRev','addCap','delCap','anRun','anToModel','anDemo','applyCurrency','archiveProject','confirmArchive','restoreProject'].includes(d.act);
+  const mutation=['createM','dupM','addRev','delRev','addCap','delCap','anRun','anToModel','anDemo','anClearImport','anRemoveHistory','anConfirmRemoval','applyCurrency','archiveProject','confirmArchive','restoreProject'].includes(d.act);
   if(mutation&&!session.canWrite)return showError(Error('O seu acesso permite apenas consulta.'));
-  if(['addRev','delRev','addCap','delCap','anRun','anToModel','anDemo','applyCurrency'].includes(d.act)&&!store.canEdit(m?.id))return showError(Error('Projecto arquivado. Restaure-o antes de o alterar.'));
+  if(['addRev','delRev','addCap','delCap','anRun','anToModel','anDemo','anClearImport','anRemoveHistory','anConfirmRemoval','applyCurrency'].includes(d.act)&&!store.canEdit(m?.id))return showError(Error('Projecto arquivado. Restaure-o antes de o alterar.'));
   busy=true;protect();
   try{await action();}catch(error){showError(error);}finally{busy=false;protect();}
 });
@@ -322,6 +349,7 @@ async function boot(){
     templates=data[1];store.load(data[0]);S.models=store.models;S.active=S.models[0]?.id||null;
     if(M()&&opening?.firstHistory?.modelId===M().id&&opening.firstHistory.revision===store.revision(M().id)){
       S.an=opening.firstHistory.historical?.analysis.input||null;historicalDrafts.set(M().id,S.an);
+      if(opening.firstHistory.historical)historicalSaved.add(M().id);
     }else if(M())await selectHistorical(M());
     const view=(location.hash||'').slice(1);if(VIEWS[view])VIEW=view;
     render();

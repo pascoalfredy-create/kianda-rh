@@ -96,7 +96,7 @@ export function fileRoutes() {
     const { f, access } = await fileById(db, actor, c.req.param('id'));
     if (!access.read) throw new DomainError('nao_encontrado', 'Ficheiro inexistente', 404);
     const data = await readFileData(db, f);
-    const disposition = c.req.query('download') ? 'attachment' : 'inline';
+    const disposition = c.req.query('download') || f.mime.includes('wordprocessingml') ? 'attachment' : 'inline';
     return new Response(data, {
       headers: {
         'content-type': f.mime,

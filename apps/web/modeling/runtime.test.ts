@@ -16,7 +16,7 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
   const model = { id: 'm1', name: template.name, sector, currency: template.currency, revision: 1, createdAt: '2026-10-28', archivedAt: projects.initialArchived ? '2026-10-29T08:00:00Z' : null as string | null, assumptions: incomplete ? { pessoal: 1 } : template.assumptions };
   const records = [model], pendingUsage: (() => void)[] = [];
   node('#integra-session').textContent = JSON.stringify({ canWrite, permission: canWrite ? 'editor' : 'viewer', formats: { pdf: true, xlsx: false, csv: false }, usage: {}, ...(projects.bootstrap ? { bootstrap: { models: records, templates: allowedSectors.map(financialTemplate), firstHistory: projects.initialArchived ? null : { modelId: model.id, revision: model.revision, historical: withHistory ? { inputHash: 'a'.repeat(64), updatedAt: '2026-10-28', analysis: analyzeFinancialHistory(historyInput) } : null } } } : {}) });
-  let restored=false,modelReads=0;
+  let restored=false,modelReads=0,historyRemoved=false;
   const requests: { path: string; method?: string; payload?: any }[] = [];
   const pendingReads: (()=>void)[]=[];
   const currencyField=node('[data-p="moeda"]');currencyField.dataset={p:'moeda',t:'t'};currencyField.value=model.currency;
@@ -37,8 +37,9 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
       else if(path.includes('/exchange-rate?')){const q=new URLSearchParams(path.split('?')[1]);data={from:q.get('from'),to:q.get('to'),rate:q.get('from')==='Kz'?0.001:1000,rateDate:'2026-10-27',source:'Referência do teste',stale:false};}
       else if(path.endsWith('/convert-currency')){model.currency=payload.to;model.assumptions={...convertFinancialCurrency(model.assumptions as unknown as Record<string,unknown>,payload.from,payload.to,payload.rate),currencyConversion:payload} as any;model.revision++;data=model;}
       else if(path.endsWith('/history')&&init?.method==='PUT'){model.revision++;data={model,historical:{inputHash:'a'.repeat(64),updatedAt:'2026-10-28',analysis:analyzeFinancialHistory(payload.input)}};}
+      else if(path.endsWith('/history')&&init?.method==='DELETE'){model.revision++;historyRemoved=true;data={model,historical:null};}
       else if(path.endsWith('/models')){modelReads++;data=records;}
-      else data=path.endsWith('/templates')?allowedSectors.map(financialTemplate):path.endsWith('/history')?{revision:records.find(r=>path.includes('/'+r.id+'/'))?.revision??1,historical:withHistory?{inputHash:'a'.repeat(64),updatedAt:'2026-10-28',analysis:analyzeFinancialHistory(historyInput)}:null}:records;
+      else data=path.endsWith('/templates')?allowedSectors.map(financialTemplate):path.endsWith('/history')?{revision:records.find(r=>path.includes('/'+r.id+'/'))?.revision??1,historical:withHistory&&!historyRemoved?{inputHash:'a'.repeat(64),updatedAt:'2026-10-28',analysis:analyzeFinancialHistory(historyInput)}:null}:records;
       return new Response(JSON.stringify(data),{headers:{'content-type':'application/json'}});
     },
   });
@@ -185,7 +186,7 @@ describe('runtime do protótipo ligado à API', () => {
   });
   it('aceita PDF nos dois exercícios e apresenta o resultado da leitura sem guardar automaticamente', async () => {
     const ui=await mount('comercio');const html=await ui.go('analise');
-    expect(html.match(/accept="\.csv,\.txt,\.pdf,text\/csv,text\/plain,application\/pdf"/g)).toHaveLength(2);
+    expect(html.match(/accept="\.csv,\.txt,\.pdf,\.docx,text\/csv,text\/plain,application\/pdf,application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document"/g)).toHaveLength(2);
     expect(html).toContain('anStatus1');expect(html).toContain('anStatus2');expect(html).toContain('Confira as contas extraídas');
     const text='Conta;Designação;Saldo\n43;Banco;100,25',bytes=new TextEncoder().encode(text);
     ui.node('#anF2').files=[{name:'balancete.csv',size:bytes.length,buffer:bytes.buffer}];ui.node('#anF2').onchange();
@@ -198,6 +199,34 @@ describe('runtime do protótipo ligado à API', () => {
     expect(ui.node('#anStatus2').textContent).toContain('10 MB');expect(ui.node('#anT2').value).toBe('origem existente');
     expect(ui.requests.filter(r=>r.method==='PUT'||r.method==='POST')).toHaveLength(0);
     await ui.act('anRun');expect(ui.node('#view').innerHTML).toContain('10 MB');expect(ui.node('#view').innerHTML).not.toContain('250 000 caracteres');
+  });
+  it('remove a selecção e permite voltar a carregar o mesmo documento sem gravar', async () => {
+    const ui=await mount('comercio');await ui.go('analise');
+    for(const[id,value]of Object.entries({anEmp:'Externa',anY1:'2024',anY2:'2025',anCP:'30',anMo:'Kz',anT1:historicalInput.N1,anT2:''}))ui.edit(id,value);
+    const bytes=new TextEncoder().encode(historicalInput.N),file={name:'balancete.csv',size:bytes.length,buffer:bytes.buffer};
+    ui.node('#anF2').files=[file];ui.node('#anF2').value='balancete.csv';ui.node('#anF2').onchange();
+    expect(ui.node('#anT2').value).toBe(historicalInput.N);
+    await ui.act('anClearImport',{number:'2'});
+    expect(ui.node('#anF2').value).toBe('');expect(ui.node('#anT2').value).toBe('');expect(ui.node('#anT1').value).toBe(historicalInput.N1);
+    expect(ui.requests.some(r=>r.method==='PUT'||r.method==='DELETE')).toBe(false);
+    ui.node('#anF2').files=[file];ui.node('#anF2').onchange();expect(ui.node('#anT2').value).toBe(historicalInput.N);
+  });
+  it('cancelar uma leitura mantém os dados anteriores e não deixa uma resposta tardia repô-los', async () => {
+    const ui=await mount('comercio',true,false,false,true);await ui.go('analise');ui.node('#anT2').value='Origem anterior';
+    const bytes=new TextEncoder().encode(historicalInput.N);ui.node('#anF2').files=[{name:'balancete.csv',size:bytes.length,buffer:bytes.buffer}];ui.node('#anF2').onchange();
+    await ui.act('anClearImport',{number:'2'});ui.pendingReads.shift()!();
+    expect(ui.node('#anT2').value).toBe('Origem anterior');expect(ui.node('#anStatus2').textContent).toContain('conservados');
+    expect(ui.requests.some(r=>r.method==='PUT'||r.method==='DELETE')).toBe(false);
+  });
+  it('a remoção guardada exige a confirmação do projecto e elimina a análise activa', async () => {
+    const ui=await mount('comercio',true,false,true);await ui.go('analise');expect(ui.node('#view').innerHTML).toContain('Remover análise guardada');
+    const assumptions=structuredClone(ui.model.assumptions);
+    await ui.act('anRemoveHistory');expect(ui.node('#modal').innerHTML).toContain('balancetes N e N−1');expect(ui.requests.some(r=>r.method==='DELETE')).toBe(false);
+    await ui.act('close');expect(ui.requests.some(r=>r.method==='DELETE')).toBe(false);
+    await ui.act('anRemoveHistory');await ui.act('anConfirmRemoval');
+    expect(ui.requests.find(r=>r.method==='DELETE')?.payload).toEqual({revision:1});
+    expect(ui.node('#view').innerHTML).not.toContain('Remover análise guardada');expect(ui.node('#view').innerHTML).not.toContain('Usar como base');
+    expect(ui.model.assumptions).toEqual(assumptions);
   });
   it('uma edição manual permite corrigir a origem depois de uma falha de importação', async()=>{
     const ui=await mount('comercio');await ui.go('analise');ui.node('#anF2').files=[{name:'grande.pdf',size:11*1024*1024}];ui.node('#anF2').onchange();
