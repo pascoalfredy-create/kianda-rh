@@ -20,7 +20,7 @@ function replace(from, to) { if (!source.includes(from)) throw new Error('Expres
 const dialogStart = source.indexOf('newM:()=>openModal('), dialogEnd = source.indexOf('   createM:', dialogStart);
 const dialog = source.slice(dialogStart + 'newM:'.length, dialogEnd).trim().replace(/,$/, '').replace('Object.entries(SECT).map', 'Object.entries(SECT).filter(([key])=>templates.some(t=>t.sector===key)).map');
 span('function newModel(', '/* ---------------- Estado', `function newModel(sk,over={}){const t=templates.find(t=>t.sector===sk);if(!t)throw Error('Modelo-tipo indisponível');return Object.assign(clone(t.assumptions),{id:'',sector:sk,moeda:t.currency,nome:SECT[sk].m.nome||t.name,criado:new Date().toISOString().slice(0,10)},over);}\n\n`);
-span('let S;', '/* ---------------- Motor', `let S={models:[],active:null,unit:'M',an:null};\nconst M=()=>S.models.find(m=>m.id===S.active)||S.models[0];\n\n`);
+span('let S;', '/* ---------------- Motor', `let S={models:[],active:null,unit:'M',an:null};\nconst M=()=>previewModel||S.models.find(m=>m.id===S.active)||S.models[0];\n\n`);
 span('/* ---------------- Motor', '/* ---------------- Formatação', `function run(m,ov={}){return runFinancialModel(m,ov);}\nfunction breakEvenPrice(m){return financialBreakEvenPrice(m);}\nfunction waccOf(m){try{return run(m).wacc}catch{return null}}\nfunction keOf(m){try{return run(m).ke}catch{return null}}\n\n`);
 replace('function render(){', 'function renderPrototype(){');
 replace('function liveStrip(){', 'function liveStripPrototype(){');
@@ -40,7 +40,7 @@ replace('money(m.capex.reduce((s,c)=>s+ +c.valor,0))', 'assumptionMoney(m.capex.
 replace("'Financiamento em USD'", "'Financiamento em '+cur");
 replace("cur==='USD'?'US Treasury 10 anos':'Obrigações do Tesouro em Kz'", "cur==='Kz'?'Obrigações do Tesouro em Kz':'Taxa sem risco em '+cur");
 replace("cur==='USD'?'Risco Angola sobre activos em USD':'0 se a taxa sem risco já é em Kz'", "cur==='Kz'?'0 se a taxa sem risco já incorpora o risco país':'Prémio de risco país coerente com '+cur");
-replace("const closeModal=()=>$('#ov').classList.remove('on');", "function closeModal(){currencyDialog=null;$('#ov').classList.remove('on');}");
+replace("const closeModal=()=>$('#ov').classList.remove('on');", "function closeModal(){currencyDialog=null;projectDialog=null;$('#ov').classList.remove('on');}");
 replace('data-act="copyFS">${ico(\'copy\')}Copiar (CSV)', 'data-act="downloadFS">${ico(\'doc\')}Descarregar PDF');
 replace('data-act="repCopy">${ico(\'copy\')}Copiar texto', 'data-act="downloadReport">${ico(\'doc\')}Descarregar PDF');
 // A análise usa o mesmo core no browser/API; os formulários e tabelas originais são preservados.

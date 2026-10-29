@@ -6,15 +6,17 @@ import { historicalInput } from '../../../packages/core/test/fixtures/financial-
 const runtime = readFileSync(new URL('../public/modeling-runtime.js', import.meta.url), 'utf8');
 const views = ['painel', 'pressupostos', 'demonstracoes', 'avaliacao', 'credito', 'sensibilidade', 'relatorios'];
 /** Teste do código distribuído e das vistas, sem simular um motor de layout de navegador. */
-async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, incomplete = false, withHistory = false, deferRead = false, historyInput:FinancialHistoricalInput=historicalInput, allowedSectors: readonly typeof FINANCIAL_SECTORS[number][] = FINANCIAL_SECTORS) {
+async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, incomplete = false, withHistory = false, deferRead = false, historyInput:FinancialHistoricalInput=historicalInput, allowedSectors: readonly typeof FINANCIAL_SECTORS[number][] = FINANCIAL_SECTORS, projects: { initialArchived?: boolean; restoreFails?: boolean; deferUsage?: boolean; historyFailsAfterRestore?: boolean; historyFailsOnRefresh?: boolean } = {}) {
   const template = financialTemplate(sector), handlers = new Map<string, Function>();
   const nodes = new Map<string, any>();
   const node = (selector: string) => {
-    if (!nodes.has(selector)) nodes.set(selector, { innerHTML: '', textContent: '', value: '', disabled: false, dataset: {}, style:{}, classList: { add() {}, remove() {} }, insertAdjacentHTML(_position: string, html: string) { this.innerHTML = html + this.innerHTML; } });
+    if (!nodes.has(selector)) { const classes = new Set<string>(); nodes.set(selector, { innerHTML: '', textContent: '', value: '', disabled: false, dataset: {}, style:{}, classList: { add(v: string) { classes.add(v); }, remove(v: string) { classes.delete(v); }, contains(v: string) { return classes.has(v); } }, insertAdjacentHTML(_position: string, html: string) { this.innerHTML = html + this.innerHTML; } }); }
     return nodes.get(selector)!;
   };
   node('#integra-session').textContent = JSON.stringify({ canWrite, permission: canWrite ? 'editor' : 'viewer', formats: { pdf: true, xlsx: false, csv: false }, usage: {} });
-  const model = { id: 'm1', name: template.name, sector, currency: template.currency, revision: 1, createdAt: '2026-10-28', archivedAt: null, assumptions: incomplete ? { pessoal: 1 } : template.assumptions };
+  const model = { id: 'm1', name: template.name, sector, currency: template.currency, revision: 1, createdAt: '2026-10-28', archivedAt: projects.initialArchived ? '2026-10-29T08:00:00Z' : null as string | null, assumptions: incomplete ? { pessoal: 1 } : template.assumptions };
+  const records = [model], pendingUsage: (() => void)[] = [];
+  let restored=false,modelReads=0;
   const requests: { path: string; method?: string; payload?: any }[] = [];
   const pendingReads: (()=>void)[]=[];
   const currencyField=node('[data-p="moeda"]');currencyField.dataset={p:'moeda',t:'t'};currencyField.value=model.currency;
@@ -29,18 +31,84 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
     fetch: async (path: string, init?: {method?:string;body?:string}) => {
       const payload=init?.body?JSON.parse(init.body):undefined;requests.push({path,method:init?.method,payload});
       let data:unknown;
-      if(path.includes('/exchange-rate?')){const q=new URLSearchParams(path.split('?')[1]);data={from:q.get('from'),to:q.get('to'),rate:q.get('from')==='Kz'?0.001:1000,rateDate:'2026-10-27',source:'Referência do teste',stale:false};}
+      if(path.endsWith('/usage')){const activeProjects=records.filter(r=>!r.archivedAt).length;data={activeProjects,projectLimit:2,userLimit:5,enabledUsers:1,canCreateProject:activeProjects<2};if(projects.deferUsage)await new Promise<void>(resolve=>pendingUsage.push(resolve));}
+      else if(path.endsWith('/archive')){const target=records.find(r=>path.includes('/'+r.id+'/'))!;if(!payload.archived&&projects.restoreFails)return new Response(JSON.stringify({message:'Atingiu o limite de projectos activos.'}),{status:409,headers:{'content-type':'application/json'}});target.archivedAt=payload.archived?'2026-10-29T08:00:00Z':null;target.revision++;restored=!payload.archived;data=target;}
+      else if(path.endsWith('/history')&&init?.method!=='PUT'&&(projects.historyFailsAfterRestore&&restored||projects.historyFailsOnRefresh&&modelReads>1))return new Response(JSON.stringify({message:'Histórico indisponível'}),{status:503,headers:{'content-type':'application/json'}});
+      else if(path.includes('/exchange-rate?')){const q=new URLSearchParams(path.split('?')[1]);data={from:q.get('from'),to:q.get('to'),rate:q.get('from')==='Kz'?0.001:1000,rateDate:'2026-10-27',source:'Referência do teste',stale:false};}
       else if(path.endsWith('/convert-currency')){model.currency=payload.to;model.assumptions={...convertFinancialCurrency(model.assumptions as unknown as Record<string,unknown>,payload.from,payload.to,payload.rate),currencyConversion:payload} as any;model.revision++;data=model;}
       else if(path.endsWith('/history')&&init?.method==='PUT'){model.revision++;data={model,historical:{inputHash:'a'.repeat(64),updatedAt:'2026-10-28',analysis:analyzeFinancialHistory(payload.input)}};}
-      else data=path.endsWith('/templates')?allowedSectors.map(financialTemplate):path.endsWith('/history')?{revision:1,historical:withHistory?{inputHash:'a'.repeat(64),updatedAt:'2026-10-28',analysis:analyzeFinancialHistory(historyInput)}:null}:[model];
+      else if(path.endsWith('/models')){modelReads++;data=records;}
+      else data=path.endsWith('/templates')?allowedSectors.map(financialTemplate):path.endsWith('/history')?{revision:records.find(r=>path.includes('/'+r.id+'/'))?.revision??1,historical:withHistory?{inputHash:'a'.repeat(64),updatedAt:'2026-10-28',analysis:analyzeFinancialHistory(historyInput)}:null}:records;
       return new Response(JSON.stringify(data),{headers:{'content-type':'application/json'}});
     },
   });
   // boot() termina depois das respostas JSON e da montagem inicial.
   await new Promise<void>(resolve => setImmediate(resolve));
-  return { node, field, baseScenario, requests, model, pendingReads, edit(id:string,value:string){node('#'+id).value=value;handlers.get('input')!({target:{id}});}, async currency(to:string){currencyField.value=to;await currencyField.onchange();},async act(act:string){await handlers.get('click')!({target:new Element({act}),preventDefault(){}});}, async go(view: string) { await handlers.get('click')!({ target: new Element({ go: view }), preventDefault() {} }); return node('#view').innerHTML as string; }, async sub(k = 'pt', v = 'custos') { await handlers.get('click')!({ target: new Element({ act: 'sub', k, v }), preventDefault() {} }); return node('#view').innerHTML as string; } };
+  return { node, field, baseScenario, requests, model, records, pendingReads, pendingUsage, escape(){handlers.get('keydown')!({key:'Escape'});}, async select(id:string){node('#mSel').value=id;await node('#mSel').onchange();}, edit(id:string,value:string){node('#'+id).value=value;handlers.get('input')!({target:{id}});}, async currency(to:string){currencyField.value=to;await currencyField.onchange();},async act(act:string,extra:Record<string,string>={}){await handlers.get('click')!({target:new Element({act,...extra}),preventDefault(){}});}, async go(view: string) { await handlers.get('click')!({ target: new Element({ go: view }), preventDefault() {} }); return node('#view').innerHTML as string; }, async sub(k = 'pt', v = 'custos') { await handlers.get('click')!({ target: new Element({ act: 'sub', k, v }), preventDefault() {} }); return node('#view').innerHTML as string; } };
 }
 describe('runtime do protótipo ligado à API', () => {
+  it('a gestão está no selector existente, mesmo sem projectos activos', async () => {
+    const ui = await mount('servicos', true, false, false, false, historicalInput, FINANCIAL_SECTORS, { initialArchived: true });
+    expect(ui.node('#mSel').disabled).toBe(false); expect(ui.node('#mSel').innerHTML).toContain('Gerir projectos…');
+    await ui.select('__projects'); await ui.act('projectTab', { v: 'archived' });
+    expect(ui.node('#modal').innerHTML).toContain('Arquivados (1)'); expect(ui.node('#modal').innerHTML).toContain('Restaurar');
+    await ui.act('viewProject', { id: 'm1' });
+    expect(ui.node('#view').innerHTML).toContain('Projecto arquivado · consulta'); expect(ui.field.disabled).toBe(true); expect(ui.node('#ov').classList.contains('on')).toBe(false);
+    expect(ui.node('#mSel').innerHTML).toContain('Arquivado ·');
+  });
+  it('arquivar pede confirmação, conserva a consulta e restaurar volta a permitir edição', async () => {
+    const ui = await mount('servicos');
+    await ui.select('__projects'); await ui.act('archiveProject', { id: 'm1' });
+    expect(ui.node('#modal').innerHTML).toContain('Arquivar projecto'); expect(ui.requests.some(r => r.path.endsWith('/archive'))).toBe(false);
+    await ui.act('confirmArchive');
+    expect(ui.requests.find(r => r.path.endsWith('/archive'))!.payload).toEqual({ archived: true, revision: 1 });
+    expect(ui.node('#view').innerHTML).toContain('Projecto arquivado · consulta'); expect(ui.field.disabled).toBe(true);
+    await ui.act('restoreProject', { id: 'm1' });
+    expect(ui.requests.filter(r => r.path.endsWith('/archive')).at(-1)!.payload).toEqual({ archived: false, revision: 2 });
+    expect(ui.model.archivedAt).toBeNull(); expect(ui.node('#view').innerHTML).not.toContain('Projecto arquivado · consulta'); expect(ui.field.disabled).toBe(false); expect(ui.baseScenario.disabled).toBe(true);
+  });
+  it('o restauro recusado por quota mantém o arquivo e apresenta o motivo', async () => {
+    const ui = await mount('servicos', true, false, false, false, historicalInput, FINANCIAL_SECTORS, { initialArchived: true, restoreFails: true });
+    await ui.select('__projects'); await ui.act('projectTab', { v: 'archived' }); await ui.act('restoreProject', { id: 'm1' });
+    expect(ui.model.archivedAt).toBeTruthy(); expect(ui.node('#projectError').textContent).toContain('limite de projectos'); expect(ui.node('#modal').innerHTML).toContain('Activos (0)');
+  });
+  it('consulta pode abrir o arquivo e não recebe comandos de arquivo ou restauro', async () => {
+    const ui = await mount('servicos', false, false, false, false, historicalInput, FINANCIAL_SECTORS, { initialArchived: true });
+    await ui.select('__projects'); await ui.act('projectTab', { v: 'archived' });
+    expect(ui.node('#modal').innerHTML).not.toContain('data-act="restoreProject"');
+    await ui.act('restoreProject', { id: 'm1' }); expect(ui.requests.some(r => r.path.endsWith('/archive'))).toBe(false);
+    await ui.act('viewProject', { id: 'm1' }); expect(ui.field.disabled).toBe(true);
+  });
+  it('não arquiva nem substitui a lista com balancetes por analisar', async () => {
+    const ui = await mount('servicos', true, false, true); await ui.go('analise'); ui.edit('anEmp', 'Em edição');
+    await ui.select('__projects'); await ui.act('archiveProject', { id: 'm1' });
+    expect(ui.node('#projectError').textContent).toContain('Analise e guarde'); expect(ui.requests.some(r => r.path.endsWith('/archive'))).toBe(false);
+    const before = ui.requests.filter(r => r.path.endsWith('/models')).length;
+    await ui.act('refreshProjects'); expect(ui.requests.filter(r => r.path.endsWith('/models'))).toHaveLength(before);
+  });
+  it('actualiza projectos de outra sessão e escapa os nomes na lista', async () => {
+    const ui = await mount('servicos'); ui.records.push({ ...ui.model, id: 'm2', name: '<img src=x onerror=bad>' });
+    await ui.select('__projects'); await ui.act('refreshProjects');
+    expect(ui.node('#mSel').innerHTML).toContain('m2'); expect(ui.node('#modal').innerHTML).toContain('&lt;img'); expect(ui.node('#modal').innerHTML).not.toContain('<img src=x');
+    await ui.act('viewProject', { id: 'm2' }); expect(ui.node('#mSel').value).toBe('m2');
+  });
+  it('fechar durante a consulta da quota não reabre a janela quando a resposta chega', async () => {
+    const ui = await mount('servicos', true, false, false, false, historicalInput, FINANCIAL_SECTORS, { deferUsage: true });
+    const opening = ui.select('__projects'); await new Promise<void>(resolve => setImmediate(resolve));
+    expect(ui.node('#ov').classList.contains('on')).toBe(true); ui.escape();
+    ui.pendingUsage.shift()!(); await opening; expect(ui.node('#ov').classList.contains('on')).toBe(false);
+  });
+  it('uma falha ao carregar balancetes não desfaz nem oculta um restauro confirmado', async () => {
+    const ui = await mount('servicos', true, false, false, false, historicalInput, FINANCIAL_SECTORS, { initialArchived: true, historyFailsAfterRestore: true });
+    await ui.select('__projects'); await ui.act('projectTab', { v: 'archived' }); await ui.act('restoreProject', { id: 'm1' });
+    expect(ui.model.archivedAt).toBeNull(); expect(ui.field.disabled).toBe(false); expect(ui.node('#view').innerHTML).toContain('Projecto restaurado. Não foi possível carregar'); expect(ui.node('#ov').classList.contains('on')).toBe(false);
+  });
+  it('uma falha de leitura na actualização não mostra os balancetes do projecto anterior no novo', async () => {
+    const ui = await mount('servicos', true, false, true, false, historicalInput, FINANCIAL_SECTORS, { historyFailsOnRefresh: true });
+    await ui.go('analise'); ui.records.splice(0,1,{...ui.model,id:'m2',name:'Outro projecto'});
+    await ui.select('__projects'); await ui.act('refreshProjects');
+    expect(ui.node('#mSel').value).toBe('m2'); expect(ui.node('#view').innerHTML).not.toContain(`value="${historicalInput.empresa}"`); expect(ui.node('#view').innerHTML).toContain('Histórico indisponível');
+  });
   it('o selector de novos modelos mostra apenas os sectores licenciados, sem confundir sectores e projectos', async () => {
     const ui = await mount('mineracao', true, false, false, false, historicalInput, ['mineracao', 'servicos']);
     await ui.act('newM');
