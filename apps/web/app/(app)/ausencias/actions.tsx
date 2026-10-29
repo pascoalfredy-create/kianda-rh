@@ -1,5 +1,6 @@
 'use client';
 
+import { RhDialog } from '@/components/rh-dialog';
 import { Attachments } from '@/components/attachments';
 import { ABSENCE_POLICIES, checkAbsenceLimit, labourRules, workingDaysByYear, type AbsenceType } from '@kianda/core';
 import { useMemo, useState } from 'react';
@@ -62,7 +63,7 @@ export function NewAbsenceForm({ me, people, canRegisterOthers, canApprove }: {
     );
   }
   return (
-    <form
+    <RhDialog title="Pedido de ausência" onClose={() => setOpen(false)}><form
       className="form card cols4"
       onSubmit={async (e) => {
         e.preventDefault();
@@ -97,7 +98,7 @@ export function NewAbsenceForm({ me, people, canRegisterOthers, canApprove }: {
         <button type="button" className="btn ghost" onClick={() => setOpen(false)}>Cancelar</button>
         <button className="btn" disabled={busy || preview?.bad}>{busy ? 'A enviar…' : 'Enviar'}</button>
       </div>
-    </form>
+    </form></RhDialog>
   );
 }
 

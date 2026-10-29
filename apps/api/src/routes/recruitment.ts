@@ -69,10 +69,11 @@ export function recruitmentRoutes() {
     const rows = await db.select({ o: jobOpenings, dept: departments.name, manager: employees.name }).from(jobOpenings)
       .leftJoin(departments, eq(departments.id, jobOpenings.departmentId)).leftJoin(employees, eq(employees.id, jobOpenings.hiringManagerId))
       .where(and(...where)).orderBy(desc(jobOpenings.createdAt));
-    const cs = rows.length ? await db.select({ openingId: candidates.openingId, stage: candidates.stage, source: candidates.source, createdAt: candidates.createdAt, hiredAt: candidates.hiredAt })
+    const cs = rows.length ? await db.select({ id: candidates.id, name: candidates.name, rating: candidates.rating, openingId: candidates.openingId, stage: candidates.stage, source: candidates.source, createdAt: candidates.createdAt, hiredAt: candidates.hiredAt })
       .from(candidates).where(inArray(candidates.openingId, rows.map((r) => r.o.id))) : [];
     return c.json(rows.map(({ o, dept, manager }) => ({
       ...o, departmentName: dept, hiringManagerName: manager,
+      ...(c.req.query('includeCandidates') === '1' ? { candidates: cs.filter(x => x.openingId === o.id).map(x => ({ id: x.id, name: x.name, rating: x.rating, stage: x.stage, source: x.source })) } : {}),
       stats: pipelineStats(cs.filter((x) => x.openingId === o.id).map((x) => ({ stage: x.stage as Stage, source: x.source, createdAt: x.createdAt.toISOString(), hiredAt: x.hiredAt?.toISOString() ?? null }))),
     })));
   });

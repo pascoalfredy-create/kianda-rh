@@ -10,7 +10,7 @@ export function ModuleCards({ modules, manage = false }: { modules: CompanyModul
       const title = modeling ? 'Modelagem Financeira · Kianda Integra' : 'Recursos Humanos · Kianda RH';
       const until = access.status === 'trial' ? access.trialEndsAt : access.paidUntil;
       const status = !access.subscribed ? 'Não subscrito' : !access.canAccess ? 'Acesso por atribuir' : SUBSCRIPTION_STATUS[access.status];
-      return <div className="card kpi" key={key}>
+      return <div className="card kpi" key={key} id={key}>
         <div className="l">{title}</div>
         <div className="v" style={{ fontSize: 18 }}>{status}</div>
         <p className="muted">{modeling ? access.subscribed ? `${MODELING_PLANS.find(p => p.key === modules.modeling.planKey)?.label ?? 'Contrato por projectos'} · ${modules.modeling.projectLimit === null ? 'projectos ilimitados' : `até ${modules.modeling.projectLimit} projecto(s)`} · ${modules.modeling.sectors.length} sectores · ${modules.modeling.userLimit} utilizadores` : 'Planos por projectos activos · 5 utilizadores incluídos · PDF' : 'Planos por número de colaboradores activos'}</p>
