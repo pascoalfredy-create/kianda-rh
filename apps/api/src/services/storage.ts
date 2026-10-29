@@ -6,6 +6,7 @@
  */
 import { and, eq, fileBlobs, files, sql, type Db } from '@kianda/db';
 import { DomainError } from './payroll.js';
+import { WORD_MIME, wordArchive } from '@kianda/core';
 
 export interface ObjectStore {
   put(key: string, data: Uint8Array, mime: string): Promise<void>;
@@ -50,8 +51,12 @@ const KINDS: { mime: string; ext: string; test: (b: Uint8Array) => boolean }[] =
 
 /** O tipo vem do conteúdo (assinatura do ficheiro), nunca do nome ou do cabeçalho enviado. */
 export function detectKind(data: Uint8Array) {
+  if (data[0] === 0x50 && data[1] === 0x4b) {
+    try { wordArchive(data); return { mime: WORD_MIME, ext: 'docx' }; }
+    catch { throw new DomainError('tipo_nao_suportado', 'Seleccione um Word DOCX válido, sem macros.', 415); }
+  }
   const k = KINDS.find((x) => x.test(data));
-  if (!k) throw new DomainError('tipo_nao_suportado', 'Só são aceites PDF, JPG, PNG ou WEBP', 415);
+  if (!k) throw new DomainError('tipo_nao_suportado', 'Só são aceites PDF, Word (DOCX), JPG, PNG ou WEBP', 415);
   return k;
 }
 

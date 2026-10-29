@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { totp } from '@kianda/core';
 import { buildApp } from '../src/app.js';
 import { testClient, type InjectResponse } from './inject.js';
+import { fixtureWord, fixtureZip } from '../../../packages/core/test/fixtures/document-import.js';
 
 const app = testClient(buildApp({ rateLimit: false }));
 afterAll(async () => { await app.close(); if (process.env.DATABASE_URL) await closeDb(); });
@@ -1744,6 +1745,21 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect((await upload(owner, 'absence', absenceId, big)).statusCode).toBe(413);
       const p = await upload(owner, 'absence', absenceId, png, 'foto.jpeg');
       expect(p.json()).toMatchObject({ name: 'foto.png', mime: 'image/png' });
+    });
+
+    it('Word é detectado pelo pacote, descarregado como documento e removido com as mesmas permissões', async () => {
+      const data = fixtureWord([['Justificativo'], ['Documento de teste']]);
+      const uploaded = await upload(employeeUser, 'absence', absenceId, data, '../../Justificativo.pdf');
+      expect(uploaded.statusCode).toBe(201);
+      expect(uploaded.json()).toMatchObject({ name: 'Justificativo.docx', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      const id = uploaded.json().id;
+      const downloaded = await get(employeeUser, `/v1/files/${id}`);
+      expect(downloaded.headers['content-disposition']).toMatch(/^attachment;/);
+      expect(downloaded.bytes).toEqual(data);
+      expect((await app.inject({ method: 'DELETE', url: `/v1/files/${id}`, headers: as(ownerB) })).statusCode).toBe(404);
+      expect((await app.inject({ method: 'DELETE', url: `/v1/files/${id}`, headers: as(employeeUser) })).statusCode).toBe(200);
+      expect((await get(owner, `/v1/files/${id}`)).statusCode).toBe(404);
+      expect((await upload(owner, 'absence', absenceId, fixtureZip([['texto.txt', 'não é Word']]), 'enganado.docx')).statusCode).toBe(415);
     });
 
     it('cópias de documentos: só o RH anexa; o próprio vê; Finanças e outra empresa não', async () => {

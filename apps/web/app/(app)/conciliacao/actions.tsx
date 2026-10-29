@@ -1,17 +1,12 @@
 'use client';
 
-import { formatKz } from '@kianda/core';
+import { DOCUMENT_ACCEPT, formatKz } from '@kianda/core';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { send, useMutation } from '@/lib/client';
+import { readStatementDocument } from '@/lib/document-import';
 
 const pt = (d: string) => d.split('-').reverse().join('/');
-
-/** Lê o ficheiro respeitando a codificação: UTF-8 ou, se não for válido, Windows-1252 (exportações antigas do Excel). */
-async function readText(f: File) {
-  const buf = await f.arrayBuffer();
-  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch { return new TextDecoder('windows-1252').decode(buf); }
-}
 
 type Key = 'date' | 'description' | 'amount' | 'debit' | 'credit' | 'balance' | 'reference';
 const ROLES: [Key, string][] = [['date', 'Data'], ['description', 'Descritivo'], ['amount', 'Valor (com sinal)'], ['debit', 'Débito'], ['credit', 'Crédito'], ['balance', 'Saldo'], ['reference', 'Referência']];
@@ -32,28 +27,54 @@ export function StatementImport({ accountId }: { accountId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState('');
+  const [selectedName, setSelectedName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const input = useRef<HTMLInputElement>(null), requestId = useRef(0), reading = useRef<AbortController | null>(null);
+  useEffect(() => () => { requestId.current++; reading.current?.abort(); }, []);
 
-  async function preview(text: string, name: string, m?: Partial<Record<Key, number>>, h?: number) {
+  function clear() {
+    requestId.current++; reading.current?.abort(); reading.current = null;
+    if (input.current) input.current.value = '';
+    setFile(null); setPv(null); setSelectedName(''); setMapping({}); setHeaderRow(undefined); setError(''); setDone(''); setBusy(false);
+  }
+
+  async function selectDocument(f: File) {
+    clear(); const token = requestId.current, controller = new AbortController(); reading.current = controller;
+    setSelectedName(f.name); setBusy(true);
+    try {
+      const text = await readStatementDocument(f, { signal: controller.signal });
+      if (token !== requestId.current || controller.signal.aborted) return;
+      setFile({ name: f.name, text });
+      await preview(text, f.name, undefined, undefined, token);
+    } catch (error) {
+      if (token === requestId.current && !controller.signal.aborted) { setError(error instanceof Error ? error.message : 'Não foi possível ler o documento.'); setBusy(false); }
+    } finally { if (reading.current === controller) reading.current = null; }
+  }
+
+  async function preview(text: string, name: string, m?: Partial<Record<Key, number>>, h?: number, token = ++requestId.current) {
     setBusy(true); setError(''); setDone('');
     const full = m && m.date !== undefined && m.description !== undefined && (m.amount !== undefined || m.debit !== undefined || m.credit !== undefined);
-    const r = await send<Preview>('/v1/bank/statements/preview', 'POST', { accountId, fileName: name, text, mapping: full ? m : undefined, headerRow: h });
-    setBusy(false);
-    if (!r.ok) return setError(r.message ?? 'Erro');
-    setPv(r.data!);
-    setMapping(m ?? r.data!.mapping ?? {});
-    setHeaderRow(r.data!.headerRow);
+    try {
+      const r = await send<Preview>('/v1/bank/statements/preview', 'POST', { accountId, fileName: name, text, mapping: full ? m : undefined, headerRow: h });
+      if (token !== requestId.current) return;
+      if (!r.ok) { setPv(null); return setError(r.message ?? 'Erro'); }
+      setPv(r.data!); setMapping(m ?? r.data!.mapping ?? {}); setHeaderRow(r.data!.headerRow);
+    } catch {
+      if (token === requestId.current) { setPv(null); setError('Não foi possível conferir o extracto. Tente novamente.'); }
+    } finally { if (token === requestId.current) setBusy(false); }
   }
 
   async function confirm() {
-    if (!file || !pv) return;
-    setBusy(true); setError('');
+    if (!file || !pv || busy || saving) return;
+    setBusy(true); setSaving(true); setError('');
     const full = mapping.date !== undefined && mapping.description !== undefined;
-    const r = await send<{ newCount: number; duplicates: number; matched: number }>('/v1/bank/statements', 'POST', { accountId, fileName: file.name, text: file.text, mapping: full ? mapping : undefined, headerRow });
-    setBusy(false);
-    if (!r.ok) return setError(r.message ?? 'Erro');
-    setDone(`Importados ${r.data!.newCount} movimento(s)${r.data!.duplicates ? ` (${r.data!.duplicates} já existiam)` : ''}. ${r.data!.matched} pagamento(s) conciliado(s) automaticamente.`);
-    setFile(null); setPv(null);
-    router.refresh();
+    try {
+      const r = await send<{ newCount: number; duplicates: number; matched: number }>('/v1/bank/statements', 'POST', { accountId, fileName: file.name, text: file.text, mapping: full ? mapping : undefined, headerRow });
+      if (!r.ok) return setError(r.message ?? 'Erro');
+      clear(); setDone(`Importados ${r.data!.newCount} movimento(s)${r.data!.duplicates ? ` (${r.data!.duplicates} já existiam)` : ''}. ${r.data!.matched} pagamento(s) conciliado(s) automaticamente.`);
+      router.refresh();
+    } catch { setError('Não foi possível confirmar o resultado da importação. Confira a lista antes de tentar novamente.'); }
+    finally { setBusy(false); setSaving(false); }
   }
 
   const mappingOk = mapping.date !== undefined && mapping.description !== undefined && (mapping.amount !== undefined || mapping.debit !== undefined || mapping.credit !== undefined);
@@ -62,15 +83,14 @@ export function StatementImport({ accountId }: { accountId: string }) {
       <h2>Importar extracto</h2>
       <div style={{ padding: 16, display: 'grid', gap: 12 }}>
         <label className="muted" style={{ display: 'grid', gap: 6 }}>
-          Ficheiro CSV exportado do homebanking (no Excel: Guardar como → CSV). Movimentos já importados são ignorados.
-          <input type="file" accept=".csv,.txt,text/csv" onChange={async (e) => {
+          Extracto em CSV, TXT, PDF com texto ou Word (.docx), até 10 MB. Confira a leitura antes de importar. Movimentos já importados são ignorados.
+          <input ref={input} type="file" accept={DOCUMENT_ACCEPT} disabled={saving} onChange={(e) => {
             const f = e.target.files?.[0];
             if (!f) return;
-            const text = await readText(f);
-            setFile({ name: f.name, text });
-            await preview(text, f.name);
+            void selectDocument(f);
           }} />
         </label>
+        {selectedName && <div className="actions" style={{ justifyContent: 'flex-start' }}><span>{selectedName}{busy ? ' · A processar…' : ''}</span><button type="button" className="btn ghost sm" disabled={saving} onClick={clear}>{busy && !saving ? 'Cancelar leitura' : 'Remover documento'}</button></div>}
         {error && <div className="err" style={{ color: 'var(--red)' }}>{error}</div>}
         {done && <div className="ok" style={{ color: 'var(--brand)', fontWeight: 600 }}>{done}</div>}
         {pv && file && (
@@ -112,7 +132,7 @@ export function StatementImport({ accountId }: { accountId: string }) {
             )}
             <div className="actions" style={{ justifyContent: 'flex-start' }}>
               <button className="btn" disabled={busy || !mappingOk || !pv.newCount} onClick={confirm}>Importar {pv.newCount} movimento(s)</button>
-              <button className="btn ghost" onClick={() => { setFile(null); setPv(null); }}>Cancelar</button>
+              <button className="btn ghost" disabled={saving} onClick={clear}>Cancelar</button>
             </div>
           </>
         )}

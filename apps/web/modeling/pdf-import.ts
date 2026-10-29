@@ -6,18 +6,18 @@ export const PDF_IMPORT_PAGES = 80;
 export const PDF_IMPORT_URL = `/modeling-pdf/${PDF_IMPORT_VERSION}/pdf.min.mjs`;
 export const PDF_WORKER_URL = `/modeling-pdf/${PDF_IMPORT_VERSION}/pdf.worker.min.mjs`;
 export interface PdfTextItem { str: string; transform: number[]; width: number; height: number }
-interface Cell { text: string; x: number; end: number; y: number; height: number }
+export interface PdfCell { text: string; x: number; end: number; y: number; height: number }
 type ColumnKey = 'account' | 'name' | 'debit' | 'credit' | 'signed' | 'side' | 'movementDebit' | 'movementCredit' | 'ignored';
 interface Column { key: ColumnKey; center: number; start: number }
 interface TableHeader { columns: Column[]; scope: 'final' | 'accumulated' }
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
 const problem = (message: string): never => { throw new Error(message); };
-const cellText = (cells: Cell[]) => cells.map(c => c.text).join(' ').trim();
+const cellText = (cells: PdfCell[]) => cells.map(c => c.text).join(' ').trim();
 const csvCell = (s: string) => `"${s.replaceAll('"', '""')}"`;
 
 /** Coordenadas de texto, sem executar JavaScript, ligações ou anexos do documento. */
-function pageRows(items: PdfTextItem[]): Cell[][] {
-  const cells: Cell[] = [];
+export function pdfPageRows(items: PdfTextItem[]): PdfCell[][] {
+  const cells: PdfCell[] = [];
   for (const item of items) {
     if (!item.str.trim()) continue;
     if (!item.transform.every(Number.isFinite) || !Number.isFinite(item.width)) problem('O PDF contém coordenadas de texto inválidas.');
@@ -29,7 +29,7 @@ function pageRows(items: PdfTextItem[]): Cell[][] {
     }
   }
   cells.sort((a, b) => b.y - a.y || a.x - b.x);
-  const rows: Cell[][] = [];
+  const rows: PdfCell[][] = [];
   for (const cell of cells) {
     const row = rows.at(-1), previous = row?.[0];
     if (!previous || Math.abs(previous.y - cell.y) > Math.min(2.5, Math.max(1, cell.height * 0.22))) rows.push([cell]);
@@ -44,7 +44,7 @@ const labels: [RegExp, ColumnKey][] = [
   [/^(?:D\s*\/\s*C|D\s*-\s*C|NATUREZA)$/, 'side'],
   [/^(?:MOV\.?\s*)?DEBITO(?: ACUMULADO)?$/, 'movementDebit'], [/^(?:MOV\.?\s*)?CREDITO(?: ACUMULADO)?$/, 'movementCredit'],
 ];
-function header(row: Cell[], preceding: Cell[][] = []): TableHeader | null {
+function header(row: PdfCell[], preceding: PdfCell[][] = []): TableHeader | null {
   const columns: Column[] = [];
   for (let i = 0; i < row.length; i++) {
     let found = false;
@@ -77,8 +77,8 @@ function header(row: Cell[], preceding: Cell[][] = []): TableHeader | null {
   if (!(count('debit') && count('credit')) && !count('signed')) return null;
   return {columns,scope};
 }
-function rowCells(row: Cell[], columns: Column[]): Map<ColumnKey, string> {
-  const buckets = new Map<ColumnKey, Cell[]>();
+function rowCells(row: PdfCell[], columns: Column[]): Map<ColumnKey, string> {
+  const buckets = new Map<ColumnKey, PdfCell[]>();
   for (const cell of row) {
     const center = (cell.x + cell.end) / 2;
     const name = columns.findIndex(c=>c.key==='name');
@@ -98,7 +98,7 @@ export function trialBalanceFromPdfPages(pages: PdfTextItem[][]): PdfTrialBalanc
   let scope: PdfTrialBalance['scope'] | undefined, period: HistoricalPeriod | undefined, entityName: string | undefined, currency: PdfTrialBalance['currency'], printedTotal: number | undefined;
   for (const [pageIndex, items] of pages.entries()) {
     if (items.length > 25_000) problem('O PDF tem demasiado texto numa página. Exporte um balancete mais curto.');
-    const rows = pageRows(items);
+    const rows = pdfPageRows(items);
     if (!rows.length) problem(`A página ${pageIndex + 1} não contém texto extraível. PDF digitalizados precisam de reconhecimento de texto (OCR).`);
     const pageText = norm(rows.map(cellText).join(' ')); characters += pageText.length;
     if (characters > 2_000_000) problem('O texto do PDF excede o limite de importação.');
@@ -178,7 +178,12 @@ export function trialBalanceFromPdfPages(pages: PdfTextItem[][]): PdfTrialBalanc
   return { text, accounts: parsed.lines.length, pages: pages.length, difference: parsed.diff, scope:scope||'final',...(period?{period}:{}),...(entityName?{entityName}:{}),...(currency?{currency}:{}) };
 }
 
-export async function extractPdfTrialBalance(buffer: ArrayBuffer, options: { signal?: AbortSignal; progress?: (page: number, total: number) => void } = {}): Promise<PdfTrialBalance> {
+export interface PdfReadOptions { signal?: AbortSignal; progress?: (page: number, total: number) => void }
+export function extractPdfTrialBalance(buffer: ArrayBuffer, options: PdfReadOptions = {}): Promise<PdfTrialBalance> {
+  return extractPdfContent(buffer, trialBalanceFromPdfPages, options);
+}
+
+export async function extractPdfContent<T>(buffer: ArrayBuffer, convert: (pages: PdfTextItem[][]) => T, options: PdfReadOptions = {}): Promise<T> {
   if (!buffer.byteLength || buffer.byteLength > PDF_IMPORT_LIMIT) problem('O PDF admite até 10 MB.');
   if (!new TextDecoder('latin1').decode(buffer.slice(0, 1024)).includes('%PDF-')) problem('O ficheiro seleccionado não é um PDF válido.');
   options.signal?.throwIfAborted();
@@ -193,7 +198,7 @@ export async function extractPdfTrialBalance(buffer: ArrayBuffer, options: { sig
   });
   try {
     return await Promise.race([(async () => {
-      const pdfjs = await import(/* @vite-ignore */ PDF_IMPORT_URL) as typeof import('pdfjs-dist');
+      const pdfjs = await import(/* webpackIgnore: true */ /* @vite-ignore */ PDF_IMPORT_URL) as typeof import('pdfjs-dist');
       if (stopped) throw new Error('Importação terminada.');
       options.signal?.throwIfAborted();
       port = new Worker(PDF_WORKER_URL, { type: 'module' });
@@ -212,7 +217,7 @@ export async function extractPdfTrialBalance(buffer: ArrayBuffer, options: { sig
         if (characters > 2_000_000) problem('O texto do PDF excede o limite de importação.');
         pages.push(items); page.cleanup();
       }
-      return trialBalanceFromPdfPages(pages);
+      return convert(pages);
     })(), interrupted]);
   } catch (error) {
     if ((error as Error).name === 'PasswordException') problem('O PDF está protegido por palavra-passe. Exporte uma cópia sem protecção para importar.');

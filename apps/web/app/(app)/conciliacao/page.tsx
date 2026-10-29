@@ -68,7 +68,7 @@ export default async function Conciliacao({ searchParams }: { searchParams: Prom
         <div className="card kpi"><div className="l">Conciliados</div><div className="v">{rec.summary.matched}</div><div className="muted">{rec.summary.outOfScope} fora do âmbito (não são de pessoal)</div></div>
       </div>
 
-      {canEdit && <StatementImport accountId={acc.id} />}
+      {canEdit && <StatementImport key={acc.id} accountId={acc.id} />}
 
       {withCandidate.length > 0 && (
         <div className="card section">

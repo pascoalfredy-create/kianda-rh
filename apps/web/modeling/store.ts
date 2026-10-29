@@ -139,6 +139,12 @@ export class ModelingStore {
     this.entries.get(id)!.revision = result.model.revision;
     return result.historical;
   }
+  async removeHistory(id: string) {
+    this.writable(id);
+    await this.flush(id);
+    const result = await this.request<{ model: ModelRecord; historical: null }>(`/models/${encodeURIComponent(id)}/history`, 'DELETE', { revision: this.revision(id) });
+    this.entries.get(id)!.revision = result.model.revision;
+  }
   async createFromHistory(id: string) {
     this.writable(id);
     await this.flush();

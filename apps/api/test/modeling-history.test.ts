@@ -47,6 +47,9 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: balancetes por projecto e r
     expect((await req('GET', `/v1/modeling/models/${modelId}/history`, undefined, other)).statusCode).toBe(404);
     expect((await history(2, historicalInput, other)).statusCode).toBe(404);
     expect((await history(2, historicalInput, viewer)).statusCode).toBe(403);
+    expect((await req('DELETE', `/v1/modeling/models/${modelId}/history`, { revision: 2 }, viewer)).statusCode).toBe(403);
+    expect((await req('DELETE', `/v1/modeling/models/${modelId}/history`, { revision: 2 }, other)).statusCode).toBe(404);
+    expect((await req('DELETE', `/v1/modeling/models/${modelId}/history`, { revision: 1 })).statusCode).toBe(409);
     expect((await req('POST', `/v1/modeling/models/${modelId}/history/to-model`, { revision: 2 }, viewer)).statusCode).toBe(403);
     expect((await withTenant(otherCompany, () => getDb().execute(sql`select id from financial_historical_inputs where model_id=${modelId}`))).rows).toEqual([]);
     // Este projecto não tem histórico: a recusa testa a pertença à empresa, não um conflito UNIQUE.
@@ -118,5 +121,31 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: balancetes por projecto e r
     const repeated=await req('PUT',`/v1/modeling/models/${id}/history`,{revision:3,input:{...compared,periods:{...compared.periods,N1:input.periods.N}}},cookie);expect(repeated.statusCode).toBe(422);
     const preserved=await req('GET',`/v1/modeling/models/${id}/history`,undefined,cookie);expect(preserved.json().revision).toBe(3);expect(preserved.json().historical.analysis.input).toEqual(compared);
     const unchanged=await req('GET',`/v1/modeling/models/${id}`,undefined,cookie);expect(unchanged.json().assumptions).toEqual({});expect(unchanged.json().currency).toBe('USD');
+  });
+  it('remove a análise, conserva versões aprovadas e pressupostos e permite nova importação', async () => {
+    const created = await req('POST', '/v1/modeling/models', { name: 'Documento a substituir', sector: 'servicos', currency: 'Kz', assumptions: financialTemplate('servicos').assumptions }, other);
+    expect(created.statusCode).toBe(201); const id = created.json().id;
+    const saved = await req('PUT', `/v1/modeling/models/${id}/history`, { revision: 1, input: historicalInput }, other);
+    expect(saved.statusCode).toBe(200);
+    const version = await req('POST', `/v1/modeling/models/${id}/versions`, { revision: 2, label: 'Origem aprovada' }, other);
+    expect(version.statusCode).toBe(201);
+    const pdfPath = `/v1/modeling/models/${id}/reports/analise?version=${version.json().id}`;
+    const before = (await req('GET', pdfPath, undefined, other)).bytes;
+    const removed = await req('DELETE', `/v1/modeling/models/${id}/history`, { revision: 2 }, other);
+    expect(removed.statusCode).toBe(200); expect(removed.json()).toMatchObject({ model: { revision: 3, assumptions: created.json().assumptions }, historical: null });
+    expect((await req('GET', `/v1/modeling/models/${id}/history`, undefined, other)).json()).toEqual({ revision: 3, historical: null });
+    expect((await req('GET', `/v1/modeling/models/${id}/reports/analise`, undefined, other)).statusCode).toBe(422);
+    expect((await req('GET', pdfPath, undefined, other)).bytes).toEqual(before);
+    expect((await req('DELETE', `/v1/modeling/models/${id}/history`, { revision: 3 }, other)).json().model.revision).toBe(3);
+    const audit = await withTenant(otherCompany, () => getDb().execute(sql`select count(*)::int as n from audit_logs where entity_id=${id} and action='remove_trial_balance'`));
+    expect(audit.rows[0]!.n).toBe(1);
+    expect((await req('PUT', `/v1/modeling/models/${id}/history`, { revision: 3, input: historicalInput }, other)).statusCode).toBe(200);
+    const raced = await Promise.all([
+      req('DELETE', `/v1/modeling/models/${id}/history`, { revision: 4 }, other),
+      req('PUT', `/v1/modeling/models/${id}/history`, { revision: 4, input: { ...historicalInput, empresa: 'Substituição simultânea' } }, other),
+    ]);
+    expect(raced.map(r => r.statusCode).sort()).toEqual([200, 409]);
+    expect((await req('POST', `/v1/modeling/models/${id}/archive`, { revision: 5, archived: true }, other)).statusCode).toBe(200);
+    expect((await req('DELETE', `/v1/modeling/models/${id}/history`, { revision: 6 }, other)).json().error).toBe('projecto_arquivado');
   });
 });

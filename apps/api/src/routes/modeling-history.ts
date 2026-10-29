@@ -35,6 +35,17 @@ export function modelingHistoryRoutes() {
     await db.insert(auditLogs).values({ companyId: model.companyId, actorId: actor.actorId, action: 'import_trial_balance', entity: 'financial_model', entityId: model.id, before: { historicalHash: before?.inputHash ?? null }, after: { historicalHash: inputHash, revision: updated!.revision, years: analysis.input.anos, currency: analysis.input.moeda } });
     return c.json({ model: updated, historical: { inputHash, updatedAt, analysis } });
   });
+  app.delete('/v1/modeling/models/:id/history', async (c) => {
+    const input = z.object({ revision }).parse(await body(c)), db = getDb(), actor = c.get('actor');
+    await lockModelingCompany(db, actor.companyId);
+    const model = await lockedModel(c, input.revision);
+    const [before] = await db.select({ inputHash: financialHistoricalInputs.inputHash }).from(financialHistoricalInputs).where(and(eq(financialHistoricalInputs.companyId, model.companyId), eq(financialHistoricalInputs.modelId, model.id)));
+    if (!before) return c.json({ model, historical: null });
+    await db.delete(financialHistoricalInputs).where(and(eq(financialHistoricalInputs.companyId, model.companyId), eq(financialHistoricalInputs.modelId, model.id)));
+    const [updated] = await db.update(financialModels).set({ revision: model.revision + 1, updatedAt: new Date() }).where(eq(financialModels.id, model.id)).returning();
+    await db.insert(auditLogs).values({ companyId: model.companyId, actorId: actor.actorId, action: 'remove_trial_balance', entity: 'financial_model', entityId: model.id, before: { historicalHash: before.inputHash }, after: { historicalHash: null, revision: updated!.revision } });
+    return c.json({ model: updated, historical: null });
+  });
   app.post('/v1/modeling/models/:id/history/to-model', async (c) => {
     const input = z.object({ revision }).parse(await body(c)), db = getDb(), actor = c.get('actor');
     // Ordem de bloqueios igual à criação/arquivo: empresa antes de projecto.
