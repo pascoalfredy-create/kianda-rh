@@ -21,7 +21,7 @@ export function AppShell({ me, counts, children }: { me: Me; counts: { absences:
   const side = useRef<HTMLElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
   useEffect(() => { setOpen(false); setNotices(false); }, [path, search]);
-  useEffect(() => { setExpanded(previous => previous[activeGroup] ? previous : { ...previous, [activeGroup]: true }); }, [activeGroup]);
+  useEffect(() => { setExpanded({ [activeGroup]: true }); }, [activeGroup]);
   useEffect(() => {
     if (!open) return;
     const before = document.body.style.overflow;
@@ -45,7 +45,7 @@ export function AppShell({ me, counts, children }: { me: Me; counts: { absences:
       <div className="logo"><div className="mark">K</div><div><b>Kianda RH</b><small>Gestão de Pessoas · Angola</small></div></div>
       <div className="company-card"><small>Empresa</small><b>{me.company?.name ?? '—'}</b><small>NIF {me.company?.nif ?? '—'}</small></div>
       <nav>{groups.map((g, index) => <div key={g.label} className="nav-group">
-        <button className="nav-group-toggle" aria-expanded={!!expanded[g.label]} aria-controls={`rh-nav-${index}`} onClick={() => setExpanded(previous => ({ ...previous, [g.label]: !previous[g.label] }))}>
+        <button className="nav-group-toggle" aria-expanded={!!expanded[g.label]} aria-controls={`rh-nav-${index}`} onClick={() => setExpanded(previous => ({ [g.label]: !previous[g.label] }))}>
           <span>{g.label}</span><span className="nav-chevron" aria-hidden="true">⌄</span>
         </button>
         <div id={`rh-nav-${index}`} hidden={!expanded[g.label]}>{g.items.map(item => <NavigationItem key={item.href} item={item} active={navActive(item.href, path, new URLSearchParams(search.toString()))} onNavigate={() => setOpen(false)} />)}</div>

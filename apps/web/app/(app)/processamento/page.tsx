@@ -1,7 +1,7 @@
 import { formatKz } from '@kianda/core';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { api, currentUser, preloadApi } from '@/lib/api';
+import { actorFromApi, api, apiWithActor, ApiError } from '@/lib/api';
 import { currentPeriod, monthLabel, shiftMonth } from '@/lib/format';
 import { PAYROLL_ROLES, VARIABLE_LABEL, type EmployeeRow, type JournalRow, type PayrollLineRow, type PayrollRunDetail, type PayrollVariableRow } from '@/lib/types';
 import { AddVariable, CloseButton, DeleteVariable, PrepareButton, SubsidyToggle } from './actions';
@@ -14,18 +14,18 @@ const k = (v: number) => (v ? formatKz(v).replace(' Kz', '') : '—');
 export default async function Processamento({ searchParams }: { searchParams: Promise<{ mes?: string; s?: string }> }) {
   const sp = await searchParams;
   const period = sp.mes ?? currentPeriod();
-  preloadApi(`/v1/payroll-runs?period=${period}`, `/v1/payroll-variables?period=${period}`);
-  const me = (await currentUser())!;
-  const role = me.user.role;
+  const opening = await apiWithActor<{ run: PayrollRunDetail | null; variables: PayrollVariableRow[] }>(`/v1/payroll-runs/opening?period=${period}`).catch((error) => {
+    if (error instanceof ApiError && error.actor && !PAYROLL_ROLES.includes(error.actor.role)) redirect('/');
+    throw error;
+  });
+  const actor = await actorFromApi(opening);
+  if (!actor) redirect('/login');
+  const role = actor.role;
   if (!PAYROLL_ROLES.includes(role)) redirect('/');
   const tab = sp.s ?? 'resumo';
   const canPrepare = role === 'owner' || role === 'payroll';
   const canClose = role === 'owner' || role === 'finance';
-  const [foundRows, variables] = await Promise.all([
-    api<{ id: string }[]>(`/v1/payroll-runs?period=${period}`), api<PayrollVariableRow[]>(`/v1/payroll-variables?period=${period}`),
-  ]);
-  const [found] = foundRows;
-  const run = found ? await api<PayrollRunDetail>(`/v1/payroll-runs/${found.id}`) : null;
+  const { run, variables } = opening.data;
   const draft = run?.status === 'draft';
 
   return (
@@ -49,7 +49,7 @@ export default async function Processamento({ searchParams }: { searchParams: Pr
         </span>
         {canPrepare && (!run || draft) && <PrepareButton period={period} label={run ? 'Recalcular' : 'Preparar processamento'} />}
         {run?.status === 'closed' && <Link href="/obrigacoes" className="btn ghost">Pagamentos e mapas →</Link>}
-        {canClose && draft && <CloseButton runId={run!.id} period={period} selfPrepared={run!.preparedBy === me.user.sub} />}
+        {canClose && draft && <CloseButton runId={run!.id} period={period} selfPrepared={run!.preparedBy === actor.sub} />}
       </div>
 
       {run && run.warnings.length > 0 && (

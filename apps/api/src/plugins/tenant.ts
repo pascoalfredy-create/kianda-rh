@@ -68,6 +68,10 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
     if (blocked && (await moduleLicence(getDb(), claims.companyId, 'modeling')).canWrite) blocked = null;
   }
   if (blocked) return c.json({ error: 'licenca_inactiva', message: blocked }, 402);
+  // Metadados da sessão já verificada para o servidor web; nunca são lidos de cabeçalhos do cliente.
+  c.header('X-Kianda-Role', claims.role);
+  c.header('X-Kianda-User', claims.sub);
+  c.header('X-Kianda-Employee', claims.employeeId ?? '');
   // A consola da plataforma vê todas as empresas (o acesso é verificado a seguir: só administradores Kianda).
   if (c.req.path.startsWith('/v1/platform/')) { c.set('companyGuarded', true); return next(); }
   // Segurança por empresa na base de dados (RLS): o pedido corre numa transacção restrita à empresa da sessão.

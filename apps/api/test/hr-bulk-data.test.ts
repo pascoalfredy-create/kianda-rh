@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { absences, attendanceEntries, attendanceMonths, closeDb, companyModules, contracts, employees, eq, expenseClaims, getDb, measureQueries, payrollLines, payrollPayments, payrollRuns, payrollVariables, subscriptions, withTenant, workSchedules } from '@kianda/db';
+import { absences, attendanceEntries, attendanceMonths, closeDb, companyModules, compensationChanges, contracts, employeeDocuments, employees, eq, expenseClaims, getDb, measureQueries, payrollLines, payrollPayments, payrollRuns, payrollVariables, subscriptions, withTenant, workSchedules } from '@kianda/db';
 import { buildApp } from '../src/app.js';
 import { testClient, type InjectResponse } from './inject.js';
 
@@ -122,6 +122,55 @@ describe.skipIf(!process.env.DATABASE_URL)('leituras RH em conjunto: resultados,
     expect(rows.find((e: { id: string }) => e.id === ids[3])).toMatchObject({ contract: null, alerts: ['Sem contrato registado'] });
   });
 
+  it('abre a assiduidade com os mesmos dados e permissões, numa única chamada', async () => {
+    for (const cookie of [owner, sessions.get('manager')!, sessions.get('hr')!, other]) {
+      const opening = await request(cookie, 'GET', '/v1/attendance/opening?period=2026-09');
+      expect(opening.statusCode).toBe(200);
+      expect(opening.json()).toEqual({ tab: 'equipa', sheet: null, rows: (await request(cookie, 'GET', '/v1/attendance/overview?period=2026-09')).json() });
+    }
+    const employee = sessions.get('employee')!;
+    expect((await request(employee, 'GET', '/v1/attendance/opening?period=2026-09')).json()).toEqual({
+      tab: 'meu', rows: null, sheet: (await request(employee, 'GET', '/v1/attendance/sheet?period=2026-09')).json(),
+    });
+    // Forçar o separador da equipa não dá ao colaborador os dados dos colegas.
+    expect((await request(employee, 'GET', '/v1/attendance/opening?period=2026-09&tab=equipa')).json()).toEqual({ tab: 'equipa', rows: null, sheet: null });
+    expect((await request(sessions.get('unlinked')!, 'GET', '/v1/attendance/opening?period=2026-09&tab=meu')).json()).toEqual({ tab: 'meu', rows: null, sheet: null });
+  });
+
+  it('os metadados vêm da sessão assinada, mesmo com cabeçalhos de perfil falsificados', async () => {
+    const cookie = sessions.get('employee')!;
+    const me = (await request(cookie, 'GET', '/v1/auth/me')).json();
+    const headers = { cookie, 'X-Kianda-Role': 'owner', 'X-Kianda-User': actorId, 'X-Kianda-Employee': ids[0]! };
+    const opening = await app.inject({ method: 'GET', url: '/v1/attendance/opening?period=2026-09', headers });
+    expect(opening.statusCode).toBe(200);
+    expect(opening.headers['x-kianda-role']).toBe('employee');
+    expect(opening.headers['x-kianda-user']).toBe(me.user.sub);
+    expect(opening.headers['x-kianda-employee']).toBe(ids[1]);
+    expect(opening.json().sheet.employee.id).toBe(ids[1]);
+    const payroll = await app.inject({ method: 'GET', url: '/v1/payroll-runs/opening?period=2026-09', headers });
+    expect(payroll.statusCode).toBe(403);
+    expect(payroll.headers['x-kianda-role']).toBe('employee');
+    expect((await app.inject({ method: 'GET', url: '/v1/attendance/opening?period=2026-09', headers: { 'X-Kianda-Role': 'owner' } })).statusCode).toBe(401);
+  });
+
+  it('a leitura conjunta conserva a remuneração em vigor e os alertas de documentos', async () => {
+    await withTenant(companyId, async () => {
+      await getDb().insert(compensationChanges).values([
+        { companyId, employeeId: ids[0]!, effectiveDate: '2025-01-01', baseMinor: 42000000, reason: 'Inicial', createdBy: actorId },
+        { companyId, employeeId: ids[0]!, effectiveDate: '2026-01-01', baseMinor: 44000000, reason: 'Aumento', createdBy: actorId },
+        { companyId, employeeId: ids[0]!, effectiveDate: '2099-01-01', baseMinor: 99000000, reason: 'Futuro', createdBy: actorId },
+      ]);
+      await getDb().insert(employeeDocuments).values({ companyId, employeeId: ids[0]!, type: 'passport', number: 'SINTETICO', expiryDate: '2020-01-01' });
+    });
+    const r = await measureQueries(() => request(owner, 'GET', '/v1/employees'));
+    expect(r.value.statusCode).toBe(200);
+    expect(r.queries).toBeLessThanOrEqual(6); // Licença, uma leitura dos dados e transacção RLS.
+    const employee = r.value.json().find((e: { id: string }) => e.id === ids[0]);
+    expect(employee.contract.baseMinor).toBe(44000000);
+    expect(employee.alerts.some((a: string) => a.includes('Passaporte') && a.includes('caducou'))).toBe(true);
+    expect((await request(other, 'GET', '/v1/employees')).json().some((e: { id: string }) => ids.includes(e.id))).toBe(false);
+  });
+
   it('mantém as restrições de licença, incluindo nas rotas com middleware repetido', async () => {
     await withTenant(companyId, () => getDb().update(subscriptions).set({ status: 'cancelled' }).where(eq(subscriptions.companyId, companyId)));
     try {
@@ -166,5 +215,19 @@ describe.skipIf(!process.env.DATABASE_URL)('leituras RH em conjunto: resultados,
     expect((await request(owner, 'POST', '/v1/payroll-runs', { period: '2026-07' })).statusCode).toBe(422);
     const after = await withTenant(companyId, () => getDb().select().from(payrollLines));
     expect(after).toEqual(before);
+  });
+
+  it('abre a folha e as variáveis sem alterar os valores nem o isolamento entre empresas', async () => {
+    const opening = await measureQueries(() => request(owner, 'GET', '/v1/payroll-runs/opening?period=2026-07'));
+    expect(opening.value.statusCode).toBe(200);
+    const data = opening.value.json();
+    expect(data.run.lines).toHaveLength(3);
+    expect(data.variables).toHaveLength(2);
+    expect(data.run).toEqual((await request(owner, 'GET', `/v1/payroll-runs/${data.run.id}`)).json());
+    expect(data.variables).toEqual((await request(owner, 'GET', '/v1/payroll-variables?period=2026-07')).json());
+    expect(opening.queries).toBeLessThanOrEqual(9);
+    expect((await request(other, 'GET', '/v1/payroll-runs/opening?period=2026-07')).json()).toEqual({ run: null, variables: [] });
+    expect((await request(sessions.get('manager')!, 'GET', '/v1/payroll-runs/opening?period=2026-07')).statusCode).toBe(403);
+    expect((await request(owner, 'GET', '/v1/payroll-runs/opening?period=errado')).statusCode).toBe(400);
   });
 });

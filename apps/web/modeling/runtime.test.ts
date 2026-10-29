@@ -61,6 +61,7 @@ describe('runtime do protótipo ligado à API', () => {
     expect(ui.node('#nav').innerHTML).toContain('aria-controls="integra-nav-1"');
     await ui.act('navToggle', { group: '1' });
     expect(ui.node('#nav').innerHTML).toContain('id="integra-nav-1">');
+    expect(ui.node('#nav').innerHTML).toContain('id="integra-nav-0" hidden');
     expect(ui.node('#view').innerHTML).toBe(view);
     expect(ui.requests).toHaveLength(requestCount);
     await ui.act('navToggle', { group: '1' });
