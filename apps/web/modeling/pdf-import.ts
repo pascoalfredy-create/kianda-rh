@@ -198,7 +198,7 @@ export async function extractPdfContent<T>(buffer: ArrayBuffer, convert: (pages:
   });
   try {
     return await Promise.race([(async () => {
-      const pdfjs = await import(/* @vite-ignore */ PDF_IMPORT_URL) as typeof import('pdfjs-dist');
+      const pdfjs = await import(/* webpackIgnore: true */ /* @vite-ignore */ PDF_IMPORT_URL) as typeof import('pdfjs-dist');
       if (stopped) throw new Error('Importação terminada.');
       options.signal?.throwIfAborted();
       port = new Worker(PDF_WORKER_URL, { type: 'module' });
