@@ -49,20 +49,6 @@ export function RenewForm({ prices, currentTier, currentCycle, activeEmployees, 
   );
 }
 
-export function ExtraSeatsForm({ priceMinor }: { priceMinor: number | null }) {
-  const { busy, error, run } = useMutation();
-  const [seats, setSeats] = useState(5);
-  if (!priceMinor) return <p className="muted">O valor por colaborador extra é definido pela Kianda. Contacte o suporte se precisar de ultrapassar o limite do escalão.</p>;
-  return (
-    <div className="form" style={{ gridTemplateColumns: '160px 1fr auto', alignItems: 'end' }}>
-      <label>Colaboradores extra<input type="number" min={1} value={seats} onChange={(e) => setSeats(Math.max(1, Number(e.target.value) || 1))} /></label>
-      <div>Pagamento único: <b>{formatKz(priceMinor * seats)}</b> <span className="muted">({formatKz(priceMinor)} por colaborador)</span></div>
-      <button className="btn ghost" disabled={busy} onClick={() => run('/v1/billing/requests', 'POST', { kind: 'extra_seats', seats })}>Gerar pedido</button>
-      {error && <span className="err wide">{error}</span>}
-    </div>
-  );
-}
-
 export function ReferenceForm({ id }: { id: string }) {
   const { busy, error, run } = useMutation();
   return (

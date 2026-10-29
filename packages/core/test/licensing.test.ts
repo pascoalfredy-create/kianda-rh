@@ -37,8 +37,7 @@ describe('licenças', () => {
     expect(effectiveStatus(p, '2027-01-09')).toBe('suspended');
     expect(effectiveStatus({ ...p, status: 'suspended' }, '2026-12-01')).toBe('suspended');
   });
-  it('limite de colaboradores com extras', () => {
-    expect(employeeLimit(DEFAULT_TIERS[0]!, 5)).toBe(105);
-    expect(employeeLimit(DEFAULT_TIERS[4]!, 0)).toBeNull();
+  it('limite de colaboradores corresponde apenas à faixa contratada', () => {
+    expect(DEFAULT_TIERS.map(employeeLimit)).toEqual([100, 250, 500, 1000, null]);
   });
 });

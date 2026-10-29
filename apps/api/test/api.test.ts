@@ -1183,11 +1183,11 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(r.json()).toMatchObject({ amountMinor: 95_999_000, discountMinor: 23_999_800, status: 'pending', number: expect.stringMatching(/^PF-/) });
       const me = (await get(owner, '/v1/auth/me')).json();
       expect(r.json().periodStart > me.licence.trialEndsAt).toBe(true); // começa depois do experimental
-      expect((await get(financeUser, '/v1/billing')).json().extraSeatMinor).toBe(300_000); // 3 000 Kz por omissão
+      expect((await get(financeUser, '/v1/billing')).json()).not.toHaveProperty('extraSeatMinor');
       expect((await post(financeUser, `/v1/billing/requests/${r.json().id}/reference`, { payerReference: 'TRF BAI 778899' })).json().payerReference).toBe('TRF BAI 778899');
     });
 
-    it('consola: só administradores; confirmar o pagamento activa a licença; extras com preço definido', async () => {
+    it('consola: só administradores; confirmar o plano activa a licença, sem venda de extras', async () => {
       expect((await get(owner, '/v1/platform/companies')).statusCode).toBe(403);
       await getDb().insert(platformAdmins).values({ email: `dona+${stamp}@a.ao` }).onConflictDoNothing();
       expect((await get(owner, '/v1/auth/me')).json().platformAdmin).toBe(true);
@@ -1198,11 +1198,12 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(ok.json().status).toBe('paid');
       const b = (await get(financeUser, '/v1/billing')).json();
       expect(b).toMatchObject({ status: 'active', cycle: 'annual', paidUntil: pending.periodEnd });
-      await app.inject({ method: 'PUT', url: '/v1/platform/settings', headers: as(owner), payload: { extraSeatMinor: 500_000, bank: { holder: 'Kianda RH, Lda.', bankName: 'BAI', iban: 'AO06004000005521889010252' }, supportEmail: 'suporte@kianda.ao', supportPhone: '+244 923 000 000' } });
+      await app.inject({ method: 'PUT', url: '/v1/platform/settings', headers: as(owner), payload: { bank: { holder: 'Kianda RH, Lda.', bankName: 'BAI', iban: 'AO06004000005521889010252' }, supportEmail: 'suporte@kianda.ao', supportPhone: '+244 923 000 000' } });
       const extra = await post(financeUser, '/v1/billing/requests', { kind: 'extra_seats', seats: 10 });
-      expect(extra.json()).toMatchObject({ amountMinor: 5_000_000 });
-      await post(owner, `/v1/platform/payment-requests/${extra.json().id}/confirm`, {});
-      expect((await get(financeUser, '/v1/billing')).json()).toMatchObject({ extraSeats: 10, limit: 110 });
+      expect(extra.statusCode).toBe(400);
+      const fixed = (await get(financeUser, '/v1/billing')).json();
+      expect(fixed.limit).toBe(100);
+      expect(fixed).not.toHaveProperty('extraSeats');
     });
 
     it('licença suspensa: só consulta (escrever dá 402), mas pode tratar da licença; limite de colaboradores', async () => {
@@ -1214,10 +1215,10 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect((await post(financeUser, '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'monthly' })).statusCode).toBe(201);
       await patch(owner, `/v1/platform/companies/${companyId}/subscription`, { status: 'active' });
       const n = (await get(owner, '/v1/employees')).json().filter((e: { status: string }) => e.status === 'active').length;
-      await patch(owner, `/v1/platform/companies/${companyId}/subscription`, { tierKey: 'custom', customMaxEmployees: n, extraSeats: 0 });
+      await patch(owner, `/v1/platform/companies/${companyId}/subscription`, { tierKey: 'custom', customMaxEmployees: n });
       const over = await post(owner, '/v1/employees', { number: '999', name: 'Excedente', jobTitle: 'Teste', contract: { type: 'indefinite', startDate: '2026-11-02', base: 150000 } });
       expect(over.json().error).toBe('limite_colaboradores');
-      await patch(owner, `/v1/platform/companies/${companyId}/subscription`, { tierKey: 't1', extraSeats: 10 });
+      await patch(owner, `/v1/platform/companies/${companyId}/subscription`, { tierKey: 't1' });
     });
 
     it('logotipo para o papel timbrado: só PNG/JPEG', async () => {
@@ -1516,12 +1517,12 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect((invoices[0] as { items: { gross_price: string; tax_id: string }[] }).items[0]).toMatchObject({ gross_price: (paid.amountMinor / 100).toFixed(2), tax_id: 'NOR' });
       const pdf = await get(financeUser, `/v1/billing/requests/${paid.id}/invoice`);
       expect(pdf.headers['content-type']).toBe('application/pdf');
-      // Sincronização (rede de segurança do webhook): colaboradores extra pagos → aplicado, factura automática, pagamento reconhecido.
-      const extra = (await post(financeUser, '/v1/billing/requests', { kind: 'extra_seats', seats: 2 })).json();
-      queue = [{ id: pid(3), reference_id: Number(extra.gatewayReference), amount: (extra.amountMinor / 100).toFixed(2) }];
+      // Sincronização: renovação da faixa fixa → aplicada, factura automática, pagamento reconhecido.
+      const renewal = (await post(financeUser, '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'monthly' })).json();
+      queue = [{ id: pid(3), reference_id: Number(renewal.gatewayReference), amount: (renewal.amountMinor / 100).toFixed(2) }];
       expect((await post(owner, '/v1/platform/gateway/sync')).json()).toMatchObject({ enabled: true, processed: 1, applied: 1, issues: 0 });
       expect(acked).toContain(String(pid(3)));
-      const after = (await get(financeUser, '/v1/billing')).json().requests.find((x: { id: string }) => x.id === extra.id);
+      const after = (await get(financeUser, '/v1/billing')).json().requests.find((x: { id: string }) => x.id === renewal.id);
       expect(after).toMatchObject({ status: 'paid', invoiceRef: 'FR KRH2026/2' });
     });
 
