@@ -116,11 +116,13 @@ describe.skipIf(!process.env.DATABASE_URL)('leituras RH em conjunto: resultados,
       expect((await request(owner, 'GET', '/v1/employees')).statusCode).toBe(200);
       expect((await request(owner, 'POST', '/v1/employees', {})).statusCode).toBe(402);
     } finally { await withTenant(companyId, () => getDb().update(subscriptions).set({ status: 'trial' }).where(eq(subscriptions.companyId, companyId))); }
-    await withTenant(companyId, () => getDb().update(companyModules).set({ enabled: false }).where(eq(companyModules.companyId, companyId)));
+    // O perfil RLS da empresa não pode alterar as licenças; só a preparação administrativa do teste o faz.
+    await expect(withTenant(companyId, () => getDb().update(companyModules).set({ enabled: false }).where(eq(companyModules.companyId, companyId)))).rejects.toThrow();
+    await getDb().update(companyModules).set({ enabled: false }).where(eq(companyModules.companyId, companyId));
     try {
       expect((await request(owner, 'GET', '/v1/employees')).statusCode).toBe(403);
       expect((await request(owner, 'GET', '/v1/notifications/counts')).statusCode).toBe(403);
-    } finally { await withTenant(companyId, () => getDb().update(companyModules).set({ enabled: true }).where(eq(companyModules.companyId, companyId))); }
+    } finally { await getDb().update(companyModules).set({ enabled: true }).where(eq(companyModules.companyId, companyId)); }
   });
 
   it('agrega vários meses sem mais consultas, com totais grandes, meses vazios e pagamento', async () => {
