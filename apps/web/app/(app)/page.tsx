@@ -23,28 +23,25 @@ export default async function Home() {
   const deadlines = fiscal ? payrollDeadlines(period, fiscal) : null;
   const nextHolidays = [...labourRules('AO', year).holidays, ...labourRules('AO', year + 1).holidays].filter((h) => h.date >= today).slice(0, 4);
 
-  const [awaiting, current, balances] = await Promise.all([
+  const decider = ['owner', 'hr_admin', 'manager'].includes(me.user.role);
+  const finance = ['owner', 'payroll', 'finance', 'hr_admin'].includes(me.user.role);
+  const [awaiting, current, balances, obligationRuns, expenseApprovals, toReimburse, inbox, overview, people] = await Promise.all([
     api<AbsenceRow[]>('/v1/absences?awaitingMe=1').catch(() => []),
     api<AbsenceRow[]>(`/v1/absences?from=${today}&to=${today}&status=approved`).catch(() => []),
     api<BalanceRow[]>(`/v1/leave/balances?year=${year}`).catch(() => []),
+    finance ? api<{ obligations: { status: string; amountMinor: number; paidAt: string | null; reconciled: boolean | null }[] }[]>('/v1/obligations').catch(() => []) : Promise.resolve([]),
+    decider ? api<unknown[]>('/v1/expenses?scope=approve').catch(() => []) : Promise.resolve([]),
+    ['owner', 'finance'].includes(me.user.role) ? api<{ totalMinor: number }[]>('/v1/expenses?scope=pay').catch(() => []) : Promise.resolve([]),
+    ['owner', 'hr_admin'].includes(me.user.role) ? api<{ documents: unknown[]; profiles: unknown[] }>('/v1/portal/inbox').catch(() => ({ documents: [], profiles: [] })) : Promise.resolve({ documents: [], profiles: [] }),
+    api<PersonnelOverview>('/v1/reports/overview').catch(() => null),
+    api<EmployeeRow[]>('/v1/employees').catch(() => []),
   ]);
-  const mine = balances.find((b) => b.employee.id === me.user.employeeId);
-  const obligations = ['owner', 'payroll', 'finance', 'hr_admin'].includes(me.user.role)
-    ? (await api<{ obligations: { status: string; amountMinor: number; paidAt: string | null; reconciled: boolean | null }[] }[]>('/v1/obligations').catch(() => [])).flatMap((r) => r.obligations)
-    : [];
-  const late = obligations.filter((o) => o.status === 'overdue');
-  const soon = obligations.filter((o) => o.status === 'due_soon');
-  const decider = ['owner', 'hr_admin', 'manager'].includes(me.user.role);
-  const expenseApprovals = decider ? await api<unknown[]>('/v1/expenses?scope=approve').catch(() => []) : [];
-  const toReimburse = ['owner', 'finance'].includes(me.user.role) ? await api<{ totalMinor: number }[]>('/v1/expenses?scope=pay').catch(() => []) : [];
+  const mine = balances.find(b => b.employee.id === me.user.employeeId);
+  const obligations = obligationRuns.flatMap(r => r.obligations);
+  const late = obligations.filter(o => o.status === 'overdue'), soon = obligations.filter(o => o.status === 'due_soon');
   const proofLimit = new Date(Date.now() - 5 * 86_400_000).toISOString().slice(0, 10);
-  const noProof = ['owner', 'finance'].includes(me.user.role) ? obligations.filter((o) => o.paidAt && o.reconciled === false && o.paidAt < proofLimit) : [];
-  const staff = me.user.role !== 'employee';
-  const inbox = ['owner', 'hr_admin'].includes(me.user.role) ? await api<{ documents: unknown[]; profiles: unknown[] }>('/v1/portal/inbox').catch(() => ({ documents: [], profiles: [] })) : { documents: [], profiles: [] };
+  const noProof = ['owner', 'finance'].includes(me.user.role) ? obligations.filter(o => o.paidAt && o.reconciled === false && o.paidAt < proofLimit) : [];
   const portalPending = inbox.documents.length + inbox.profiles.length;
-
-  const overview = await api<PersonnelOverview>('/v1/reports/overview').catch(() => null);
-  const people = await api<EmployeeRow[]>('/v1/employees').catch(() => []);
   const financial = overview?.financial;
   const alerts = people.flatMap(e => e.alerts.map(message => ({ id: e.id, name: e.name, message })));
   const hour = Number(new Date().toLocaleTimeString('en-GB', { hour: '2-digit', hourCycle: 'h23', timeZone: 'Africa/Luanda' }));

@@ -60,8 +60,6 @@ export async function licenceBlocks(db: Db, companyId: string, method: string, p
 }
 
 export async function isPlatformAdmin(db: Db, userId: string): Promise<boolean> {
-  const [u] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId));
-  if (!u?.email) return false;
-  const [a] = await db.select().from(platformAdmins).where(eq(platformAdmins.email, u.email.toLowerCase()));
+  const [a] = await db.select({ email: platformAdmins.email }).from(users).innerJoin(platformAdmins, eq(platformAdmins.email, sql`lower(${users.email})`)).where(eq(users.id, userId));
   return Boolean(a);
 }

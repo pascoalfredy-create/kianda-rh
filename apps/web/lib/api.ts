@@ -1,4 +1,5 @@
 import 'server-only';
+import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { upstream } from './upstream';
 import type { CompanyModulesOverview } from '@kianda/core';
@@ -9,7 +10,7 @@ export class ApiError extends Error {
 }
 
 /** Chamada à API a partir de componentes de servidor, reenviando o cookie de sessão do utilizador. */
-export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function requestJson(path: string, init: RequestInit = {}): Promise<unknown> {
   const session = (await cookies()).get(SESSION_COOKIE)?.value;
   const res = await upstream(path, {
     ...init,
@@ -17,7 +18,14 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     cache: 'no-store',
   });
   if (!res.ok) throw new ApiError(res.status, (await res.json().catch(() => ({}))).message ?? `Erro ${res.status}`);
-  return res.json() as Promise<T>;
+  return res.json();
+}
+
+// React limita esta reutilização à renderização corrente: sem cache entre empresas,
+// sessões ou pedidos. Escritas e chamadas com opções continuam sempre a executar.
+const readJson = cache((path: string) => requestJson(path));
+export function api<T>(path: string, init?: RequestInit): Promise<T> {
+  return (init === undefined ? readJson(path) : requestJson(path, init)) as Promise<T>;
 }
 
 export interface Me {
@@ -28,6 +36,6 @@ export interface Me {
   modules: CompanyModulesOverview;
 }
 
-export async function currentUser(): Promise<Me | null> {
+export const currentUser = cache(async (): Promise<Me | null> => {
   try { return await api<Me>('/v1/auth/me'); } catch { return null; }
-}
+});

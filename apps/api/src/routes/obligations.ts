@@ -8,7 +8,7 @@ import {
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { body, requireCompany, requireRole, type AppEnv } from '../plugins/tenant.js';
-import { closedRun, KIND_CODE, obligationsFor, registerPayment, undoMatch } from '../services/payments.js';
+import { closedRun, KIND_CODE, obligationsForRuns, registerPayment, undoMatch } from '../services/payments.js';
 
 const READERS = ['payroll', 'finance', 'hr_admin'] as const;
 /**
@@ -39,9 +39,7 @@ export function obligationRoutes() {
   app.get('/v1/obligations', requireRole(...READERS), async (c) => {
     const db = getDb();
     const runs = await db.select().from(payrollRuns).where(and(eq(payrollRuns.companyId, c.get('actor').companyId), eq(payrollRuns.status, 'closed'))).orderBy(desc(payrollRuns.period)).limit(24);
-    const out = [];
-    for (const run of runs) out.push({ runId: run.id, period: run.period, obligations: await obligationsFor(db, run) });
-    return c.json(out);
+    return c.json(await obligationsForRuns(db, runs));
   });
 
   /** Registar o pagamento de uma obrigação: gera o lançamento PGC (dívida a débito, banco a crédito). */

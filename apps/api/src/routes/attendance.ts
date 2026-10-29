@@ -8,6 +8,7 @@ import {
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { body, requireCompany, requireRole, type Actor, type AppEnv } from '../plugins/tenant.js';
+import { groupBy } from '../lib/group-by.js';
 import { DomainError } from '../services/payroll.js';
 import { canDecideFor, canSee, visibleEmployeeIds } from '../services/scope.js';
 
@@ -26,42 +27,45 @@ async function loadEmployee(db: Db, actor: Actor, id: string): Promise<Employee>
   return e;
 }
 
-/** Folha mensal de um colaborador: registos, ausências aprovadas, feriados, resumo e aprovação. */
-export async function monthSheet(db: Db, companyId: string, emp: Employee, period: string) {
-  const from = `${period}-01`;
-  const to = lastDay(period);
-  const [company] = await db.select({ workdayMinutes: companies.workdayMinutes }).from(companies).where(eq(companies.id, companyId));
-  const entries = await db.select().from(attendanceEntries)
-    .where(and(eq(attendanceEntries.employeeId, emp.id), gte(attendanceEntries.workDate, from), lte(attendanceEntries.workDate, to)))
-    .orderBy(asc(attendanceEntries.clockIn));
-  const abs = await db.select().from(absences).where(and(
-    eq(absences.employeeId, emp.id), eq(absences.status, 'approved'), lte(absences.startDate, to), gte(absences.endDate, from),
-  ));
+/** Dados de todas as folhas pedidas, isolados à empresa e aos colaboradores já autorizados. */
+async function monthData(db: Db, companyId: string, people: Employee[], period: string) {
+  const from = `${period}-01`, to = lastDay(period), ids = people.map(e => e.id);
+  const scheduleIds = [...new Set(people.flatMap(e => e.scheduleId ? [e.scheduleId] : []))];
+  const [company, entries, abs, approvals, terms, schedules] = await Promise.all([
+    db.select({ workdayMinutes: companies.workdayMinutes }).from(companies).where(eq(companies.id, companyId)),
+    db.select().from(attendanceEntries).where(and(eq(attendanceEntries.companyId, companyId), inArray(attendanceEntries.employeeId, ids), gte(attendanceEntries.workDate, from), lte(attendanceEntries.workDate, to))).orderBy(asc(attendanceEntries.clockIn)),
+    db.select().from(absences).where(and(eq(absences.companyId, companyId), inArray(absences.employeeId, ids), eq(absences.status, 'approved'), lte(absences.startDate, to), gte(absences.endDate, from))),
+    db.select({ m: attendanceMonths, by: users.name }).from(attendanceMonths).leftJoin(users, eq(users.id, attendanceMonths.approvedBy)).where(and(eq(attendanceMonths.companyId, companyId), inArray(attendanceMonths.employeeId, ids), eq(attendanceMonths.period, period))),
+    db.select({ employeeId: contracts.employeeId, startDate: contracts.startDate, endDate: contracts.endDate, terminatedAt: contracts.terminatedAt }).from(contracts).where(inArray(contracts.employeeId, ids)).orderBy(desc(contracts.startDate)),
+    scheduleIds.length ? db.select().from(workSchedules).where(and(eq(workSchedules.companyId, companyId), inArray(workSchedules.id, scheduleIds))) : Promise.resolve([]),
+  ]);
+  return { from, to, today: luandaDate(new Date()), dailyMinutes: company[0]?.workdayMinutes ?? 480,
+    entries: groupBy(entries, e => e.employeeId), absences: groupBy(abs, a => a.employeeId),
+    approvals: new Map(approvals.map(a => [a.m.employeeId, a])), terms: groupBy(terms, t => t.employeeId), schedules: new Map(schedules.map(s => [s.id, s])),
+    holidays: labourRules('AO', Number(period.slice(0, 4))).holidays,
+  };
+}
+
+function sheetFromData(emp: Employee, period: string, data: Awaited<ReturnType<typeof monthData>>) {
+  const entries = data.entries.get(emp.id) ?? [], abs = data.absences.get(emp.id) ?? [];
   const absenceByDate: Record<string, string> = {};
-  for (const a of abs) {
-    for (let d = a.startDate < from ? from : a.startDate; d <= (a.endDate > to ? to : a.endDate); d = nextDay(d)) {
-      absenceByDate[d] = ABSENCE_POLICIES[a.type as AbsenceType]?.label ?? a.type;
-    }
-  }
-  const [approval] = await db.select({ m: attendanceMonths, by: users.name }).from(attendanceMonths)
-    .leftJoin(users, eq(users.id, attendanceMonths.approvedBy))
-    .where(and(eq(attendanceMonths.employeeId, emp.id), eq(attendanceMonths.period, period)));
-  const [first] = await db.select({ d: contracts.startDate }).from(contracts).where(eq(contracts.employeeId, emp.id)).orderBy(asc(contracts.startDate)).limit(1);
-  const [last] = await db.select({ t: contracts.terminatedAt, e: contracts.endDate }).from(contracts).where(eq(contracts.employeeId, emp.id)).orderBy(desc(contracts.startDate)).limit(1);
-  const [sched] = emp.scheduleId ? await db.select().from(workSchedules).where(eq(workSchedules.id, emp.scheduleId)) : [];
+  for (const a of abs) for (let d = a.startDate < data.from ? data.from : a.startDate; d <= (a.endDate > data.to ? data.to : a.endDate); d = nextDay(d)) absenceByDate[d] = ABSENCE_POLICIES[a.type as AbsenceType]?.label ?? a.type;
+  const approval = data.approvals.get(emp.id), terms = data.terms.get(emp.id) ?? [];
+  const first = terms.at(-1), last = terms[0], sched = data.schedules.get(emp.scheduleId ?? '');
   const regime = sched ? { kind: sched.kind as 'weekly' | 'cycle', pattern: sched.pattern, anchorDate: sched.anchorDate } : null;
   const anchor = emp.scheduleAnchor ?? sched?.anchorDate ?? null;
-  const summary = summarizeMonth({
-    shiftRegime: regime?.kind === 'cycle',
-    schedule: regime ? (d) => scheduledMinutes(regime, d, anchor) : undefined,
-    employedFrom: first?.d ?? null,
-    employedUntil: emp.status === 'terminated' ? (last?.t ?? last?.e ?? null) : null,
-    period, dailyMinutes: company?.workdayMinutes ?? 480, holidays: labourRules('AO', Number(period.slice(0, 4))).holidays,
-    absences: absenceByDate, today: luandaDate(new Date()),
-    punches: entries.map((e) => ({ workDate: e.workDate, clockIn: e.clockIn, clockOut: e.clockOut })),
+  const summary = summarizeMonth({ shiftRegime: regime?.kind === 'cycle', schedule: regime ? (d) => scheduledMinutes(regime, d, anchor) : undefined,
+    employedFrom: first?.startDate ?? null, employedUntil: emp.status === 'terminated' ? (last?.terminatedAt ?? last?.endDate ?? null) : null,
+    period, dailyMinutes: data.dailyMinutes, holidays: data.holidays, absences: absenceByDate, today: data.today,
+    punches: entries.map(e => ({ workDate: e.workDate, clockIn: e.clockIn, clockOut: e.clockOut })),
   });
   const schedule = sched ? { id: sched.id, name: sched.name, description: describeSchedule(regime!), anchor } : null;
   return { summary, entries, schedule, approval: approval ? { ...approval.m, approvedByName: approval.by } : null };
+}
+
+/** Folha individual e visão da equipa usam exactamente o mesmo resumo. */
+export async function monthSheet(db: Db, companyId: string, emp: Employee, period: string) {
+  return sheetFromData(emp, period, await monthData(db, companyId, [emp], period));
 }
 
 function nextDay(d: string): string {
@@ -182,13 +186,13 @@ export function attendanceRoutes() {
     if (visible) conds.push(inArray(employees.id, visible.length ? visible : ['-']));
     const list = await db.select({ e: employees, department: departments.name }).from(employees)
       .leftJoin(departments, eq(departments.id, employees.departmentId)).where(and(...conds)).orderBy(asc(employees.name));
-    const out = [];
-    for (const { e, department } of list) {
-      const { summary, approval } = await monthSheet(db, actor.companyId, e, period);
+    if (!list.length) return c.json([]);
+    const data = await monthData(db, actor.companyId, list.map(r => r.e), period);
+    return c.json(list.map(({ e, department }) => {
+      const { summary, approval } = sheetFromData(e, period, data);
       const { days: _d, ...totals } = summary;
-      out.push({ employee: { id: e.id, name: e.name, number: e.number, department }, ...totals, approval, canApprove: canDecideFor(actor, e) && !approval && period < luandaDate(new Date()).slice(0, 7) });
-    }
-    return c.json(out);
+      return { employee: { id: e.id, name: e.name, number: e.number, department }, ...totals, approval, canApprove: canDecideFor(actor, e) && !approval && period < data.today.slice(0, 7) };
+    }));
   });
 
   /** Correcção manual (chefia da equipa ou RH; nunca o próprio). */

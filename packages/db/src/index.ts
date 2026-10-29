@@ -10,6 +10,15 @@ export type Db = NodePgDatabase<typeof schema>;
 
 let instance: { db: Db; pool: pg.Pool } | undefined;
 const requestScope = new AsyncLocalStorage<Db>();
+const queryMeasurement = new AsyncLocalStorage<{ queries: number }>();
+const queryLogger = { logQuery() { const measurement = queryMeasurement.getStore(); if (measurement) measurement.queries += 1; } };
+
+/** Medição isolada por operação, sem guardar SQL, parâmetros ou dados pessoais. */
+export async function measureQueries<T>(fn: () => Promise<T>) {
+  const measurement = { queries: 0 }, start = performance.now();
+  const value = await queryMeasurement.run(measurement, fn);
+  return { value, queries: measurement.queries, elapsedMs: Math.round(performance.now() - start) };
+}
 
 /**
  * Ligação ao PostgreSQL.
@@ -24,7 +33,7 @@ export function getDb(connectionString = process.env.DATABASE_URL): Db {
     // DATABASE_CA_CERT (opcional): certificado CA do fornecedor em PEM (só se for privada) → TLS com verificação completa (CI / scripts).
     const ca = process.env.DATABASE_CA_CERT?.replace(/\\n/g, '\n');
     const pool = new pg.Pool({ connectionString, max: 10, ...(ca ? { ssl: { ca, rejectUnauthorized: true } } : {}) });
-    instance = { pool, db: drizzle(pool, { schema }) };
+    instance = { pool, db: drizzle(pool, { schema, logger: queryLogger }) };
   }
   return instance.db;
 }
@@ -33,7 +42,7 @@ export function getDb(connectionString = process.env.DATABASE_URL): Db {
 export async function withRequestDb<T>(connectionString: string, fn: () => Promise<T>): Promise<T> {
   const pool = new pg.Pool({ connectionString, max: 1, connectionTimeoutMillis: 10_000 });
   try {
-    return await requestScope.run(drizzle(pool, { schema }), fn);
+    return await requestScope.run(drizzle(pool, { schema, logger: queryLogger }), fn);
   } finally {
     await pool.end().catch(() => undefined);
   }

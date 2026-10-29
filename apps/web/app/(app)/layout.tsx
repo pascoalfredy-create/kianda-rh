@@ -25,12 +25,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const me = await currentUser();
   if (!me) redirect('/login');
   const decider = ['owner', 'hr_admin', 'manager'].includes(me.user.role) && me.modules.hr.canAccess;
-  const [absences, expenses] = decider ? await Promise.all([
-    api<unknown[]>('/v1/absences?awaitingMe=1').catch(() => []),
-    api<unknown[]>('/v1/expenses?scope=approve').catch(() => []),
-  ]) : [[], []];
+  const counts = decider ? await api<{ absences: number; expenses: number }>('/v1/notifications/counts').catch(() => ({ absences: 0, expenses: 0 })) : { absences: 0, expenses: 0 };
   return <Suspense fallback={<div className="empty">A abrir o Kianda…</div>}>
-    <AppShell me={me} counts={{ absences: absences.length, expenses: expenses.length }}>
+    <AppShell me={me} counts={counts}>
       <LicenceBanner me={me} />
       {children}
     </AppShell>

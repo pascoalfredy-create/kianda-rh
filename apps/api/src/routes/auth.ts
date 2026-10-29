@@ -183,7 +183,7 @@ export function authRoutes() {
     return c.json({
       user, company: co ? { id: co.id, name: co.name, nif: co.nif, code: co.code, hasLogo: Boolean(co.logoDataUrl) } : null,
       licence: { status: licence.status, label: licence.statusLabel, canWrite: licence.canWrite, trialEndsAt: licence.sub?.trialEndsAt ?? null, paidUntil: licence.sub?.paidUntil ?? null },
-      modules: await companyModulesOverview(db, companyId, session.sub, session.role),
+      modules: await companyModulesOverview(db, companyId, session.sub, session.role, { licence, sector: co?.sector ?? null }),
       platformAdmin: await isPlatformAdmin(db, session.sub),
     });
   });

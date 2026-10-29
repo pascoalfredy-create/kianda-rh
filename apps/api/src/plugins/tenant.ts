@@ -25,7 +25,7 @@ export interface Actor {
   session: SessionClaims;
 }
 
-export type AppEnv = { Variables: { actor: Actor } };
+export type AppEnv = { Variables: { actor: Actor; companyGuarded: boolean } };
 export type Ctx = Context<AppEnv>;
 
 export const SESSION_COOKIE = 'kianda_session';
@@ -42,6 +42,9 @@ export function jwtSecret(): string {
  * A empresa vem SEMPRE do token assinado — nunca de um parâmetro enviado pelo cliente.
  */
 export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
+  // Vários padrões de rota podem casar o mesmo pedido. A primeira passagem já verificou
+  // sessão/licença e abriu a transacção RLS; as seguintes continuam nessa mesma transacção.
+  if (c.get('companyGuarded')) return next();
   const bearer = c.req.header('authorization')?.match(/^Bearer (.+)$/i)?.[1];
   const token = getCookie(c, SESSION_COOKIE) || bearer;
   let claims: SessionClaims;
@@ -65,11 +68,12 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
   }
   if (blocked) return c.json({ error: 'licenca_inactiva', message: blocked }, 402);
   // A consola da plataforma vê todas as empresas (o acesso é verificado a seguir: só administradores Kianda).
-  if (c.req.path.startsWith('/v1/platform/')) return next();
+  if (c.req.path.startsWith('/v1/platform/')) { c.set('companyGuarded', true); return next(); }
   // Segurança por empresa na base de dados (RLS): o pedido corre numa transacção restrita à empresa da sessão.
   // Um erro no pedido desfaz tudo o que gravou (o onError do Hono já preparou a resposta).
   try {
     await withTenant(claims.companyId, async () => {
+      c.set('companyGuarded', true);
       await next();
       if (c.error) throw new Rollback();
     });
