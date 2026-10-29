@@ -2,9 +2,9 @@
 
 ## Contrato do produto
 
-Mesmo repositório, autenticação e PostgreSQL. RH e Modelagem têm direitos independentes. A interface aprovada é reutilizada na rota autenticada `/modelagem`, sem redesenho: o CSS e a estrutura HTML do protótipo são preservados. Os ecrãs, menus e estilos RH existentes não são alterados.
+Mesmo repositório, autenticação e PostgreSQL. RH e Modelagem têm direitos independentes. A interface aprovada é reutilizada na rota autenticada `/modelagem`, sem redesenho: o CSS e a estrutura HTML do protótipo são preservados. Os controlos comuns de contratação estão descritos em [MODULOS-LICENCAS.md](MODULOS-LICENCAS.md).
 
-O backend disponibiliza persistência, direitos comerciais e o motor financeiro anual, com templates para os oito sectores. Os ecrãs de projecção estão ligados à API para carregar, criar, duplicar, gravar e exportar PDF. O backend também cria versões aprovadas; a selecção/aprovação de versões, a importação RH e a gestão de participantes ainda não têm novos controlos na interface. Não confundir `revision` (controlo de concorrência) com versões de comité/banco. A cobrança da Modelagem ainda não foi automatizada.
+O backend disponibiliza persistência, direitos comerciais e o motor financeiro anual, com modelos-tipo para os oito sectores, conforme os sectores contratados. Os ecrãs estão ligados à API para carregar, criar, duplicar, gravar, arquivar/restaurar e exportar PDF. Os participantes são geridos na licença comum. A selecção/aprovação de versões e a importação RH continuam disponíveis na API e pendentes de controlos na interface financeira. Não confundir `revision` (controlo de concorrência) com versões de comité/banco.
 
 ## Compatibilidade comercial
 
@@ -13,13 +13,13 @@ O backend disponibiliza persistência, direitos comerciais e o motor financeiro 
 - Modelagem exige uma linha explícita em `company_modules`, `enabled=true` e uma licença válida. Uma licença RH não concede Modelagem.
 - Licença expirada/suspensa conserva leitura dos modelos contratados; escritas ficam bloqueadas. Desactivar `enabled` retira também acesso de leitura.
 - Os serviços comuns ficam utilizáveis com Modelagem activa mesmo que o RH esteja suspenso. Gestão de utilizadores e dados continua sujeita às permissões existentes.
-- Só administradores da plataforma podem alterar direitos. Nenhuma licença de Modelagem é activada pela migração. Preços e checkout da Modelagem ficam para uma entrega posterior.
+- Direitos são atribuídos no registo experimental, por confirmação de pagamento ou por ajuste da administração. A empresa não escreve directamente nas tabelas de licenças. Nenhuma licença de Modelagem é activada pela migração.
 
 ## API
 
 | Método e rota | Contrato |
 | --- | --- |
-| GET `/v1/modules` | Estado de RH e Modelagem para proprietário/Finanças |
+| GET `/v1/modules` | Catálogo e acesso efectivo de RH e Modelagem para o utilizador autenticado |
 | GET `/v1/modeling/session` | Empresa, identidade, permissão efectiva, possibilidade de escrita, limites e formatos para qualquer participante autorizado |
 | PUT `/v1/platform/companies/:id/modules/:module` | Administração técnica dos direitos; `module=hr|modeling`; `enabled`, `status`, `trialEndsAt`, `paidUntil` |
 | GET/POST `/v1/modeling/models` | Listar/criar modelos da empresa; participantes autorizados (escrita: editor) |
@@ -69,7 +69,18 @@ Modelagem tem preço próprio, independente do número de funcionários e dos es
 | POST `/v1/modeling/models/:id/archive` | Arquivar/restaurar com `{archived, revision}` |
 | GET `/v1/modeling/export-options` | Política de formatos da conta autenticada |
 
-A rota administrativa dos direitos aceita agora `projectLimit` e `extraUsers` na Modelagem. Omiti-los numa renovação conserva os valores anteriores. Reduções abaixo do consumo actual são recusadas. O módulo RH continua sem cobrança por projectos.
+A rota administrativa dos direitos aceita `projectLimit` e `extraUsers` na Modelagem. Omiti-los numa renovação conserva os valores anteriores. Reduções abaixo do consumo actual são recusadas. O módulo RH continua sem cobrança por projectos.
+
+### Gestão de projectos na interface
+
+No selector **Modelo**, a opção **Gerir projectos…** abre o modal existente, com listas de activos e arquivados e consulta da quota actual. Não acrescenta botões à barra nem altera o CSS/HTML original do protótipo.
+
+- Arquivar exige confirmação e guarda primeiro as edições dos pressupostos. Balancetes por analisar impedem o arquivo; não são descartados silenciosamente.
+- O projecto só muda de lista após confirmação da API. Uma falha de rede, conflito de revisão ou recusa por quota não cria um estado local fictício.
+- Arquivados podem ser abertos em consulta e exportados em PDF. Campos, conversão de moeda e importações ficam bloqueados. Duplicar continua a criar um novo projecto, sujeito à quota.
+- Restaurar usa a revisão arquivada e os limites/sectores são validados no servidor. A edição só volta a estar disponível após a resposta confirmada.
+- **Actualizar lista** incorpora alterações de outras sessões depois de guardar pressupostos; balancetes locais por analisar impedem essa substituição. Uma falha de leitura nunca apresenta o balancete anterior como se fosse de outro projecto.
+- Licenças em consulta e participantes `viewer` podem consultar o arquivo, sem comandos de arquivo/restauro.
 
 ### PDF para clientes; Excel exclusivo do proprietário da plataforma
 
@@ -169,6 +180,6 @@ As alterações são agrupadas e gravadas por projecto com revisão obrigatória
 
 O motor puro partilhado fornece a pré-visualização imediata nos ecrãs; não existe uma segunda implementação do cálculo do protótipo. O servidor valida e calcula os downloads. Um rascunho incompleto pode abrir os pressupostos, mas não recebe projecções preenchidas com dados de exemplo. No modo de consulta os campos ficam bloqueados; cenário e unidade de apresentação são temporários. O download PDF espera pelas gravações e envia revisão/cenário, recusando origens desactualizadas.
 
-Os comandos de cópia das demonstrações e dos relatórios passam a descarregar PDF, conservando as posições e classes existentes. Excel continua exclusivamente na API do proprietário configurado. Não se acrescentaram botões, menus ou formulários de aprovação, RH, licenças ou participantes. A área histórica apresenta a dependência de balancetes persistidos e não guarda dados históricos locais como se fossem dados da empresa.
+Os comandos de cópia das demonstrações e dos relatórios descarregam PDF, conservando as posições e classes existentes. Excel continua exclusivamente na API do proprietário configurado. O selector de modelos inclui gestão de activos/arquivados no modal existente. Aprovação de versões e importação RH ainda não têm controlos nesta interface; licenças e participantes ficam na área comum. A área histórica depende de balancetes persistidos e não guarda dados históricos locais como se fossem dados da empresa.
 
 Verificação: testes de fila/revisão, falha de rede, conflito, consulta, quota e origem do PDF; comparação exacta com o HTML aprovado; isolamento do JSON da sessão; montagem das sete vistas nos oito sectores com o código distribuído. Um teste HTTP local do Next com uma API de teste verificou redireccionamento, recusa de licença, cabeçalhos, proxy, gravação e PDF. Esse teste não substitui os testes PostgreSQL do CI. O navegador remoto não alcançou o servidor local, pelo que não se afirma uma inspecção visual desta integração num navegador real. `pnpm --filter @kianda/web modeling:generate` regenera os ficheiros; o teste web recusa runtime desactualizado.

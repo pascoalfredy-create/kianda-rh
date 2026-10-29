@@ -107,4 +107,68 @@ describe('persistência da interface Integra', () => {
     const one=store.convertCurrency('m1',input);await settle();await expect(store.convertCurrency('m1',input)).rejects.toThrow('Aguarde');expect(store.dirty).toBe(true);
     finish({...record(),currency:'EUR',revision:2});await one;expect(request).toHaveBeenCalledTimes(1);expect(store.dirty).toBe(false);
   });
+  it('arquiva só depois de guardar edições e conserva o projecto para consulta', async () => {
+    const calls: any[] = [];
+    const request: ModelingTransport = async <T>(path: string, method?: string, payload?: any) => {
+      calls.push({ path, method, payload });
+      return (path.endsWith('/archive') ? { ...record('m1', 3), archivedAt: '2026-10-29T08:00:00Z', assumptions: { ...record().assumptions, pessoal: 321 } } : { ...record('m1', 2), assumptions: payload.assumptions }) as T;
+    };
+    const store = new ModelingStore(true, request); store.load([record()]);
+    const model = store.models[0]!; model.pessoal = 321; store.change(model);
+    const archived = await store.setArchived('m1', true);
+    expect(calls.map(c => c.path)).toEqual(['/models/m1', '/models/m1/archive']);
+    expect(calls[1].payload).toEqual({ archived: true, revision: 2 });
+    expect(store.models).toHaveLength(0); expect(store.archivedModels).toEqual([archived]); expect(archived.pessoal).toBe(321);
+    expect(store.revision('m1')).toBe(3); expect(store.canEdit('m1')).toBe(false); expect(store.dirty).toBe(false);
+    archived.pessoal = 999; store.change(archived); await store.flush(); expect(calls).toHaveLength(2);
+  });
+  it('um arquivo recusado conserva o modelo activo e a revisão local', async () => {
+    const request = vi.fn().mockRejectedValue(new ModelingApiError(409, 'Projecto alterado')), store = new ModelingStore(true, request); store.load([record()]);
+    await expect(store.setArchived('m1', true)).rejects.toThrow('Projecto alterado');
+    expect(store.models).toHaveLength(1); expect(store.archivedModels).toHaveLength(0); expect(store.revision('m1')).toBe(1); expect(store.canEdit('m1')).toBe(true); expect(store.dirty).toBe(false);
+  });
+  it('não arquiva quando a gravação anterior falhou', async () => {
+    const request = vi.fn().mockRejectedValue(new Error('Sem rede')), store = new ModelingStore(true, request); store.load([record()]);
+    store.models[0]!.pessoal = 123; store.change(store.models[0]!);
+    await expect(store.setArchived('m1', true)).rejects.toThrow('Sem rede');
+    expect(request).toHaveBeenCalledTimes(1); expect(request.mock.calls[0]![0]).toBe('/models/m1'); expect(store.models).toHaveLength(1); expect(store.dirty).toBe(true);
+  });
+  it('o restauro recusado por quota não cria um projecto activo fictício', async () => {
+    const request = vi.fn().mockRejectedValue(new ModelingApiError(409, 'Limite de projectos')), store = new ModelingStore(true, request);
+    store.load([{ ...record('m1', 4), archivedAt: '2026-10-29T08:00:00Z' }]);
+    await expect(store.setArchived('m1', false)).rejects.toThrow('Limite de projectos');
+    expect(store.models).toHaveLength(0); expect(store.archivedModels).toHaveLength(1); expect(store.revision('m1')).toBe(4); expect(store.dirty).toBe(false);
+  });
+  it('restaura com a revisão arquivada e volta a permitir gravações', async () => {
+    const request = vi.fn().mockResolvedValue(record('m1', 5)), store = new ModelingStore(true, request);
+    store.load([{ ...record('m1', 4), archivedAt: '2026-10-29T08:00:00Z' }]);
+    const restored = await store.setArchived('m1', false);
+    expect(request).toHaveBeenCalledWith('/models/m1/archive', 'POST', { archived: false, revision: 4 });
+    expect(store.models).toEqual([restored]); expect(store.archivedModels).toHaveLength(0); expect(store.revision('m1')).toBe(5); expect(store.canEdit('m1')).toBe(true);
+  });
+  it('arquivados permitem histórico e PDF, mas recusam importações e conversão', async () => {
+    const request = vi.fn().mockResolvedValue({ revision: 4, historical: null }), store = new ModelingStore(true, request);
+    store.load([{ ...record('m1', 4), archivedAt: '2026-10-29T08:00:00Z' }]);
+    expect(await store.history('m1')).toBeNull();
+    await expect(store.saveHistory('m1', historicalInput)).rejects.toThrow('arquivado');
+    await expect(store.createFromHistory('m1')).rejects.toThrow('arquivado');
+    await expect(store.convertCurrency('m1', { from: 'USD', to: 'Kz', rate: 900, rateDate: '2026-10-29', source: 'Teste', reference: false })).rejects.toThrow('arquivado');
+    const fetchFile = vi.fn().mockResolvedValue(new Response('%PDF-1.7')); vi.stubGlobal('fetch', fetchFile);
+    await store.download(store.archivedModels[0]!, 'sumario'); expect(fetchFile.mock.calls[0]![0]).toContain('format=pdf&revision=4'); expect(request).toHaveBeenCalledTimes(1);
+  });
+  it('consulta não arquiva nem restaura', async () => {
+    const request = vi.fn(), store = new ModelingStore(false, request); store.load([record(), { ...record('m2'), archivedAt: '2026-10-29T08:00:00Z' }]);
+    await expect(store.setArchived('m1', true)).rejects.toThrow('consulta'); await expect(store.setArchived('m2', false)).rejects.toThrow('consulta'); expect(request).not.toHaveBeenCalled();
+  });
+  it('dois cliques não enviam o mesmo arquivo e a moeda não muda durante a operação', async () => {
+    let finish!: (v: ModelRecord) => void;
+    const request = vi.fn(() => new Promise<ModelRecord>(r => { finish = r; })) as unknown as ModelingTransport;
+    const store = new ModelingStore(true, request); store.load([record()]);
+    const first = store.setArchived('m1', true); await settle();
+    await expect(store.setArchived('m1', true)).rejects.toThrow('Aguarde');
+    await expect(store.convertCurrency('m1', { from: 'USD', to: 'EUR', rate: .9, rateDate: '2026-10-29', source: 'Teste', reference: false })).rejects.toThrow('Aguarde');
+    expect(() => store.load([])).toThrow('por guardar');
+    finish({ ...record('m1', 2), archivedAt: '2026-10-29T08:00:00Z' }); await first;
+    expect(request).toHaveBeenCalledTimes(1); expect(store.dirty).toBe(false);
+  });
 });

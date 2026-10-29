@@ -1,5 +1,6 @@
 /* Liga a interface aprovada à API. Este ficheiro é montado depois das vistas do protótipo. */
 let store, session, templates = [], notice = '', busy = false;
+let previewModel=null, projectDialog=null, projectUsage=null, projectTab='active';
 let currencyDialog=null;
 const currencyFields=['fxFrom','fxRate','fxDate','fxSource'];
 const currentDate=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Luanda',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -31,7 +32,7 @@ async function loadCurrencyQuote(){
   }finally{busy=false;protect();}
 }
 async function openCurrencyConversion(model,to){
-  if(!session.canWrite||busy)return;
+  if(!store.canEdit(model.id)||busy)return;
   currencyDialog={modelId:model.id,to,quote:null};
   openModal('Converter moeda',`<div class="alert b">${ico('info',17)}<div>Aplicar <b>${esc(to)}</b> ao investimento, custos, dívida, DRE, Balanço, fluxos de caixa, avaliação e relatórios projectados. Quantidades, dias, anos e percentagens mantêm-se.</div></div><div class="form"><div class="f"><label>Moeda real dos valores actuais</label><select class="sel" id="fxFrom">${['Kz','USD','EUR'].map(c=>`<option ${model.moeda===c?'selected':''}>${c}</option>`).join('')}</select><span class="hint">Se anteriormente mudou apenas o símbolo, indique a moeda em que os valores foram introduzidos.</span></div><div class="f"><label>Taxa: 1 unidade da origem em ${esc(to)}</label><input class="inp n" id="fxRate" type="number" step="any" min="0"></div><div class="f"><label>Data da taxa</label><input class="inp" id="fxDate" type="date" value="${currentDate()}"></div><div class="f"><label>Fonte / pressuposto</label><input class="inp" id="fxSource" maxlength="160"></div></div><p class="hint" id="fxStatus"></p><p class="hint">A taxa fica fixada nesta conversão. Reveja inflação, juros e taxa de desconto para a moeda de análise; estes pressupostos não são alterados pelo câmbio.</p>`,`<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="applyCurrency">Aplicar conversão</button>`,'700px');
   $('#fxFrom').onchange=loadCurrencyQuote;
@@ -58,7 +59,7 @@ const historicalReadErrors=new Map();
 const historicalFields=['anEmp','anY1','anY2','anCP','anMo','anT1','anT2','anF1','anF2'];
 function historicalReferenceField(input,key){return input?.periods?.[key]?.to?.split('-').reverse().join('/')||input?.anos?.[key==='N'?1:0]||String(new Date().getFullYear()-(key==='N'?0:1));}
 function captureHistoricalDraft(){
-  if(VIEW!=='analise'||(SUB.at||'dados')!=='dados'||!M()||!session.canWrite||!historicalDirty.has(M().id))return;
+  if(VIEW!=='analise'||(SUB.at||'dados')!=='dados'||!M()||!store.canEdit(M().id)||!historicalDirty.has(M().id))return;
   const input={empresa:$('#anEmp').value,anos:[$('#anY1').value,$('#anY2').value],pctCP:Number($('#anCP').value),moeda:$('#anMo').value,N1:$('#anT1').value,N:$('#anT2').value};
   const periods={};for(const key of ['N','N1']){const index=key==='N'?1:0,reference=parseHistoricalReference(input.anos[index],S.an?.periods?.[key]);if(reference){input.anos[index]=reference.year;if(input[key].trim()&&reference.period)periods[key]=reference.period;}}
   if(!input.N1.trim()&&!/^(?:19|20|21)\d{2}$/.test(input.anos[0])&&/^(?:19|20|21)\d{2}$/.test(input.anos[1]))input.anos[0]=String(Math.max(1900,Number(input.anos[1])-1));
@@ -97,33 +98,92 @@ async function analyzeAndSave(){
 async function modelFromHistorical(){
   if(historicalDirty.has(M().id))throw Error('Prima Analisar para validar e guardar os balancetes antes de criar o modelo.');
   const result=await store.createFromHistory(M().id);
-  S.active=result.model.id;S.an=result.historical.analysis.input;historicalDrafts.set(M().id,S.an);
+  previewModel=null;S.active=result.model.id;S.an=result.historical.analysis.input;historicalDrafts.set(M().id,S.an);
   go('pressupostos');toast('Modelo criado. Reveja os pressupostos de projecção e financiamento.');
 }
 function errorText(error) {
   if (error?.issues) return error.issues.map(v=>`${v.path}: ${v.message}`).join(' · ');
   return error?.message || 'Não foi possível concluir. Tente novamente.';
 }
-function showError(error) { notice=errorText(error);toast(notice);render(); }
+function showError(error) { notice=errorText(error);toast(notice);if(projectDialog){const field=document.querySelector('#projectError');if(field)field.textContent=notice;}render(); }
 function alertMessage(message) { return `<div class="alert r" role="alert">${ico('alert',17)}<div>${esc(message)}</div></div>`; }
 function liveStrip(){try{return liveStripPrototype()}catch(error){return alertMessage(errorText(error));}}
 function optionalNpv(model,overrides={}) { try{return run(model,overrides).npv}catch(error){if(error instanceof FinancialModelError||error instanceof RangeError)return null;throw error;} }
 function validRange(values,fn) { return values.every(Number.isFinite)?fn(...values):null; }
 function save(){if(M())store.change(M());}
+function projectPicker(){
+  const selected=M()?.id;
+  $('#mSel').innerHTML=(previewModel?`<option value="${esc(previewModel.id)}" selected>Arquivado · ${esc(previewModel.nome)}</option>`:'')+(!S.models.length&&!previewModel?'<option value="" selected disabled>Seleccione um projecto</option>':'')+S.models.map(m=>`<option value="${esc(m.id)}" ${selected===m.id?'selected':''}>${esc(m.nome)}</option>`).join('')+'<option value="__projects">Gerir projectos…</option>';
+  if(selected)$('#mSel').value=selected;
+}
+async function chooseProject(id){
+  await store.flush();
+  const model=store.project(id);if(!model)throw Error('Projecto inexistente nesta lista. Actualize os projectos.');
+  await selectHistorical(model);previewModel=store.archivedAt(id)?model:null;S.active=store.archivedAt(id)?null:id;
+  notice='';render();
+}
+function projectDate(id){const date=new Date(store.archivedAt(id));return Number.isFinite(date.getTime())?date.toLocaleDateString('pt-PT',{timeZone:'Africa/Luanda'}):'—';}
+function projectQuota(){return projectUsage?`${projectUsage.activeProjects} projecto(s) activo(s) · ${projectUsage.projectLimit===null?'plano ilimitado':'limite contratado: '+projectUsage.projectLimit}`:'Não foi possível consultar a quota. Utilize Actualizar lista.';}
+function projectCatalogue(){
+  const archived=projectTab==='archived',projects=archived?store.archivedModels:store.models;
+  const rows=projects.map(m=>`<tr><td><b>${esc(m.nome)}</b><div class="muted">${esc(SECT[m.sector]?.t||m.sector)} · ${esc(m.moeda)}${archived?' · arquivado em '+esc(projectDate(m.id)):''}</div></td><td class="num"><button class="btn sm" data-act="viewProject" data-id="${esc(m.id)}">${archived?'Consultar':'Abrir'}</button>${session.canWrite?` <button class="btn sm" data-act="${archived?'restoreProject':'archiveProject'}" data-id="${esc(m.id)}">${archived?'Restaurar':'Arquivar'}</button>`:''}</td></tr>`).join('');
+  openModal('Gerir projectos',`<div class="alert b">${ico('info',17)}<div>${esc(projectQuota())}. Arquivar liberta uma vaga e conserva pressupostos, balancetes e versões.</div></div><div class="tabs"><a data-act="projectTab" data-v="active" class="${!archived?'on':''}">Activos (${store.models.length})</a><a data-act="projectTab" data-v="archived" class="${archived?'on':''}">Arquivados (${store.archivedModels.length})</a></div><div id="projectError" role="alert" class="muted"></div><div class="tblwrap"><table class="t"><thead><tr><th>Projecto</th><th class="num">Acções</th></tr></thead><tbody>${rows||`<tr><td colspan="2">${archived?'Não há projectos arquivados nesta lista.':'Não há projectos activos nesta lista.'}</td></tr>`}</tbody></table></div>`,`<button class="btn" data-act="refreshProjects">Actualizar lista</button><button class="btn" data-act="close">Fechar</button>`,'860px');
+}
+async function openProjects(){
+  await store.flush();render();
+  const context=projectDialog={kind:'catalogue'};
+  openModal('Gerir projectos','<p class="muted">A consultar a quota de projectos…</p>','<button class="btn" data-act="close">Fechar</button>','860px');
+  try{projectUsage=await modelingRequest('/usage');}catch{projectUsage=null;}
+  if(projectDialog===context)projectCatalogue();
+}
+async function refreshProjects(){
+  if(historicalDirty.size)throw Error('Analise os balancetes em edição antes de actualizar a lista. Os dados por guardar ficam nesta sessão.');
+  await store.flush();const context=projectDialog,selected=M()?.id;
+  const [records,usage]=await Promise.all([modelingRequest('/models'),modelingRequest('/usage')]);
+  if(projectDialog!==context)return;
+  store.load(records);projectUsage=usage;historicalDrafts.clear();historicalReadErrors.clear();
+  const model=selected?store.project(selected):store.models[0];
+  previewModel=model&&store.archivedAt(model.id)?model:null;S.active=model&&!previewModel?model.id:store.models[0]?.id||null;
+  S.an=null;if(M())await selectHistorical(M());
+  render();if(projectDialog===context)projectCatalogue();
+}
+function confirmArchive(id){
+  const model=store.project(id);if(!model||store.archivedAt(id))throw Error('Seleccione um projecto activo.');
+  if(historicalDirty.has(id))throw Error('Analise e guarde os balancetes deste projecto antes de o arquivar.');
+  projectDialog={kind:'archive',id};
+  openModal('Arquivar projecto',`<p>Arquivar <b>${esc(model.nome)}</b>?</p><p class="muted">O projecto deixa de contar para o limite de activos. Os pressupostos e os balancetes ficam disponíveis para consulta; as versões aprovadas também são conservadas. Restaurar exige uma vaga no plano e acesso ao sector.</p><div id="projectError" role="alert" class="muted"></div>`,`<button class="btn" data-act="openProjects">Cancelar</button><button class="btn pri" data-act="confirmArchive">Arquivar projecto</button>`,'620px');
+}
+async function archiveProject(){
+  const context=projectDialog;if(context?.kind!=='archive')throw Error('Seleccione novamente o projecto que pretende arquivar.');
+  if(historicalDirty.has(context.id))throw Error('Analise e guarde os balancetes deste projecto antes de o arquivar.');
+  const selected=M()?.id,model=await store.setArchived(context.id,true);
+  if(selected===model.id){previewModel=model;S.active=null;S.an=historicalDrafts.get(model.id)||null;}
+  notice='';render();toast('Projecto arquivado. Os dados foram conservados.');
+  try{projectUsage=await modelingRequest('/usage');}catch{projectUsage=null;}
+  if(projectDialog===context){projectDialog={kind:'catalogue'};projectTab='archived';projectCatalogue();}
+}
+async function restoreProject(id){
+  const model=await store.setArchived(id,false);
+  previewModel=null;S.active=id;S.an=historicalDrafts.get(id)||null;notice='';
+  try{await selectHistorical(model);}catch{S.an=null;notice='Projecto restaurado. Não foi possível carregar os balancetes; seleccione novamente o projecto para os consultar.';}
+  closeModal();render();toast('Projecto restaurado e incluído nos projectos activos.');
+  try{projectUsage=await modelingRequest('/usage');}catch{projectUsage=null;}
+}
 function protect() {
-  const writable=session?.canWrite && !busy;
+  const companyWrite=session?.canWrite&&!busy,writable=companyWrite&&M()&&store.canEdit(M().id);
   document.querySelectorAll('[data-p],[data-cen]').forEach(el=>{
     if(!writable){if(el.dataset.restoreDisabled===undefined)el.dataset.restoreDisabled=el.disabled?'1':'0';el.disabled=true;}
     else if(el.dataset.restoreDisabled!==undefined){el.disabled=el.dataset.restoreDisabled==='1';delete el.dataset.restoreDisabled;}
   });
   document.querySelectorAll(historicalFields.map(id=>'#'+id).join(',')).forEach(el=>{el.disabled=!writable;});
   document.querySelectorAll(currencyFields.map(id=>'#'+id).join(',')).forEach(el=>{el.disabled=!writable;});
-  for(const action of ['newM','dupM','createM','addRev','delRev','addCap','delCap','anRun','anToModel','anDemo','applyCurrency'])document.querySelectorAll(`[data-act="${action}"]`).forEach(el=>{
-    el.disabled=!writable||(action==='dupM'&&!M())||historicalImports.size>0&&['anRun','anToModel','anDemo'].includes(action);
+  for(const action of ['addRev','delRev','addCap','delCap','anRun','anToModel','anDemo','applyCurrency'])document.querySelectorAll(`[data-act="${action}"]`).forEach(el=>{
+    el.disabled=!writable||historicalImports.size>0&&['anRun','anToModel','anDemo'].includes(action);
     if(!session?.canWrite)el.title='Acesso apenas de consulta.';
   });
-  $('#mSel').disabled=busy||!S.models.length;
-  $('#mSel').title=notice||'Projectos da empresa; alterações guardadas na base de dados.';
+  for(const action of ['newM','createM','dupM','archiveProject','confirmArchive','restoreProject'])document.querySelectorAll(`[data-act="${action}"]`).forEach(el=>{el.disabled=!companyWrite||action==='dupM'&&!M();});
+  $('#mSel').disabled=busy;
+  $('#mSel').title=notice||'Projectos da empresa. Escolha Gerir projectos… para consultar, arquivar ou restaurar.';
 }
 function render() {
   if(!session)return;
@@ -134,19 +194,20 @@ function render() {
   if(!M()) {
     $('#nav').innerHTML=NAV.map(n=>n[0]==='g'?`<div class="grp">${n[1]}</div>`:`<a data-go="${n[0]}">${ico(n[2],17)}<span>${n[1]}</span></a>`).join('');
     $('#mSel').innerHTML='';$('#mTags').innerHTML='';
-    $('#view').innerHTML=ph('Modelagem financeira','Projectos da empresa')+`<div class="alert b">${ico('info',17)}${session.canWrite?'Ainda não há projectos activos. Utilize + Novo modelo para começar.':'Ainda não há projectos activos para consultar.'}</div>`+(notice?alertMessage(notice):'');
-    protect();return;
+    $('#view').innerHTML=ph('Modelagem financeira','Projectos da empresa')+`<div class="alert b">${ico('info',17)}${session.canWrite?'Ainda não há projectos activos. Utilize + Novo modelo para começar.':'Ainda não há projectos activos para consultar.'}${store.archivedModels.length?' Para consultar os arquivados, escolha Gerir projectos… no selector de modelos.':''}</div>`+(notice?alertMessage(notice):'');
+    projectPicker();protect();return;
   }
   try{renderPrototype();}
   catch(error){$('#view').innerHTML=ph('Pressupostos por rever','Abra Pressupostos para completar ou corrigir os dados do projecto.')+alertMessage(errorText(error));}
   if(notice)$('#view').insertAdjacentHTML('afterbegin',`<div id="integra-notice">${alertMessage(notice)}</div>`);
-  protect();
+  if(previewModel)$('#view').insertAdjacentHTML('afterbegin',`<div class="alert b" role="status">${ico('info',17)}<div>Projecto arquivado · consulta. Para voltar a gravar alterações, escolha Gerir projectos… no selector de modelos e restaure o projecto.</div></div>`);
+  projectPicker();protect();
 }
 // Os mesmos campos e separadores do protótipo; cada projecto carrega a sua própria origem.
 VIEWS.analise.after=()=>{
   for(const [id,target] of [['#anF1','#anT1'],['#anF2','#anT2']]){
     const field=$(id);if(field){const previous=historicalReadErrors.get(M().id+target);if(previous)$('#anStatus'+id.slice(-1)).textContent=previous;field.onchange=()=>{
-      if(!session.canWrite||busy||!field.files?.[0])return;
+      if(!store.canEdit(M().id)||busy||!field.files?.[0])return;
       historicalImports.get(id)?.controller.abort();
       const file=field.files[0],pdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name||'');
       const status=$('#anStatus'+id.slice(-1)),targetField=$(target),modelId=M().id;
@@ -199,7 +260,7 @@ async function createCurrent() {
     nm.abertura={imob:nm.capex.reduce((s,c)=>s+c.valor,0)*0.6,vidaRem:8,exist:k.inv[2]||0,clientes:k.ar[2]||0,caixa:nm.caixaMin*2,fornec:k.ap[2]||0,divida:nm.divida.montante*0.5,divTaxa:nm.divida.taxa,divPrazo:4};
     nm.capex=[];nm.divida.montante=0;nm.receitas.forEach(r=>r.ramp='100');if(nm.tv.metodo==='nenhum')nm.tv.metodo='gordon';
   }
-  const model=await store.create(nm);S.active=model.id;S.an=null;historicalDrafts.set(model.id,null);closeModal();go('pressupostos');toast('Modelo criado na base de dados.');
+  const model=await store.create(nm);previewModel=null;S.active=model.id;S.an=null;historicalDrafts.set(model.id,null);closeModal();go('pressupostos');toast('Modelo criado na base de dados.');
 }
 document.addEventListener('click',async ev=>{
   const target=ev.target instanceof Element?ev.target:null;if(!target)return;
@@ -209,7 +270,9 @@ document.addEventListener('click',async ev=>{
   const a=target.closest('[data-act]');if(!a||a.disabled||busy)return;
   const d=a.dataset,m=M();
   const actions={close:closeModal,sub:()=>{SUB[d.k]=d.v;render();},newM:__NEW_MODEL_DIALOG__,createM:createCurrent,
-    dupM:async()=>{const model=await store.create({...clone(m),nome:m.nome+' (cópia)'});S.active=model.id;S.an=null;historicalDrafts.set(model.id,null);render();toast('Modelo duplicado na base de dados.');},
+    openProjects,projectTab:()=>{projectTab=d.v==='archived'?'archived':'active';projectCatalogue();},refreshProjects,
+    viewProject:async()=>{await chooseProject(d.id);closeModal();},archiveProject:()=>confirmArchive(d.id),confirmArchive:archiveProject,restoreProject:()=>restoreProject(d.id),
+    dupM:async()=>{const model=await store.create({...clone(m),nome:m.nome+' (cópia)'});previewModel=null;S.active=model.id;S.an=null;historicalDrafts.set(model.id,null);render();toast('Modelo duplicado na base de dados.');},
     addRev:()=>{m.receitas.push({nome:'Nova linha',unid:'unidades',qtd:1000,cresc:5,ramp:'100',preco:1000,esc:m.inflacao});save();render();},
     delRev:()=>{m.receitas.splice(+d.i,1);save();render();},
     addCap:()=>{m.capex.push({nome:'Novo investimento',ano:1,valor:0,vida:5});save();render();},
@@ -220,16 +283,17 @@ document.addEventListener('click',async ev=>{
     anDemo:()=>{S.an={empresa:DEMO_BAL.empresa,anos:DEMO_BAL.anos,N1:demoCSV(DEMO_BAL.N1),N:demoCSV(DEMO_BAL.N),pctCP:30,moeda:'Kz'};historicalDrafts.set(m.id,S.an);historicalDirty.add(m.id);SUB.at='dados';render();toast('Exemplo carregado. Prima Analisar se o quiser guardar neste projecto.');},
   };
   const action=actions[d.act];if(!action)return;ev.preventDefault();
-  const mutation=['createM','dupM','addRev','delRev','addCap','delCap','anRun','anToModel','anDemo','applyCurrency'].includes(d.act);
+  const mutation=['createM','dupM','addRev','delRev','addCap','delCap','anRun','anToModel','anDemo','applyCurrency','archiveProject','confirmArchive','restoreProject'].includes(d.act);
   if(mutation&&!session.canWrite)return showError(Error('O seu acesso permite apenas consulta.'));
+  if(['addRev','delRev','addCap','delCap','anRun','anToModel','anDemo','applyCurrency'].includes(d.act)&&!store.canEdit(m?.id))return showError(Error('Projecto arquivado. Restaure-o antes de o alterar.'));
   busy=true;protect();
   try{await action();}catch(error){showError(error);}finally{busy=false;protect();}
 });
 $('#mSel').onchange=async()=>{
   captureHistoricalDraft();const next=$('#mSel').value;busy=true;protect();
-  try{await store.flush();const model=S.models.find(m=>m.id===next);await selectHistorical(model);S.active=next;notice='';render();}catch(error){$('#mSel').value=S.active;showError(error);}finally{busy=false;protect();}
+  try{if(next==='__projects'){projectPicker();await openProjects();}else await chooseProject(next);}catch(error){projectPicker();showError(error);}finally{busy=false;protect();}
 };
-function historicalEdited(e){if(session?.canWrite&&M()&&historicalFields.includes(e.target?.id)&&!['anF1','anF2'].includes(e.target.id)){historicalDirty.add(M().id);const key=M().id+'#'+e.target.id;if(historicalReadErrors.has(key)){historicalReadErrors.delete(key);$('#anStatus'+e.target.id.slice(-1)).textContent='Dados editados manualmente. Prima Analisar para validar.';notice='';document.querySelector('#integra-notice')?.remove?.();}}}
+function historicalEdited(e){if(M()&&store?.canEdit(M().id)&&historicalFields.includes(e.target?.id)&&!['anF1','anF2'].includes(e.target.id)){historicalDirty.add(M().id);const key=M().id+'#'+e.target.id;if(historicalReadErrors.has(key)){historicalReadErrors.delete(key);$('#anStatus'+e.target.id.slice(-1)).textContent='Dados editados manualmente. Prima Analisar para validar.';notice='';document.querySelector('#integra-notice')?.remove?.();}}}
 document.addEventListener('input',historicalEdited);
 document.addEventListener('change',historicalEdited);
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
