@@ -28,11 +28,17 @@ export function api<T>(path: string, init?: RequestInit): Promise<T> {
   return (init === undefined ? readJson(path) : requestJson(path, init)) as Promise<T>;
 }
 
+/** Inicia leituras independentes; a API continua a validar empresa, licença e perfil. */
+export function preloadApi(...paths: string[]) {
+  for (const path of paths) void api(path).catch(() => undefined);
+}
+
 export interface Me {
   user: { sub: string; name: string; role: string; companyId: string; employeeId: string | null };
   company: { id: string; name: string; nif: string; code?: string | null; hasLogo?: boolean } | null;
   licence?: { status: string; label: string; canWrite: boolean; trialEndsAt: string | null; paidUntil: string | null };
   platformAdmin?: boolean;
+  notifications?: { absences: number; expenses: number };
   modules: CompanyModulesOverview;
 }
 

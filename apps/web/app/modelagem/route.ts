@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   const nonce = crypto.randomUUID().replaceAll('-', '');
   try {
     const cookie = (await cookies()).get('kianda_session')?.value;
-    const res = await upstream('/v1/modeling/session', { headers: cookie ? { cookie: `kianda_session=${cookie}` } : {}, cache: 'no-store' });
+    const res = await upstream('/v1/modeling/bootstrap', { headers: cookie ? { cookie: `kianda_session=${cookie}` } : {}, cache: 'no-store' });
     if (res.status === 401) return new Response(null, { status: 303, headers: { location: new URL('/login?voltar=/modelagem', request.url).toString(), 'cache-control': 'private, no-store' } });
     if (!res.ok) {
       const error = await res.json().catch(() => ({}));

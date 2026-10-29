@@ -2,6 +2,17 @@
 let store, session, templates = [], notice = '', busy = false;
 let previewModel=null, projectDialog=null, projectUsage=null, projectTab='active';
 let currencyDialog=null;
+const navExpanded={};let navView=null;
+function renderNavigation(){
+  const groups=[];for(const entry of NAV){if(entry[0]==='g')groups.push({label:entry[1],items:[]});else groups.at(-1).items.push(entry);}
+  if(navView!==VIEW){const index=groups.findIndex(g=>g.items.some(item=>item[0]===VIEW));navExpanded[index<0?0:index]=true;navView=VIEW;}
+  $('#nav').innerHTML=groups.map((group,index)=>`<section class="nav-group"><button class="nav-group-toggle" data-act="navToggle" data-group="${index}" aria-expanded="${!!navExpanded[index]}" aria-controls="integra-nav-${index}"><span>${esc(group.label)}</span><span class="nav-chevron" aria-hidden="true">⌄</span></button><div id="integra-nav-${index}"${navExpanded[index]?'':' hidden'}>${group.items.map(item=>`<a href="#${item[0]}" class="${VIEW===item[0]?'on':''}" data-go="${item[0]}"${VIEW===item[0]?' aria-current="page"':''}>${ico(item[2],17)}<span>${esc(item[1])}</span></a>`).join('')}</div></section>`).join('');
+}
+function setMenuOpen(open){
+  const root=$('.app'),wasOpen=root.classList.contains('menu-open');if(open)root.classList.add('menu-open');else root.classList.remove('menu-open');
+  $('#integra-menu-toggle')?.setAttribute?.('aria-expanded',String(open));
+  if(open)$('#integra-side button')?.focus?.();else if(wasOpen)$('#integra-menu-toggle')?.focus?.();
+}
 const currencyFields=['fxFrom','fxRate','fxDate','fxSource'];
 const currentDate=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Luanda',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 function mapCurrencyContext(){
@@ -192,7 +203,7 @@ function render() {
   $('#view').dataset.view=VIEW;
   $('#view').dataset.wide=String(['demonstracoes','credito','sensibilidade','analise'].includes(VIEW)||VIEW==='pressupostos'&&['capex','receitas'].includes(SUB.pt));
   if(!M()) {
-    $('#nav').innerHTML=NAV.map(n=>n[0]==='g'?`<div class="grp">${n[1]}</div>`:`<a data-go="${n[0]}">${ico(n[2],17)}<span>${n[1]}</span></a>`).join('');
+    renderNavigation();
     $('#mSel').innerHTML='';$('#mTags').innerHTML='';
     $('#view').innerHTML=ph('Modelagem financeira','Projectos da empresa')+`<div class="alert b">${ico('info',17)}${session.canWrite?'Ainda não há projectos activos. Utilize + Novo modelo para começar.':'Ainda não há projectos activos para consultar.'}${store.archivedModels.length?' Para consultar os arquivados, escolha Gerir projectos… no selector de modelos.':''}</div>`+(notice?alertMessage(notice):'');
     projectPicker();protect();return;
@@ -264,8 +275,12 @@ async function createCurrent() {
 }
 document.addEventListener('click',async ev=>{
   const target=ev.target instanceof Element?ev.target:null;if(!target)return;
+  const menuAction=target.closest('[data-act]');
+  if(menuAction?.dataset.act==='navToggle'){const group=menuAction.dataset.group;navExpanded[group]=!navExpanded[group];renderNavigation();return;}
+  if(menuAction?.dataset.act==='toggleMenu'){setMenuOpen(!$('.app').classList.contains('menu-open'));return;}
+  if(menuAction?.dataset.act==='closeMenu'){setMenuOpen(false);return;}
   captureHistoricalDraft();
-  const g=target.closest('[data-go]');if(g){ev.preventDefault();if(!busy)go(g.dataset.go);return;}
+  const g=target.closest('[data-go]');if(g){ev.preventDefault();if(!busy){go(g.dataset.go);setMenuOpen(false);}return;}
   if(target.id==='ov')return closeModal();
   const a=target.closest('[data-act]');if(!a||a.disabled||busy)return;
   const d=a.dataset,m=M();
@@ -296,17 +311,23 @@ $('#mSel').onchange=async()=>{
 function historicalEdited(e){if(M()&&store?.canEdit(M().id)&&historicalFields.includes(e.target?.id)&&!['anF1','anF2'].includes(e.target.id)){historicalDirty.add(M().id);const key=M().id+'#'+e.target.id;if(historicalReadErrors.has(key)){historicalReadErrors.delete(key);$('#anStatus'+e.target.id.slice(-1)).textContent='Dados editados manualmente. Prima Analisar para validar.';notice='';document.querySelector('#integra-notice')?.remove?.();}}}
 document.addEventListener('input',historicalEdited);
 document.addEventListener('change',historicalEdited);
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();setMenuOpen(false);}});
 window.addEventListener('beforeunload',e=>{if(store?.dirty||historicalDirty.size||historicalImports.size){e.preventDefault();e.returnValue='';}});
 async function boot(){
   try {
     session=JSON.parse($('#integra-session').textContent);
     store=new ModelingStore(session.canWrite,modelingRequest,showError);
-    const data=await Promise.all([modelingRequest('/models'),modelingRequest('/templates')]);
+    const opening=session.bootstrap;
+    const data=opening?[opening.models,opening.templates]:await Promise.all([modelingRequest('/models'),modelingRequest('/templates')]);
     templates=data[1];store.load(data[0]);S.models=store.models;S.active=S.models[0]?.id||null;
-    if(M())await selectHistorical(M());
+    if(M()&&opening?.firstHistory?.modelId===M().id&&opening.firstHistory.revision===store.revision(M().id)){
+      S.an=opening.firstHistory.historical?.analysis.input||null;historicalDrafts.set(M().id,S.an);
+    }else if(M())await selectHistorical(M());
     const view=(location.hash||'').slice(1);if(VIEWS[view])VIEW=view;
     render();
   }catch(error){$('#view').innerHTML=alertMessage(errorText(error));document.querySelectorAll('button,select').forEach(e=>e.disabled=true);}
 }
+// A fonte externa melhora a tipografia quando chega, sem bloquear a interface ou o motor.
+const fontStylesheet=$('#integra-fonts');
+if(fontStylesheet){fontStylesheet.addEventListener?.('load',()=>{fontStylesheet.media='all';});if(fontStylesheet.sheet)fontStylesheet.media='all';}
 boot();

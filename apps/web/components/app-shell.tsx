@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import type { Me } from '@/lib/api';
-import { navActive, navigation } from '@/lib/navigation';
+import { navActive, navigation, type NavItem } from '@/lib/navigation';
 import { ROLE_LABEL, type EmployeeRow } from '@/lib/types';
 import { LogoutButton } from '@/app/(app)/logout-button';
 import { ClockCard } from './clock-card';
@@ -16,18 +16,21 @@ export function AppShell({ me, counts, children }: { me: Me; counts: { absences:
   const [open, setOpen] = useState(false);
   const [notices, setNotices] = useState(false);
   const groups = navigation(me, counts);
+  const activeGroup = groups.find(g => g.items.some(item => navActive(item.href, path, new URLSearchParams(search.toString()))))?.label ?? groups[0]?.label ?? '';
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => ({ [activeGroup]: true }));
   const side = useRef<HTMLElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
   useEffect(() => { setOpen(false); setNotices(false); }, [path, search]);
+  useEffect(() => { setExpanded(previous => previous[activeGroup] ? previous : { ...previous, [activeGroup]: true }); }, [activeGroup]);
   useEffect(() => {
     if (!open) return;
     const before = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    side.current?.querySelector<HTMLAnchorElement>('a')?.focus();
+    side.current?.querySelector<HTMLButtonElement>('.nav-group-toggle')?.focus();
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { setOpen(false); toggle.current?.focus(); }
       if (e.key !== 'Tab') return;
-      const nodes = side.current?.querySelectorAll<HTMLElement>('a,button');
+      const nodes = Array.from(side.current?.querySelectorAll<HTMLElement>('a,button') ?? []).filter(node => node.getClientRects().length > 0);
       if (!nodes?.length) return;
       const first = nodes[0]!, last = nodes[nodes.length - 1]!;
       if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
@@ -41,9 +44,12 @@ export function AppShell({ me, counts, children }: { me: Me; counts: { absences:
     <aside ref={side} id="rh-side" className={`side ${open ? 'side-open' : ''}`} aria-label="Navegação principal">
       <div className="logo"><div className="mark">K</div><div><b>Kianda RH</b><small>Gestão de Pessoas · Angola</small></div></div>
       <div className="company-card"><small>Empresa</small><b>{me.company?.name ?? '—'}</b><small>NIF {me.company?.nif ?? '—'}</small></div>
-      <nav>{groups.map((g) => <div key={g.label} className="nav-group"><div className="nav-label">{g.label}</div>{g.items.map((item) => <Link key={item.href} href={item.href} onClick={() => setOpen(false)} className={`${navActive(item.href, path, new URLSearchParams(search.toString())) ? 'nav-on' : ''} ${item.locked ? 'nav-locked' : ''}`} aria-current={navActive(item.href, path, new URLSearchParams(search.toString())) ? 'page' : undefined}>
-        <RhIcon name={item.icon} /><span>{item.label}</span>{!!item.badge && <span className="nav-count">{item.badge}</span>}{item.locked && <span className="nav-lock" title="Sem acesso"><RhIcon name="lock" size={12} /><span className="sr-only">Sem acesso</span></span>}
-      </Link>)}</div>)}</nav>
+      <nav>{groups.map((g, index) => <div key={g.label} className="nav-group">
+        <button className="nav-group-toggle" aria-expanded={!!expanded[g.label]} aria-controls={`rh-nav-${index}`} onClick={() => setExpanded(previous => ({ ...previous, [g.label]: !previous[g.label] }))}>
+          <span>{g.label}</span><span className="nav-chevron" aria-hidden="true">⌄</span>
+        </button>
+        <div id={`rh-nav-${index}`} hidden={!expanded[g.label]}>{g.items.map(item => <NavigationItem key={item.href} item={item} active={navActive(item.href, path, new URLSearchParams(search.toString()))} onNavigate={() => setOpen(false)} />)}</div>
+      </div>)}</nav>
       <div className="who"><b>{me.user.name}</b><small>{ROLE_LABEL[me.user.role] ?? me.user.role}</small><Link href="/conta">A minha conta</Link><LogoutButton /></div>
       <div className="side-foot">LGT (Lei 12/23) · IRT, OGE 2026 (Lei 14/25) · INSS<br />Kianda RH</div>
     </aside>
@@ -60,6 +66,15 @@ export function AppShell({ me, counts, children }: { me: Me; counts: { absences:
       <main id="conteudo" className="content">{children}</main>
     </div>
   </div>;
+}
+
+function NavigationItem({ item, active, onNavigate }: { item: NavItem; active: boolean; onNavigate: () => void }) {
+  const [intent, setIntent] = useState(false);
+  const content = <><RhIcon name={item.icon} /><span>{item.label}</span>{!!item.badge && <span className="nav-count">{item.badge}</span>}{item.locked && <span className="nav-lock" title="Sem acesso"><RhIcon name="lock" size={12} /><span className="sr-only">Sem acesso</span></span>}</>;
+  const shared = { onClick: onNavigate, className: `${active ? 'nav-on' : ''} ${item.locked ? 'nav-locked' : ''}`, 'aria-current': active ? 'page' as const : undefined };
+  // O Integra é um documento independente, pelo que não deve receber pedidos RSC do Next.
+  return item.href === '/modelagem' ? <a href={item.href} {...shared}>{content}</a>
+    : <Link href={item.href} prefetch={intent} onMouseEnter={() => setIntent(true)} onFocus={() => setIntent(true)} onTouchStart={() => setIntent(true)} {...shared}>{content}</Link>;
 }
 
 function LuandaClock() {

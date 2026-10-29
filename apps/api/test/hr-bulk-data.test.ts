@@ -64,12 +64,24 @@ describe.skipIf(!process.env.DATABASE_URL)('leituras RH em conjunto: resultados,
       expect(counts.json().absences).toBe(expected);
       const expenses = expected > 1 ? expected - 1 : expected;
       expect(counts.json().expenses).toBe(expenses);
+      const account = await request(cookie, 'GET', '/v1/auth/me');
+      expect(account.statusCode).toBe(200);
+      expect(account.json().notifications).toEqual(counts.json());
       if (cookie !== sessions.get('employee')) {
         const list = await request(cookie, 'GET', '/v1/absences?awaitingMe=1');
         expect(counts.json().absences).toBe(list.json().length);
         expect(counts.json().expenses).toBe((await request(cookie, 'GET', '/v1/expenses?scope=approve')).json().length);
       }
     }
+  });
+
+  it('carrega sessão, módulos e contadores com uma única leitura, sem expor o logotipo', async () => {
+    const measured = await measureQueries(() => request(owner, 'GET', '/v1/auth/me'));
+    expect(measured.value.statusCode).toBe(200);
+    expect(measured.queries).toBeLessThanOrEqual(5); // Uma leitura e a transacção RLS.
+    expect(measured.value.json().company).toMatchObject({ id: companyId, hasLogo: false });
+    expect(measured.value.json().company).not.toHaveProperty('logoDataUrl');
+    expect((await request(other, 'GET', '/v1/auth/me')).json().company.id).not.toBe(companyId);
   });
 
   it('reflecte imediatamente uma decisão, sem reutilizar os dados de outro pedido', async () => {
@@ -122,6 +134,7 @@ describe.skipIf(!process.env.DATABASE_URL)('leituras RH em conjunto: resultados,
     try {
       expect((await request(owner, 'GET', '/v1/employees')).statusCode).toBe(403);
       expect((await request(owner, 'GET', '/v1/notifications/counts')).statusCode).toBe(403);
+      expect((await request(owner, 'GET', '/v1/auth/me')).json().notifications).toEqual({ absences: 0, expenses: 0 });
     } finally { await getDb().update(companyModules).set({ enabled: true }).where(eq(companyModules.companyId, companyId)); }
   });
 

@@ -1,7 +1,7 @@
 import { formatKz } from '@kianda/core';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { api, currentUser } from '@/lib/api';
+import { api, currentUser, preloadApi } from '@/lib/api';
 import { currentPeriod, monthLabel, shiftMonth } from '@/lib/format';
 import { PAYROLL_ROLES, VARIABLE_LABEL, type EmployeeRow, type JournalRow, type PayrollLineRow, type PayrollRunDetail, type PayrollVariableRow } from '@/lib/types';
 import { AddVariable, CloseButton, DeleteVariable, PrepareButton, SubsidyToggle } from './actions';
@@ -13,16 +13,19 @@ const k = (v: number) => (v ? formatKz(v).replace(' Kz', '') : '—');
 
 export default async function Processamento({ searchParams }: { searchParams: Promise<{ mes?: string; s?: string }> }) {
   const sp = await searchParams;
+  const period = sp.mes ?? currentPeriod();
+  preloadApi(`/v1/payroll-runs?period=${period}`, `/v1/payroll-variables?period=${period}`);
   const me = (await currentUser())!;
   const role = me.user.role;
   if (!PAYROLL_ROLES.includes(role)) redirect('/');
-  const period = sp.mes ?? currentPeriod();
   const tab = sp.s ?? 'resumo';
   const canPrepare = role === 'owner' || role === 'payroll';
   const canClose = role === 'owner' || role === 'finance';
-  const [found] = await api<{ id: string }[]>(`/v1/payroll-runs?period=${period}`);
+  const [foundRows, variables] = await Promise.all([
+    api<{ id: string }[]>(`/v1/payroll-runs?period=${period}`), api<PayrollVariableRow[]>(`/v1/payroll-variables?period=${period}`),
+  ]);
+  const [found] = foundRows;
   const run = found ? await api<PayrollRunDetail>(`/v1/payroll-runs/${found.id}`) : null;
-  const variables = await api<PayrollVariableRow[]>(`/v1/payroll-variables?period=${period}`);
   const draft = run?.status === 'draft';
 
   return (

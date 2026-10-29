@@ -23,6 +23,7 @@ span('function newModel(', '/* ---------------- Estado', `function newModel(sk,o
 span('let S;', '/* ---------------- Motor', `let S={models:[],active:null,unit:'M',an:null};\nconst M=()=>previewModel||S.models.find(m=>m.id===S.active)||S.models[0];\n\n`);
 span('/* ---------------- Motor', '/* ---------------- Formatação', `function run(m,ov={}){return runFinancialModel(m,ov);}\nfunction breakEvenPrice(m){return financialBreakEvenPrice(m);}\nfunction waccOf(m){try{return run(m).wacc}catch{return null}}\nfunction keOf(m){try{return run(m).ke}catch{return null}}\n\n`);
 replace('function render(){', 'function renderPrototype(){');
+span("  $('#nav').innerHTML=", "  $('#mSel').innerHTML=", '  renderNavigation();\n');
 replace('function liveStrip(){', 'function liveStripPrototype(){');
 replace('value="${v}">', 'value="${esc(v??\'\')}">');
 replace("[['Kz','Kwanza (Kz)'],['USD','Dólar (USD)']]", "[['Kz','Kwanza (Kz)'],['USD','Dólar (USD)'],['EUR','Euro (EUR)']]");
