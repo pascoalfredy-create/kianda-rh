@@ -7,7 +7,7 @@ import { AbsenceActions, AbsenceFiles, NewAbsenceForm } from './actions';
 export const dynamic = 'force-dynamic';
 
 const pt = (d: string) => d.split('-').reverse().join('/');
-const TABS = [['pedidos', 'Pedidos'], ['mapa', 'Mapa de férias'], ['saldos', 'Saldos de férias']] as const;
+const TABS = [['pedidos', 'Pedidos'], ['calendario', 'Calendário'], ['saldos', 'Saldos de férias'], ['feriados', 'Feriados'], ['mapa', 'Mapa por colaborador']] as const;
 const policy = (t: string) => ABSENCE_POLICIES[t as AbsenceType];
 
 export default async function Ausencias({ searchParams }: { searchParams: Promise<{ s?: string; mes?: string; estado?: string; ano?: string }> }) {
@@ -18,14 +18,15 @@ export default async function Ausencias({ searchParams }: { searchParams: Promis
   const isHr = role === 'owner' || role === 'hr_admin';
   const canRegisterOthers = isHr || role === 'manager';
   const todayIso = new Date().toISOString().slice(0, 10);
-  const year = Number(sp.ano ?? todayIso.slice(0, 4));
+  const year = /^\d{4}$/.test(sp.ano ?? '') ? Number(sp.ano) : Number(todayIso.slice(0, 4));
+  const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.mes ?? '') ? sp.mes! : todayIso.slice(0, 7);
   const balances = await api<BalanceRow[]>(`/v1/leave/balances?year=${year}`);
 
   return (
     <>
       <div className="page-head">
         <div>
-          <h1>Ausências e férias</h1>
+          <h1>Férias &amp; Ausências</h1>
           <p className="sub">Pedidos, aprovações pela chefia, mapa de férias e saldos — dias úteis com feriados nacionais (LGT, Lei n.º 12/23)</p>
         </div>
       </div>
@@ -41,7 +42,9 @@ export default async function Ausencias({ searchParams }: { searchParams: Promis
         {TABS.map(([k, l]) => <Link key={k} href={`?s=${k}`} className={tab === k ? 'on' : ''} scroll={false}>{l}</Link>)}
       </nav>
       {tab === 'pedidos' && <Requests estado={sp.estado} />}
-      {tab === 'mapa' && <VacationMap month={sp.mes ?? todayIso.slice(0, 7)} people={balances} today={todayIso} />}
+      {tab === 'calendario' && <AbsenceCalendar month={month} today={todayIso} />}
+      {tab === 'feriados' && <Holidays year={year} />}
+      {tab === 'mapa' && <VacationMap month={month} people={balances} today={todayIso} />}
       {tab === 'saldos' && <Balances rows={balances} year={year} />}
     </>
   );
@@ -229,4 +232,28 @@ function Balances({ rows, year }: { rows: BalanceRow[]; year: number }) {
       <p className="muted" style={{ marginTop: 10 }}>Direito anual de 22 dias úteis; no ano de admissão, 2 dias por mês completo de serviço; gozo a partir dos 6 meses de serviço. Os dias transitados editam-se na ficha do colaborador.</p>
     </>
   );
+}
+
+async function AbsenceCalendar({ month, today }: { month: string; today: string }) {
+  const [y, m] = month.split('-').map(Number) as [number, number];
+  const first = new Date(Date.UTC(y, m - 1, 1));
+  const start = new Date(first); start.setUTCDate(1 - ((first.getUTCDay() + 6) % 7));
+  const end = new Date(start); end.setUTCDate(start.getUTCDate() + 41);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const rows = (await api<AbsenceRow[]>(`/v1/absences?from=${iso(start)}&to=${iso(end)}`)).filter(a => ['approved', 'pending'].includes(a.status));
+  const holidays = new Map([y - 1, y, y + 1].flatMap(year => labourRules('AO', year).holidays).map(h => [h.date, h.name]));
+  const shift = (n: number) => iso(new Date(Date.UTC(y, m - 1 + n, 1))).slice(0, 7);
+  return <div className="card"><div className="rh-card-head"><div className="month-nav"><Link className="btn ghost sm" href={`?s=calendario&mes=${shift(-1)}`} aria-label="Mês anterior">‹</Link><b>{first.toLocaleDateString('pt-PT', { month: 'long', year: 'numeric', timeZone: 'UTC' })}</b><Link className="btn ghost sm" href={`?s=calendario&mes=${shift(1)}`} aria-label="Mês seguinte">›</Link></div><small className="muted">Tracejado = pendente de aprovação</small></div>
+    <div className="calendar-scroll"><div className="rh-calendar">
+      {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map(d => <div className="calendar-weekday" key={d}>{d}</div>)}
+      {Array.from({ length: 42 }, (_, i) => {
+        const date = new Date(start); date.setUTCDate(start.getUTCDate() + i);
+        const day = iso(date), holiday = holidays.get(day), weekend = [0, 6].includes(date.getUTCDay());
+        const events = holiday || weekend ? [] : rows.filter(a => a.startDate <= day && a.endDate >= day);
+        return <div key={day} className={`calendar-day ${day.slice(0, 7) !== month ? 'outside' : ''} ${weekend ? 'weekend' : ''} ${holiday ? 'holiday' : ''} ${day === today ? 'today' : ''}`}><span className="calendar-number">{date.getUTCDate()}</span>{holiday && <small className="calendar-holiday">{holiday}</small>}{events.slice(0, 3).map(a => <div key={a.id} className={`calendar-event ${a.status}`} title={`${a.employee.name} — ${policy(a.type)?.label ?? a.type}`} style={{ background: `${policy(a.type)?.color ?? '#0f5c4d'}18`, color: policy(a.type)?.color ?? 'var(--brand)', borderColor: policy(a.type)?.color ?? 'var(--brand)' }}>{a.employee.name.split(' ')[0]}</div>)}{events.length > 3 && <small className="muted">+{events.length - 3}</small>}</div>;
+      })}
+    </div></div></div>;
+}
+function Holidays({ year }: { year: number }) {
+  return <><div className="month-nav" style={{ marginBottom: 14 }}><Link className="btn ghost sm" href={`?s=feriados&ano=${year - 1}`}>‹</Link><b>{year}</b><Link className="btn ghost sm" href={`?s=feriados&ano=${year + 1}`}>›</Link></div><div className="card">{labourRules('AO', year).holidays.map(h => <div className="rh-list-row" key={h.date}><span className="st pending">{pt(h.date)}</span><div className="grow"><b>{h.name}</b><small>{new Date(`${h.date}T12:00:00Z`).toLocaleDateString('pt-PT', { weekday: 'long', timeZone: 'UTC' })}</small></div></div>)}</div></>;
 }

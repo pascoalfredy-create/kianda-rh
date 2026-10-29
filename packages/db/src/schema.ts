@@ -172,6 +172,18 @@ export const personnelBudgets = pgTable('personnel_budgets', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex('personnel_budgets_company_year').on(t.companyId, t.year)]);
 
+/** Pressupostos da tesouraria de pessoal; independentes do orçamento e do módulo Integra. */
+export const personnelCashPlans = pgTable('personnel_cash_plans', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  period: text('period').notNull(),
+  openingMinor: bigint('opening_minor', { mode: 'number' }).notNull().default(0),
+  receipts: jsonb('receipts').$type<Record<string, number>>().notNull().default({}),
+  revision: integer('revision').notNull().default(1),
+  updatedBy: text('updated_by').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [uniqueIndex('personnel_cash_plans_company_period').on(t.companyId, t.period)]);
+
 /** Células do orçamento: custo com pessoal (ilíquido + INSS da empresa) e efectivo previstos por mês e departamento. */
 export const personnelBudgetLines = pgTable('personnel_budget_lines', {
   id: id(),

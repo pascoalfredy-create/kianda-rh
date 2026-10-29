@@ -19,7 +19,7 @@ interface Me {
 const pt = (d: string) => d.split('-').reverse().join('/');
 
 /** Registo de ponto: a hora registada é sempre a do servidor (não a do telemóvel). */
-export function ClockCard({ compact }: { compact?: boolean }) {
+export function ClockCard({ compact, inline }: { compact?: boolean; inline?: boolean }) {
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -60,11 +60,12 @@ export function ClockCard({ compact }: { compact?: boolean }) {
     void sync().then(load);
     const online = () => { setInfo(''); void sync(); };
     window.addEventListener('online', online);
+    window.addEventListener('kianda:punch', load);
     const t = setInterval(load, 60_000);
     const tick = () => setClock(new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Africa/Luanda' }));
     tick();
     const c = setInterval(tick, 1000);
-    return () => { clearInterval(t); clearInterval(c); window.removeEventListener('online', online); };
+    return () => { clearInterval(t); clearInterval(c); window.removeEventListener('online', online); window.removeEventListener('kianda:punch', load); };
   }, [load, sync]);
 
   async function punch(action: 'in' | 'out') {
@@ -83,11 +84,19 @@ export function ClockCard({ compact }: { compact?: boolean }) {
       setPending(pendingPunches().length);
       setInfo(`Sem rede: ${action === 'in' ? 'entrada' : 'saída'} guardada no telemóvel às ${new Date(p.at).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Luanda' })}. É enviada sozinha quando houver rede (a chefia confirma a hora).`);
     }
+    window.dispatchEvent(new Event('kianda:punch'));
     setBusy(false);
   }
 
-  if (!me && error) return compact ? null : <div className="card section"><h2>Registo de ponto</h2><div className="empty">{error}</div></div>;
+  if (!me && error) return inline || compact ? null : <div className="card section"><h2>Registo de ponto</h2><div className="empty">{error}</div></div>;
+  if (!me && inline) return <span className="muted">A carregar ponto…</span>;
   if (!me) return <div className="card clock"><div className="muted">A carregar…</div></div>;
+
+  if (inline) return <div className="clock-inline">
+    <div><small>{me.open ? 'Em serviço' : 'Hora de Luanda'}</small><b>{me.open ? formatMinutes(me.workedMinutes) : clock}</b></div>
+    <button className="btn sm" disabled={busy} onClick={() => punch(me.open ? 'out' : 'in')}>{me.open ? 'Registar saída' : 'Registar entrada'}</button>
+    {(error || info || pending > 0 || me.forgottenDays.length > 0) && <details className="clock-inline-notes"><summary aria-label="Avisos do ponto">!</summary><div role="status">{error && <p>{error}</p>}{info && <p>{info}</p>}{pending > 0 && <p>{pending} registo(s) por enviar. <button className="btn ghost sm" onClick={() => void sync()}>Enviar agora</button></p>}{me.forgottenDays.length > 0 && <p>Saída por registar: {me.forgottenDays.map(pt).join(', ')}.</p>}</div></details>}
+  </div>;
 
   return (
     <div className={`card clock ${compact ? 'compact' : ''}`}>

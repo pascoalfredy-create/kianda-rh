@@ -9,6 +9,8 @@ export interface EmployeeRow {
   jobTitle: string;
   status: 'active' | 'suspended' | 'terminated';
   managerId: string | null;
+  province?: string | null;
+  nif?: string | null;
   department: string | null;
   contract: { type: string; startDate: string; endDate: string | null; baseMinor: number } | null;
   alerts: string[];

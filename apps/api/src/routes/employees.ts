@@ -162,7 +162,7 @@ export function employeeRoutes() {
       const baseMinor = current?.baseMinor ?? c?.baseMinor ?? 0;
       return {
         id: e.id, number: e.number, name: e.name, jobTitle: e.jobTitle, status: e.status, managerId: e.managerId,
-        department: dept,
+        department: dept, province: e.province, nif: e.nif,
         contract: c ? { type: c.type, startDate: c.startDate, endDate: c.endDate, baseMinor } : null,
         alerts: c
           ? [

@@ -2,7 +2,7 @@ import { formatKz, monthLabelPt } from './portal/format';
 import Link from 'next/link';
 import { ClockCard } from '@/components/clock-card';
 import { api } from '@/lib/api';
-import type { BalanceRow } from '@/lib/types';
+import type { Profile, BalanceRow } from '@/lib/types';
 import { RequestDeclaration } from './portal/forms';
 
 interface Portal {
@@ -18,7 +18,9 @@ const STATUS: Record<string, [string, string]> = { pending: ['Pendente', 'st pen
 /** Início do colaborador: o essencial do dia-a-dia num só ecrã. */
 export async function PortalHome({ name, employeeId }: { name: string; employeeId: string }) {
   const year = new Date().getFullYear();
-  const [p, balances] = await Promise.all([api<Portal>('/v1/portal'), api<BalanceRow[]>(`/v1/leave/balances?year=${year}`).catch(() => [])]);
+  const [p, balances, profile] = await Promise.all([api<Portal>('/v1/portal'), api<BalanceRow[]>(`/v1/leave/balances?year=${year}`).catch(() => []), api<Profile>(`/v1/employees/${employeeId}`).catch(() => null)]);
+  const firstContract = profile?.contracts.at(-1)?.startDate;
+  const tenure = firstContract ? Math.max(0, (Date.now() - Date.parse(firstContract)) / (86400000 * 365.25)) : null;
   const mine = balances.find((b) => b.employee.id === employeeId);
   const titles = Object.fromEntries(p.selfService.templates.map((t) => [t.key, t.title]));
   const dt = (d: string) => new Date(d).toLocaleDateString('pt-PT', { timeZone: 'Africa/Luanda' });
@@ -32,7 +34,7 @@ export async function PortalHome({ name, employeeId }: { name: string; employeeI
           {p.review.status === 'self' ? `Tem a auto-avaliação de "${p.review.cycle}" por fazer →` : `A sua avaliação de "${p.review.cycle}" está concluída: tome conhecimento →`}
         </Link>
       )}
-      <div className="grid">
+      <div className="rh-kpis">
         <Link href={p.lastPayslip ? `/recibos/${p.lastPayslip.id}` : '/recibos'} className="card kpi">
           <div className="l">Último recibo{p.lastPayslip ? ` · ${monthLabelPt(p.lastPayslip.period)}` : ''}</div>
           <div className="v">{p.lastPayslip ? formatKz(p.lastPayslip.netMinor) : '—'}</div><div className="muted">líquido · ver todos os recibos</div>
@@ -42,6 +44,10 @@ export async function PortalHome({ name, employeeId }: { name: string; employeeI
           <div className="v">{mine ? mine.available : '—'} <span className="muted" style={{ fontSize: 14 }}>dias disponíveis</span></div>
           <div className="muted">{p.pendingAbsences ? `${p.pendingAbsences} pedido(s) à espera` : 'pedir férias ou ausência'}</div>
         </Link>
+        <div className="card kpi"><div className="l">Antiguidade</div><div className="v">{tenure === null ? '—' : `${tenure.toFixed(1).replace('.', ',')} anos`}</div><div className="muted">{firstContract ? `desde ${firstContract.split('-').reverse().join('/')}` : 'Sem contrato registado'}</div></div>
+        <div className="card kpi"><div className="l">Chefia directa</div><div className="v" style={{ fontSize: 16 }}>{profile?.manager?.name ?? '—'}</div><div className="muted">{profile?.manager?.jobTitle}</div></div>
+      </div>
+      <div className="grid">
         <Link href="/despesas" className="card kpi">
           <div className="l">Despesas</div>
           <div className="v">{p.expenses.toReceiveMinor ? formatKz(p.expenses.toReceiveMinor) : p.expenses.open}</div>

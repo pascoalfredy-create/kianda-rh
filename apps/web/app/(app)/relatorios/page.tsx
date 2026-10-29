@@ -2,6 +2,8 @@ import { formatKz } from '@kianda/core';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { api, currentUser } from '@/lib/api';
+import { PeopleSnapshot } from '@/components/people-snapshot';
+import type { PersonnelOverview } from '@/lib/personnel';
 import { monthLabel } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -86,11 +88,13 @@ export default async function Relatorios({ searchParams }: { searchParams: Promi
   const qs = new URLSearchParams();
   if (sp.de) qs.set('from', sp.de);
   if (sp.ate) qs.set('to', sp.ate);
-  const r = await api<Report>(`/v1/reports/people${qs.size ? `?${qs}` : ''}`);
+  const [r, overview] = await Promise.all([api<Report>(`/v1/reports/people${qs.size ? `?${qs}` : ''}`), api<PersonnelOverview>('/v1/reports/overview').catch(() => null)]);
   if (r.empty) {
     return (
       <>
-        <h1>Relatórios de pessoas</h1>
+        <h1>Relatórios</h1>
+        <p className="sub">Indicadores de gestão de pessoas e custo com pessoal</p>
+        <PeopleSnapshot data={overview} />
         <div className="card empty">Os relatórios usam os processamentos fechados — ainda não há nenhum. <Link href="/processamento" style={{ color: 'var(--brand)' }}>Ir para o processamento →</Link></div>
       </>
     );
@@ -104,7 +108,7 @@ export default async function Relatorios({ searchParams }: { searchParams: Promi
     <>
       <div className="page-head">
         <div>
-          <h1>Relatórios de pessoas</h1>
+          <h1>Relatórios</h1>
           <p className="sub">{monthLabel(r.from)} a {monthLabel(r.to)} · processamentos fechados · custo com pessoal = ilíquido + INSS da empresa</p>
         </div>
         <form className="actions" style={{ alignItems: 'center' }}>
@@ -116,6 +120,7 @@ export default async function Relatorios({ searchParams }: { searchParams: Promi
         </form>
       </div>
 
+      <PeopleSnapshot data={overview} absenteeism={t.absenteeismPct} />
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))' }}>
         {kpi('Custo com pessoal', formatKz(t.costMinor), `ilíquido ${formatKz(t.grossMinor)} + INSS ${formatKz(t.employerInssMinor)}`)}
         {kpi('Custo médio mensal por pessoa', formatKz(t.avgMonthlyCostPerHeadMinor))}

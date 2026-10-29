@@ -17,10 +17,10 @@ function Preview({ text }: { text: string }) {
   );
 }
 
-export function IssueForm({ templates, employees, initialEmployee }: { templates: Tpl[]; employees: { id: string; name: string; number: string }[]; initialEmployee?: string }) {
+export function IssueForm({ templates, employees, initialEmployee, initialTemplate }: { initialTemplate?: string; templates: Tpl[]; employees: { id: string; name: string; number: string }[]; initialEmployee?: string }) {
   const router = useRouter();
   const [employeeId, setEmployeeId] = useState(initialEmployee ?? '');
-  const [key, setKey] = useState(templates[0]?.key ?? '');
+  const [key, setKey] = useState(templates.find(t => t.key === initialTemplate)?.key ?? templates[0]?.key ?? '');
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [pv, setPv] = useState<{ text: string; missingLabels: string[]; version: string } | null>(null);
   const [busy, setBusy] = useState(false);

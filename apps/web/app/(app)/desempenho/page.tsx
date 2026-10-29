@@ -13,6 +13,11 @@ export default async function Desempenho() {
   const me = (await currentUser())!;
   const hr = ['owner', 'hr_admin'].includes(me.user.role);
   const [{ mine, team }, cycles] = await Promise.all([api<{ mine: Item[]; team: Item[] }>('/v1/reviews'), hr ? api<Cycle[]>('/v1/review-cycles') : Promise.resolve([] as Cycle[])]);
+  const focus = cycles.find(c => c.status !== 'draft');
+  const summary = focus ? await api<{ reviews: { status: string; finalScore: number | null }[]; distribution: Record<string, number> }>(`/v1/review-cycles/${focus.id}`).catch(() => null) : null;
+  const completed = summary?.reviews.filter(r => ['acknowledgement', 'done'].includes(r.status)) ?? [];
+  const scores = completed.filter(r => r.finalScore !== null).map(r => Number(r.finalScore)).filter(Number.isFinite);
+  const average = scores.length ? scores.reduce((s, n) => s + n, 0) / scores.length : null;
   const List = ({ items, who }: { items: Item[]; who: boolean }) => (
     <table>
       <tbody>
@@ -31,6 +36,7 @@ export default async function Desempenho() {
     <>
       <h1>Desempenho</h1>
       <p className="sub">Ciclos de avaliação por competências e objectivos, com auto-avaliação, avaliação da chefia e conhecimento do colaborador</p>
+      {hr && <div className="rh-kpis"><div className="card kpi"><div className="l">Avaliações concluídas</div><div className="v">{completed.length}/{summary?.reviews.length ?? 0}</div><div className="d">{focus?.name ?? 'Sem ciclo lançado'}</div></div><div className="card kpi"><div className="l">Nota média</div><div className="v">{average === null ? '—' : average.toFixed(2).replace('.', ',')}</div><div className="d">Escala 1–5</div></div><div className="card kpi" style={{ gridColumn: 'span 2' }}><div className="l">Distribuição</div><div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 10 }}>{summary ? Object.entries(summary.distribution).map(([label, n]) => <div key={label} style={{ flex: 1, textAlign: 'center' }}><b style={{ fontSize: 20 }}>{n}</b><small className="muted" style={{ display: 'block', fontSize: 11 }}>{label}</small></div>) : <span className="muted">Sem avaliações concluídas</span>}</div></div></div>}
       {team.length > 0 && <div className="card section"><h2>Para avaliar (a minha equipa)</h2><List items={team} who /></div>}
       <div className="card section"><h2>As minhas avaliações</h2>{mine.length ? <List items={mine} who={false} /> : <div className="empty">Sem avaliações em curso.</div>}</div>
       {hr && (

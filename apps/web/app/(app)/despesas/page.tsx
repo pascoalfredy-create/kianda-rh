@@ -18,6 +18,8 @@ export default async function Despesas({ searchParams }: { searchParams: Promise
   if (['owner', 'hr_admin', 'finance', 'payroll'].includes(role)) tabs.push(['all', 'Todas']);
   const view = tabs.find(([k]) => k === sp.v)?.[0] ?? tabs[0]?.[0] ?? 'mine';
   const claims = await api<Claim[]>(`/v1/expenses?scope=${view}`);
+  const overview = view === 'all' || !tabs.some(([k]) => k === 'all') ? claims : await api<Claim[]>('/v1/expenses?scope=all');
+  const sum = (...states: string[]) => overview.filter(c => states.includes(c.status)).reduce((s, c) => s + c.totalMinor, 0);
   const total = claims.reduce((s, c) => s + c.totalMinor, 0);
   return (
     <>
@@ -31,6 +33,7 @@ export default async function Despesas({ searchParams }: { searchParams: Promise
           <Link className="btn" href="/despesas/nova">Nova nota de despesas</Link>
         </span>
       </div>
+      <div className="rh-kpis three"><div className="card kpi"><div className="l">Pendentes de aprovação</div><div className="v">{formatKz(sum('submitted'))}</div></div><div className="card kpi"><div className="l">Aprovadas por pagar</div><div className="v">{formatKz(sum('approved'))}</div></div><div className="card kpi"><div className="l">Pagas</div><div className="v">{formatKz(sum('paid'))}</div></div></div>
       {tabs.length > 1 && <nav className="tabs">{tabs.map(([k, l]) => <Link key={k} href={`?v=${k}`} className={view === k ? 'on' : ''}>{l}</Link>)}</nav>}
       <div className="card">
         <table>
