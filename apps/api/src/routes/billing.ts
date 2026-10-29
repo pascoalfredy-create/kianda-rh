@@ -2,7 +2,7 @@ import { modelingUsage, requireModelingPlanUsage, validateModelingSectors } from
 import { storageMode } from '../services/storage.js';
 import { CYCLES, cyclePrice, DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, MODELING_EXTRA_USER_MONTHLY_MINOR, defaultModelingSector, modelingPlanPrice, luandaDate, periodEnd, SECTORS, type BillingCycle, type FinancialSector } from '@kianda/core';
 import {
-  and, auditLogs, companyModules, companies, desc, employees, eq, files, gatewayEvents, getDb, like, outboundEmails, paymentRequests, platformAdmins, platformSettings, sql, subscriptions, users, type Db,
+  and, auditLogs, companyModules, companies, desc, employees, eq, ne, files, gatewayEvents, getDb, like, outboundEmails, paymentRequests, platformAdmins, platformSettings, sql, subscriptions, users, type Db,
 } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -43,19 +43,18 @@ export function billingRoutes() {
     const requests = await db.select().from(paymentRequests).where(eq(paymentRequests.companyId, actor.companyId)).orderBy(desc(paymentRequests.createdAt)).limit(50);
     return c.json({
       status: l.status, statusLabel: l.statusLabel, canWrite: l.canWrite, tier: l.tier, cycle: l.cycle, limit: l.limit, activeEmployees: l.activeEmployees,
-      trialEndsAt: l.sub?.trialEndsAt ?? null, paidUntil: l.sub?.paidUntil ?? null, extraSeats: l.sub?.extraSeats ?? 0,
-      prices: [...priceTable(), ...(l.tier.key === 'custom' ? [{ ...l.tier, prices: Object.fromEntries((Object.keys(CYCLES) as BillingCycle[]).map(cycle => [cycle, cyclePrice(l.tier, cycle)])) }] : [])], cycles: CYCLES, extraSeatMinor: settings.extraSeatMinor, bank: settings.bank, supportEmail: settings.supportEmail, supportPhone: settings.supportPhone, requests,
+      trialEndsAt: l.sub?.trialEndsAt ?? null, paidUntil: l.sub?.paidUntil ?? null,
+      prices: [...priceTable(), ...(l.tier.key === 'custom' ? [{ ...l.tier, prices: Object.fromEntries((Object.keys(CYCLES) as BillingCycle[]).map(cycle => [cycle, cyclePrice(l.tier, cycle)])) }] : [])], cycles: CYCLES, bank: settings.bank, supportEmail: settings.supportEmail, supportPhone: settings.supportPhone, requests,
       modules, modelingPlans: MODELING_PLANS, modelingExtraUserMinor: MODELING_EXTRA_USER_MONTHLY_MINOR, modelingUsage: await modelingUsage(db, actor.companyId),
       multicaixa: !!proxypayConfig(), invoicesOnline: !!vendusConfig(),
     });
   });
 
-  /** Pedido de pagamento (pró-forma): renovação/mudança de escalão, ou colaboradores extra (pagamento único). */
+  /** Pedido de pagamento (pró-forma): plano RH ou Modelagem, com preço calculado no servidor. */
   app.post('/v1/billing/requests', requireRole('finance'), async (c) => {
     const actor = c.get('actor');
     const b = z.discriminatedUnion('kind', [
       z.object({ kind: z.literal('subscription'), tierKey: z.string(), cycle: z.enum(['monthly', 'semiannual', 'annual']) }),
-      z.object({ kind: z.literal('extra_seats'), seats: z.number().int().min(1).max(5000) }),
       z.object({ kind: z.literal('modeling_subscription'), planKey: z.enum(MODELING_PLANS.map(p => p.key) as [string, ...string[]]), cycle: z.enum(['monthly', 'semiannual', 'annual']), extraUsers: z.number().int().min(0).max(100_000).default(0), sectors: z.array(z.enum(FINANCIAL_SECTORS)).min(1).max(8) }),
     ]).parse(await body(c));
     const db = getDb();
@@ -75,22 +74,16 @@ export function billingRoutes() {
       const after = [grant?.paidUntil, grant?.status === 'trial' ? grant.trialEndsAt : null].filter((d): d is string => !!d && d >= today).sort().at(-1);
       const start = after ? addDays(after, 1) : today;
       values = { kind: b.kind, tierKey: plan.key, cycle: b.cycle, projectLimit: plan.projectLimit, extraUsers: b.extraUsers, primarySector, modelingSectors: sectors, periodStart: start, periodEnd: periodEnd(start, CYCLES[b.cycle].months), grossMinor: price.grossMinor, discountMinor: price.discountMinor, amountMinor: price.totalMinor };
-    } else if (b.kind === 'subscription') {
+    } else {
       const tier = b.tierKey === l.sub?.tierKey ? l.tier : DEFAULT_TIERS.find((t) => t.key === b.tierKey);
       if (!tier) throw new DomainError('escalao_invalido', 'Escalão inexistente', 400);
-      if (tier.maxEmployees !== null && l.activeEmployees > tier.maxEmployees + (l.sub?.extraSeats ?? 0)) throw new DomainError('escalao_pequeno', `Tem ${l.activeEmployees} colaboradores activos: escolha um escalão maior`, 400);
+      if (tier.maxEmployees !== null && l.activeEmployees > tier.maxEmployees) throw new DomainError('escalao_pequeno', `Tem ${l.activeEmployees} colaboradores activos: escolha um escalão maior`, 400);
       const price = cyclePrice(tier, b.cycle as BillingCycle);
       if (!price) throw new DomainError('sob_consulta', 'Este escalão é sob consulta: contacte o suporte Kianda para uma proposta', 400);
       // O período pago começa depois do que já está pago — ou do fim do experimental (o cliente não perde dias grátis).
       const after = [l.sub?.paidUntil, l.status === 'trial' ? l.sub?.trialEndsAt : null].filter((d): d is string => Boolean(d) && d! >= today).sort().at(-1);
       const start = after ? addDays(after, 1) : today;
       values = { kind: 'subscription', tierKey: tier.key, cycle: b.cycle, periodStart: start, periodEnd: periodEnd(start, CYCLES[b.cycle as BillingCycle].months), grossMinor: price.grossMinor, discountMinor: price.discountMinor, amountMinor: price.totalMinor };
-    } else {
-      const settings = await platformSettingsGet(db);
-      if (!settings.extraSeatMinor) throw new DomainError('preco_por_definir', 'O valor por colaborador extra ainda não está definido: contacte o suporte Kianda', 400);
-      if (l.tier.maxEmployees === null) throw new DomainError('sem_limite', 'O seu escalão não tem limite de colaboradores', 400);
-      const amount = settings.extraSeatMinor * b.seats;
-      values = { kind: 'extra_seats', seats: b.seats, grossMinor: amount, discountMinor: 0, amountMinor: amount };
     }
     const replaced = await db.select().from(paymentRequests).where(and(eq(paymentRequests.companyId, actor.companyId), eq(paymentRequests.kind, values.kind!), eq(paymentRequests.status, 'pending')));
     const created = await db.transaction(async (tx) => {
@@ -111,7 +104,7 @@ export function billingRoutes() {
     const actor = c.get('actor');
     const db = getDb();
     if (!proxypayConfig()) throw new DomainError('sem_multicaixa', 'O pagamento por referência Multicaixa ainda não está disponível', 400);
-    const [r] = await db.select().from(paymentRequests).where(and(eq(paymentRequests.id, c.req.param('id')), eq(paymentRequests.companyId, actor.companyId), eq(paymentRequests.status, 'pending')));
+    const [r] = await db.select().from(paymentRequests).where(and(eq(paymentRequests.id, c.req.param('id')), eq(paymentRequests.companyId, actor.companyId), eq(paymentRequests.status, 'pending'), ne(paymentRequests.kind, 'extra_seats')));
     if (!r) throw new DomainError('nao_encontrado', 'Pedido inexistente ou já tratado', 404);
     await releaseGatewayReference(r);
     const u = await attachGatewayReference(db, r);
@@ -135,7 +128,7 @@ export function billingRoutes() {
     const actor = c.get('actor');
     const b = z.object({ payerReference: z.string().trim().min(3, 'Indique a referência da transferência').max(80), payerNote: z.string().trim().max(500).optional().nullable() }).parse(await body(c));
     const [u] = await getDb().update(paymentRequests).set({ payerReference: b.payerReference, payerNote: b.payerNote ?? null })
-      .where(and(eq(paymentRequests.id, c.req.param('id')), eq(paymentRequests.companyId, actor.companyId), eq(paymentRequests.status, 'pending'))).returning();
+      .where(and(eq(paymentRequests.id, c.req.param('id')), eq(paymentRequests.companyId, actor.companyId), eq(paymentRequests.status, 'pending'), ne(paymentRequests.kind, 'extra_seats'))).returning();
     if (!u) throw new DomainError('nao_encontrado', 'Pedido inexistente ou já tratado', 404);
     return c.json(u);
   });
@@ -230,7 +223,7 @@ export function platformRoutes() {
         id: co.id, name: co.name, nif: co.nif, sector: co.sector, sectorLabel: co.sector ? SECTORS[co.sector as keyof typeof SECTORS] ?? co.sector : null, code: co.code, createdAt: co.createdAt,
         owner: owner ?? null, activeEmployees: counts.find((x) => x.companyId === co.id)?.n ?? 0, modules, modelingMrr,
         status: l.status, statusLabel: l.statusLabel, tierKey: sub?.tierKey ?? null, tierLabel: l.tier.label, cycle: sub?.cycle ?? null, limit: l.limit,
-        trialEndsAt: sub?.trialEndsAt ?? null, paidUntil: sub?.paidUntil ?? null, extraSeats: sub?.extraSeats ?? 0, notes: sub?.notes ?? null,
+        trialEndsAt: sub?.trialEndsAt ?? null, paidUntil: sub?.paidUntil ?? null, notes: sub?.notes ?? null,
         monthlyMinor: modules.hr.subscribed && (l.status === 'active' || l.status === 'past_due') ? monthly : null, pendingPayments: pending.find((p) => p.companyId === co.id)?.n ?? 0,
       });
     }
@@ -246,7 +239,7 @@ export function platformRoutes() {
     return c.json(rows.map(({ r, company, nif }) => ({ ...r, company, nif })));
   });
 
-  /** Confirmar o pagamento: activa o período (ou acrescenta os colaboradores extra). */
+  /** Confirmar o pagamento: activa o período do módulo contratado. */
   app.post('/v1/platform/payment-requests/:id/confirm', async (c) => {
     const actor = c.get('actor');
     const b = z.object({ invoiceRef: z.string().trim().max(80).optional().nullable() }).parse(await body(c));
@@ -308,13 +301,13 @@ export function platformRoutes() {
     return c.json(u);
   });
 
-  /** Ajustes manuais à licença (suspender, prolongar experimental, escalão à medida, extras oferecidos). */
+  /** Ajustes manuais à licença (suspender, prolongar experimental, contratos anteriores à medida). */
   app.patch('/v1/platform/companies/:id/subscription', async (c) => {
     const actor = c.get('actor');
     const b = z.object({
       status: z.enum(['trial', 'active', 'suspended', 'cancelled']).optional(), tierKey: z.enum(['custom', ...DEFAULT_TIERS.map((t) => t.key)]).optional(),
       cycle: z.enum(['monthly', 'semiannual', 'annual']).optional(), trialEndsAt: z.iso.date().nullable().optional(), paidUntil: z.iso.date().nullable().optional(),
-      extraSeats: z.number().int().min(0).max(100_000).optional(), customMaxEmployees: z.number().int().min(1).nullable().optional(),
+      extraSeats: z.never().optional(), customMaxEmployees: z.number().int().min(1).nullable().optional(),
       customMonthlyMinor: z.number().int().min(0).nullable().optional(), notes: z.string().trim().max(1000).nullable().optional(),
     }).parse(await body(c));
     const db = getDb();
@@ -357,7 +350,7 @@ export function platformRoutes() {
 
   app.put('/v1/platform/settings', async (c) => {
     const b = z.object({
-      extraSeatMinor: z.number().int().min(0).nullable(),
+      extraSeatMinor: z.never().optional(),
       bank: z.object({ holder: z.string().trim().min(2), bankName: z.string().trim().min(2), iban: z.string().trim().min(10) }).nullable(),
       supportEmail: z.email('Email de suporte inválido').nullable().or(z.literal('').transform(() => null)),
       supportPhone: z.string().trim().max(30).nullable().or(z.literal('').transform(() => null)),

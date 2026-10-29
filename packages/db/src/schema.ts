@@ -514,6 +514,7 @@ export const subscriptions = pgTable('subscriptions', {
   cycle: text('cycle').notNull().default('monthly'),
   trialEndsAt: date('trial_ends_at'),
   paidUntil: date('paid_until'),
+  /** Histórico de extras do antigo regime RH; não altera o limite das faixas fixas. */
   extraSeats: integer('extra_seats').notNull().default(0),
   /** Escalão à medida: limite e preço mensal negociados. */
   customMaxEmployees: integer('custom_max_employees'),
@@ -527,7 +528,7 @@ export const paymentRequests = pgTable('payment_requests', {
   id: id(),
   companyId: text('company_id').notNull().references(() => companies.id),
   number: text('number').notNull().unique(),
-  /** subscription (RH) | extra_seats (RH) | modeling_subscription (proposta por projectos). */
+  /** subscription (RH) | modeling_subscription. extra_seats só em registos históricos. */
   kind: text('kind').notNull(),
   tierKey: text('tier_key'),
   cycle: text('cycle'),
@@ -568,7 +569,7 @@ export const paymentRequests = pgTable('payment_requests', {
 /** Administradores da plataforma (consola Kianda) — definidos pela variável KIANDA_PLATFORM_ADMINS na publicação. */
 export const platformAdmins = pgTable('platform_admins', { email: text('email').primaryKey(), createdAt: createdAt() });
 
-/** Parâmetros comerciais da plataforma (escalões, preço por colaborador extra, dados bancários). */
+/** Parâmetros comerciais da plataforma (dados bancários e contactos de suporte). */
 export const platformSettings = pgTable('platform_settings', { key: text('key').primaryKey(), value: jsonb('value').notNull(), updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow() });
 
 /** Portal do colaborador: pedidos de declarações. */

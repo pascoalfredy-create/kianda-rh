@@ -12,7 +12,7 @@ Uma conta e empresa partilhadas, no mesmo repositório e base de dados. `/regist
 | 501–1.000 | 380.000 | 2.052.000 | 3.648.000 |
 | Mais de 1.000 | 450.000 | 2.430.000 | 4.320.000 |
 
-A primeira faixa usa os montantes comerciais indicados, incluindo o arredondamento semestral para 540.000 Kz. Contratos `custom` anteriores continuam reconhecidos e os pedidos já emitidos mantêm os valores gravados. O preço de RH nunca é utilizado para Modelagem.
+A primeira faixa usa os montantes comerciais indicados, incluindo o arredondamento semestral para 540.000 Kz. Contratos `custom` anteriores continuam reconhecidos e os pedidos já emitidos mantêm os valores gravados. O preço de RH nunca é utilizado para Modelagem. O RH não vende colaboradores extra: o limite corresponde apenas à faixa contratada e, quando necessário, a empresa muda para a faixa seguinte. O adicional de 3.000 Kz foi descontinuado. Pedidos antigos de extras ainda pendentes são cancelados com auditoria; pagamentos já confirmados mantêm os montantes e as facturas no histórico. Novas referências e confirmações desses extras são bloqueadas, incluindo pelo gateway. Valores legados de `extra_seats` não aumentam os limites actuais.
 
 ## Modelagem Financeira
 

@@ -4,9 +4,8 @@ import {
 } from '@kianda/core';
 import { and, eq, employees, platformAdmins, platformSettings, sql, subscriptions, users, type Db } from '@kianda/db';
 
-export interface PlatformSettings { extraSeatMinor: number | null; bank: { holder: string; bankName: string; iban: string } | null; supportEmail: string | null; supportPhone: string | null }
-/** Colaborador acima do limite do escalão: 3 000 Kz, pagamento único (alterável na consola). */
-const DEFAULT_SETTINGS: PlatformSettings = { extraSeatMinor: 300_000, bank: null, supportEmail: null, supportPhone: null };
+export interface PlatformSettings { bank: { holder: string; bankName: string; iban: string } | null; supportEmail: string | null; supportPhone: string | null }
+const DEFAULT_SETTINGS: PlatformSettings = { bank: null, supportEmail: null, supportPhone: null };
 
 export async function platformSettingsGet(db: Db): Promise<PlatformSettings> {
   const [row] = await db.select().from(platformSettings).where(eq(platformSettings.key, 'commercial'));
@@ -14,7 +13,9 @@ export async function platformSettingsGet(db: Db): Promise<PlatformSettings> {
   const { supportContact, ...rest } = v;
   // Compatibilidade: o antigo campo único passa para o email (se tiver @) ou para o telefone.
   const legacy = supportContact ? (supportContact.includes('@') ? { supportEmail: supportContact } : { supportPhone: supportContact }) : {};
-  return { ...DEFAULT_SETTINGS, ...legacy, ...rest };
+  // Só devolve parâmetros actuais; preços extra antigos no JSON deixam de ser expostos.
+  const { bank, supportEmail, supportPhone } = { ...DEFAULT_SETTINGS, ...legacy, ...rest };
+  return { bank, supportEmail, supportPhone };
 }
 
 /** Escalão efectivo (o "à medida" usa o limite e o preço negociados). */
@@ -36,7 +37,7 @@ export async function licenceOf(db: Db, companyId: string) {
   const status = effectiveStatus({ status: sub.status as SubscriptionStatus, trialEndsAt: sub.trialEndsAt, paidUntil: sub.paidUntil }, today);
   const tier = tierOf(sub);
   return {
-    sub, status, statusLabel: SUBSCRIPTION_STATUS[status], tier, limit: employeeLimit(tier, sub.extraSeats), activeEmployees: n?.n ?? 0,
+    sub, status, statusLabel: SUBSCRIPTION_STATUS[status], tier, limit: employeeLimit(tier), activeEmployees: n?.n ?? 0,
     canWrite: canWrite(status), cycle: sub.cycle as BillingCycle,
   };
 }

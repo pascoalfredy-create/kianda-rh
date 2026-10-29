@@ -1,7 +1,7 @@
 import { MODELING_SECTOR_LABELS, formatKz, type CompanyModulesOverview, type FinancialSector } from '@kianda/core';
 import { redirect } from 'next/navigation';
 import { api, currentUser } from '@/lib/api';
-import { ExtraSeatsForm, ModelingPlanForm, NewReference, ReferenceForm, RenewForm } from './forms';
+import { ModelingPlanForm, NewReference, ReferenceForm, RenewForm } from './forms';
 import { ModuleCards } from '@/components/module-cards';
 import { ModelingMembers, type ModelingMember } from './modeling-members';
 
@@ -10,8 +10,8 @@ export const dynamic = 'force-dynamic';
 interface Req { id: string; number: string; kind: string; tierKey: string | null; cycle: string | null; seats: number | null; projectLimit: number | null; extraUsers: number | null; modelingSectors: FinancialSector[] | null; periodStart: string | null; periodEnd: string | null; amountMinor: number; status: string; payerReference: string | null; invoiceRef: string | null; createdAt: string; gatewayEntity: string | null; gatewayReference: string | null; gatewayExpiresAt: string | null; gatewayError: string | null; invoiceProvider: string | null; confirmedVia: string | null }
 interface Billing {
   status: string; statusLabel: string; canWrite: boolean; tier: { key: string; label: string }; cycle: string; limit: number | null; activeEmployees: number;
-  trialEndsAt: string | null; paidUntil: string | null; extraSeats: number; prices: { key: string; label: string; maxEmployees: number | null; prices: Record<string, { totalMinor: number; discountMinor: number } | null> }[];
-  cycles: Record<string, { label: string }>; extraSeatMinor: number | null; bank: { holder: string; bankName: string; iban: string } | null; supportEmail: string | null; supportPhone: string | null; requests: Req[]; multicaixa: boolean; invoicesOnline: boolean;
+  trialEndsAt: string | null; paidUntil: string | null; prices: { key: string; label: string; maxEmployees: number | null; prices: Record<string, { totalMinor: number; discountMinor: number } | null> }[];
+  cycles: Record<string, { label: string }>; bank: { holder: string; bankName: string; iban: string } | null; supportEmail: string | null; supportPhone: string | null; requests: Req[]; multicaixa: boolean; invoicesOnline: boolean;
   modules: CompanyModulesOverview;
   modelingPlans: { key: string; label: string; projectLimit: number | null; sectorLimit: number; prices: Record<string, number | null> }[];
   modelingExtraUserMinor: number;
@@ -26,7 +26,7 @@ export default async function Licenca() {
   const b = await api<Billing>('/v1/billing');
   const canManageMembers = me.user.role === 'owner' && b.modules.modeling.canAccess && b.modules.modeling.canWrite;
   const [users, members] = canManageMembers ? await Promise.all([api<{ id: string; name: string }[]>('/v1/users'), api<ModelingMember[]>('/v1/modeling/members')]) : [[], []];
-  const pending = b.requests.filter((r) => r.status === 'pending');
+  const pending = b.requests.filter((r) => r.status === 'pending' && r.kind !== 'extra_seats');
   const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
   const daysLeft = b.trialEndsAt && b.status === 'trial' ? Math.max(0, Math.ceil((Date.parse(b.trialEndsAt) - Date.now()) / 86_400_000)) : null;
   const usage = b.limit ? Math.min(100, Math.round((b.activeEmployees / b.limit) * 100)) : 0;
@@ -44,7 +44,7 @@ export default async function Licenca() {
         <div className="card kpi"><div className="l">Escalão</div><div className="v" style={{ fontSize: 18 }}>{b.tier.label}</div><div className="muted">pagamento {b.cycles[b.cycle]?.label.toLowerCase()}</div></div>
         <div className="card kpi"><div className="l">Colaboradores activos</div><div className="v">{b.activeEmployees}{b.limit ? <span className="muted" style={{ fontSize: 14 }}> de {b.limit}</span> : null}</div>
           {b.limit ? <div style={{ height: 6, background: '#eef0f3', borderRadius: 3, marginTop: 6 }}><div style={{ width: `${usage}%`, height: 6, borderRadius: 3, background: usage >= 90 ? 'var(--amber)' : 'var(--brand)' }} /></div> : null}
-          <div className="muted">{b.extraSeats ? `inclui ${b.extraSeats} extra` : ''}</div></div>
+          </div>
       </div>
       {pending.length > 0 && (
         <div className="card section">
@@ -76,7 +76,6 @@ export default async function Licenca() {
         </div>
       )}
       <div className="card section"><h2>RH: subscrever, renovar ou mudar de escalão</h2><RenewForm prices={b.prices} currentTier={b.tier.key} currentCycle={b.cycle} activeEmployees={b.activeEmployees} cycles={b.cycles} /></div>
-      {b.limit !== null && <div className="card section"><h2>Colaboradores acima do limite</h2><div style={{ padding: '0 16px 6px' }}><ExtraSeatsForm priceMinor={b.extraSeatMinor} /></div></div>}
       <div className="card section">
         <h2>Tabela de preços · Recursos Humanos</h2>
         <table className="dense">

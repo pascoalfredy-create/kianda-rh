@@ -185,7 +185,7 @@ export function employeeRoutes() {
     assertMinimumWage(kz(b.contract.base), b.contract.type, b.contract.startDate);
     const lic = await licenceOf(db, req.companyId);
     if (lic.limit !== null && lic.activeEmployees >= lic.limit) {
-      throw new DomainError('limite_colaboradores', `A licença (${lic.tier.label}) permite ${lic.limit} colaboradores activos. Acrescente colaboradores extra ou mude de escalão no menu Licença.`, 402);
+      throw new DomainError('limite_colaboradores', `A licença (${lic.tier.label}) permite ${lic.limit} colaboradores activos. Mude para a faixa seguinte no menu Licença.`, 402);
     }
     const { contract, candidateId, ...data } = b;
     const [cand] = candidateId ? await db.select().from(candidates).where(and(eq(candidates.id, candidateId), eq(candidates.companyId, req.companyId))) : [];

@@ -17,6 +17,11 @@ const addDays = (d: string, n: number) => new Date(Date.parse(d) + n * 86_400_00
 /** Validade da referência Multicaixa. */
 export const REFERENCE_DAYS = 10;
 
+/** Pedidos antigos de colaboradores extra ficam apenas no histórico; nunca voltam a ser cobrados. */
+function assertCurrentRequest(r: Pick<Request, 'kind'>) {
+  if (r.kind !== 'subscription' && r.kind !== 'modeling_subscription') throw new DomainError('cobranca_descontinuada', 'O RH utiliza apenas planos de faixas fixas. Escolha o plano correspondente ao efectivo.', 400);
+}
+
 const DEFAULT_INVOICE: InvoiceSettings = { taxId: 'NOR', exemptionCode: null, exemptionLaw: null, paymentMethodId: null, registerId: null };
 export async function invoiceSettingsGet(db: Pick<Db, 'select'>): Promise<InvoiceSettings & { autoIssue: boolean }> {
   const [row] = await db.select().from(platformSettings).where(eq(platformSettings.key, 'invoicing'));
@@ -45,6 +50,7 @@ async function billingContacts(db: Pick<Db, 'select'>, companyId: string) {
 
 /** Gera a referência Multicaixa do pedido (se o ProxyPay estiver configurado). Um erro do gateway não impede o pedido. */
 export async function attachGatewayReference(db: Db, r: Request): Promise<Request> {
+  assertCurrentRequest(r);
   const cfg = proxypayConfig();
   if (!cfg) return r;
   const [co] = await db.select({ nif: companies.nif }).from(companies).where(eq(companies.id, r.companyId));
@@ -69,6 +75,7 @@ export async function releaseGatewayReference(r: Pick<Request, 'gateway' | 'gate
 
 /** Email com as instruções de pagamento (referência Multicaixa e/ou transferência). */
 export async function emailPaymentInstructions(db: Db, r: Request) {
+  assertCurrentRequest(r);
   const settings = await platformSettingsGet(db);
   const facts: [string, string][] = [['Pedido', r.number], ['Montante', formatKz(r.amountMinor)]];
   if (r.gatewayReference) {
@@ -90,7 +97,7 @@ export async function emailPaymentInstructions(db: Db, r: Request) {
 }
 
 /**
- * Confirma o pagamento: activa o período pago (ou soma os colaboradores extra). Idempotente pelo estado do pedido.
+ * Confirma o pagamento: activa o período pago do módulo. Idempotente pelo estado do pedido.
  * via = manual (consola) | gateway (Multicaixa).
  */
 export async function confirmPaymentRequest(db: Db, id: string, o: { actorId: string; via: 'manual' | 'gateway'; invoiceRef?: string | null }) {
@@ -101,6 +108,7 @@ export async function confirmPaymentRequest(db: Db, id: string, o: { actorId: st
     await tx.select({ id: companies.id }).from(companies).where(eq(companies.id, candidate.companyId)).for('update');
     const [r] = await tx.select().from(paymentRequests).where(eq(paymentRequests.id, id)).for('update');
     if (!r || r.status !== 'pending') throw new DomainError('nao_encontrado', 'Pedido inexistente ou já tratado', 404);
+    assertCurrentRequest(r);
     const [sub] = await tx.select().from(subscriptions).where(eq(subscriptions.companyId, r.companyId));
     if (r.kind === 'modeling_subscription') {
       const sectors = validateModelingSectors(r.tierKey!, r.primarySector as FinancialSector, r.modelingSectors ?? []);
@@ -113,8 +121,6 @@ export async function confirmPaymentRequest(db: Db, id: string, o: { actorId: st
       if (sub) await tx.update(subscriptions).set(values).where(eq(subscriptions.companyId, r.companyId));
       else await tx.insert(subscriptions).values({ companyId: r.companyId, ...values });
       await tx.insert(companyModules).values({ companyId: r.companyId, module: 'hr', enabled: true }).onConflictDoUpdate({ target: [companyModules.companyId, companyModules.module], set: { enabled: true, updatedAt: new Date() } });
-    } else {
-      await tx.update(subscriptions).set({ extraSeats: (sub?.extraSeats ?? 0) + (r.seats ?? 0), updatedAt: new Date() }).where(eq(subscriptions.companyId, r.companyId));
     }
     const [x] = await tx.update(paymentRequests).set({ status: 'paid', paidAt: new Date(), confirmedBy: o.actorId, confirmedVia: o.via, invoiceRef: o.invoiceRef ?? null })
       .where(eq(paymentRequests.id, r.id)).returning();
@@ -182,10 +188,11 @@ export async function applyGatewayPayment(db: Db, p: GatewayPayment) {
   // O ProxyPay pode reciclar n.ºs de referência expirados: vale o pedido pendente mais recente com essa referência.
   const candidates = p.reference ? await db.select().from(paymentRequests).where(and(eq(paymentRequests.gateway, 'proxypay'), eq(paymentRequests.gatewayReference, p.reference))).orderBy(desc(paymentRequests.createdAt)) : [];
   const r = candidates.find((x) => x.status === 'pending') ?? candidates[0];
-  let outcome: 'applied' | 'unmatched' | 'amount_mismatch' | 'not_pending' = 'applied';
+  let outcome: 'applied' | 'unmatched' | 'amount_mismatch' | 'not_pending' | 'retired_request' = 'applied';
   let message: string | null = null;
   if (!r) { outcome = 'unmatched'; message = `Referência ${p.reference} sem pedido no Kianda`; }
   else if (r.status !== 'pending') { outcome = 'not_pending'; message = `Pedido ${r.number} já estava ${r.status === 'paid' ? 'pago' : 'cancelado'} — verificar e devolver se necessário`; }
+  else if (r.kind !== 'subscription' && r.kind !== 'modeling_subscription') { outcome = 'retired_request'; message = `Pedido ${r.number}: cobrança de colaboradores extra descontinuada — rever o pagamento recebido`; }
   else if (p.amountMinor !== r.amountMinor) { outcome = 'amount_mismatch'; message = `Pago ${formatKz(p.amountMinor)}; o pedido ${r.number} é de ${formatKz(r.amountMinor)}`; }
   const inserted = await db.insert(gatewayEvents).values({
     provider: 'proxypay', externalId: p.id, reference: p.reference, amountMinor: p.amountMinor, payload: p.raw as object, outcome, paymentRequestId: r?.id ?? null, message,

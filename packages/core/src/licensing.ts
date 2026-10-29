@@ -2,12 +2,12 @@ import { kz, type Minor } from './money.js';
 
 /**
  * Licenciamento da plataforma: escalões por número de colaboradores activos, ciclos de pagamento com desconto,
- * colaboradores extra (pagamento único) e estado da subscrição.
+ * faixas fixas e estado da subscrição.
  */
 
 export interface Tier { key: string; label: string; minEmployees: number; maxEmployees: number | null; monthlyMinor: Minor | null; cycleTotals?: Partial<Record<BillingCycle, Minor>> }
 
-/** Tabela comercial por omissão (Kz/mês). Acima do último escalão: proposta à medida. */
+/** Tabela comercial de faixas fixas (Kz/mês). A última faixa não tem limite de colaboradores. */
 export const DEFAULT_TIERS: Tier[] = [
   { key: 't1', label: '1 a 100 colaboradores', minEmployees: 0, maxEmployees: 100, monthlyMinor: kz(99_999), cycleTotals: { semiannual: kz(540_000), annual: kz(959_990) } },
   { key: 't2', label: '101 a 250 colaboradores', minEmployees: 101, maxEmployees: 250, monthlyMinor: kz(200_000) },
@@ -76,9 +76,9 @@ export function effectiveStatus(s: { status: SubscriptionStatus; trialEndsAt: st
 /** Pode escrever (criar/alterar)? Em só leitura, a empresa consulta e exporta, e pode sempre tratar da subscrição. */
 export const canWrite = (status: SubscriptionStatus) => status === 'trial' || status === 'active' || status === 'past_due';
 
-/** Limite de colaboradores activos: máximo do escalão + extras comprados (escalão à medida: sem limite). */
-export function employeeLimit(tier: Tier, extraSeats: number): number | null {
-  return tier.maxEmployees === null ? null : tier.maxEmployees + extraSeats;
+/** Limite de colaboradores activos da faixa, sem acréscimos por colaborador. */
+export function employeeLimit(tier: Tier): number | null {
+  return tier.maxEmployees;
 }
 
 export const SECTORS = {
