@@ -1,6 +1,6 @@
 import { kz } from '@kianda/core';
 import {
-  and, asc, auditLogs, companies, departments, desc, employees, eq, getDb, journalEntries, payrollLines, payrollRuns, payrollVariables, users,
+  and, asc, auditLogs, companies, departments, desc, employees, eq, getDb, journalEntries, payrollLines, payrollRuns, payrollVariables, users, type Db,
 } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -9,6 +9,25 @@ import { closePayroll, DomainError, draftPayroll, type SubsidyOverrides } from '
 
 const periodSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Período inválido (AAAA-MM)');
 const READERS = ['payroll', 'finance', 'hr_admin'] as const;
+
+async function runDetail(db: Db, run: typeof payrollRuns.$inferSelect) {
+  const lines = await db.select({ l: payrollLines, name: employees.name, number: employees.number, department: departments.name, iban: employees.iban })
+    .from(payrollLines).innerJoin(employees, eq(employees.id, payrollLines.employeeId)).leftJoin(departments, eq(departments.id, employees.departmentId))
+    .where(eq(payrollLines.runId, run.id)).orderBy(asc(employees.number));
+  const people = await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.companyId, run.companyId));
+  const who = (uid: string | null) => people.find((p) => p.id === uid)?.name ?? null;
+  return {
+    ...run, preparedByName: who(run.preparedBy), closedByName: who(run.closedBy),
+    lines: lines.map(({ l, name, number, department, iban }) => ({ ...l, employee: { id: l.employeeId, name, number, department, hasIban: !!iban } })),
+  };
+}
+
+async function variablesFor(db: Db, companyId: string, period: string) {
+  const rows = await db.select({ v: payrollVariables, name: employees.name, number: employees.number }).from(payrollVariables)
+    .innerJoin(employees, eq(employees.id, payrollVariables.employeeId))
+    .where(and(eq(payrollVariables.companyId, companyId), eq(payrollVariables.period, period))).orderBy(asc(employees.number));
+  return rows.map(({ v, name, number }) => ({ ...v, employee: { id: v.employeeId, name, number } }));
+}
 
 export function payrollRoutes() {
   const app = new Hono<AppEnv>();
@@ -28,20 +47,24 @@ export function payrollRoutes() {
     return c.json(await draftPayroll(getDb(), companyId, period, actorId), 201);
   });
 
+  /** Folha e variáveis com uma só validação de sessão e licença. */
+  app.get('/v1/payroll-runs/opening', requireRole(...READERS), async (c) => {
+    const { period } = z.object({ period: periodSchema }).parse(c.req.query());
+    const { companyId } = c.get('actor');
+    const db = getDb();
+    const [runs, variables] = await Promise.all([
+      db.select().from(payrollRuns).where(and(eq(payrollRuns.companyId, companyId), eq(payrollRuns.period, period))).limit(1),
+      variablesFor(db, companyId, period),
+    ]);
+    return c.json({ run: runs[0] ? await runDetail(db, runs[0]) : null, variables });
+  });
+
   app.get('/v1/payroll-runs/:id', requireRole(...READERS), async (c) => {
     const { id } = c.req.param();
     const db = getDb();
     const [run] = await db.select().from(payrollRuns).where(and(eq(payrollRuns.id, id), eq(payrollRuns.companyId, c.get('actor').companyId)));
     if (!run) return c.json({ error: 'nao_encontrado', message: 'Processamento inexistente' }, 404);
-    const lines = await db.select({ l: payrollLines, name: employees.name, number: employees.number, department: departments.name, iban: employees.iban })
-      .from(payrollLines).innerJoin(employees, eq(employees.id, payrollLines.employeeId)).leftJoin(departments, eq(departments.id, employees.departmentId))
-      .where(eq(payrollLines.runId, id)).orderBy(asc(employees.number));
-    const people = await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.companyId, run.companyId));
-    const who = (uid: string | null) => people.find((p) => p.id === uid)?.name ?? null;
-    return c.json({
-      ...run, preparedByName: who(run.preparedBy), closedByName: who(run.closedBy),
-      lines: lines.map(({ l, name, number, department, iban }) => ({ ...l, employee: { id: l.employeeId, name, number, department, hasIban: !!iban } })),
-    });
+    return c.json(await runDetail(db, run));
   });
 
   app.post('/v1/payroll-runs/:id/close', requireRole('finance'), async (c) => {
@@ -77,10 +100,7 @@ export function payrollRoutes() {
 
   app.get('/v1/payroll-variables', requireRole(...READERS), async (c) => {
     const { period } = z.object({ period: periodSchema }).parse(c.req.query());
-    const rows = await getDb().select({ v: payrollVariables, name: employees.name, number: employees.number }).from(payrollVariables)
-      .innerJoin(employees, eq(employees.id, payrollVariables.employeeId))
-      .where(and(eq(payrollVariables.companyId, c.get('actor').companyId), eq(payrollVariables.period, period))).orderBy(asc(employees.number));
-    return c.json(rows.map(({ v, name, number }) => ({ ...v, employee: { id: v.employeeId, name, number } })));
+    return c.json(await variablesFor(getDb(), c.get('actor').companyId, period));
   });
 
   app.post('/v1/payroll-variables', requireRole('payroll'), async (c) => {

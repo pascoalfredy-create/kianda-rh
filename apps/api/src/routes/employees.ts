@@ -1,6 +1,6 @@
 import {
   buildOrgTree, compensationAt, compensationHistory, complianceAlerts, contractAlerts, createsCycle, documentAlerts, getPack,
-  angolanIbanProblem, isValidAngolanBI, kz, normalizeIban, packOrLatest, PackNotFoundError, type CountryPack, type DocumentType,
+  angolanIbanProblem, isValidAngolanBI, kz, normalizeIban, packOrLatest, PackNotFoundError, type CompensationChange, type CountryPack, type DocumentType,
 } from '@kianda/core';
 import {
   candidates, candidateEvents, auditLogs, compensationChanges, contracts, departments, employeeDocuments, employees, files, getDb, payrollRuns, users, type Db,
@@ -9,7 +9,6 @@ import { and, asc, desc, eq, gte, inArray, or, sql } from '@kianda/db';
 import { removeFiles } from '../services/storage.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { groupBy } from '../lib/group-by.js';
 import { body, requireCompany, requireRole, type Actor, type AppEnv } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
 import { licenceOf } from '../services/licence.js';
@@ -150,16 +149,20 @@ export function employeeRoutes() {
     const db = getDb();
     const latest = db.selectDistinctOn([contracts.employeeId], { employeeId: contracts.employeeId, type: contracts.type, startDate: contracts.startDate, endDate: contracts.endDate, baseMinor: contracts.baseMinor }).from(contracts)
       .innerJoin(employees, eq(employees.id, contracts.employeeId)).where(eq(employees.companyId, req.companyId)).orderBy(contracts.employeeId, desc(contracts.startDate)).as('latest_contract');
-    const rows = await db.select({ e: employees, c: { employeeId: latest.employeeId, type: latest.type, startDate: latest.startDate, endDate: latest.endDate, baseMinor: latest.baseMinor }, dept: departments.name }).from(employees)
+    const comp = db.select({ employeeId: compensationChanges.employeeId,
+      changes: sql<CompensationChange[]>`jsonb_agg(jsonb_build_object('effectiveDate', ${compensationChanges.effectiveDate}, 'baseMinor', ${compensationChanges.baseMinor}, 'mealMinor', ${compensationChanges.mealMinor}, 'transportMinor', ${compensationChanges.transportMinor}))`.as('changes'),
+    }).from(compensationChanges).where(eq(compensationChanges.companyId, req.companyId)).groupBy(compensationChanges.employeeId).as('compensation_by_employee');
+    const docs = db.select({ employeeId: employeeDocuments.employeeId,
+      documents: sql<{ type: DocumentType; number: string; expiryDate: string | null }[]>`jsonb_agg(jsonb_build_object('type', ${employeeDocuments.type}, 'number', ${employeeDocuments.number}, 'expiryDate', ${employeeDocuments.expiryDate}))`.as('documents'),
+    }).from(employeeDocuments).where(eq(employeeDocuments.companyId, req.companyId)).groupBy(employeeDocuments.employeeId).as('documents_by_employee');
+    const rows = await db.select({ e: employees, c: { employeeId: latest.employeeId, type: latest.type, startDate: latest.startDate, endDate: latest.endDate, baseMinor: latest.baseMinor }, dept: departments.name, comp: comp.changes, docs: docs.documents }).from(employees)
       .leftJoin(latest, eq(latest.employeeId, employees.id)).leftJoin(departments, eq(departments.id, employees.departmentId))
+      .leftJoin(comp, eq(comp.employeeId, employees.id)).leftJoin(docs, eq(docs.employeeId, employees.id))
       .where(eq(employees.companyId, req.companyId)).orderBy(employees.number);
-    const comp = await db.select().from(compensationChanges).where(eq(compensationChanges.companyId, req.companyId));
-    const docs = await db.select().from(employeeDocuments).where(eq(employeeDocuments.companyId, req.companyId));
     const t = today();
     const pack = alertPack(t);
-    const compByEmployee = groupBy(comp, x => x.employeeId), docsByEmployee = groupBy(docs, d => d.employeeId);
-    return ctx.json(rows.map(({ e, c, dept }) => {
-      const current = compensationAt(compByEmployee.get(e.id) ?? [], t);
+    return ctx.json(rows.map(({ e, c, dept, comp, docs }) => {
+      const current = compensationAt(comp ?? [], t);
       const baseMinor = current?.baseMinor ?? c?.baseMinor ?? 0;
       return {
         id: e.id, number: e.number, name: e.name, jobTitle: e.jobTitle, status: e.status, managerId: e.managerId,
@@ -169,7 +172,7 @@ export function employeeRoutes() {
           ? [
               ...contractAlerts({ startDate: c.startDate, endDate: c.endDate, type: c.type === 'fixed_term' ? 'fixed-term' : c.type }, t, pack).map((a) => a.message),
               ...complianceAlerts({ baseMinor, internship: c.type === 'internship' }, pack),
-              ...documentAlerts((docsByEmployee.get(e.id) ?? []) as { type: DocumentType; number: string; expiryDate: string | null }[], t).map((a) => a.message),
+              ...documentAlerts(docs ?? [], t).map((a) => a.message),
             ]
           : ['Sem contrato registado'],
       };

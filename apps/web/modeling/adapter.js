@@ -5,7 +5,7 @@ let currencyDialog=null;
 const navExpanded={};let navView=null;
 function renderNavigation(){
   const groups=[];for(const entry of NAV){if(entry[0]==='g')groups.push({label:entry[1],items:[]});else groups.at(-1).items.push(entry);}
-  if(navView!==VIEW){const index=groups.findIndex(g=>g.items.some(item=>item[0]===VIEW));navExpanded[index<0?0:index]=true;navView=VIEW;}
+  if(navView!==VIEW){for(const key of Object.keys(navExpanded))delete navExpanded[key];const index=groups.findIndex(g=>g.items.some(item=>item[0]===VIEW));navExpanded[index<0?0:index]=true;navView=VIEW;}
   $('#nav').innerHTML=groups.map((group,index)=>`<section class="nav-group"><button class="nav-group-toggle" data-act="navToggle" data-group="${index}" aria-expanded="${!!navExpanded[index]}" aria-controls="integra-nav-${index}"><span>${esc(group.label)}</span><span class="nav-chevron" aria-hidden="true">⌄</span></button><div id="integra-nav-${index}"${navExpanded[index]?'':' hidden'}>${group.items.map(item=>`<a href="#${item[0]}" class="${VIEW===item[0]?'on':''}" data-go="${item[0]}"${VIEW===item[0]?' aria-current="page"':''}>${ico(item[2],17)}<span>${esc(item[1])}</span></a>`).join('')}</div></section>`).join('');
 }
 function setMenuOpen(open){
@@ -276,7 +276,7 @@ async function createCurrent() {
 document.addEventListener('click',async ev=>{
   const target=ev.target instanceof Element?ev.target:null;if(!target)return;
   const menuAction=target.closest('[data-act]');
-  if(menuAction?.dataset.act==='navToggle'){const group=menuAction.dataset.group;navExpanded[group]=!navExpanded[group];renderNavigation();return;}
+  if(menuAction?.dataset.act==='navToggle'){const group=menuAction.dataset.group,open=!navExpanded[group];for(const key of Object.keys(navExpanded))delete navExpanded[key];navExpanded[group]=open;renderNavigation();return;}
   if(menuAction?.dataset.act==='toggleMenu'){setMenuOpen(!$('.app').classList.contains('menu-open'));return;}
   if(menuAction?.dataset.act==='closeMenu'){setMenuOpen(false);return;}
   captureHistoricalDraft();

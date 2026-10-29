@@ -1,6 +1,6 @@
 import { formatKz } from '@kianda/core';
 import Link from 'next/link';
-import { api, ApiError, currentUser, preloadApi } from '@/lib/api';
+import { actorFromApi, apiWithActor, ApiError, type ApiActor } from '@/lib/api';
 import { CAN_EDIT, CONTRACT_LABEL, STATUS_LABEL, type EmployeeRow } from '@/lib/types';
 import { RhDialog } from '@/components/rh-dialog';
 import Ficha from './[id]/profile';
@@ -11,18 +11,18 @@ type Filters = { q?: string; estado?: string; dept?: string; provincia?: string;
 export default async function Colaboradores({ searchParams }: { searchParams: Promise<Filters> }) {
   const sp = await searchParams;
   const { q = '', estado = 'activos', dept = '', provincia = '', contrato = '' } = sp;
-  preloadApi('/v1/employees');
-  const me = await currentUser();
+  let actor: ApiActor | null = null;
   let rows: EmployeeRow[] = [], error = '';
-  try { rows = await api<EmployeeRow[]>('/v1/employees'); }
-  catch (e) { error = e instanceof ApiError && e.status === 403 ? 'O seu perfil não permite consultar a lista de colaboradores.' : 'Não foi possível carregar os colaboradores. Tente novamente.'; }
+  try { const response = await apiWithActor<EmployeeRow[]>('/v1/employees'); rows = response.data; actor = response.actor; }
+  catch (e) { if (e instanceof ApiError) actor = e.actor; error = e instanceof ApiError && e.status === 403 ? 'O seu perfil não permite consultar a lista de colaboradores.' : 'Não foi possível carregar os colaboradores. Tente novamente.'; }
+  actor = await actorFromApi({ actor });
   const needle = q.trim().toLocaleLowerCase('pt-PT');
   const shown = rows.filter(e => (estado === 'todos' || (estado === 'cessados' ? e.status === 'terminated' : e.status !== 'terminated')) &&
     (!dept || e.department === dept) && (!provincia || e.province === provincia) && (!contrato || e.contract?.type === contrato) &&
     (!needle || [e.name, e.number, e.nif ?? '', e.jobTitle, e.department ?? ''].some(v => v.toLocaleLowerCase('pt-PT').includes(needle))));
   const qs = new URLSearchParams({ q, estado, dept, provincia, contrato });
   const returnTo = `/colaboradores?${qs}`;
-  const canEdit = CAN_EDIT.includes(me?.user.role ?? '');
+  const canEdit = CAN_EDIT.includes(actor?.role ?? '');
   const initial = (name: string) => name.split(/\s+/).slice(0, 2).map(w => w[0]).join('');
   return <>
     <div className="page-head"><div><h1>Colaboradores</h1><p className="sub">{rows.length} registos · ficha individual com identificação, INSS, IBAN e contrato</p></div>{canEdit && <Link href={`${returnTo}&novo=1`} className="btn">+ Novo colaborador</Link>}</div>

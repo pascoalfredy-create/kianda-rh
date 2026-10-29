@@ -86,11 +86,52 @@ const audit = (db: Db, actor: Actor, action: string, entity: string, id: string,
 
 const view = (e: Entry) => ({ ...e, in: luandaTime(e.clockIn), out: e.clockOut ? luandaTime(e.clockOut) : null });
 
+function presentSheet(actor: Actor, emp: Employee, period: string, sheet: Awaited<ReturnType<typeof monthSheet>>) {
+  return {
+    employee: { id: emp.id, name: emp.name, number: emp.number, jobTitle: emp.jobTitle },
+    ...sheet, entries: sheet.entries.map(view),
+    canEdit: canDecideFor(actor, emp) && !sheet.approval,
+    canApprove: canDecideFor(actor, emp) && !sheet.approval && period < luandaDate(new Date()).slice(0, 7),
+    canReopen: !!sheet.approval && (actor.role === 'owner' || actor.role === 'hr_admin'),
+  };
+}
+
+async function overviewFor(db: Db, actor: Actor, period: string) {
+  const visible = await visibleEmployeeIds(db, actor);
+  const conds = [eq(employees.companyId, actor.companyId), inArray(employees.status, ['active', 'suspended'])];
+  if (visible) conds.push(inArray(employees.id, visible.length ? visible : ['-']));
+  const list = await db.select({ e: employees, department: departments.name }).from(employees)
+    .leftJoin(departments, eq(departments.id, employees.departmentId)).where(and(...conds)).orderBy(asc(employees.name));
+  if (!list.length) return [];
+  const data = await monthData(db, actor.companyId, list.map(r => r.e), period);
+  return list.map(({ e, department }) => {
+    const { summary, approval } = sheetFromData(e, period, data);
+    const { days: _d, ...totals } = summary;
+    return { employee: { id: e.id, name: e.name, number: e.number, department }, ...totals, approval, canApprove: canDecideFor(actor, e) && !approval && period < data.today.slice(0, 7) };
+  });
+}
+
 // ───────────────────────── Rotas ─────────────────────────
 
 export function attendanceRoutes() {
   const app = new Hono<AppEnv>();
   app.use('/v1/attendance/*', requireCompany);
+
+  /** Abertura do ecrã: identidade e dados são validados no mesmo pedido. */
+  app.get('/v1/attendance/opening', async (c) => {
+    const actor = c.get('actor');
+    const { period, tab: selected } = z.object({ period: periodSchema, tab: z.string().optional() }).parse(c.req.query());
+    const tab = selected ?? (actor.role === 'employee' ? 'meu' : 'equipa');
+    const db = getDb();
+    if (tab === 'equipa' && actor.role !== 'employee') {
+      return c.json({ tab, rows: await overviewFor(db, actor, period), sheet: null });
+    }
+    if (tab === 'meu' && actor.employeeId) {
+      const emp = await loadEmployee(db, actor, actor.employeeId);
+      return c.json({ tab, rows: null, sheet: presentSheet(actor, emp, period, await monthSheet(db, actor.companyId, emp, period)) });
+    }
+    return c.json({ tab, rows: null, sheet: null });
+  });
 
   /** O meu dia: registos de hoje e se há entrada aberta. */
   app.get('/v1/attendance/me', async (c) => {
@@ -167,13 +208,7 @@ export function attendanceRoutes() {
     const emp = await loadEmployee(db, actor, employeeId);
     if (!(await canSee(db, actor, emp.id))) return c.json({ error: 'sem_permissao', message: 'Sem acesso à assiduidade deste colaborador.' }, 403);
     const sheet = await monthSheet(db, actor.companyId, emp, q.period);
-    return c.json({
-      employee: { id: emp.id, name: emp.name, number: emp.number, jobTitle: emp.jobTitle },
-      ...sheet, entries: sheet.entries.map(view),
-      canEdit: canDecideFor(actor, emp) && !sheet.approval,
-      canApprove: canDecideFor(actor, emp) && !sheet.approval && q.period < luandaDate(new Date()).slice(0, 7),
-      canReopen: !!sheet.approval && (actor.role === 'owner' || actor.role === 'hr_admin'),
-    });
+    return c.json(presentSheet(actor, emp, q.period, sheet));
   });
 
   /** Visão da equipa/empresa: totais do mês por colaborador. */
@@ -181,18 +216,7 @@ export function attendanceRoutes() {
     const actor = c.get('actor');
     const { period } = z.object({ period: periodSchema }).parse(c.req.query());
     const db = getDb();
-    const visible = await visibleEmployeeIds(db, actor);
-    const conds = [eq(employees.companyId, actor.companyId), inArray(employees.status, ['active', 'suspended'])];
-    if (visible) conds.push(inArray(employees.id, visible.length ? visible : ['-']));
-    const list = await db.select({ e: employees, department: departments.name }).from(employees)
-      .leftJoin(departments, eq(departments.id, employees.departmentId)).where(and(...conds)).orderBy(asc(employees.name));
-    if (!list.length) return c.json([]);
-    const data = await monthData(db, actor.companyId, list.map(r => r.e), period);
-    return c.json(list.map(({ e, department }) => {
-      const { summary, approval } = sheetFromData(e, period, data);
-      const { days: _d, ...totals } = summary;
-      return { employee: { id: e.id, name: e.name, number: e.number, department }, ...totals, approval, canApprove: canDecideFor(actor, e) && !approval && period < data.today.slice(0, 7) };
-    }));
+    return c.json(await overviewFor(db, actor, period));
   });
 
   /** Correcção manual (chefia da equipa ou RH; nunca o próprio). */

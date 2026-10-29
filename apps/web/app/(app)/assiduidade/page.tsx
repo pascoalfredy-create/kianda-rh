@@ -1,7 +1,8 @@
 import { formatMinutes } from '@kianda/core';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { ClockCard } from '@/components/clock-card';
-import { api, currentUser } from '@/lib/api';
+import { actorFromApi, apiWithActor } from '@/lib/api';
 import type { OverviewRow, Sheet } from '@/lib/types';
 import { SheetView } from './sheet-view';
 import { currentPeriod, monthLabel, shiftMonth as shift } from '@/lib/format';
@@ -10,11 +11,13 @@ export const dynamic = 'force-dynamic';
 
 export default async function Assiduidade({ searchParams }: { searchParams: Promise<{ s?: string; mes?: string }> }) {
   const sp = await searchParams;
-  const me = (await currentUser())!;
-  const staff = me.user.role !== 'employee';
-  const hasFile = !!me.user.employeeId;
-  const tab = sp.s ?? (staff ? 'equipa' : 'meu');
   const period = sp.mes ?? currentPeriod();
+  const opening = await apiWithActor<{ tab: string; rows: OverviewRow[] | null; sheet: Sheet | null }>(`/v1/attendance/opening?period=${period}${sp.s ? `&tab=${encodeURIComponent(sp.s)}` : ''}`);
+  const actor = await actorFromApi(opening);
+  if (!actor) redirect('/login');
+  const staff = actor.role !== 'employee';
+  const hasFile = !!actor.employeeId;
+  const tab = opening.data.tab;
 
   return (
     <>
@@ -33,14 +36,13 @@ export default async function Assiduidade({ searchParams }: { searchParams: Prom
         </div>
       </div>
       <div style={{ borderBottom: '1px solid var(--line)', marginBottom: 16 }} />
-      {tab === 'equipa' && staff && <Overview period={period} />}
-      {tab === 'meu' && hasFile && <SheetView sheet={await api<Sheet>(`/v1/attendance/sheet?period=${period}`)} period={period} />}
+      {tab === 'equipa' && staff && <Overview period={period} rows={opening.data.rows ?? []} />}
+      {tab === 'meu' && hasFile && opening.data.sheet && <SheetView sheet={opening.data.sheet} period={period} />}
     </>
   );
 }
 
-async function Overview({ period }: { period: string }) {
-  const rows = await api<OverviewRow[]>(`/v1/attendance/overview?period=${period}`);
+function Overview({ period, rows }: { period: string; rows: OverviewRow[] }) {
   const toApprove = rows.filter((r) => r.canApprove).length;
   return (
     <>

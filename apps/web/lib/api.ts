@@ -4,28 +4,44 @@ import { cookies } from 'next/headers';
 import { upstream } from './upstream';
 import type { CompanyModulesOverview } from '@kianda/core';
 export const SESSION_COOKIE = 'kianda_session';
+export interface ApiActor { sub: string; role: string; employeeId: string | null }
+interface ApiResponse<T> { data: T; actor: ApiActor | null }
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) { super(message); }
+  constructor(public status: number, message: string, public actor: ApiActor | null = null) { super(message); }
 }
 
 /** Chamada à API a partir de componentes de servidor, reenviando o cookie de sessão do utilizador. */
-async function requestJson(path: string, init: RequestInit = {}): Promise<unknown> {
+async function requestJson(path: string, init: RequestInit = {}): Promise<ApiResponse<unknown>> {
   const session = (await cookies()).get(SESSION_COOKIE)?.value;
   const res = await upstream(path, {
     ...init,
     headers: { 'content-type': 'application/json', ...(session ? { cookie: `${SESSION_COOKIE}=${session}` } : {}), ...init.headers },
     cache: 'no-store',
   });
-  if (!res.ok) throw new ApiError(res.status, (await res.json().catch(() => ({}))).message ?? `Erro ${res.status}`);
-  return res.json();
+  const role = res.headers.get('X-Kianda-Role');
+  const sub = res.headers.get('X-Kianda-User');
+  const actor = role && sub ? { sub, role, employeeId: res.headers.get('X-Kianda-Employee') || null } : null;
+  if (!res.ok) throw new ApiError(res.status, (await res.json().catch(() => ({}))).message ?? `Erro ${res.status}`, actor);
+  return { data: await res.json(), actor };
 }
 
 // React limita esta reutilização à renderização corrente: sem cache entre empresas,
 // sessões ou pedidos. Escritas e chamadas com opções continuam sempre a executar.
 const readJson = cache((path: string) => requestJson(path));
-export function api<T>(path: string, init?: RequestInit): Promise<T> {
-  return (init === undefined ? readJson(path) : requestJson(path, init)) as Promise<T>;
+export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  return (await (init === undefined ? readJson(path) : requestJson(path, init))).data as T;
+}
+
+export function apiWithActor<T>(path: string): Promise<ApiResponse<T>> {
+  return readJson(path) as Promise<ApiResponse<T>>;
+}
+
+/** Compatibilidade com respostas anteriores; a autoridade é sempre a API autenticada. */
+export async function actorFromApi(response: { actor: ApiActor | null }): Promise<ApiActor | null> {
+  if (response.actor) return response.actor;
+  const me = await currentUser();
+  return me ? { sub: me.user.sub, role: me.user.role, employeeId: me.user.employeeId } : null;
 }
 
 /** Inicia leituras independentes; a API continua a validar empresa, licença e perfil. */
