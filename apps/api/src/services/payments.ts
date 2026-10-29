@@ -1,18 +1,24 @@
 import { getPack, luandaDate, OBLIGATION_LABEL, paymentJournal, payrollObligations, type ObligationKind } from '@kianda/core';
 import {
-  and, auditLogs, like, bankAccounts, expenseClaims, bankLines, bankMatches, eq, journalEntries, journalLines, payrollLines, payrollPayments, payrollRuns, type Db,
+  and, auditLogs, like, bankAccounts, expenseClaims, bankLines, bankMatches, eq, inArray, sql, journalEntries, journalLines, payrollLines, payrollPayments, payrollRuns, type Db,
 } from '@kianda/db';
+import { groupBy } from '../lib/group-by.js';
 import { companyAccounts, DomainError } from './payroll.js';
 
 export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 export const KIND_CODE: Record<ObligationKind, string> = { salaries: 'SAL', inss: 'INSS', irt: 'IRT' };
 
 export async function runTotals(db: Db | Tx, runId: string) {
-  const lines = await db.select().from(payrollLines).where(eq(payrollLines.runId, runId));
-  return lines.reduce((t, l) => ({
-    netMinor: t.netMinor + l.netMinor, irtMinor: t.irtMinor + l.irtMinor,
-    inssEmployeeMinor: t.inssEmployeeMinor + l.inssEmployeeMinor, inssEmployerMinor: t.inssEmployerMinor + l.inssEmployerMinor,
-  }), { netMinor: 0, irtMinor: 0, inssEmployeeMinor: 0, inssEmployerMinor: 0 });
+  return (await totalsForRuns(db, [runId])).get(runId) ?? emptyTotals();
+}
+
+const emptyTotals = () => ({ netMinor: 0, irtMinor: 0, inssEmployeeMinor: 0, inssEmployerMinor: 0 });
+async function totalsForRuns(db: Db | Tx, ids: string[]) {
+  const rows = await db.select({ runId: payrollLines.runId,
+    netMinor: sql`sum(${payrollLines.netMinor})`.mapWith(Number), irtMinor: sql`sum(${payrollLines.irtMinor})`.mapWith(Number),
+    inssEmployeeMinor: sql`sum(${payrollLines.inssEmployeeMinor})`.mapWith(Number), inssEmployerMinor: sql`sum(${payrollLines.inssEmployerMinor})`.mapWith(Number),
+  }).from(payrollLines).where(inArray(payrollLines.runId, ids)).groupBy(payrollLines.runId);
+  return new Map(rows.map(({ runId, ...totals }) => [runId, totals]));
 }
 
 export function obligationAmount(kind: ObligationKind, t: Awaited<ReturnType<typeof runTotals>>) {
@@ -20,12 +26,25 @@ export function obligationAmount(kind: ObligationKind, t: Awaited<ReturnType<typ
 }
 
 export async function obligationsFor(db: Db, run: typeof payrollRuns.$inferSelect) {
-  const payments = await db.select().from(payrollPayments).where(eq(payrollPayments.runId, run.id));
-  const paid = Object.fromEntries(payments.map((p) => [p.kind, p.paidOn]));
-  const items = payrollObligations({ period: run.period, pack: getPack('AO', Number(run.period.slice(0, 4))), ...(await runTotals(db, run.id)), paid, today: luandaDate(new Date()) });
-  return items.map((o) => {
-    const p = payments.find((x) => x.kind === o.kind);
-    return { ...o, reference: p?.reference ?? null, reconciled: p ? Boolean(p.matchId) : null };
+  return (await obligationsForRuns(db, [run]))[0]!.obligations;
+}
+
+/** Duas leituras para todos os meses, sem transferir os recibos completos para obter totais. */
+export async function obligationsForRuns(db: Db, runs: (typeof payrollRuns.$inferSelect)[]) {
+  if (!runs.length) return [];
+  const ids = runs.map(r => r.id);
+  const [paymentRows, totals] = await Promise.all([
+    db.select().from(payrollPayments).where(inArray(payrollPayments.runId, ids)), totalsForRuns(db, ids),
+  ]);
+  const paymentsByRun = groupBy(paymentRows, p => p.runId), today = luandaDate(new Date());
+  return runs.map(run => {
+    const payments = paymentsByRun.get(run.id) ?? [];
+    const paid = Object.fromEntries(payments.map(p => [p.kind, p.paidOn]));
+    const items = payrollObligations({ period: run.period, pack: getPack('AO', Number(run.period.slice(0, 4))), ...(totals.get(run.id) ?? emptyTotals()), paid, today });
+    return { runId: run.id, period: run.period, obligations: items.map(o => {
+      const p = payments.find(x => x.kind === o.kind);
+      return { ...o, reference: p?.reference ?? null, reconciled: p ? Boolean(p.matchId) : null };
+    }) };
   });
 }
 

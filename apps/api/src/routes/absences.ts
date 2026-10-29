@@ -51,12 +51,16 @@ function daysInYear(a: Pick<Absence, 'startDate' | 'endDate'>, year: number): nu
 }
 
 async function balanceFor(db: Db, emp: Employee, year: number, excludeId?: string) {
-  const pack = labourRules('AO', year);
   const hire = await hireDate(db, emp.id);
   const rows = await db.select().from(absences).where(and(
     eq(absences.employeeId, emp.id), eq(absences.type, 'vacation'), inArray(absences.status, ['pending', 'approved']),
     lte(absences.startDate, `${year}-12-31`), gte(absences.endDate, `${year}-01-01`),
   ));
+  return balanceFromRows(emp, year, hire, rows, excludeId);
+}
+
+function balanceFromRows(emp: Employee, year: number, hire: string | null, rows: Absence[], excludeId?: string) {
+  const pack = labourRules('AO', year);
   let approved = 0;
   let pending = 0;
   for (const a of rows) {
@@ -219,9 +223,17 @@ export function absenceRoutes() {
     if (employeeId) conds.push(eq(employees.id, employeeId));
     const list = await db.select({ e: employees, department: departments.name }).from(employees)
       .leftJoin(departments, eq(departments.id, employees.departmentId)).where(and(...conds)).orderBy(asc(employees.name));
-    const out = [];
-    for (const { e, department } of list) out.push({ employee: { id: e.id, name: e.name, number: e.number, department }, ...(await balanceFor(db, e, year)) });
-    return c.json(out);
+    if (!list.length) return c.json([]);
+    const ids = list.map(({ e }) => e.id);
+    // Duas leituras para toda a lista, em vez de duas por colaborador.
+    const [firstContracts, vacationRows] = await Promise.all([
+      db.select({ employeeId: contracts.employeeId, date: sql<string>`min(${contracts.startDate})` }).from(contracts).where(inArray(contracts.employeeId, ids)).groupBy(contracts.employeeId),
+      db.select().from(absences).where(and(eq(absences.companyId, actor.companyId), inArray(absences.employeeId, ids), eq(absences.type, 'vacation'), inArray(absences.status, ['pending', 'approved']), lte(absences.startDate, `${year}-12-31`), gte(absences.endDate, `${year}-01-01`))),
+    ]);
+    const hireDates = new Map(firstContracts.map(c => [c.employeeId, c.date]));
+    const byEmployee = new Map<string, Absence[]>();
+    for (const a of vacationRows) { const rows = byEmployee.get(a.employeeId) ?? []; rows.push(a); byEmployee.set(a.employeeId, rows); }
+    return c.json(list.map(({ e, department }) => ({ employee: { id: e.id, name: e.name, number: e.number, department }, ...balanceFromRows(e, year, hireDates.get(e.id) ?? null, byEmployee.get(e.id) ?? []) })));
   });
 
   return app;

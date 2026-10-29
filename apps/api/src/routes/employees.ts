@@ -9,6 +9,7 @@ import { and, asc, desc, eq, gte, inArray, or, sql } from '@kianda/db';
 import { removeFiles } from '../services/storage.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { groupBy } from '../lib/group-by.js';
 import { body, requireCompany, requireRole, type Actor, type AppEnv } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
 import { licenceOf } from '../services/licence.js';
@@ -147,18 +148,18 @@ export function employeeRoutes() {
   app.get('/v1/employees', requireRole(...STAFF), async (ctx) => {
     const req = ctx.get('actor');
     const db = getDb();
-    const rows = await db.select({ e: employees, c: contracts, dept: departments.name }).from(employees)
-      .leftJoin(contracts, eq(contracts.employeeId, employees.id))
-      .leftJoin(departments, eq(departments.id, employees.departmentId))
-      .where(eq(employees.companyId, req.companyId))
-      .orderBy(employees.number, desc(contracts.startDate));
+    const latest = db.selectDistinctOn([contracts.employeeId], { employeeId: contracts.employeeId, type: contracts.type, startDate: contracts.startDate, endDate: contracts.endDate, baseMinor: contracts.baseMinor }).from(contracts)
+      .innerJoin(employees, eq(employees.id, contracts.employeeId)).where(eq(employees.companyId, req.companyId)).orderBy(contracts.employeeId, desc(contracts.startDate)).as('latest_contract');
+    const rows = await db.select({ e: employees, c: { employeeId: latest.employeeId, type: latest.type, startDate: latest.startDate, endDate: latest.endDate, baseMinor: latest.baseMinor }, dept: departments.name }).from(employees)
+      .leftJoin(latest, eq(latest.employeeId, employees.id)).leftJoin(departments, eq(departments.id, employees.departmentId))
+      .where(eq(employees.companyId, req.companyId)).orderBy(employees.number);
     const comp = await db.select().from(compensationChanges).where(eq(compensationChanges.companyId, req.companyId));
     const docs = await db.select().from(employeeDocuments).where(eq(employeeDocuments.companyId, req.companyId));
     const t = today();
     const pack = alertPack(t);
-    const seen = new Set<string>();
-    return ctx.json(rows.filter((r) => !seen.has(r.e.id) && seen.add(r.e.id)).map(({ e, c, dept }) => {
-      const current = compensationAt(comp.filter((x) => x.employeeId === e.id), t);
+    const compByEmployee = groupBy(comp, x => x.employeeId), docsByEmployee = groupBy(docs, d => d.employeeId);
+    return ctx.json(rows.map(({ e, c, dept }) => {
+      const current = compensationAt(compByEmployee.get(e.id) ?? [], t);
       const baseMinor = current?.baseMinor ?? c?.baseMinor ?? 0;
       return {
         id: e.id, number: e.number, name: e.name, jobTitle: e.jobTitle, status: e.status, managerId: e.managerId,
@@ -168,7 +169,7 @@ export function employeeRoutes() {
           ? [
               ...contractAlerts({ startDate: c.startDate, endDate: c.endDate, type: c.type === 'fixed_term' ? 'fixed-term' : c.type }, t, pack).map((a) => a.message),
               ...complianceAlerts({ baseMinor, internship: c.type === 'internship' }, pack),
-              ...documentAlerts(docs.filter((d) => d.employeeId === e.id) as { type: DocumentType; number: string; expiryDate: string | null }[], t).map((a) => a.message),
+              ...documentAlerts((docsByEmployee.get(e.id) ?? []) as { type: DocumentType; number: string; expiryDate: string | null }[], t).map((a) => a.message),
             ]
           : ['Sem contrato registado'],
       };

@@ -1,3 +1,4 @@
+import { groupBy } from '../lib/group-by.js';
 import { createHash } from 'node:crypto';
 import {
   allowanceAmount, businessDays, calculatePayroll, fullMonthsBetween, monthlyDeductionCap, scheduledDays, scheduledMinutes, type Schedule, compensationAt, DEFAULT_PGC_ACCOUNTS, getPack, labourRules, lastDayOfMonth, NegativeNetError, overtimeHoursFromMinutes,
@@ -5,7 +6,7 @@ import {
 } from '@kianda/core';
 import {
   absences, accountMappings, allowanceTypes, and, asc, employeeAllowances, isNull, or, workSchedules, attendanceEntries, attendanceMonths, auditLogs, companies, compensationChanges, contracts, departments, desc, employees, eq,
-  gte, inArray, journalEntries, journalLines, lte, ne, payrollLines, payrollRuns, payrollVariables, type Db,
+  gte, inArray, sql, journalEntries, journalLines, lte, ne, payrollLines, payrollRuns, payrollVariables, type Db,
 } from '@kianda/db';
 
 export class DomainError extends Error {
@@ -88,23 +89,29 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
     const paidThisYear = await tx.select({ employeeId: payrollLines.employeeId, breakdown: payrollLines.breakdown }).from(payrollLines)
       .innerJoin(payrollRuns, eq(payrollRuns.id, payrollLines.runId))
       .where(and(eq(payrollRuns.companyId, companyId), eq(payrollRuns.status, 'closed'), gte(payrollRuns.period, `${year}-01`), lte(payrollRuns.period, `${year}-12`), ne(payrollRuns.period, period)));
-    const paid = (employeeId: string, code: string) => paidThisYear.some((p) => p.employeeId === employeeId && amountOf(p, code) > 0);
+    const compByEmployee = groupBy(comp, x => x.employeeId), absencesByEmployee = groupBy(unjustified, x => x.employeeId);
+    const leavesByEmployee = groupBy(monthLeaves, x => x.employeeId), vacationsByEmployee = groupBy(vacations, x => x.employeeId);
+    const variablesByEmployee = groupBy(variables, x => x.employeeId), allowancesByEmployee = groupBy(assigned, x => x.a.employeeId);
+    const unjustifiedYearByEmployee = groupBy(unjustifiedYear, a => a.employeeId);
+    const attendanceByEmployee = new Map(approvedMonths.map(a => [a.employeeId, a])), paidByEmployee = groupBy(paidThisYear, x => x.employeeId);
+    const paid = (employeeId: string, code: string) => (paidByEmployee.get(employeeId) ?? []).some(p => amountOf(p, code) > 0);
 
     const warnings: PayrollWarning[] = [];
     const seen = new Set<string>();
     const results: { employeeId: string; r: PayrollResult }[] = [];
     const keep: string[] = [];
+    const pendingLines: (typeof payrollLines.$inferInsert)[] = [];
     for (const { e, c } of staff) {
       if (seen.has(e.id)) continue;
       if (c.startDate > periodEnd) continue; // contrato futuro: usa o contrato anterior (se existir)
       seen.add(e.id);
       const ended = c.terminatedAt ?? c.endDate;
       if (ended && ended < periodStart) continue;
-      const pay = compensationAt(comp.filter((x) => x.employeeId === e.id), periodEnd) ?? c;
+      const pay = compensationAt(compByEmployee.get(e.id) ?? [], periodEnd) ?? c;
       const hire = firstContract.get(e.id) ?? c.startDate;
 
       // Assiduidade e faltas
-      const att = approvedMonths.find((m) => m.employeeId === e.id);
+      const att = attendanceByEmployee.get(e.id);
       if (!att && withPunches.has(e.id)) warnings.push({ employeeId: e.id, message: `${e.name}: assiduidade de ${period} por aprovar — horas extra não incluídas` });
       // Extra em dias normais (+50%/+75%); descanso semanal (+75%, mín. 3 h) e feriados (+1 dia) à parte — arts. 188.º, 194.º e 200.º.
       const overtimeHours = att ? overtimeHoursFromMinutes(Math.max(0, att.approvedOvertimeMinutes - att.restHolidayOvertimeMinutes)) : 0;
@@ -116,7 +123,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       const anchor = e.scheduleAnchor ?? sched?.anchorDate ?? null;
       if (sched?.kind === 'cycle' && !anchor) warnings.push({ employeeId: e.id, message: `${e.name}: regime "${sched.name}" sem data de início do ciclo — faltas e subsídios por dia não calculados` });
       // Faltas injustificadas: dias de trabalho previstos (regime) dentro da falta, sem feriados.
-      const myAbsences = unjustified.filter((a) => a.employeeId === e.id).map((a) => ({ from: a.startDate < periodStart ? periodStart : a.startDate, to: a.endDate > periodEnd ? periodEnd : a.endDate }));
+      const myAbsences = (absencesByEmployee.get(e.id) ?? []).map((a) => ({ from: a.startDate < periodStart ? periodStart : a.startDate, to: a.endDate > periodEnd ? periodEnd : a.endDate }));
       const absenceDays = myAbsences.reduce((s, a) => s + (sched ? scheduledDays(regime, a.from, a.to, anchor, holidaySet) : businessDays(a.from, a.to, [labourRules('AO', year)])), 0);
       // Horas de falta pelo regime (valor-hora × horas, arts. 237.º e 240.º); sem regime: dias × 8 h.
       const minutesIn = (from: string, to: string) => {
@@ -129,7 +136,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       };
       const absenceHours = sched ? Math.round((myAbsences.reduce((s, a) => s + minutesIn(a.from, a.to), 0) / 60) * 100) / 100 : undefined;
       const unjustifiedThisMonth = absenceDays;
-      const unjustifiedThisYear = unjustifiedYear.filter((a) => a.employeeId === e.id).reduce((s, a) => {
+      const unjustifiedThisYear = (unjustifiedYearByEmployee.get(e.id) ?? []).reduce((s, a) => {
         const f = a.startDate < `${year}-01-01` ? `${year}-01-01` : a.startDate;
         const l = a.endDate > periodEnd ? periodEnd : a.endDate;
         return s + businessDays(f, l, [labourRules('AO', year)]);
@@ -141,7 +148,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       // Paternidade: 1 dia pago e o restante não remunerado (art. 218.º).
       const workMinutesIn = (from: string, to: string) => (sched ? minutesIn(from, to) : businessDays(from, to, [labourRules('AO', year)]) * pack.labour.dailyHours * 60);
       let unpaidLeaveHours = 0;
-      for (const a of monthLeaves.filter((x) => x.employeeId === e.id && x.type === 'paternity')) {
+      for (const a of (leavesByEmployee.get(e.id) ?? []).filter((x) => x.type === 'paternity')) {
         const from = a.startDate < periodStart ? periodStart : a.startDate;
         const to = a.endDate > periodEnd ? periodEnd : a.endDate;
         let mins = workMinutesIn(from, to);
@@ -151,7 +158,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       unpaidLeaveHours = Math.round(unpaidLeaveHours * 100) / 100;
       // Licença de maternidade: suspende o contrato e o salário (arts. 267.º, c) e 268.º) — cálculo manual, só se contam os dias.
       let maternityDays = 0;
-      for (const a of monthLeaves.filter((x) => x.employeeId === e.id && x.type === 'maternity')) {
+      for (const a of (leavesByEmployee.get(e.id) ?? []).filter((x) => x.type === 'maternity')) {
         const from = a.startDate < periodStart ? periodStart : a.startDate;
         const to = a.endDate > periodEnd ? periodEnd : a.endDate;
         maternityDays += Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1;
@@ -160,13 +167,13 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       let vacationAllowanceCut: { fraction: number; days: number } | undefined;
       if (!company?.allowancesOnVacation) {
         const dayCount = (from: string, to: string) => (sched ? scheduledDays(regime, from, to, anchor, holidaySet) : businessDays(from, to, [labourRules('AO', year)]));
-        const vacDays = monthLeaves.filter((x) => x.employeeId === e.id && x.type === 'vacation').reduce((s, a) => s + dayCount(a.startDate < periodStart ? periodStart : a.startDate, a.endDate > periodEnd ? periodEnd : a.endDate), 0);
+        const vacDays = (leavesByEmployee.get(e.id) ?? []).filter((x) => x.type === 'vacation').reduce((s, a) => s + dayCount(a.startDate < periodStart ? periodStart : a.startDate, a.endDate > periodEnd ? periodEnd : a.endDate), 0);
         const monthDays = dayCount(periodStart, periodEnd);
         if (vacDays > 0 && monthDays > 0) vacationAllowanceCut = { fraction: Math.min(1, vacDays / monthDays), days: vacDays };
       }
 
       // Variáveis do mês
-      const mine = variables.filter((v) => v.employeeId === e.id);
+      const mine = variablesByEmployee.get(e.id) ?? [];
       const variableEarnings: EarningInput[] = mine.filter((v) => v.kind === 'bonus' || v.kind === 'other_earning').map((v) => ({
         code: v.code ?? (v.kind === 'bonus' ? 'BONUS' : 'OUTABON'), name: v.label, amountMinor: v.amountMinor, inInss: v.inInss, inIrt: v.inIrt,
       }));
@@ -182,7 +189,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
 
       // Subsídios recorrentes: vigência ∩ contrato no mês; por dia = dias de escala menos faltas injustificadas.
       const allowanceEarnings: EarningInput[] = [];
-      for (const { a, t } of assigned.filter((x) => x.a.employeeId === e.id)) {
+      for (const { a, t } of allowancesByEmployee.get(e.id) ?? []) {
         const aFrom = a.startDate > from ? a.startDate : from;
         const aTo = a.endDate && a.endDate < to ? a.endDate : to;
         if (aFrom > aTo) continue;
@@ -206,7 +213,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
 
       // Subsídio de férias: mês fixo da empresa, ou mês em que começam as primeiras férias aprovadas do ano (Dezembro como último recurso)
       const ov = overrides[e.id] ?? {};
-      const firstVacation = vacations.filter((v) => v.employeeId === e.id).map((v) => v.startDate).sort()[0];
+      const firstVacation = (vacationsByEmployee.get(e.id) ?? []).map((v) => v.startDate).sort()[0];
       const holidayAuto = company?.holidaySubsidyMonth
         ? month === company.holidaySubsidyMonth
         : (firstVacation ? firstVacation.slice(0, 7) === period : false) || month === 12;
@@ -262,14 +269,33 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
         grossMinor: r.grossMinor, inssBaseMinor: r.inssBaseMinor, irtTaxableMinor: r.irtTaxableMinor, inssEmployeeMinor: r.inssEmployeeMinor, irtMinor: r.irtMinor, netMinor: r.netMinor,
         inssEmployerMinor: r.inssEmployerMinor, irtBracket: r.irtBracket, breakdown: r.lines, calculationHash: hash,
       };
-      await tx.insert(payrollLines).values({ runId: run.id, employeeId: e.id, ...values })
-        .onConflictDoUpdate({ target: [payrollLines.runId, payrollLines.employeeId], set: values });
+      pendingLines.push({ runId: run.id, employeeId: e.id, ...values });
       keep.push(e.id);
       results.push({ employeeId: e.id, r });
     }
+    // Até 200 linhas por escrita; preserva os IDs dos recibos no recálculo.
+    for (let i = 0; i < pendingLines.length; i += 200) {
+      await tx.insert(payrollLines).values(pendingLines.slice(i, i + 200)).onConflictDoUpdate({ target: [payrollLines.runId, payrollLines.employeeId], set: {
+        overtimeHours: sql`excluded.overtime_hours`,
+        absenceDays: sql`excluded.absence_days`,
+        bonusMinor: sql`excluded.bonus_minor`,
+        advancesMinor: sql`excluded.advances_minor`,
+        grossMinor: sql`excluded.gross_minor`,
+        inssBaseMinor: sql`excluded.inss_base_minor`,
+        irtTaxableMinor: sql`excluded.irt_taxable_minor`,
+        inssEmployeeMinor: sql`excluded.inss_employee_minor`,
+        irtMinor: sql`excluded.irt_minor`,
+        netMinor: sql`excluded.net_minor`,
+        inssEmployerMinor: sql`excluded.inss_employer_minor`,
+        irtBracket: sql`excluded.irt_bracket`,
+        breakdown: sql`excluded.breakdown`,
+        calculationHash: sql`excluded.calculation_hash`,
+      } });
+    }
     // Colaboradores que já não entram (cessados, suspensos) saem do rascunho.
     const stale = await tx.select({ id: payrollLines.id, employeeId: payrollLines.employeeId }).from(payrollLines).where(eq(payrollLines.runId, run.id));
-    const remove = stale.filter((l) => !keep.includes(l.employeeId)).map((l) => l.id);
+    const keepIds = new Set(keep);
+    const remove = stale.filter((l) => !keepIds.has(l.employeeId)).map((l) => l.id);
     if (remove.length) await tx.delete(payrollLines).where(inArray(payrollLines.id, remove));
 
     [run] = await tx.update(payrollRuns).set({ preparedBy: actorId, warnings, packVersion: pack.version }).where(eq(payrollRuns.id, run.id)).returning() as [typeof run];

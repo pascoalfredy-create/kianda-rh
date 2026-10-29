@@ -37,7 +37,27 @@ describe.skipIf(!process.env.DATABASE_URL)('volume de RH: 1 e 200 colaboradores'
     const largePay = await sample('POST', '/v1/payroll-runs', { period: '2026-10' });
     expect(largePay.value.json().lines).toBe(200);
     await withTenant(companyId, async () => { const [line] = await getDb().select().from(payrollLines).where(eq(payrollLines.employeeId, firstId)); expect(line!.id).toBe(firstLineId); expect(line!.netMinor).toBe(39274400); });
-    for (let i = 0; i < paths.length; i++) console.log('RH_BENCH', JSON.stringify({ path: paths[i], smallQueries: small[i]!.queries, largeQueries: large[i]!.queries, smallMs: small[i]!.elapsedMs, largeMs: large[i]!.elapsedMs }));
+    for (let i = 0; i < paths.length; i++) {
+      // O número de consultas não pode voltar a crescer com cada colaborador.
+      expect(large[i]!.queries).toBeLessThanOrEqual(small[i]!.queries + 1);
+      expect(large[i]!.queries).toBeLessThan(20);
+      console.log('RH_BENCH', JSON.stringify({ path: paths[i], smallQueries: small[i]!.queries, largeQueries: large[i]!.queries, smallMs: small[i]!.elapsedMs, largeMs: large[i]!.elapsedMs }));
+    }
+    expect(largePay.queries).toBeLessThanOrEqual(smallPay.queries + 1);
+    expect(largePay.queries).toBeLessThan(50);
     console.log('RH_BENCH', JSON.stringify({ path: 'POST /v1/payroll-runs', smallQueries: smallPay.queries, largeQueries: largePay.queries, smallMs: smallPay.elapsedMs, largeMs: largePay.elapsedMs }));
   }, 120000);
+  it('processa também o lote seguinte a 200 sem perder nem duplicar recibos', async () => {
+    await seed(1, 201);
+    const result = await sample('POST', '/v1/payroll-runs', { period: '2026-10' });
+    expect(result.value.json().lines).toBe(201);
+    expect(result.queries).toBeLessThan(50);
+    await withTenant(companyId, async () => {
+      const lines = await getDb().select().from(payrollLines);
+      expect(lines).toHaveLength(201);
+      expect(new Set(lines.map(l => l.employeeId)).size).toBe(201);
+      expect(lines.every(l => l.netMinor === 39274400)).toBe(true);
+      expect(lines.find(l => l.employeeId === firstId)!.id).toBe(firstLineId);
+    });
+  });
 });
