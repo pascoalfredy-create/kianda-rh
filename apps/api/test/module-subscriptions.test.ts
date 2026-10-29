@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { closeDb, companyModules, getDb, platformAdmins, sql, withTenant } from '@kianda/db';
+import { closeDb, companyModules, getDb, measureQueries, platformAdmins, sql, withTenant } from '@kianda/db';
 import { FINANCIAL_SECTORS } from '@kianda/core';
 import { buildApp } from '../src/app.js';
 import { testClient, type InjectResponse } from './inject.js';
@@ -74,6 +74,19 @@ describe.skipIf(!process.env.DATABASE_URL)('conta comum, preços e direitos inde
     expect((await request(both, 'GET', '/v1/modeling/templates')).json()).toHaveLength(4);
     expect((await request(unlimited, 'GET', '/v1/modeling/templates')).json()).toHaveLength(8);
     expect((await request(unlimited, 'GET', '/v1/modules')).json()).toMatchObject({ hr: { subscribed: false }, modeling: { projectLimit: null, userLimit: 5 } });
+  });
+  it('abre o Integra num pedido, conservando o âmbito de projectos, sectores, quotas e histórico', async () => {
+    expect((await request(hr, 'GET', '/v1/modeling/bootstrap')).statusCode).toBe(403);
+    const measured = await measureQueries(() => request(modeling, 'GET', '/v1/modeling/bootstrap'));
+    expect(measured.value.statusCode).toBe(200); expect(measured.queries).toBeLessThanOrEqual(12);
+    const data = measured.value.json();
+    expect(data).toMatchObject({ canWrite: true, permission: 'editor', formats: { pdf: true, xlsx: false, csv: false } });
+    expect(data.bootstrap.models).toEqual((await request(modeling, 'GET', '/v1/modeling/models')).json());
+    expect(data.bootstrap.templates).toEqual((await request(modeling, 'GET', '/v1/modeling/templates')).json());
+    expect(data.usage).toEqual((await request(modeling, 'GET', '/v1/modeling/usage')).json());
+    const first = data.bootstrap.models.find((m: { archivedAt: string | null }) => !m.archivedAt);
+    expect(data.bootstrap.firstHistory).toEqual({ modelId: first.id, revision: first.revision, historical: null });
+    expect(data.bootstrap.models.every((m: { companyId: string; sector: string }) => m.companyId === modelingId && pme.sectors.includes(m.sector))).toBe(true);
   });
   it('ilimitado cria mais de dez projectos sem transformar os cinco utilizadores em ilimitados', async () => {
     for (let i = 0; i < 11; i++) expect((await request(unlimited, 'POST', '/v1/modeling/models', model())).statusCode).toBe(201);

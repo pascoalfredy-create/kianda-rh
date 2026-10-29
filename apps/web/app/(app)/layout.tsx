@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/api';
 import { Suspense } from 'react';
 import { AppShell } from '@/components/app-shell';
-import { api } from '@/lib/api';
 
 /** Área autenticada: sem sessão válida (verificada pela API), redirecciona para o login. */
 /** Aviso de licença: experimental a terminar, pagamento em atraso ou só consulta. */
@@ -24,8 +23,7 @@ function LicenceBanner({ me }: { me: NonNullable<Awaited<ReturnType<typeof curre
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const me = await currentUser();
   if (!me) redirect('/login');
-  const decider = ['owner', 'hr_admin', 'manager'].includes(me.user.role) && me.modules.hr.canAccess;
-  const counts = decider ? await api<{ absences: number; expenses: number }>('/v1/notifications/counts').catch(() => ({ absences: 0, expenses: 0 })) : { absences: 0, expenses: 0 };
+  const counts = me.notifications ?? { absences: 0, expenses: 0 };
   return <Suspense fallback={<div className="empty">A abrir o Kianda…</div>}>
     <AppShell me={me} counts={counts}>
       <LicenceBanner me={me} />

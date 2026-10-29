@@ -1,6 +1,6 @@
 import { formatKz } from '@kianda/core';
 import Link from 'next/link';
-import { api, ApiError, currentUser } from '@/lib/api';
+import { api, ApiError, currentUser, preloadApi } from '@/lib/api';
 import { CAN_EDIT, CONTRACT_LABEL, STATUS_LABEL, type EmployeeRow } from '@/lib/types';
 import { RhDialog } from '@/components/rh-dialog';
 import Ficha from './[id]/profile';
@@ -11,6 +11,7 @@ type Filters = { q?: string; estado?: string; dept?: string; provincia?: string;
 export default async function Colaboradores({ searchParams }: { searchParams: Promise<Filters> }) {
   const sp = await searchParams;
   const { q = '', estado = 'activos', dept = '', provincia = '', contrato = '' } = sp;
+  preloadApi('/v1/employees');
   const me = await currentUser();
   let rows: EmployeeRow[] = [], error = '';
   try { rows = await api<EmployeeRow[]>('/v1/employees'); }

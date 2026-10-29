@@ -5,13 +5,13 @@ import { modelingHistoryRoutes } from './modeling-history.js';
 import { modelingCurrencyRoutes } from './modeling-currency.js';
 import { renderFinancialPdf } from '../lib/financial-pdf.js';
 import { renderFinancialXlsx } from '../lib/financial-xlsx.js';
-import { FINANCIAL_SECTORS, financialBreakEvenPrice, financialScenarios, financialSensitivity, financialTemplate, runFinancialModel } from '@kianda/core';
+import { FINANCIAL_SECTORS, financialBreakEvenPrice, financialScenarios, financialSensitivity, financialTemplate, modelingCapacity, runFinancialModel } from '@kianda/core';
 import { financialCalculationSource, financialFingerprint, financialModelOf } from '../services/modeling-calculation.js';
 import { modelingExportOptions, modelingUsage, lockModelingCompany, requireProjectCapacity, requireModelingSector } from '../services/modeling-policy.js';
 import { companyModulesOverview, moduleLicence } from '../services/modules.js';
 import { DomainError } from '../services/payroll.js';
-import { body, requireCompany, requireRole, type AppEnv } from '../plugins/tenant.js';
-import { and, auditLogs, companies, companyModules, desc, eq, financialModelVersions, financialModels, financialPersonnelImports, getDb, gte, inArray, lte, payrollLines, payrollRuns, personnelBudgetLines, personnelBudgets, modelingMembers, users } from '@kianda/db';
+import { body, requireCompany, requireRole, type AppEnv, type Ctx } from '../plugins/tenant.js';
+import { and, auditLogs, companies, companyModules, desc, eq, financialModelVersions, financialModels, financialPersonnelImports, getDb, gte, inArray, lte, payrollLines, payrollRuns, personnelBudgetLines, personnelBudgets, modelingMembers, sql, users } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
@@ -42,6 +42,7 @@ export function modelingRoutes() {
       }
     }
     if (!member?.enabled) return c.json({ error: 'sem_permissao', message: 'Solicite ao proprietário acesso à Modelagem.' }, 403);
+    c.set('modelingPermission', member.permission);
     if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && member.permission !== 'editor') return c.json({ error: 'sem_permissao', message: 'O seu acesso permite apenas consulta.' }, 403);
     const encodedId = /^\/v1\/modeling\/models\/([^/]+)(?:\/|$)/.exec(c.req.path)?.[1];
     const projectId = encodedId ? decodeURIComponent(encodedId) : null;
@@ -52,13 +53,26 @@ export function modelingRoutes() {
     await next();
   });
 
-  app.get('/v1/modeling/session', async (c) => {
+  const opening = (bootstrap: boolean) => async (c: Ctx) => {
     const a = c.get('actor'), db = getDb();
-    const [member] = await db.select().from(modelingMembers).where(and(eq(modelingMembers.companyId, a.companyId), eq(modelingMembers.userId, a.actorId)));
-    const [company] = await db.select({ id: companies.id, name: companies.name }).from(companies).where(eq(companies.id, a.companyId));
-    const licence = await moduleLicence(db, a.companyId, 'modeling');
-    return c.json({ user: { id: a.actorId, name: a.session.name, role: a.role }, company, permission: member!.permission, canWrite: member!.permission === 'editor' && licence.canWrite, formats: await modelingExportOptions(db, a.actorId), usage: await modelingUsage(db, a.companyId) });
-  });
+    const [row] = await db.select({ company: { id: companies.id, name: companies.name }, grant: companyModules,
+      projects: sql<number>`(select count(*) from financial_models where company_id = ${a.companyId} and archived_at is null)`.mapWith(Number),
+      members: sql<number>`(select count(*) from modeling_members where company_id = ${a.companyId} and enabled = true)`.mapWith(Number),
+    }).from(companies).leftJoin(companyModules, and(eq(companyModules.companyId, companies.id), eq(companyModules.module, 'modeling'))).where(eq(companies.id, a.companyId));
+    const permission = c.get('modelingPermission');
+    const session = { user: { id: a.actorId, name: a.session.name, role: a.role }, company: row!.company, permission,
+      canWrite: permission === 'editor' && c.get('moduleAccess').canWrite, formats: await modelingExportOptions(db, a.actorId),
+      usage: modelingCapacity({ projectLimit: row?.grant ? row.grant.projectLimit : 1, extraUsers: row?.grant?.extraUsers ?? 0 }, row?.projects ?? 0, row?.members ?? 0),
+    };
+    if (!bootstrap) return c.json(session);
+    const sectors = row?.grant?.modelingSectors ?? [];
+    const models = await db.select().from(financialModels).where(and(eq(financialModels.companyId, a.companyId), inArray(financialModels.sector, sectors))).orderBy(desc(financialModels.updatedAt));
+    const first = models.find(m => !m.archivedAt);
+    const firstHistory = first ? { modelId: first.id, revision: first.revision, historical: await financialHistoryOf(db, first) } : null;
+    return c.json({ ...session, bootstrap: { models, templates: FINANCIAL_SECTORS.filter(s => sectors.includes(s)).map(financialTemplate), firstHistory } });
+  };
+  app.get('/v1/modeling/session', opening(false));
+  app.get('/v1/modeling/bootstrap', opening(true));
   app.route('/', modelingHistoryRoutes());
   app.route('/', modelingCurrencyRoutes());
 

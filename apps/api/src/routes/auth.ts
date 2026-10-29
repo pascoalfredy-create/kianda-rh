@@ -5,13 +5,12 @@ import { Hono } from 'hono';
 import { deleteCookie, setCookie } from 'hono/cookie';
 import { sign, verify } from 'hono/jwt';
 import { z } from 'zod';
-import { isPlatformAdmin, licenceOf } from '../services/licence.js';
 import { body, jwtSecret, rateLimit, requireCompany, requireRole, SESSION_COOKIE, type AppEnv, type Ctx, type Role, type SessionClaims } from '../plugins/tenant.js';
 import { applySectorPreset } from '../services/sector.js';
 import { appBaseUrl } from '../services/integrations.js';
 import { sendMail } from '../services/mail.js';
-import { companyModulesOverview } from '../services/modules.js';
 import { validateModelingSectors } from '../services/modeling-policy.js';
+import { accountOverview } from '../services/account-overview.js';
 
 const SESSION_HOURS = 12;
 const password = z.string().superRefine((v, ctx) => { const p = passwordProblems(v); if (p) ctx.addIssue({ code: 'custom', message: p }); });
@@ -175,17 +174,9 @@ export function authRoutes() {
   });
 
   app.get('/v1/auth/me', requireCompany, async (c) => {
-    const { companyId, session } = c.get('actor');
-    const [co] = await getDb().select().from(companies).where(eq(companies.id, companyId));
+    const { session } = c.get('actor');
     const { exp: _exp, ...user } = session as SessionClaims & { exp?: number };
-    const db = getDb();
-    const licence = await licenceOf(db, companyId);
-    return c.json({
-      user, company: co ? { id: co.id, name: co.name, nif: co.nif, code: co.code, hasLogo: Boolean(co.logoDataUrl) } : null,
-      licence: { status: licence.status, label: licence.statusLabel, canWrite: licence.canWrite, trialEndsAt: licence.sub?.trialEndsAt ?? null, paidUntil: licence.sub?.paidUntil ?? null },
-      modules: await companyModulesOverview(db, companyId, session.sub, session.role, { licence, sector: co?.sector ?? null }),
-      platformAdmin: await isPlatformAdmin(db, session.sub),
-    });
+    return c.json({ user, ...await accountOverview(getDb(), c.get('actor')) });
   });
 
   /** Gestão de utilizadores da empresa (proprietário e administração de RH). */

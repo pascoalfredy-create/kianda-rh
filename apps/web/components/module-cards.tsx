@@ -17,7 +17,7 @@ export function ModuleCards({ modules, manage = false }: { modules: CompanyModul
         {access.subscribed && until && <p className="muted">{access.status === 'trial' ? 'Experimental até ' : 'Pago até '}{until.split('-').reverse().join('/')}</p>}
         {access.subscribed && !access.canAccess && <p className="muted">Solicite acesso ao proprietário da empresa.</p>}
         <div className="actions" style={{ justifyContent: 'flex-start' }}>
-          {access.canAccess ? <Link className="btn sm" href={modeling ? '/modelagem' : '/'}>{access.canWrite ? 'Abrir módulo' : 'Abrir em consulta'}</Link> : <button className="btn sm" disabled>Sem acesso</button>}
+          {access.canAccess ? modeling ? <a className="btn sm" href="/modelagem">{access.canWrite ? 'Abrir módulo' : 'Abrir em consulta'}</a> : <Link className="btn sm" href="/">{access.canWrite ? 'Abrir módulo' : 'Abrir em consulta'}</Link> : <button className="btn sm" disabled>Sem acesso</button>}
           {manage && <Link className="btn ghost sm" href={`/licenca#${key}`}>Ver planos</Link>}
         </div>
       </div>;

@@ -239,6 +239,25 @@ table.dense th, table.dense td { padding: 8px 8px; font-size: 13px; }
 .side-foot { padding: 15px 10px 0; font-size: 10px; line-height: 1.6; color: #6d9589; }
 .rh-app .who { margin-top: 18px; }
 .rh-app .who > a { display: block; font-size: 12px; margin-bottom: 7px; }
+/* Menus claros e secções recolhíveis, conforme pedido. */
+.rh-app .side { background: #fff; color: #374151; border-right: 1px solid var(--line); }
+.rh-app .side .mark { background: #374151; }
+.rh-app .logo b, .rh-app .company-card b, .rh-app .who b { color: #1f2937; }
+.rh-app .logo small, .rh-app .company-card small, .rh-app .who small, .rh-app .side-foot { color: #6b7280; }
+.rh-app .company-card { border-color: var(--line); background: #f9fafb; }
+.rh-app .who { border-color: var(--line); }
+.rh-app .side .link { color: #4b5563; }
+.rh-app .side nav a:hover, .rh-app .side nav a.nav-on { background: #eef0f3; color: #111827; }
+.nav-group-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 11px 12px; margin-top: 3px; border: 0; border-radius: 7px; background: transparent; color: #6b7280; font: inherit; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; cursor: pointer; }
+.nav-group-toggle:hover { background: #f3f4f6; color: #111827; }
+.nav-group-toggle:focus-visible { outline: 2px solid #6b7280; outline-offset: -2px; }
+.nav-chevron { font-size: 17px; line-height: 1; transform: rotate(-90deg); transition: transform .15s; }
+.nav-group-toggle[aria-expanded="true"] .nav-chevron { transform: none; }
+.nav-group > [hidden] { display: none; }
+.screen-loading { display: flex; align-items: center; gap: 12px; padding: 28px 4px; color: var(--ink2); min-height: 120px; }
+.loading-spinner { width: 20px; height: 20px; border: 2px solid #e5e7eb; border-top-color: #4b5563; border-radius: 50%; animation: loading-spin .8s linear infinite; }
+@keyframes loading-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .loading-spinner { animation: none; } .nav-chevron { transition: none; } }
 .rh-main { min-width: 0; display: flex; flex-direction: column; }
 .rh-app .content { min-width: 0; width: 100%; max-width: 1360px; padding: 24px 26px 60px; }
 .rh-top { position: sticky; top: 0; height: 60px; flex: none; z-index: 30; display: flex; align-items: center; gap: 18px; padding: 0 26px; background: #fff; border-bottom: 1px solid var(--line); }

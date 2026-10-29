@@ -16,14 +16,14 @@ export async function moduleLicence(db: Db, companyId: string, module: PlatformM
 }
 
 /** O catálogo comum mostra os dois módulos sem conceder a licença nem um lugar de utilizador. */
-export async function companyModulesOverview(db: Db, companyId: string, userId: string, role: string, loaded?: { licence: Awaited<ReturnType<typeof licenceOf>>; sector: string | null }): Promise<CompanyModulesOverview> {
-  const grants = await db.select().from(companyModules).where(eq(companyModules.companyId, companyId));
+export async function companyModulesOverview(db: Db, companyId: string, userId: string, role: string, loaded?: { licence: Awaited<ReturnType<typeof licenceOf>>; sector: string | null; grants?: (typeof companyModules.$inferSelect)[]; member?: { enabled: boolean } | null }): Promise<CompanyModulesOverview> {
+  const grants = loaded?.grants ?? await db.select().from(companyModules).where(eq(companyModules.companyId, companyId));
   const hrGrant = grants.find(g => g.module === 'hr');
   const modelingGrant = grants.find(g => g.module === 'modeling');
   const hr = loaded?.licence ?? await licenceOf(db, companyId);
   const hrAccess = hrGrant?.enabled === false ? moduleAccess(null, luandaDate(new Date())) : { subscribed: true, status: hr.status, canRead: true, canWrite: hr.canWrite };
   const modeling = moduleAccess(modelingGrant ? { ...modelingGrant, status: modelingGrant.status as SubscriptionStatus } : null, luandaDate(new Date()));
-  const [member] = await db.select().from(modelingMembers).where(and(eq(modelingMembers.companyId, companyId), eq(modelingMembers.userId, userId)));
+  const member = loaded && 'member' in loaded ? loaded.member : (await db.select().from(modelingMembers).where(and(eq(modelingMembers.companyId, companyId), eq(modelingMembers.userId, userId))))[0];
   const company = loaded ? { sector: loaded.sector } : (await db.select({ sector: companies.sector }).from(companies).where(eq(companies.id, companyId)))[0];
   return {
     hr: { ...hrAccess, canAccess: hrAccess.canRead, trialEndsAt: hr.sub?.trialEndsAt ?? null, paidUntil: hr.sub?.paidUntil ?? null },

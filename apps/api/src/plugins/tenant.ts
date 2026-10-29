@@ -2,7 +2,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { verify } from 'hono/jwt';
 import { getDb, withTenant } from '@kianda/db';
-import { moduleForPath } from '@kianda/core';
+import { moduleForPath, type ModuleAccess } from '@kianda/core';
 import { moduleLicence } from '../services/modules.js';
 import { licenceBlocks } from '../services/licence.js';
 
@@ -25,7 +25,7 @@ export interface Actor {
   session: SessionClaims;
 }
 
-export type AppEnv = { Variables: { actor: Actor; companyGuarded: boolean } };
+export type AppEnv = { Variables: { actor: Actor; companyGuarded: boolean; moduleAccess: ModuleAccess; modelingPermission: string } };
 export type Ctx = Context<AppEnv>;
 
 export const SESSION_COOKIE = 'kianda_session';
@@ -60,6 +60,7 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
   let blocked: string | null = null;
   if (module) {
     const access = await moduleLicence(getDb(), claims.companyId, module);
+    c.set('moduleAccess', access);
     if (!access.canRead) return c.json({ error: 'modulo_nao_subscrito', message: 'A empresa não subscreveu este módulo.' }, 403);
     if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && !access.canWrite) blocked = 'A licença deste módulo está em modo de consulta.';
   } else {

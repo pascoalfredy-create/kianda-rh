@@ -28,16 +28,20 @@ export function tierOf(sub: typeof subscriptions.$inferSelect): Tier {
 /** Licença da empresa: estado efectivo hoje, escalão, limite e colaboradores activos. */
 export async function licenceOf(db: Db, companyId: string) {
   const [sub] = await db.select().from(subscriptions).where(eq(subscriptions.companyId, companyId));
-  const today = luandaDate(new Date());
   const [n] = await db.select({ n: sql<number>`count(*)::int` }).from(employees).where(and(eq(employees.companyId, companyId), eq(employees.status, 'active')));
+  return licenceFromRows(sub ?? null, n?.n ?? 0);
+}
+
+export function licenceFromRows(sub: typeof subscriptions.$inferSelect | null, activeEmployees: number) {
+  const today = luandaDate(new Date());
   if (!sub) {
     // Empresas sem registo de licença (não deveria acontecer depois da migração 0015): tratadas como activas.
-    return { sub: null, status: 'active' as SubscriptionStatus, statusLabel: SUBSCRIPTION_STATUS.active, tier: DEFAULT_TIERS[0]!, limit: null as number | null, activeEmployees: n?.n ?? 0, canWrite: true, cycle: 'monthly' as BillingCycle };
+    return { sub: null, status: 'active' as SubscriptionStatus, statusLabel: SUBSCRIPTION_STATUS.active, tier: DEFAULT_TIERS[0]!, limit: null as number | null, activeEmployees, canWrite: true, cycle: 'monthly' as BillingCycle };
   }
   const status = effectiveStatus({ status: sub.status as SubscriptionStatus, trialEndsAt: sub.trialEndsAt, paidUntil: sub.paidUntil }, today);
   const tier = tierOf(sub);
   return {
-    sub, status, statusLabel: SUBSCRIPTION_STATUS[status], tier, limit: employeeLimit(tier), activeEmployees: n?.n ?? 0,
+    sub, status, statusLabel: SUBSCRIPTION_STATUS[status], tier, limit: employeeLimit(tier), activeEmployees,
     canWrite: canWrite(status), cycle: sub.cycle as BillingCycle,
   };
 }
