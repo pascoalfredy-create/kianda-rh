@@ -209,6 +209,8 @@ describe('runtime do protótipo ligado à API', () => {
     await ui.act('anClearImport',{number:'2'});
     expect(ui.node('#anF2').value).toBe('');expect(ui.node('#anT2').value).toBe('');expect(ui.node('#anT1').value).toBe(historicalInput.N1);
     expect(ui.requests.some(r=>r.method==='PUT'||r.method==='DELETE')).toBe(false);
+    await ui.act('anClearImport',{number:'1'});await ui.act('archiveProject',{id:'m1'});
+    expect(ui.node('#modal').innerHTML).toContain('deixa de contar');await ui.act('close');
     ui.node('#anF2').files=[file];ui.node('#anF2').onchange();expect(ui.node('#anT2').value).toBe(historicalInput.N);
   });
   it('cancelar uma leitura mantém os dados anteriores e não deixa uma resposta tardia repô-los', async () => {

@@ -92,7 +92,8 @@ function clearHistoricalDocument(number){
   if(pending||failed){$('#anStatus'+number).textContent='Selecção cancelada. Os dados anteriores foram conservados.';protect();return;}
   $(target).value='';S.an={...S.an,periods:{...S.an?.periods}};delete S.an.periods[key];
   historicalDirty.add(modelId);captureHistoricalDraft();
-  $('#anStatus'+number).textContent='Documento removido desta edição. Pode escolher outro ficheiro. Para apagar a análise já guardada, use Remover análise guardada.';protect();
+  if(!historicalSaved.has(modelId)&&!S.an.N.trim()&&!S.an.N1.trim())historicalDirty.delete(modelId);
+  $('#anStatus'+number).textContent='Documento removido desta edição. Pode escolher outro ficheiro.'+(historicalSaved.has(modelId)?' Para apagar a análise já guardada, use Remover análise guardada.':'');protect();
 }
 function confirmHistoricalRemoval(){
   projectDialog={kind:'removeHistory',id:M().id};
