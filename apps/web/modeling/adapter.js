@@ -11,6 +11,7 @@ function renderNavigation(){
 function setMenuOpen(open){
   const root=$('.app'),wasOpen=root.classList.contains('menu-open');if(open)root.classList.add('menu-open');else root.classList.remove('menu-open');
   $('#integra-menu-toggle')?.setAttribute?.('aria-expanded',String(open));
+  $('.main').inert=open;
   if(open)$('#integra-side button')?.focus?.();else if(wasOpen)$('#integra-menu-toggle')?.focus?.();
 }
 const currencyFields=['fxFrom','fxRate','fxDate','fxSource'];
@@ -238,7 +239,7 @@ function render() {
   catch(error){$('#view').innerHTML=ph('Pressupostos por rever','Abra Pressupostos para completar ou corrigir os dados do projecto.')+alertMessage(errorText(error));}
   if(notice)$('#view').insertAdjacentHTML('afterbegin',`<div id="integra-notice">${alertMessage(notice)}</div>`);
   if(previewModel)$('#view').insertAdjacentHTML('afterbegin',`<div class="alert b" role="status">${ico('info',17)}<div>Projecto arquivado · consulta. Para voltar a gravar alterações, escolha Gerir projectos… no selector de modelos e restaure o projecto.</div></div>`);
-  projectPicker();protect();
+  projectPicker();protect();prepareFinancialTables($('#view'));
 }
 // Os mesmos campos e separadores do protótipo; cada projecto carrega a sua própria origem.
 VIEWS.analise.after=()=>{
@@ -359,4 +360,6 @@ async function boot(){
 // A fonte externa melhora a tipografia quando chega, sem bloquear a interface ou o motor.
 const fontStylesheet=$('#integra-fonts');
 if(fontStylesheet){fontStylesheet.addEventListener?.('load',()=>{fontStylesheet.media='all';});if(fontStylesheet.sheet)fontStylesheet.media='all';}
+setupModelingMobile(()=>openModal('Instalar Kianda no iPhone','<p>No Safari, toque em <b>Partilhar</b> e depois em <b>Adicionar ao ecrã principal</b>. Ao abrir o Kianda, entre na sua conta e escolha o Integra em Módulos e licenças.</p>','<button class="btn pri" data-act="close">Fechar</button>'));
+window.addEventListener('resize',()=>{if(window.matchMedia?.('(min-width: 821px)').matches)setMenuOpen(false);});
 boot();

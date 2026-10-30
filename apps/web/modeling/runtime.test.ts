@@ -10,7 +10,7 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
   const template = financialTemplate(sector), handlers = new Map<string, Function>();
   const nodes = new Map<string, any>();
   const node = (selector: string) => {
-    if (!nodes.has(selector)) { const classes = new Set<string>(); nodes.set(selector, { innerHTML: '', textContent: '', value: '', disabled: false, dataset: {}, style:{}, classList: { add(v: string) { classes.add(v); }, remove(v: string) { classes.delete(v); }, contains(v: string) { return classes.has(v); } }, insertAdjacentHTML(_position: string, html: string) { this.innerHTML = html + this.innerHTML; } }); }
+    if (!nodes.has(selector)) { const classes = new Set<string>(), attributes = new Map<string,string>(); nodes.set(selector, { innerHTML: '', textContent: '', value: '', disabled: false, dataset: {}, style:{}, querySelectorAll: () => [], setAttribute(k:string,v:string){attributes.set(k,v);},getAttribute(k:string){return attributes.get(k);},focus(){this.focused=true;}, classList: { add(v: string) { classes.add(v); }, remove(v: string) { classes.delete(v); }, contains(v: string) { return classes.has(v); } }, insertAdjacentHTML(_position: string, html: string) { this.innerHTML = html + this.innerHTML; } }); }
     return nodes.get(selector)!;
   };
   const model = { id: 'm1', name: template.name, sector, currency: template.currency, revision: 1, createdAt: '2026-10-28', archivedAt: projects.initialArchived ? '2026-10-29T08:00:00Z' : null as string | null, assumptions: incomplete ? { pessoal: 1 } : template.assumptions };
@@ -48,6 +48,22 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
   return { node, field, baseScenario, requests, model, records, pendingReads, pendingUsage, escape(){handlers.get('keydown')!({key:'Escape'});}, async select(id:string){node('#mSel').value=id;await node('#mSel').onchange();}, edit(id:string,value:string){node('#'+id).value=value;handlers.get('input')!({target:{id}});}, async currency(to:string){currencyField.value=to;await currencyField.onchange();},async act(act:string,extra:Record<string,string>={}){await handlers.get('click')!({target:new Element({act,...extra}),preventDefault(){}});}, async go(view: string) { await handlers.get('click')!({ target: new Element({ go: view }), preventDefault() {} }); return node('#view').innerHTML as string; }, async sub(k = 'pt', v = 'custos') { await handlers.get('click')!({ target: new Element({ act: 'sub', k, v }), preventDefault() {} }); return node('#view').innerHTML as string; } };
 }
 describe('runtime do protótipo ligado à API', () => {
+  it('o menu móvel fecha pelo botão, por Escape ou ao escolher um ecrã, sem deixar o conteúdo bloqueado', async () => {
+    const ui = await mount('servicos');
+    await ui.act('toggleMenu');
+    expect(ui.node('.app').classList.contains('menu-open')).toBe(true);
+    expect(ui.node('.main').inert).toBe(true);
+    expect(ui.node('#integra-menu-toggle').getAttribute('aria-expanded')).toBe('true');
+    ui.escape();
+    expect(ui.node('.main').inert).toBe(false);
+    expect(ui.node('#integra-menu-toggle').focused).toBe(true);
+    await ui.act('toggleMenu'); await ui.go('demonstracoes');
+    expect(ui.node('.app').classList.contains('menu-open')).toBe(false);
+    expect(ui.node('.main').inert).toBe(false);
+    await ui.act('toggleMenu'); await ui.act('closeMenu');
+    expect(ui.node('#integra-menu-toggle').getAttribute('aria-expanded')).toBe('false');
+    expect(ui.requests.some(r=>r.method&&r.method!=='GET')).toBe(false);
+  });
   it('abre com os dados autenticados iniciais sem repetir modelos, templates e balancetes', async () => {
     const ui = await mount('servicos', true, false, true, false, historicalInput, FINANCIAL_SECTORS, { bootstrap: true });
     expect(ui.node('#view').innerHTML).toContain('Perspectiva do investidor');

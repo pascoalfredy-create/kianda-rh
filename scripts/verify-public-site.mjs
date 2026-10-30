@@ -1,0 +1,23 @@
+/** Smoke público depois de publicar: sem cookies, credenciais ou dados de empresas. */
+import assert from 'node:assert/strict';
+const origin = process.argv[2];
+assert(origin?.startsWith('https://'), 'Indique o endereço HTTPS principal');
+const get = (path) => fetch(new URL(path, origin), { redirect: 'manual', signal: AbortSignal.timeout(30000) });
+const [home, robots, sitemap, manifest, modeling, login] = await Promise.all(['/', '/robots.txt', '/sitemap.xml', '/manifest.webmanifest', '/modelagem', '/login'].map(get));
+assert.equal(home.status, 200, 'A apresentação pública tem de responder 200 sem sessão');
+const html = await home.text();
+assert.match(html, /<h1>Recursos Humanos e Modelagem Financeira para empresas em Angola<\/h1>/);
+assert.match(html, /<meta name="robots" content="index, follow"/);
+assert.equal(new URL(/<link rel="canonical" href="([^"]+)"/.exec(html)?.[1]).href, 'https://kianda.yelaperformance.com/');
+assert.match(html, /application\/ld\+json/);
+assert.equal(robots.status, 200); assert.match(await robots.text(), /Sitemap: https:\/\/kianda\.yelaperformance\.com\/sitemap.xml/);
+assert.equal(sitemap.status, 200);
+const xml = await sitemap.text();
+assert.match(xml, /<loc>https:\/\/kianda\.yelaperformance\.com<\/loc>/);
+assert.equal((xml.match(/<loc>/g) || []).length, 1, 'O índice só contém a apresentação pública');
+assert.equal(manifest.status, 200);
+assert((await manifest.json()).shortcuts.some(shortcut => shortcut.url === '/modelagem'));
+assert.equal(modeling.status, 303, 'O Integra continua protegido por sessão');
+assert.equal(new URL(modeling.headers.get('location'), origin).pathname, '/login');
+assert.equal(login.status, 200); assert.match(await login.text(), /<meta name="robots" content="noindex, nofollow"/);
+console.log('Público OK: apresentação 200, metadados, robots, sitemap e Integra no manifest; login e projectos protegidos.');

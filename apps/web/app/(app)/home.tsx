@@ -8,8 +8,6 @@ import type { AbsenceRow, BalanceRow } from '@/lib/types';
 import { PortalHome } from './portal-home';
 import { redirect } from 'next/navigation';
 
-export const dynamic = 'force-dynamic';
-
 const pt = (d: string) => d.split('-').reverse().join('/');
 
 export default async function Home() {

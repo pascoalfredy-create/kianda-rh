@@ -42,8 +42,8 @@ export function PwaSetup({ invite = true }: { invite?: boolean }) {
         <div className="install-bar" role="dialog" aria-label="Instalar a app">
           <img src="/icons/icon-192.png" alt="" width={36} height={36} />
           <div style={{ flex: 1 }}>
-            <b>Instale a app Kianda RH</b>
-            <div className="muted" style={{ fontSize: 12.5 }}>{ios ? <>No Safari, toque em <b>Partilhar</b> e depois em <b>Adicionar ao ecrã principal</b>.</> : 'Ponto, recibos e férias no ecrã inicial, também com rede fraca.'}</div>
+            <b>Instale a app Kianda</b>
+            <div className="muted" style={{ fontSize: 12.5 }}>{ios ? <>No Safari, toque em <b>Partilhar</b> e depois em <b>Adicionar ao ecrã principal</b>.</> : 'RH e Integra no ecrã inicial, conforme os módulos da sua conta.'}</div>
           </div>
           {deferred && <button className="btn sm" onClick={async () => { await deferred.prompt(); await deferred.userChoice; setDeferred(null); dismiss(); }}>Instalar</button>}
           <button className="btn ghost sm" aria-label="Fechar" onClick={dismiss}>×</button>
