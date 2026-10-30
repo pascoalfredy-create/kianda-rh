@@ -1,3 +1,5 @@
+
+import { ExportLink } from '@/components/document-export';
 import { formatKz } from '@kianda/core';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
@@ -45,11 +47,11 @@ export default async function Obrigacoes() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px 0', gap: 10, flexWrap: 'wrap' }}>
               <h2 className="h2-inline" style={{ fontSize: 14 }}><Link href={`/processamento?mes=${r.period}`}>{monthLabel(r.period)}</Link></h2>
               <div className="actions">
-                <a className="btn sm" href={`/api/v1/payroll-runs/${r.runId}/maps/agt?format=xlsx`} title="Template IRT A2.1 — Portal do Contribuinte → Declarações → IRT → Entregar → Mapa de Remunerações → Upload de Ficheiro">Mapa AGT A2.1 (Excel)</a>
-                <a className="btn ghost sm" href={`/api/v1/payroll-runs/${r.runId}/maps/agt?format=xlsx&template=simple`} title="Novo Template Simplificado IRT">AGT simplificado</a>
-                <a className="btn ghost sm" href={`/api/v1/payroll-runs/${r.runId}/maps/inss?format=xlsx`}>Folha do INSS (Excel)</a>
-                <a className="btn ghost sm" href={`/api/v1/payroll-runs/${r.runId}/maps/irt?format=csv`}>Resumo IRT (CSV)</a>
-                {canBankFile && <a className="btn ghost sm" href={`/api/v1/payroll-runs/${r.runId}/bank-file`}>{bankLabel}</a>}
+                <ExportLink className="btn sm" href={`/api/v1/payroll-runs/${r.runId}/maps/agt?format=xlsx`} title="Template IRT A2.1 — Portal do Contribuinte → Declarações → IRT → Entregar → Mapa de Remunerações → Upload de Ficheiro">Mapa AGT A2.1 (Excel)</ExportLink>
+                <ExportLink className="btn ghost sm" href={`/api/v1/payroll-runs/${r.runId}/maps/agt?format=xlsx&template=simple`} title="Novo Template Simplificado IRT">AGT simplificado</ExportLink>
+                <ExportLink className="btn ghost sm" href={`/api/v1/payroll-runs/${r.runId}/maps/inss?format=xlsx`}>Folha do INSS (Excel)</ExportLink>
+                <ExportLink className="btn ghost sm" href={`/api/v1/payroll-runs/${r.runId}/maps/irt?format=csv`}>Resumo IRT (CSV)</ExportLink>
+                {canBankFile && <ExportLink className="btn ghost sm" href={`/api/v1/payroll-runs/${r.runId}/bank-file`}>{bankLabel}</ExportLink>}
               </div>
             </div>
             <table>

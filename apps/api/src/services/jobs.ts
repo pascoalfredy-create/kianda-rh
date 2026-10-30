@@ -18,14 +18,14 @@ export function reminderFor(sub: { status: string; trialEndsAt: string | null; p
     if (d === 7) return { kind: 'renovacao_7d', subject: 'A sua licença Kianda RH termina dentro de 7 dias', title: 'Renovação da licença', text: `A licença está paga até ${pt(paid)}. Gere o pedido de renovação na página Licença para não perder o acesso.` };
     if (d === 0) return { kind: 'renovacao_hoje', subject: 'A sua licença Kianda RH termina hoje', title: 'A licença termina hoje', text: `Depois de hoje tem ${GRACE_DAYS} dias de tolerância; a seguir a conta passa a modo de consulta (sem perda de dados).` };
     if (d === -1) return { kind: 'em_atraso', subject: 'Licença Kianda RH em atraso', title: 'Pagamento em atraso', text: `A licença terminou a ${pt(paid)}. Tem ${GRACE_DAYS} dias para regularizar antes de a conta passar a modo de consulta.` };
-    if (d === -(GRACE_DAYS + 1)) return { kind: 'modo_consulta', subject: 'Conta Kianda RH em modo de consulta', title: 'Conta em modo de consulta', text: 'Pode consultar e exportar todos os dados, mas não gravar alterações. Regularize o pagamento na página Licença para voltar a usar tudo.' };
+    if (d === -(GRACE_DAYS + 1)) return { kind: 'modo_consulta', subject: 'Conta Kianda RH em modo de consulta', title: 'Conta em modo de consulta', text: 'Pode consultar os dados guardados e pré-visualizar os documentos. Regularize o pagamento na página Licença para voltar a gravar, exportar e imprimir.' };
     return null;
   }
   if (sub.trialEndsAt) {
     const d = diff(sub.trialEndsAt, today);
     if (d === 2) return { kind: 'experimental_2d', subject: 'O período experimental do Kianda RH termina dentro de 2 dias', title: 'O experimental está a terminar', text: `O período experimental termina a ${pt(sub.trialEndsAt)}. Escolha o escalão e gere o pedido de pagamento na página Licença — os dias que faltam não se perdem.` };
-    if (d === 0) return { kind: 'experimental_hoje', subject: 'O período experimental do Kianda RH termina hoje', title: 'Último dia do experimental', text: 'A partir de amanhã a conta passa a modo de consulta até o pagamento ser recebido. Os seus dados ficam guardados.' };
-    if (d === -1) return { kind: 'experimental_fim', subject: 'Período experimental do Kianda RH terminado', title: 'O experimental terminou', text: 'A conta está em modo de consulta. Gere o pedido de pagamento na página Licença: com Multicaixa a activação é imediata.' };
+    if (d === 0) return { kind: 'experimental_hoje', subject: 'O período experimental do Kianda RH termina hoje', title: 'Último dia do experimental', text: 'A partir de amanhã a conta passa a modo de consulta até o pagamento ser recebido. Os dados ficam guardados e os documentos em pré-visualização. Active uma subscrição paga para exportar e imprimir.' };
+    if (d === -1) return { kind: 'experimental_fim', subject: 'Período experimental do Kianda RH terminado', title: 'O experimental terminou', text: 'A conta está em modo de consulta, com documentos apenas em pré-visualização. Gere o pedido de pagamento na página Licença para voltar a gravar e exportar.' };
   }
   return null;
 }

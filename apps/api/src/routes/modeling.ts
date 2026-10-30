@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { FINANCIAL_DOCUMENT_KEYS, FINANCIAL_REPORT_KEYS, FINANCIAL_REPORT_TITLES, type FinancialReportDocument } from '@kianda/core';
+import { canExportDocuments, FINANCIAL_DOCUMENT_KEYS, FINANCIAL_REPORT_KEYS, FINANCIAL_REPORT_TITLES, type FinancialReportDocument } from '@kianda/core';
 import { financialHistoricalDocument, financialHistoryOf, financialReportBundle, financialVersionOf } from '../services/modeling-versions.js';
 import { modelingHistoryRoutes } from './modeling-history.js';
 import { modelingCurrencyRoutes } from './modeling-currency.js';
@@ -61,7 +61,7 @@ export function modelingRoutes() {
     }).from(companies).leftJoin(companyModules, and(eq(companyModules.companyId, companies.id), eq(companyModules.module, 'modeling'))).where(eq(companies.id, a.companyId));
     const permission = c.get('modelingPermission');
     const session = { user: { id: a.actorId, name: a.session.name, role: a.role }, company: row!.company, permission,
-      canWrite: permission === 'editor' && c.get('moduleAccess').canWrite, formats: await modelingExportOptions(db, a.actorId),
+      canWrite: permission === 'editor' && c.get('moduleAccess').canWrite, formats: await modelingExportOptions(db, a.actorId, canExportDocuments(c.get('moduleAccess').status)),
       licence: { status: c.get('moduleAccess').status, trialEndsAt: row?.grant?.trialEndsAt ?? null, paidUntil: row?.grant?.paidUntil ?? null },
       usage: modelingCapacity({ projectLimit: row?.grant ? row.grant.projectLimit : 1, extraUsers: row?.grant?.extraUsers ?? 0 }, row?.projects ?? 0, row?.members ?? 0),
     };
@@ -136,12 +136,12 @@ export function modelingRoutes() {
   app.get('/v1/modeling/models/:id/reports', async (c) => {
     const model = await financialModelOf(c, true), query = z.object({ version: z.uuid().optional() }).parse(c.req.query()), db = getDb();
     const historical = query.version ? Boolean((await financialVersionOf(db, c.get('actor').companyId, model.id, query.version)).payload.reports.analise) : Boolean(await financialHistoryOf(db, model));
-    return c.json({ reports: [...FINANCIAL_REPORT_KEYS.map((key) => ({ key, title: FINANCIAL_REPORT_TITLES[key], available: true })), { key: 'analise', title: 'Relatório de análise económico-financeira', available: historical, ...(historical ? {} : { reason: 'Requer balancetes históricos analisados nesta revisão ou versão.' }) }], formats: await modelingExportOptions(db, c.get('actor').actorId) });
+    return c.json({ reports: [...FINANCIAL_REPORT_KEYS.map((key) => ({ key, title: FINANCIAL_REPORT_TITLES[key], available: true })), { key: 'analise', title: 'Relatório de análise económico-financeira', available: historical, ...(historical ? {} : { reason: 'Requer balancetes históricos analisados nesta revisão ou versão.' }) }], formats: await modelingExportOptions(db, c.get('actor').actorId, canExportDocuments(c.get('moduleAccess').status)) });
   });
   app.get('/v1/modeling/models/:id/reports/:reportKey', async (c) => {
     const a = c.get('actor'), db = getDb();
     const query = z.object({ format: z.enum(['pdf', 'xlsx']).default('pdf'), version: z.uuid().optional(), revision: z.coerce.number().int().positive().optional(), scenario: z.enum(['base', 'otim', 'pess']).optional() }).refine((q) => !q.version || !q.scenario, 'Uma versão aprovada não admite alteração de cenário.').parse(c.req.query());
-    if (query.format === 'xlsx' && !(await modelingExportOptions(db, a.actorId)).xlsx) throw new DomainError('formato_nao_permitido', 'A exportação Excel é exclusiva da conta do proprietário da plataforma. Utilize PDF.', 403);
+    if (query.format === 'xlsx' && !(await modelingExportOptions(db, a.actorId, canExportDocuments(c.get('moduleAccess').status))).xlsx) throw new DomainError('formato_nao_permitido', 'A exportação Excel é exclusiva da conta do proprietário da plataforma. Utilize PDF.', 403);
     const model = await financialModelOf(c, true);
     const key = z.enum(FINANCIAL_DOCUMENT_KEYS).parse(c.req.param('reportKey'));
     if (!query.version && query.revision !== undefined && model.revision !== query.revision) throw new DomainError('revisao_invalida', 'Projecto alterado. Volte a carregá-lo antes de exportar.', 409);
@@ -155,7 +155,7 @@ export function modelingRoutes() {
   });
 
   app.get('/v1/modeling/usage', async (c) => c.json(await modelingUsage(getDb(), c.get('actor').companyId)));
-  app.get('/v1/modeling/export-options', async (c) => c.json(await modelingExportOptions(getDb(), c.get('actor').actorId)));
+  app.get('/v1/modeling/export-options', async (c) => c.json(await modelingExportOptions(getDb(), c.get('actor').actorId, canExportDocuments(c.get('moduleAccess').status))));
   app.get('/v1/modeling/members', requireRole(), async (c) => {
     return c.json(await getDb().select({ userId: modelingMembers.userId, permission: modelingMembers.permission, enabled: modelingMembers.enabled, name: users.name }).from(modelingMembers).innerJoin(users, eq(users.id, modelingMembers.userId)).where(eq(modelingMembers.companyId, c.get('actor').companyId)));
   });

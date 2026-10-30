@@ -1,3 +1,5 @@
+
+import { ExportLink } from '@/components/document-export';
 import { formatKz } from '@kianda/core';
 import Link from 'next/link';
 import { api, currentUser } from '@/lib/api';
@@ -29,7 +31,7 @@ export default async function Despesas({ searchParams }: { searchParams: Promise
           <p className="sub">Notas de despesas com recibos e diárias, aprovação pela chefia e reembolso pelas Finanças</p>
         </div>
         <span className="actions">
-          {view === 'pay' && claims.length > 0 && <a className="btn ghost" href="/api/v1/expenses-bank-file">Ficheiro de transferências (CSV)</a>}
+          {view === 'pay' && claims.length > 0 && <ExportLink className="btn ghost" href="/api/v1/expenses-bank-file">Ficheiro de transferências (CSV)</ExportLink>}
           <Link className="btn" href="/despesas/nova">Nova nota de despesas</Link>
         </span>
       </div>

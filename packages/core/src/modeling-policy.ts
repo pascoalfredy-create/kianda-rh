@@ -1,4 +1,4 @@
-import { CYCLES, type BillingCycle } from './licensing.js';
+import { cyclePrice, CYCLES, type BillingCycle } from './licensing.js';
 import { kz } from './money.js';
 import { FINANCIAL_SECTORS, type FinancialSector } from './modeling/types.js';
 
@@ -6,10 +6,10 @@ import { FINANCIAL_SECTORS, type FinancialSector } from './modeling/types.js';
 export const MODELING_INCLUDED_USERS = 5;
 export const MODELING_EXTRA_USER_MONTHLY_MINOR = kz(35_000);
 export const MODELING_PLANS = [
-  { key: 'pme', label: 'Plano PME', projectLimit: 2, sectorLimit: 2, monthlyMinor: kz(300_000), prices: { monthly: kz(300_000), semiannual: kz(1_620_000), annual: kz(2_880_000) } },
-  { key: 'corporate', label: 'Plano Corporate', projectLimit: 5, sectorLimit: 4, monthlyMinor: kz(600_000), prices: { monthly: kz(600_000), semiannual: kz(3_240_000), annual: kz(5_760_000) } },
-  { key: 'enterprise10', label: 'Grandes Empresas (Até 10)', projectLimit: 10, sectorLimit: 8, monthlyMinor: kz(1_200_000), prices: { monthly: kz(1_200_000), semiannual: kz(6_480_000), annual: kz(11_520_000) } },
-  { key: 'unlimited', label: 'Grandes Empresas (Ilimitado)', projectLimit: null, sectorLimit: 8, monthlyMinor: kz(1_500_000), prices: { monthly: null, semiannual: kz(8_100_000), annual: kz(14_400_000) } },
+  { key: 'pme', label: 'Plano PME', projectLimit: 2, sectorLimit: 2, monthlyMinor: kz(69_000), prices: { monthly: kz(69_000), semiannual: kz(372_600), annual: kz(703_800) } },
+  { key: 'corporate', label: 'Plano Corporate', projectLimit: 5, sectorLimit: 4, monthlyMinor: kz(120_000), prices: { monthly: kz(120_000), semiannual: kz(648_000), annual: kz(1_224_000) } },
+  { key: 'enterprise10', label: 'Grandes Empresas (Até 10)', projectLimit: 10, sectorLimit: 8, monthlyMinor: kz(200_000), prices: { monthly: kz(200_000), semiannual: kz(1_080_000), annual: kz(2_040_000) } },
+  { key: 'unlimited', label: 'Grandes Empresas (Ilimitado)', projectLimit: null, sectorLimit: 8, monthlyMinor: kz(300_000), prices: { monthly: kz(300_000), semiannual: kz(1_620_000), annual: kz(3_060_000) } },
 ] as const;
 export type ModelingPlanKey = typeof MODELING_PLANS[number]['key'];
 export const MODELING_SECTOR_LABELS: Record<FinancialSector, string> = { mineracao: 'Mineração', petroleo: 'Petróleo & Gás', agro: 'Agro-indústria', comercio: 'Comércio & Distribuição', servicos: 'Serviços & Consultoria', industria: 'Indústria transformadora', imobiliario: 'Imobiliário', tecnologia: 'Tecnologia & Telecom' };
@@ -36,7 +36,7 @@ export function modelingPlanPrice(planKey: string, cycle: BillingCycle, extraUse
   const months = CYCLES[cycle].months;
   const extraMinor = extraUsers * MODELING_EXTRA_USER_MONTHLY_MINOR * months;
   const grossMinor = plan.monthlyMinor * months + extraMinor;
-  const totalMinor = plan.prices[cycle] + extraMinor;
+  const totalMinor = cyclePrice({ ...plan, minEmployees: 0, maxEmployees: null }, cycle)!.totalMinor + extraMinor;
   return { grossMinor, discountMinor: grossMinor - totalMinor, totalMinor, extraMinor };
 }
 

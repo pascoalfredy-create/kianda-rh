@@ -1,3 +1,5 @@
+
+import { ExportLink } from '@/components/document-export';
 import { formatKz } from '@kianda/core';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
@@ -116,7 +118,7 @@ export default async function Relatorios({ searchParams }: { searchParams: Promi
           <span className="muted">a</span>
           <select name="ate" defaultValue={r.to} aria-label="Até">{r.available.map((p) => <option key={p} value={p}>{monthLabel(p)}</option>)}</select>
           <button className="btn ghost sm">Ver</button>
-          <a className="btn sm" href={xlsxHref}>Exportar Excel</a>
+          <ExportLink className="btn sm" href={xlsxHref}>Exportar Excel</ExportLink>
         </form>
       </div>
 

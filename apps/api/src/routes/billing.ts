@@ -65,7 +65,7 @@ export function billingRoutes() {
     if (b.kind === 'modeling_subscription') {
       const plan = MODELING_PLANS.find(p => p.key === b.planKey)!;
       const price = modelingPlanPrice(plan.key, b.cycle, b.extraUsers);
-      if (!price) throw new DomainError('ciclo_indisponivel', 'O plano ilimitado só está disponível com pagamento semestral ou anual.', 400);
+      if (!price) throw new DomainError('ciclo_indisponivel', 'O plano não está disponível no ciclo escolhido.', 400);
       const [grant] = await db.select().from(companyModules).where(and(eq(companyModules.companyId, actor.companyId), eq(companyModules.module, 'modeling')));
       const [company] = await db.select({ sector: companies.sector }).from(companies).where(eq(companies.id, actor.companyId));
       const primarySector = grant?.primarySector as FinancialSector || defaultModelingSector(company?.sector);

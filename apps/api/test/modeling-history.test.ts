@@ -103,7 +103,8 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: balancetes por projecto e r
     expect((await req('POST', `/v1/modeling/models/${modelId}/history/to-model`, { revision: 5 })).json().error).toBe('projecto_arquivado');
     await getDb().update(companyModules).set({ status: 'suspended' }).where(eq(companyModules.companyId, company));
     expect((await history(5)).statusCode).toBe(402);
-    expect((await req('GET', `/v1/modeling/models/${modelId}/reports/analise?version=${versionId}`, undefined, viewer)).bytes).toEqual(snapshot);
+    expect((await req('GET', `/v1/modeling/models/${modelId}/reports/analise?version=${versionId}`, undefined, viewer)).statusCode).toBe(402);
+    expect((await req('GET', `/v1/modeling/models/${modelId}/versions/${versionId}`, undefined, viewer)).json().payload.reports.analise).toBeTruthy();
   });
   it('analisa um documento externo apurado e intercalar sem pressupostos projectados e conserva a origem no PDF',async()=>{
     const register=await req('POST','/v1/auth/register',{company:{name:'Consultora de exemplo',nif:String(Date.now()+39000).slice(-10)},name:'Analista',email:`${stamp}external@history.ao`,password});

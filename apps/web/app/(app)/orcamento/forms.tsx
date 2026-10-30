@@ -1,4 +1,6 @@
 'use client';
+import { ExportLink } from '@/components/document-export';
+
 
 import { formatKz } from '@kianda/core';
 import { useRouter } from 'next/navigation';
@@ -154,7 +156,7 @@ export function BudgetActions({ id, status, isOwner, canEdit }: { id: string; st
       {isOwner && status === 'draft' && <button className="btn sm" disabled={busy} onClick={() => run(`/v1/budgets/${id}/approve`, 'POST', undefined, () => router.refresh())}>Aprovar</button>}
       {isOwner && status === 'approved' && <button className="btn ghost sm" disabled={busy} onClick={() => run(`/v1/budgets/${id}/reopen`, 'POST', undefined, () => router.refresh())}>Reabrir</button>}
       {canEdit && status === 'draft' && <button className="btn danger" disabled={busy} onClick={() => { if (window.confirm('Apagar este orçamento?')) void run(`/v1/budgets/${id}`, 'DELETE', undefined, () => router.refresh()); }}>Apagar</button>}
-      <a className="btn ghost sm" href={`/api/v1/budgets/${id}/export`}>Exportar Excel</a>
+      <ExportLink className="btn ghost sm" href={`/api/v1/budgets/${id}/export`}>Exportar Excel</ExportLink>
     </span>
   );
 }

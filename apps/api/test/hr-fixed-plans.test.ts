@@ -40,10 +40,10 @@ describe.skipIf(!process.env.DATABASE_URL)('RH: apenas faixas fixas, sem cobran�
 
   it('cobra só a faixa e obriga a mudar de plano quando o efectivo a excede', async () => {
     const atLimit = await request('POST', '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'monthly', amountMinor: 1, seats: 50 });
-    expect(atLimit.statusCode).toBe(201); expect(atLimit.json().amountMinor).toBe(9999900);
+    expect(atLimit.statusCode).toBe(201); expect(atLimit.json().amountMinor).toBe(2990000);
     await withTenant(companyId, () => getDb().insert(employees).values({ companyId, number: '101', name: 'Admissão anterior sintética', jobTitle: 'Técnico' }));
     expect((await request('POST', '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'monthly' })).json().error).toBe('escalao_pequeno');
-    for (const [cycle, amount] of [['monthly', 20000000], ['semiannual', 108000000], ['annual', 192000000]] as const) {
+    for (const [cycle, amount] of [['monthly', 4990000], ['semiannual', 26946000], ['annual', 50898000]] as const) {
       const r = await request('POST', '/v1/billing/requests', { kind: 'subscription', tierKey: 't2', cycle, amountMinor: 1, seats: 50 });
       expect(r.statusCode).toBe(201); expect(r.json().amountMinor).toBe(amount); expect(r.json().seats).toBeNull();
     }

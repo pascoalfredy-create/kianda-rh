@@ -80,7 +80,7 @@ export function authRoutes() {
     const modelingCycle = b.modelingPlan?.cycle ?? 'monthly';
     if (hasModeling && !b.modelingPlan) return c.json({ error: 'plano_obrigatorio', message: 'Escolha o plano, o sector principal e os sectores adicionais da Modelagem.' }, 400);
     const modelingSectors = hasModeling ? validateModelingSectors(modelingPlan.key, b.modelingPlan!.primarySector, b.modelingPlan!.sectors) : [];
-    if (hasModeling && modelingPlan.prices[modelingCycle] === null) return c.json({ error: 'ciclo_indisponivel', message: 'O plano ilimitado só está disponível com pagamento semestral ou anual.' }, 400);
+    if (hasModeling && modelingPlan.prices[modelingCycle] === null) return c.json({ error: 'ciclo_indisponivel', message: 'O plano não está disponível no ciclo escolhido.' }, 400);
     const db = getDb();
     const passwordHash = await hashPassword(b.password);
     const result = await db.transaction(async (tx) => {
@@ -105,7 +105,7 @@ export function authRoutes() {
     const trialEnd = result.trialEnd.split('-').reverse().join('/');
     await sendMail(db, {
       to: result.user.email, companyId: result.company.id, kind: 'boas_vindas', subject: 'Bem-vindo ao Kianda RH', title: `Bem-vindo ao Kianda RH, ${result.user.name.split(' ')[0]}`,
-      paragraphs: [`A conta de ${result.company.name} está criada, com ${TRIAL_DAYS} dias de calendário de período experimental, incluindo o dia do registo e até ${trialEnd}, inclusive, pela hora de Angola, nos módulos escolhidos: ${[hasHr ? 'Recursos Humanos' : '', hasModeling ? 'Modelagem Financeira' : ''].filter(Boolean).join(' e ')}.`, 'Sem cobrança automática. No fim da avaliação, os módulos sem pagamento ficam em consulta e os dados guardados são conservados. Consulte os módulos, planos e pagamentos na página Módulos e licenças. Cada módulo tem a sua subscrição.'],
+      paragraphs: [`A conta de ${result.company.name} está criada, com ${TRIAL_DAYS} dias de calendário de período experimental, incluindo o dia do registo e até ${trialEnd}, inclusive, pela hora de Angola, nos módulos escolhidos: ${[hasHr ? 'Recursos Humanos' : '', hasModeling ? 'Modelagem Financeira' : ''].filter(Boolean).join(' e ')}.`, 'Sem cobrança automática. Durante a avaliação, os documentos ficam apenas em pré-visualização; exportar e imprimir exige uma subscrição paga. No fim da avaliação, os módulos sem pagamento ficam em consulta e os dados guardados são conservados. Consulte os módulos, planos e pagamentos na página Módulos e licenças. Cada módulo tem a sua subscrição.'],
       facts: [['Código da empresa', result.company.code ?? '—']], button: base ? { label: 'Ver módulos e licenças', url: `${base}/licenca` } : null,
     });
     for (const a of await db.select().from(platformAdmins)) {

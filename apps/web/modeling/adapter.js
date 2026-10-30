@@ -246,6 +246,10 @@ function protect() {
   });
   for(const number of ['1','2']){const button=document.querySelector(`[data-act="anClearImport"][data-number="${number}"]`);if(button){const pending=historicalImports.has('#anF'+number);button.textContent=pending?'Cancelar leitura':'Remover documento';button.disabled=!writable||!pending&&!$('#anT'+number)?.value?.trim()&&!$('#anF'+number)?.value;}}
   for(const action of ['newM','createM','dupM','archiveProject','confirmArchive','restoreProject'])document.querySelectorAll(`[data-act="${action}"]`).forEach(el=>{el.disabled=!companyWrite||action==='dupM'&&!M();});
+  for(const action of ['downloadFS','downloadReport'])document.querySelectorAll(`[data-act="${action}"]`).forEach(el=>{
+    el.disabled=busy||!session?.formats?.pdf;
+    el.title=session?.formats?.pdf?'Descarregar PDF':'Pré-visualização. Active uma subscrição paga do Integra para exportar.';
+  });
   $('#mSel').disabled=busy;
   $('#integra-logout').disabled=busy;
   $('#integra-logout').textContent=signingOut?'A terminar sessão…':'Terminar sessão';
@@ -313,6 +317,7 @@ VIEWS.analise.after=()=>{
   }
 };
 async function downloadReport(key) {
+  if(!session?.formats?.pdf)throw Error('Pode pré-visualizar os documentos. Active uma subscrição paga do Integra para exportar.');
   if(key==='analise'&&historicalDirty.has(M().id))throw Error('Prima Analisar para validar e guardar os balancetes antes de descarregar o PDF.');
   const response=await store.download(M(),key),blob=await response.blob();
   const link=document.createElement('a'),url=URL.createObjectURL(blob);

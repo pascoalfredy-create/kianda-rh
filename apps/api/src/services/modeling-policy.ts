@@ -32,7 +32,8 @@ export async function requireProjectCapacity(db: Db, companyId: string) {
   await lockModelingCompany(db, companyId);
   if (!(await modelingUsage(db, companyId)).canCreateProject) throw new DomainError('limite_projectos', 'Atingiu o número de projectos activos contratado. Arquive um projecto ou amplie a subscrição.', 409);
 }
-export async function modelingExportOptions(db: Db, actorId: string) {
+export async function modelingExportOptions(db: Db, actorId: string, allowed: boolean) {
+  if (!allowed) return { pdf: false, xlsx: false, csv: false };
   const admin = await isPlatformAdmin(db, actorId);
   return { pdf: true, xlsx: canExportModeling('xlsx', actorId, process.env.KIANDA_MODELING_OWNER_USER_ID, admin), csv: false };
 }
