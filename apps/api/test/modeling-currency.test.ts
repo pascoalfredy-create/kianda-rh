@@ -79,9 +79,10 @@ describe.skipIf(!process.env.DATABASE_URL)('conversão monetária atómica por e
       expect(result.json()).toMatchObject({ revision: 7, currency: 'Kz', assumptions: { currencyConversion: { rate: 913, source: 'BNA via Frankfurter (referência)' } } });
     } finally { vi.unstubAllGlobals(); }
   });
-  it('arquivo/licença em consulta bloqueiam conversões e mantêm os downloads aprovados', async () => {
+  it('arquivo/licença em consulta bloqueiam conversões e downloads, conservando a versão para pré-visualização', async () => {
     expect((await req('POST', `/v1/modeling/models/${id}/archive`, { revision: 7, archived: true })).statusCode).toBe(200); expect((await convert(8)).statusCode).toBe(409);
     await getDb().update(companyModules).set({ status: 'suspended' }).where(eq(companyModules.companyId, companyId)); expect((await convert(8)).statusCode).toBe(402);
-    expect((await req('GET', `/v1/modeling/models/${id}/reports/sumario?version=${version}`)).bytes).toEqual(pdf);
+    expect((await req('GET', `/v1/modeling/models/${id}/reports/sumario?version=${version}`)).statusCode).toBe(402);
+    expect((await req('GET', `/v1/modeling/models/${id}/versions/${version}`)).json().payload.source.currency).toBe('USD');
   });
 });
