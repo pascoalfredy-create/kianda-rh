@@ -164,6 +164,10 @@ jobs:
             scripts/ci-run.sh "Verificar /api/health em $h" curl -sS --fail-with-body "https://$h/api/health"
           done
 
+      - name: Verificar apresentação pública e descoberta
+        if: vars.KIANDA_HOSTNAME != ''
+        run: scripts/ci-run.sh "Apresentação, SEO e Integra instalável" node scripts/verify-public-site.mjs "https://$PRIMARY_HOST"
+
       - name: Verificar base de dados (login de demonstração)
         if: vars.KIANDA_HOSTNAME != '' && vars.KIANDA_SEED_DEMO == 'true'
         run: |

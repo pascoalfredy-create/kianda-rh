@@ -25,6 +25,16 @@ span('/* ---------------- Motor', '/* ---------------- Formatação', `function 
 replace('function render(){', 'function renderPrototype(){');
 span("  $('#nav').innerHTML=", "  $('#mSel').innerHTML=", '  renderNavigation();\n');
 replace('function liveStrip(){', 'function liveStripPrototype(){');
+// Mantém o relatório no computador e permite que o selector e o documento empilhem no telefone.
+replace('<div style="display:grid;grid-template-columns:270px 1fr;gap:18px;align-items:start">', '<div class="report-layout" style="display:grid;grid-template-columns:270px 1fr;gap:18px;align-items:start">');
+replace('<div class="card" style="position:sticky;top:76px">', '<div class="card report-picker" style="position:sticky;top:76px">');
+replace('<div data-act="sub" data-k="rep"', '<button type="button" class="report-choice" data-act="sub" data-k="rep"');
+replace('<div class="muted" style="font-size:11.5px">${r.aud}${r.hist?\' · histórico\':\'\'}</div></div>', '<span class="muted" style="display:block;font-size:11.5px">${r.aud}${r.hist?\' · histórico\':\'\'}</span></button>');
+replace('<label>${l}</label>', '<label for="assumption-${p}">${l}</label>');
+replace('class="inp" data-p="${p}"', 'id="assumption-${p}" class="inp" data-p="${p}"');
+replace('class="inp n" data-p="${p}"', 'id="assumption-${p}" class="inp n" data-p="${p}"');
+replace('class="sel" data-p="${p}"', 'id="assumption-${p}" class="sel" data-p="${p}"');
+replace('type="number" step="any"', 'type="number" inputmode="decimal" step="any"');
 replace('value="${v}">', 'value="${esc(v??\'\')}">');
 replace("[['Kz','Kwanza (Kz)'],['USD','Dólar (USD)']]", "[['Kz','Kwanza (Kz)'],['USD','Dólar (USD)'],['EUR','Euro (EUR)']]");
 replace("M().moeda==='USD'?'USD':'Kz'", 'M().moeda');
@@ -100,7 +110,8 @@ source = source.slice(0, source.indexOf('/* ---------------- Eventos'));
 const adapter = (await readFile(new URL('modeling/adapter.js', web), 'utf8')).replace('__NEW_MODEL_DIALOG__', dialog);
 const imports = `import {runFinancialModel} from '${fileURLToPath(new URL('packages/core/src/modeling/engine.ts', root))}';\nimport {financialBreakEvenPrice} from '${fileURLToPath(new URL('packages/core/src/modeling/analysis.ts', root))}';\nimport {FinancialModelError} from '${fileURLToPath(new URL('packages/core/src/modeling/types.ts', root))}';\nimport {analyzeFinancialHistory,historicalPeriodLabel,parseHistoricalReference,HISTORICAL_RATIO_DEFINITIONS} from '${fileURLToPath(new URL('packages/core/src/modeling/historical.ts', root))}';\nimport {ModelingStore,modelingRequest} from '${fileURLToPath(new URL('modeling/store.ts', web))}';\nimport {extractPdfTrialBalance,PDF_IMPORT_LIMIT} from '${fileURLToPath(new URL('modeling/pdf-import.ts', web))}';\n`;
 const documentImports = `import {extractWordTrialBalance,documentFormat,decodeDocumentText} from '${fileURLToPath(new URL('lib/document-import.ts', web))}';\n`;
-const result = await build({ stdin: { contents: imports + documentImports + source + adapter, resolveDir: fileURLToPath(web), sourcefile: 'integra-ui.js' }, alias: {'@kianda/core':fileURLToPath(new URL('packages/core/src/index.ts',root))}, bundle: true, format: 'iife', platform: 'browser', target: 'es2022', minify: true, legalComments: 'none', write: false, logLevel: 'silent' });
+const mobileImports = `import {setupModelingMobile,prepareFinancialTables} from '${fileURLToPath(new URL('modeling/mobile.ts', web))}';\n`;
+const result = await build({ stdin: { contents: imports + documentImports + mobileImports + source + adapter, resolveDir: fileURLToPath(web), sourcefile: 'integra-ui.js' }, alias: {'@kianda/core':fileURLToPath(new URL('packages/core/src/index.ts',root))}, bundle: true, format: 'iife', platform: 'browser', target: 'es2022', minify: true, legalComments: 'none', write: false, logLevel: 'silent' });
 const js = result.outputFiles[0].text;
 const digest = (s) => createHash('sha256').update(s).digest('hex');
 const spaceCss = await readFile(new URL('modeling/space.css', web), 'utf8');

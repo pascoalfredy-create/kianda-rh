@@ -1,7 +1,10 @@
 import { upstream } from '@/lib/upstream';
 import { ApplyForm } from './apply';
+import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
+// As vagas foram publicadas para consulta externa; mantêm a sua indexação própria.
+export const metadata: Metadata = { robots: { index: true, follow: true } };
 
 interface Opening { id: string; title: string; location: string | null; contractType: string; description: string | null; requirements: string | null; closesOn: string | null; department: string | null }
 const CONTRACT: Record<string, string> = { indefinite: 'Tempo indeterminado', fixed_term: 'Tempo determinado', internship: 'Estágio' };

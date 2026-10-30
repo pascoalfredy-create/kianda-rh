@@ -24,6 +24,17 @@ describe('interface aprovada e documento autenticado', () => {
     expect(modelingHeaders('nonce')['content-security-policy']).not.toContain("'unsafe-eval'");
     expect(modelingHeaders('nonce')['content-security-policy']).toContain("worker-src 'self'");
     expect(html).toContain('id="integra-space"');
+    expect(modelingHeaders('nonce')['x-robots-tag']).toBe('noindex, nofollow');
+  });
+  it('liga o documento independente ao Kianda instalável e preserva o zoom no telefone', () => {
+    const html = modelingPage({ canWrite: true } as ModelingSession, 'nonce');
+    expect(html).toContain('<link rel="manifest" href="/manifest.webmanifest">');
+    expect(html).toContain('width=device-width, initial-scale=1, viewport-fit=cover');
+    expect(html).not.toContain('user-scalable=no');
+    expect(html).toContain('id="integra-install" hidden');
+    expect(html).toContain('class="menu-close btn"');
+    expect(html).toContain('<label for="mSel"');
+    expect(html).toContain('id="integra-network-status"');
   });
   it('o runtime distribuído não persiste dados ou exporta CSV/clipboard', () => {
     const js = readFileSync(new URL('../public/modeling-runtime.js', import.meta.url), 'utf8');
