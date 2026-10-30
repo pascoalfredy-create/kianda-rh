@@ -38,7 +38,14 @@ jobs:
       - run: pnpm --filter @kianda/db build
       - run: pnpm db:migrate
       - run: pnpm typecheck
-      - run: pnpm test
+      - name: Testes (diagnóstico com saída limitada)
+        run: |
+          if pnpm test > "$RUNNER_TEMP/kianda-tests.log" 2>&1; then
+            grep -E 'Test Files|Tests  ' "$RUNNER_TEMP/kianda-tests.log"
+          else
+            tail -n 250 "$RUNNER_TEMP/kianda-tests.log" | cut -c 1-1200
+            exit 1
+          fi
       - name: Build Cloudflare (OpenNext)
         run: pnpm --filter @kianda/web cf:build
 
