@@ -24,7 +24,12 @@ describe('entrada pública, sessão e descoberta do Kianda', () => {
     expect(page.type).toBe(PublicHome); expect(state.me).not.toHaveBeenCalled();
     const html = renderToStaticMarkup(page);
     expect(html).toContain('Kianda RH'); expect(html).toContain('Kianda Integra');
-    expect(html).toContain('<h1>Recursos Humanos e Modelagem Financeira para empresas em Angola</h1>');
+    expect(html).toMatch(/<h1>Cuide da sua equipa\.<br\s*\/?><em>Prepare o próximo investimento\.<\/em><\/h1>/);
+    expect(html).toContain('Recursos Humanos e Modelagem Financeira para empresas em Angola.');
+    expect(html).toContain('Ver planos'); expect(html).toContain('<dialog');
+    expect(html).not.toMatch(/<dialog[^>]*\sopen(?:[\s=>])/);
+    expect(html).not.toContain('PROTÓTIPO PARA REVISÃO');
+    expect(html).toContain('aria-label="Kianda — página inicial"');
     expect(html).toContain('href="/login"'); expect(html).toContain('href="/registo"');
     expect(html).toContain('application/ld+json');
     expect(metadata.robots).toEqual({ index: true, follow: true });

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
-import { HomePrototype } from '@/components/home-prototype';
+import { PublicHomeContent } from '@/components/public-home-content';
 
 export const metadata: Metadata = { title: 'Proposta da página principal | Kianda', robots: { index: false, follow: false } };
 
-/** Prévia isolada para revisão do proprietário; não substitui a página inicial. */
-export default function PrototypePage() { return <HomePrototype />; }
+/** Mantém o endereço da prévia partilhada, fora do índice de pesquisa. */
+export default function PrototypePage() { return <PublicHomeContent preview />; }
