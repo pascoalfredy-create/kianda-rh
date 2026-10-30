@@ -1,4 +1,4 @@
-import { DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, isValidCompanyNif, luandaDate, SECTORS, tierFor, TRIAL_DAYS, verifyTotp } from '@kianda/core';
+import { DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, isValidCompanyNif, luandaDate, SECTORS, tierFor, trialEndDate, TRIAL_DAYS, verifyTotp } from '@kianda/core';
 import { auditLogs, companies, companyModules, employees, getDb, modelingMembers, platformAdmins, hashPassword, passwordProblems, subscriptions, users, verifyPassword, type Db } from '@kianda/db';
 import { and, eq } from '@kianda/db';
 import { Hono } from 'hono';
@@ -86,7 +86,7 @@ export function authRoutes() {
     const result = await db.transaction(async (tx) => {
       const [co] = await tx.insert(companies).values({ name: b.company.name, nif: b.company.nif, sector: b.company.sector ?? null, address: b.company.address ?? null, code: companyCode() }).returning();
       // Período experimental com o escalão adequado à dimensão declarada.
-      const trialEnd = new Date(Date.parse(luandaDate(new Date())) + TRIAL_DAYS * 86_400_000).toISOString().slice(0, 10);
+      const trialEnd = trialEndDate(luandaDate(co!.createdAt));
       await tx.insert(subscriptions).values({ companyId: co!.id, status: hasHr ? 'trial' : 'cancelled', tierKey: hrTier.key, cycle: b.hrPlan?.cycle ?? 'monthly', trialEndsAt: hasHr ? trialEnd : null });
       const [u] = await tx.insert(users).values({ companyId: co!.id, email: b.email.toLowerCase(), name: b.name, passwordHash, role: 'owner' }).returning();
       await tx.insert(companyModules).values([
@@ -97,15 +97,15 @@ export function authRoutes() {
       // Pré-configuração do sector: regimes de horário e subsídios sugeridos (a empresa ajusta depois).
       if (hasHr) await applySectorPreset(tx, co!.id, co!.sector, u!.id);
       await tx.insert(auditLogs).values({ companyId: co!.id, actorId: u!.id, action: 'register', entity: 'company', entityId: co!.id, after: { company: co, owner: { id: u!.id, email: u!.email }, modules: b.modules, hrPlan: hasHr ? { tierKey: hrTier.key, cycle: b.hrPlan?.cycle ?? 'monthly' } : null, modelingPlan: hasModeling ? { key: modelingPlan.key, cycle: modelingCycle } : null } });
-      return { company: co!, user: u! };
+      return { company: co!, user: u!, trialEnd };
     });
     const token = await startSession(c, { sub: result.user.id, companyId: result.company.id, role: 'owner', employeeId: null, name: result.user.name });
     // Boas-vindas ao proprietário e aviso à administração da plataforma (sem bloquear o registo).
     const base = appBaseUrl();
-    const trialEnd = new Date(Date.parse(luandaDate(new Date())) + TRIAL_DAYS * 86_400_000).toISOString().slice(0, 10).split('-').reverse().join('/');
+    const trialEnd = result.trialEnd.split('-').reverse().join('/');
     await sendMail(db, {
       to: result.user.email, companyId: result.company.id, kind: 'boas_vindas', subject: 'Bem-vindo ao Kianda RH', title: `Bem-vindo ao Kianda RH, ${result.user.name.split(' ')[0]}`,
-      paragraphs: [`A conta de ${result.company.name} está criada, com ${TRIAL_DAYS} dias de período experimental (até ${trialEnd}) nos módulos escolhidos: ${[hasHr ? 'Recursos Humanos' : '', hasModeling ? 'Modelagem Financeira' : ''].filter(Boolean).join(' e ')}.`, 'Consulte os módulos, planos e pagamentos na página Módulos e licenças. Cada módulo tem a sua subscrição.'],
+      paragraphs: [`A conta de ${result.company.name} está criada, com ${TRIAL_DAYS} dias de calendário de período experimental, incluindo o dia do registo e até ${trialEnd}, inclusive, pela hora de Angola, nos módulos escolhidos: ${[hasHr ? 'Recursos Humanos' : '', hasModeling ? 'Modelagem Financeira' : ''].filter(Boolean).join(' e ')}.`, 'Sem cobrança automática. No fim da avaliação, os módulos sem pagamento ficam em consulta e os dados guardados são conservados. Consulte os módulos, planos e pagamentos na página Módulos e licenças. Cada módulo tem a sua subscrição.'],
       facts: [['Código da empresa', result.company.code ?? '—']], button: base ? { label: 'Ver módulos e licenças', url: `${base}/licenca` } : null,
     });
     for (const a of await db.select().from(platformAdmins)) {

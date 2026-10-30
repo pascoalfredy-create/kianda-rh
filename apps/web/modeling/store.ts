@@ -1,5 +1,5 @@
 /** Persistência do protótipo: sem localStorage, revisões serializadas e sem perder edições em curso. */
-import type { FinancialCurrency, FinancialHistoricalAnalysis, FinancialHistoricalInput, financialTemplate } from '@kianda/core';
+import type { FinancialCurrency, FinancialHistoricalAnalysis, FinancialHistoricalInput, SubscriptionStatus, financialTemplate } from '@kianda/core';
 export interface CurrencyConversionInput { from: FinancialCurrency; to: FinancialCurrency; rate: number; rateDate: string; source: string; reference: boolean }
 export interface HistoricalRecord { inputHash: string; updatedAt: string; analysis: FinancialHistoricalAnalysis }
 export interface ModelRecord {
@@ -10,6 +10,7 @@ export interface UiModel extends Record<string, any> { id: string; nome: string;
 export interface ModelingSession {
   user: { id: string; name: string; role: string }; company: { id: string; name: string };
   permission: 'editor' | 'viewer'; canWrite: boolean; formats: { pdf: boolean; xlsx: boolean; csv: boolean };
+  licence?: { status: SubscriptionStatus; trialEndsAt: string | null; paidUntil: string | null };
   usage: { activeProjects: number; projectLimit: number | null; canCreateProject: boolean; userLimit: number; enabledUsers: number };
   bootstrap?: { models: ModelRecord[]; templates: ReturnType<typeof financialTemplate>[]; firstHistory: { modelId: string; revision: number; historical: HistoricalRecord | null } | null };
 }

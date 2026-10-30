@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { cyclePrice, DEFAULT_TIERS, effectiveStatus, employeeLimit, kz, periodEnd, tierFor } from '../src/index.js';
+import { cyclePrice, DEFAULT_TIERS, effectiveStatus, employeeLimit, kz, periodEnd, tierFor, trialEndDate, trialDaysRemaining } from '../src/index.js';
 
 describe('licenças', () => {
+  it('a avaliação tem sete datas de calendário, incluindo registo e último dia, mesmo ao mudar de mês/ano', () => {
+    expect(trialEndDate('2026-10-30')).toBe('2026-11-05');
+    expect(trialEndDate('2026-12-29')).toBe('2027-01-04');
+    expect(trialEndDate('2028-02-26')).toBe('2028-03-03');
+    const until = trialEndDate('2026-10-30');
+    expect(trialDaysRemaining(until, '2026-10-30')).toBe(7);
+    expect(trialDaysRemaining(until, '2026-11-05')).toBe(1);
+    expect(trialDaysRemaining(until, '2026-11-06')).toBe(0);
+    expect(effectiveStatus({ status: 'trial', trialEndsAt: until, paidUntil: null }, '2026-11-05')).toBe('trial');
+    expect(effectiveStatus({ status: 'trial', trialEndsAt: until, paidUntil: null }, '2026-11-06')).toBe('suspended');
+  });
+  it('recusa datas inválidas em vez de transferir silenciosamente a avaliação para outro mês', () => {
+    for (const day of ['2026-02-30', '2026-2-01', '2026-10-30T10:00:00Z', 'invalid']) expect(() => trialEndDate(day)).toThrow(RangeError);
+    expect(() => trialDaysRemaining('2026-11-05', '2026-02-30')).toThrow(RangeError);
+  });
   it('escalão pelo número de colaboradores', () => {
     expect(tierFor(0).key).toBe('t1');
     expect(tierFor(100).key).toBe('t1');

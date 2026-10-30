@@ -50,7 +50,8 @@ export default function Registo() {
           <div><b style={{ color: 'var(--ink)' }}>Kianda RH</b><small style={{ color: 'var(--ink3)' }}>Gestão de Pessoas · Angola</small></div>
         </div>
         <h1 style={{ fontSize: 19, marginBottom: 4 }}>Criar a conta da empresa</h1>
-        <p className="muted" style={{ marginTop: 0 }}>{TRIAL_DAYS} dias grátis nos módulos escolhidos. Uma conta para RH e Modelagem Financeira. Sem cartão nem compromisso.</p>
+        <p className="muted" style={{ marginTop: 0 }}>{TRIAL_DAYS} dias de calendário grátis nos módulos escolhidos, incluindo o dia do registo, pela hora de Angola. Uma conta para RH e Modelagem Financeira. Sem cartão nem cobrança automática.</p>
+        <p className="muted" style={{ marginTop: 8, fontSize: 12.5 }}>O teste usa os limites do plano seleccionado. A data final fica visível na conta. Sem pagamento, o módulo passa a consulta e os dados guardados são conservados.</p>
         <h3 style={{ fontSize: 12, textTransform: 'uppercase', color: 'var(--ink3)', margin: '16px 0 8px' }}>Empresa</h3>
         <label>Denominação social<input name="companyName" required placeholder="Ex.: Kwanza Logística, Lda." /></label>
         <label>NIF da empresa<input name="nif" required inputMode="numeric" placeholder="10 dígitos" /></label>
@@ -67,7 +68,7 @@ export default function Registo() {
           <label>N.º de colaboradores activos<input type="number" min={1} max={100000} value={estimate} onChange={(e) => { setEstimate(Math.max(1, Number(e.target.value) || 1)); setHrTier(''); }} /></label>
           <label>Plano RH<select value={tier.key} onChange={e => setHrTier(e.target.value)}>{DEFAULT_TIERS.map(t => <option key={t.key} value={t.key} disabled={t.maxEmployees !== null && t.maxEmployees < estimate}>{t.label}</option>)}</select></label>
           <label>Pagamento RH<select value={hrCycle} onChange={e => setHrCycle(e.target.value as BillingCycle)}>{Object.entries(CYCLES).map(([key, cycle]) => <option key={key} value={key}>{cycle.label}</option>)}</select></label>
-          <div className="warn" style={{ margin: '4px 0 12px' }}>RH: <b>{price && formatKz(price.totalMinor)}</b> por ciclo {hrCycle === 'monthly' ? 'mensal' : hrCycle === 'semiannual' ? 'semestral, à vista' : 'anual, à vista'}. Só paga depois do período experimental.</div>
+          <div className="warn" style={{ margin: '4px 0 12px' }}>RH: <b>{price && formatKz(price.totalMinor)}</b> por ciclo {hrCycle === 'monthly' ? 'mensal' : hrCycle === 'semiannual' ? 'semestral, à vista' : 'anual, à vista'}. A avaliação é gratuita. Se activar a subscrição durante o teste, o período pago começa depois dos dias gratuitos restantes.</div>
         </>}
         <label style={{ display: 'flex', gap: 8 }}><input type="checkbox" checked={modeling} onChange={e => setModeling(e.target.checked)} style={{ width: 'auto' }} />Modelagem Financeira · Kianda Integra</label>
         {modeling && <>

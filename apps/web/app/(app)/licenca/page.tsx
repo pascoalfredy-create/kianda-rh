@@ -1,4 +1,4 @@
-import { MODELING_SECTOR_LABELS, formatKz, type CompanyModulesOverview, type FinancialSector } from '@kianda/core';
+import { MODELING_SECTOR_LABELS, formatKz, luandaDate, trialDaysRemaining, type CompanyModulesOverview, type FinancialSector } from '@kianda/core';
 import { redirect } from 'next/navigation';
 import { api, currentUser } from '@/lib/api';
 import { ModelingPlanForm, NewReference, ReferenceForm, RenewForm } from './forms';
@@ -27,8 +27,8 @@ export default async function Licenca() {
   const canManageMembers = me.user.role === 'owner' && b.modules.modeling.canAccess && b.modules.modeling.canWrite;
   const [users, members] = canManageMembers ? await Promise.all([api<{ id: string; name: string }[]>('/v1/users'), api<ModelingMember[]>('/v1/modeling/members')]) : [[], []];
   const pending = b.requests.filter((r) => r.status === 'pending' && r.kind !== 'extra_seats');
-  const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
-  const daysLeft = b.trialEndsAt && b.status === 'trial' ? Math.max(0, Math.ceil((Date.parse(b.trialEndsAt) - Date.now()) / 86_400_000)) : null;
+  const today = luandaDate(new Date());
+  const daysLeft = b.trialEndsAt && b.status === 'trial' ? trialDaysRemaining(b.trialEndsAt, today) : null;
   const usage = b.limit ? Math.min(100, Math.round((b.activeEmployees / b.limit) * 100)) : 0;
   return (
     <>
