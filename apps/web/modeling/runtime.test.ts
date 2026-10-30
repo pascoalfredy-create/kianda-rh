@@ -6,7 +6,7 @@ import { historicalInput } from '../../../packages/core/test/fixtures/financial-
 const runtime = readFileSync(new URL('../public/modeling-runtime.js', import.meta.url), 'utf8');
 const views = ['painel', 'pressupostos', 'demonstracoes', 'avaliacao', 'credito', 'sensibilidade', 'relatorios'];
 /** Teste do código distribuído e das vistas, sem simular um motor de layout de navegador. */
-async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, incomplete = false, withHistory = false, deferRead = false, historyInput:FinancialHistoricalInput=historicalInput, allowedSectors: readonly typeof FINANCIAL_SECTORS[number][] = FINANCIAL_SECTORS, projects: { bootstrap?: boolean; initialArchived?: boolean; restoreFails?: boolean; deferUsage?: boolean; historyFailsAfterRestore?: boolean; historyFailsOnRefresh?: boolean } = {}) {
+async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, incomplete = false, withHistory = false, deferRead = false, historyInput:FinancialHistoricalInput=historicalInput, allowedSectors: readonly typeof FINANCIAL_SECTORS[number][] = FINANCIAL_SECTORS, projects: { bootstrap?: boolean; initialArchived?: boolean; restoreFails?: boolean; deferUsage?: boolean; historyFailsAfterRestore?: boolean; historyFailsOnRefresh?: boolean; logoutFails?: boolean; deferLogout?: boolean; bootFails?: boolean } = {}) {
   const template = financialTemplate(sector), handlers = new Map<string, Function>();
   const nodes = new Map<string, any>();
   const node = (selector: string) => {
@@ -14,7 +14,8 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
     return nodes.get(selector)!;
   };
   const model = { id: 'm1', name: template.name, sector, currency: template.currency, revision: 1, createdAt: '2026-10-28', archivedAt: projects.initialArchived ? '2026-10-29T08:00:00Z' : null as string | null, assumptions: incomplete ? { pessoal: 1 } : template.assumptions };
-  const records = [model], pendingUsage: (() => void)[] = [];
+  const records = [model], pendingUsage: (() => void)[] = [], pendingLogout: (() => void)[] = [];
+  const redirects: string[] = [], windowHandlers = new Map<string, Function>();
   node('#integra-session').textContent = JSON.stringify({ canWrite, permission: canWrite ? 'editor' : 'viewer', formats: { pdf: true, xlsx: false, csv: false }, usage: {}, ...(projects.bootstrap ? { bootstrap: { models: records, templates: allowedSectors.map(financialTemplate), firstHistory: projects.initialArchived ? null : { modelId: model.id, revision: model.revision, historical: withHistory ? { inputHash: 'a'.repeat(64), updatedAt: '2026-10-28', analysis: analyzeFinancialHistory(historyInput) } : null } } } : {}) });
   let restored=false,modelReads=0,historyRemoved=false;
   const requests: { path: string; method?: string; payload?: any }[] = [];
@@ -22,32 +23,70 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
   const currencyField=node('[data-p="moeda"]');currencyField.dataset={p:'moeda',t:'t'};currencyField.value=model.currency;
   node('#fxFrom').value=model.currency;
   const field = { disabled: false, dataset: { p: 'pessoal' } }, baseScenario = { disabled: true, dataset: { cen: 'base.preco' } };
+  node('#integra-logout').dataset={act:'logout'};
   class Element { constructor(public dataset: Record<string, string>) {} closest(selector: string) { return selector === '[data-go]' && this.dataset.go || selector === '[data-act]' && this.dataset.act ? this : null; } }
   runInNewContext(runtime, {
-    document: { querySelector: node, querySelectorAll: (selector: string) => selector === '[data-p],[data-cen]' ? [field, baseScenario, currencyField] : selector === '[data-p]' ? [currencyField] : [], addEventListener: (name: string, fn: Function) => handlers.set(name, fn) },
-    Element, window: { addEventListener() {}, scrollTo() {} }, location: { hash: '' }, history: { replaceState() {} },
-    setTimeout, clearTimeout, structuredClone, URL, URLSearchParams, TextDecoder, AbortController, console,
+    document: { querySelector: node, querySelectorAll: (selector: string) => selector === '[data-p],[data-cen]' ? [field, baseScenario, currencyField] : selector === '[data-p]' ? [currencyField] : selector==='button,select' ? [node('#integra-logout'),node('#mSel')] : [], addEventListener: (name: string, fn: Function) => handlers.set(name, fn) },
+    Element, window: { addEventListener(name:string,fn:Function) { windowHandlers.set(name,fn); }, removeEventListener() {}, scrollTo() {}, location: { replace(path:string){redirects.push(path);},reload(){} } }, location: { hash: '' }, history: { replaceState() {} },
+    setTimeout, clearTimeout, structuredClone, URL, URLSearchParams, TextDecoder, AbortController, AbortSignal, console,
     FileReader: class { result?: ArrayBuffer; onload?: () => void; readAsArrayBuffer(file: { buffer: ArrayBuffer }) { this.result=file.buffer;if(deferRead)pendingReads.push(()=>this.onload?.());else this.onload?.(); } },
     fetch: async (path: string, init?: {method?:string;body?:string}) => {
       const payload=init?.body?JSON.parse(init.body):undefined;requests.push({path,method:init?.method,payload});
       let data:unknown;
-      if(path.endsWith('/usage')){const activeProjects=records.filter(r=>!r.archivedAt).length;data={activeProjects,projectLimit:2,userLimit:5,enabledUsers:1,canCreateProject:activeProjects<2};if(projects.deferUsage)await new Promise<void>(resolve=>pendingUsage.push(resolve));}
+      if(path.endsWith('/auth/logout')){if(projects.deferLogout)await new Promise<void>(resolve=>pendingLogout.push(resolve));if(projects.logoutFails)return new Response(JSON.stringify({message:'Fim de sessão indisponível'}),{status:503,headers:{'content-type':'application/json'}});data={ok:true};}
+      else if(path.endsWith('/usage')){const activeProjects=records.filter(r=>!r.archivedAt).length;data={activeProjects,projectLimit:2,userLimit:5,enabledUsers:1,canCreateProject:activeProjects<2};if(projects.deferUsage)await new Promise<void>(resolve=>pendingUsage.push(resolve));}
       else if(path.endsWith('/archive')){const target=records.find(r=>path.includes('/'+r.id+'/'))!;if(!payload.archived&&projects.restoreFails)return new Response(JSON.stringify({message:'Atingiu o limite de projectos activos.'}),{status:409,headers:{'content-type':'application/json'}});target.archivedAt=payload.archived?'2026-10-29T08:00:00Z':null;target.revision++;restored=!payload.archived;data=target;}
       else if(path.endsWith('/history')&&init?.method!=='PUT'&&(projects.historyFailsAfterRestore&&restored||projects.historyFailsOnRefresh&&modelReads>1))return new Response(JSON.stringify({message:'Histórico indisponível'}),{status:503,headers:{'content-type':'application/json'}});
       else if(path.includes('/exchange-rate?')){const q=new URLSearchParams(path.split('?')[1]);data={from:q.get('from'),to:q.get('to'),rate:q.get('from')==='Kz'?0.001:1000,rateDate:'2026-10-27',source:'Referência do teste',stale:false};}
       else if(path.endsWith('/convert-currency')){model.currency=payload.to;model.assumptions={...convertFinancialCurrency(model.assumptions as unknown as Record<string,unknown>,payload.from,payload.to,payload.rate),currencyConversion:payload} as any;model.revision++;data=model;}
       else if(path.endsWith('/history')&&init?.method==='PUT'){model.revision++;data={model,historical:{inputHash:'a'.repeat(64),updatedAt:'2026-10-28',analysis:analyzeFinancialHistory(payload.input)}};}
       else if(path.endsWith('/history')&&init?.method==='DELETE'){model.revision++;historyRemoved=true;data={model,historical:null};}
-      else if(path.endsWith('/models')){modelReads++;data=records;}
+      else if(path.endsWith('/models')){if(projects.bootFails)return new Response(JSON.stringify({message:'Projectos indisponíveis'}),{status:503,headers:{'content-type':'application/json'}});modelReads++;data=records;}
       else data=path.endsWith('/templates')?allowedSectors.map(financialTemplate):path.endsWith('/history')?{revision:records.find(r=>path.includes('/'+r.id+'/'))?.revision??1,historical:withHistory&&!historyRemoved?{inputHash:'a'.repeat(64),updatedAt:'2026-10-28',analysis:analyzeFinancialHistory(historyInput)}:null}:records;
       return new Response(JSON.stringify(data),{headers:{'content-type':'application/json'}});
     },
   });
   // boot() termina depois das respostas JSON e da montagem inicial.
   await new Promise<void>(resolve => setImmediate(resolve));
-  return { node, field, baseScenario, requests, model, records, pendingReads, pendingUsage, escape(){handlers.get('keydown')!({key:'Escape'});}, async select(id:string){node('#mSel').value=id;await node('#mSel').onchange();}, edit(id:string,value:string){node('#'+id).value=value;handlers.get('input')!({target:{id}});}, async currency(to:string){currencyField.value=to;await currencyField.onchange();},async act(act:string,extra:Record<string,string>={}){await handlers.get('click')!({target:new Element({act,...extra}),preventDefault(){}});}, async go(view: string) { await handlers.get('click')!({ target: new Element({ go: view }), preventDefault() {} }); return node('#view').innerHTML as string; }, async sub(k = 'pt', v = 'custos') { await handlers.get('click')!({ target: new Element({ act: 'sub', k, v }), preventDefault() {} }); return node('#view').innerHTML as string; } };
+  return { node, field, baseScenario, requests, model, records, pendingReads, pendingUsage, pendingLogout, redirects, beforeUnload(){let blocked=false;windowHandlers.get('beforeunload')!({preventDefault(){blocked=true;}});return blocked;}, escape(){handlers.get('keydown')!({key:'Escape'});}, async select(id:string){node('#mSel').value=id;await node('#mSel').onchange();}, edit(id:string,value:string){node('#'+id).value=value;handlers.get('input')!({target:{id}});}, async currency(to:string){currencyField.value=to;await currencyField.onchange();},async act(act:string,extra:Record<string,string>={}){await handlers.get('click')!({target:new Element({act,...extra}),preventDefault(){}});}, async go(view: string) { await handlers.get('click')!({ target: new Element({ go: view }), preventDefault() {} }); return node('#view').innerHTML as string; }, async sub(k = 'pt', v = 'custos') { await handlers.get('click')!({ target: new Element({ act: 'sub', k, v }), preventDefault() {} }); return node('#view').innerHTML as string; } };
 }
 describe('runtime do protótipo ligado à API', () => {
+  it('consegue terminar sessão mesmo quando os projectos não carregaram', async () => {
+    const ui = await mount('servicos',true,false,false,false,historicalInput,FINANCIAL_SECTORS,{bootFails:true});
+    expect(ui.node('#view').innerHTML).toContain('Projectos indisponíveis');
+    expect(ui.node('#integra-logout').disabled).toBe(false); await ui.act('logout'); expect(ui.redirects).toEqual(['/']);
+  });
+  it('um utilizador de consulta também pode terminar sessão e os dados desaparecem antes de regressar à página pública', async () => {
+    const ui = await mount('servicos', false); await ui.act('logout');
+    expect(ui.requests.filter(r=>r.path.endsWith('/auth/logout'))).toHaveLength(1);
+    expect(ui.node('#integra-session').textContent).toBe(''); expect(ui.node('#nav').innerHTML).toBe('');
+    expect(ui.node('#view').innerHTML).toContain('Sessão terminada'); expect(ui.redirects).toEqual(['/']);
+    expect(ui.beforeUnload()).toBe(false);
+  });
+  it('documentos por analisar pedem confirmação e cancelar mantém o rascunho', async () => {
+    const ui = await mount('servicos'); await ui.go('analise'); ui.edit('anT2','Conta;Designação;Saldo\n43;Banco;1000');
+    expect(ui.beforeUnload()).toBe(true); await ui.act('logout');
+    expect(ui.node('#modal').innerHTML).toContain('Há documentos por analisar');
+    expect(ui.requests.some(r=>r.path.endsWith('/auth/logout'))).toBe(false);
+    await ui.act('close'); expect(ui.node('#anT2').value).toContain('Banco'); expect(ui.beforeUnload()).toBe(true);
+    await ui.act('logout'); await ui.act('confirmLogout');
+    expect(ui.redirects).toEqual(['/']); expect(ui.beforeUnload()).toBe(false); expect(ui.node('#integra-session').textContent).toBe('');
+  });
+  it('uma falha no logout conserva a sessão, o documento e a possibilidade de tentar de novo', async () => {
+    const options = { logoutFails: true };
+    const ui = await mount('servicos',true,false,false,false,historicalInput,FINANCIAL_SECTORS,options);
+    await ui.go('analise'); ui.edit('anT2','Documento por analisar'); await ui.act('logout'); await ui.act('confirmLogout');
+    expect(ui.node('#integra-session-status').textContent).toContain('Fim de sessão indisponível');
+    expect(ui.node('#anT2').value).toBe('Documento por analisar'); expect(ui.node('#integra-session').textContent).not.toBe('');
+    expect(ui.redirects).toEqual([]); expect(ui.beforeUnload()).toBe(true);
+    options.logoutFails=false; await ui.act('confirmLogout'); expect(ui.redirects).toEqual(['/']);
+  });
+  it('dois cliques enquanto o logout aguarda resposta enviam apenas um pedido', async () => {
+    const ui = await mount('servicos',true,false,false,false,historicalInput,FINANCIAL_SECTORS,{deferLogout:true});
+    const first = ui.act('logout'); await new Promise<void>(resolve=>setImmediate(resolve));
+    await ui.act('logout'); expect(ui.requests.filter(r=>r.path.endsWith('/auth/logout'))).toHaveLength(1);
+    ui.pendingLogout.shift()!(); await first; expect(ui.redirects).toEqual(['/']);
+  });
   it('o menu móvel fecha pelo botão, por Escape ou ao escolher um ecrã, sem deixar o conteúdo bloqueado', async () => {
     const ui = await mount('servicos');
     await ui.act('toggleMenu');

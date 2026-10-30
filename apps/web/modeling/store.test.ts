@@ -6,6 +6,21 @@ const record = (id = 'm1', revision = 1): ModelRecord => ({ id, name: 'Projecto 
 const settle = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 describe('persistência da interface Integra', () => {
+  it('o logout cancela gravações agendadas e não inicia outras depois de fechar a sessão', async () => {
+    vi.useFakeTimers(); const request = vi.fn(), store = new ModelingStore(true, request);
+    store.load([record()]); const m = store.models[0]!; m.pessoal = 999; store.change(m);
+    store.stopAutosave(); await vi.advanceTimersByTimeAsync(1000); await store.flush();
+    m.pessoal = 1000; store.change(m); await vi.advanceTimersByTimeAsync(1000);
+    expect(request).not.toHaveBeenCalled();
+  });
+  it('uma gravação já enviada não encadeia a edição seguinte depois do logout', async () => {
+    let finish!: (value: ModelRecord) => void;
+    const request = vi.fn(() => new Promise<ModelRecord>(resolve=>{finish=resolve;})) as unknown as ModelingTransport;
+    const store = new ModelingStore(true,request); store.load([record()]); const m=store.models[0]!;
+    m.pessoal=100; store.change(m); const pending=store.flush(); await settle();
+    m.pessoal=200; store.change(m); store.stopAutosave(); finish({...record(),revision:2}); await pending;
+    expect(request).toHaveBeenCalledTimes(1);
+  });
   it('não cria exemplos nem grava ao carregar projectos existentes', async () => {
     const request = vi.fn(), store = new ModelingStore(true, request);
     store.load([]); expect(store.models).toEqual([]);
