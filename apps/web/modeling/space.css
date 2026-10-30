@@ -15,13 +15,14 @@
 .nav-group-toggle:hover{background:#f3f4f6;color:#111827}.nav-group-toggle:focus-visible{outline:2px solid #6b7280;outline-offset:-2px}
 .nav-chevron{font-size:17px;line-height:1;transform:rotate(-90deg)}.nav-group-toggle[aria-expanded="true"] .nav-chevron{transform:none}.nav-group>[hidden]{display:none}
 .screen-loading{padding:28px 0;color:var(--ink2)}.menu-toggle,.menu-shade,.menu-close{display:none}
-#integra-install[hidden],.network-status[hidden]{display:none}
+#integra-install,.network-status[hidden]{display:none}
 .network-status{padding:10px 16px;background:var(--amberSoft);color:#73500f}
 .report-choice{display:block;width:100%;border:0;background:transparent;font:inherit;color:inherit;text-align:left}
 .grid>*,.form>*,.report-layout>*{min-width:0}
 .tblwrap{max-width:100%;min-width:0;overscroll-behavior-x:contain}
 .tblwrap:focus-visible,.report-choice:focus-visible{outline:2px solid var(--brand2);outline-offset:2px}
 @media(max-width:820px){
+ #integra-install:not([hidden]){display:inline-flex}
  body:has(.menu-open){overflow:hidden}
  .side{display:flex;position:fixed;left:0;top:0;height:100dvh;width:min(280px,85vw);z-index:70;transform:translateX(-100%);visibility:hidden;transition:transform .2s;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);overscroll-behavior:contain}
  .menu-open .side{transform:none;visibility:visible}.menu-open .menu-shade{display:block;position:fixed;inset:0;z-index:60;background:#0006;border:0}
