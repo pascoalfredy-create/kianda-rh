@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { reloadPrivatePageOnRestore } from '@/lib/session-client';
+export { clearOfflineData } from '@/lib/session-client';
 
 interface InstallEvent extends Event { prompt(): Promise<void>; userChoice: Promise<{ outcome: string }> }
 
@@ -15,6 +17,7 @@ export function PwaSetup({ invite = true }: { invite?: boolean }) {
   const [hidden, setHidden] = useState(true);
 
   useEffect(() => {
+    const stopRestoreGuard = reloadPrivatePageOnRestore(() => !!document.querySelector('.rh-app'));
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).catch(() => {});
     const update = () => setOffline(!navigator.onLine);
     update();
@@ -30,7 +33,7 @@ export function PwaSetup({ invite = true }: { invite?: boolean }) {
     }
     const onPrompt = (e: Event) => { e.preventDefault(); setDeferred(e as InstallEvent); };
     window.addEventListener('beforeinstallprompt', onPrompt);
-    return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); window.removeEventListener('beforeinstallprompt', onPrompt); };
+    return () => { stopRestoreGuard(); window.removeEventListener('online', update); window.removeEventListener('offline', update); window.removeEventListener('beforeinstallprompt', onPrompt); };
   }, [invite]);
 
   const dismiss = () => { setHidden(true); try { localStorage.setItem('kianda_install_dismissed', '1'); } catch { /* sem armazenamento */ } };
@@ -51,11 +54,4 @@ export function PwaSetup({ invite = true }: { invite?: boolean }) {
       )}
     </>
   );
-}
-
-/** Ao terminar sessão: apaga as páginas guardadas no telemóvel (dados pessoais) e a fila/estado do ponto. */
-export async function clearOfflineData() {
-  try { if ('caches' in window) await caches.delete('kianda-pages-v1'); } catch { /* ignorar */ }
-  try { navigator.serviceWorker?.controller?.postMessage('clear-pages'); } catch { /* ignorar */ }
-  try { localStorage.removeItem('kianda_me_cache'); } catch { /* ignorar */ }
 }

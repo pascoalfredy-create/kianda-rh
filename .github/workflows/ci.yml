@@ -182,6 +182,18 @@ jobs:
           scripts/ci-run.sh "Pedido com RLS (/v1/employees)" curl -sS --fail-with-body -b /tmp/jar -o /tmp/emp.out "https://$PRIMARY_HOST/api/v1/employees"
           n=$(grep -o '"number"' /tmp/emp.out | wc -l); [ "$n" -gt 0 ] || { echo "::error title=RLS::A lista de colaboradores veio vazia"; exit 1; }
           echo "RLS OK: $n colaborador(es) visíveis"
+          scripts/ci-run.sh "Painel BI e menu autenticados" curl -sS --fail-with-body -b /tmp/jar -o /tmp/bi.out "https://$PRIMARY_HOST/bi"
+          grep -q 'Painel BI' /tmp/bi.out && grep -q '>Configuração<' /tmp/bi.out || { echo "::error title=Menu::BI ou Configuração indisponível"; exit 1; }
+          echo "Menu OK: Painel BI e Configuração disponíveis"
+          rm -f /tmp/bi.out
+          # O mesmo cookie deixa de autenticar depois do logout; o Integra volta ao login.
+          scripts/ci-run.sh "Logout da sessão de demonstração" curl -sS --fail-with-body -b /tmp/jar -c /tmp/jar -o /tmp/logout.out -X POST "https://$PRIMARY_HOST/api/v1/auth/logout"
+          logout_status=$(curl -sS -b /tmp/jar -o /dev/null -w '%{http_code}' "https://$PRIMARY_HOST/api/v1/auth/me")
+          [ "$logout_status" = 401 ] || { echo "::error title=Logout::A sessão continuou autenticada ($logout_status)"; exit 1; }
+          logout_status=$(curl -sS -b /tmp/jar -o /dev/null -w '%{http_code}' "https://$PRIMARY_HOST/modelagem")
+          [ "$logout_status" = 303 ] || { echo "::error title=Logout::O Integra continuou acessível ($logout_status)"; exit 1; }
+          echo "Logout OK: sessão removida e Integra protegido"
+          rm -f /tmp/logout.out
           rm -f /tmp/login.json /tmp/jar /tmp/emp.out
           rm -f /tmp/login.json /tmp/login.out
         env:

@@ -17,6 +17,7 @@
 .screen-loading{padding:28px 0;color:var(--ink2)}.menu-toggle,.menu-shade,.menu-close{display:none}
 #integra-install,.network-status[hidden]{display:none}
 .network-status{padding:10px 16px;background:var(--amberSoft);color:#73500f}
+.modules-link{color:var(--ink);text-decoration:none}
 .report-choice{display:block;width:100%;border:0;background:transparent;font:inherit;color:inherit;text-align:left}
 .grid>*,.form>*,.report-layout>*{min-width:0}
 .tblwrap{max-width:100%;min-width:0;overscroll-behavior-x:contain}

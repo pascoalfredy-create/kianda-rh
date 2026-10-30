@@ -2,6 +2,32 @@
 let store, session, templates = [], notice = '', busy = false;
 let previewModel=null, projectDialog=null, projectUsage=null, projectTab='active';
 let currencyDialog=null;
+let leaving=false, signingOut=false;
+function clearModelSession(){
+  leaving=true;store?.stopAutosave();
+  for(const pending of historicalImports.values())pending.controller.abort();historicalImports.clear();
+  historicalDirty.clear();historicalDrafts.clear();historicalSaved.clear();historicalReadErrors.clear();
+  session=null;S.models=[];S.active=null;S.an=null;previewModel=null;
+  $('#integra-session').textContent='';$('#nav').innerHTML='';$('#mSel').innerHTML='';$('#mTags').innerHTML='';
+  $('#view').innerHTML='<div class="screen-loading" role="status">Sessão terminada. A abrir a página inicial…</div>';
+  closeModal();setMenuOpen(false);
+  document.querySelectorAll('button,input,select,textarea').forEach(el=>{el.disabled=true;});
+}
+function confirmLogout(message){
+  closeModal();setMenuOpen(false);
+  openModal('Terminar sessão',`<p>${esc(message)}</p><p style="margin-top:10px">Pode voltar ao projecto ou terminar sessão mesmo assim.</p>`,`<button class="btn" data-act="close">Voltar ao projecto</button><button class="btn red" data-act="confirmLogout">Terminar sessão mesmo assim</button>`);
+}
+async function leaveModeling(force=false){
+  if(!force){
+    captureHistoricalDraft();
+    let timer;
+    try{await Promise.race([store?.flush(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('A gravação ainda não terminou.')),10000);})]);}
+    catch(error){return confirmLogout('Não foi possível concluir a gravação das alterações. '+errorText(error));}
+    finally{clearTimeout(timer);}
+    if(historicalDirty.size||historicalImports.size)return confirmLogout('Há documentos por analisar ou alterações de análise ainda não guardadas. Ao sair, os dados por guardar podem perder-se.');
+  }
+  await endSession(clearModelSession);
+}
 const navExpanded={};let navView=null;
 function renderNavigation(){
   const groups=[];for(const entry of NAV){if(entry[0]==='g')groups.push({label:entry[1],items:[]});else groups.at(-1).items.push(entry);}
@@ -221,6 +247,8 @@ function protect() {
   for(const number of ['1','2']){const button=document.querySelector(`[data-act="anClearImport"][data-number="${number}"]`);if(button){const pending=historicalImports.has('#anF'+number);button.textContent=pending?'Cancelar leitura':'Remover documento';button.disabled=!writable||!pending&&!$('#anT'+number)?.value?.trim()&&!$('#anF'+number)?.value;}}
   for(const action of ['newM','createM','dupM','archiveProject','confirmArchive','restoreProject'])document.querySelectorAll(`[data-act="${action}"]`).forEach(el=>{el.disabled=!companyWrite||action==='dupM'&&!M();});
   $('#mSel').disabled=busy;
+  $('#integra-logout').disabled=busy;
+  $('#integra-logout').textContent=signingOut?'A terminar sessão…':'Terminar sessão';
   $('#mSel').title=notice||'Projectos da empresa. Escolha Gerir projectos… para consultar, arquivar ou restaurar.';
 }
 function render() {
@@ -308,6 +336,13 @@ document.addEventListener('click',async ev=>{
   if(menuAction?.dataset.act==='navToggle'){const group=menuAction.dataset.group,open=!navExpanded[group];for(const key of Object.keys(navExpanded))delete navExpanded[key];navExpanded[group]=open;renderNavigation();return;}
   if(menuAction?.dataset.act==='toggleMenu'){setMenuOpen(!$('.app').classList.contains('menu-open'));return;}
   if(menuAction?.dataset.act==='closeMenu'){setMenuOpen(false);return;}
+  if(['logout','confirmLogout'].includes(menuAction?.dataset.act)){
+    ev.preventDefault();if(busy||leaving)return;
+    busy=true;signingOut=true;protect();$('#integra-session-status').hidden=true;
+    try{await leaveModeling(menuAction.dataset.act==='confirmLogout');}
+    catch(error){const status=$('#integra-session-status');status.hidden=false;status.textContent=errorText(error);toast(status.textContent);}
+    finally{busy=false;signingOut=false;if(!leaving)protect();}return;
+  }
   captureHistoricalDraft();
   const g=target.closest('[data-go]');if(g){ev.preventDefault();if(!busy){go(g.dataset.go);setMenuOpen(false);}return;}
   if(target.id==='ov')return closeModal();
@@ -341,7 +376,7 @@ function historicalEdited(e){if(M()&&store?.canEdit(M().id)&&historicalFields.in
 document.addEventListener('input',historicalEdited);
 document.addEventListener('change',historicalEdited);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();setMenuOpen(false);}});
-window.addEventListener('beforeunload',e=>{if(store?.dirty||historicalDirty.size||historicalImports.size){e.preventDefault();e.returnValue='';}});
+window.addEventListener('beforeunload',e=>{if(!leaving&&(store?.dirty||historicalDirty.size||historicalImports.size)){e.preventDefault();e.returnValue='';}});
 async function boot(){
   try {
     session=JSON.parse($('#integra-session').textContent);
@@ -355,11 +390,12 @@ async function boot(){
     }else if(M())await selectHistorical(M());
     const view=(location.hash||'').slice(1);if(VIEWS[view])VIEW=view;
     render();
-  }catch(error){$('#view').innerHTML=alertMessage(errorText(error));document.querySelectorAll('button,select').forEach(e=>e.disabled=true);}
+  }catch(error){$('#view').innerHTML=alertMessage(errorText(error));document.querySelectorAll('button,select').forEach(e=>e.disabled=e.dataset.act!=='logout');}
 }
 // A fonte externa melhora a tipografia quando chega, sem bloquear a interface ou o motor.
 const fontStylesheet=$('#integra-fonts');
 if(fontStylesheet){fontStylesheet.addEventListener?.('load',()=>{fontStylesheet.media='all';});if(fontStylesheet.sheet)fontStylesheet.media='all';}
 setupModelingMobile(()=>openModal('Instalar Kianda no iPhone','<p>No Safari, toque em <b>Partilhar</b> e depois em <b>Adicionar ao ecrã principal</b>. Ao abrir o Kianda, entre na sua conta e escolha o Integra em Módulos e licenças.</p>','<button class="btn pri" data-act="close">Fechar</button>'));
+reloadPrivatePageOnRestore();
 window.addEventListener('resize',()=>{if(window.matchMedia?.('(min-width: 821px)').matches)setMenuOpen(false);});
 boot();

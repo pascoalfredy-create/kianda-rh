@@ -54,6 +54,7 @@ export class ModelingStore {
   readonly models: UiModel[] = [];
   readonly archivedModels: UiModel[] = [];
   private entries = new Map<string, Entry>();
+  private stopped = false;
   constructor(readonly canWrite: boolean, private request: ModelingTransport = modelingRequest, private onError: (error: Error) => void = () => {}, private delay = 500) {}
   load(records: ModelRecord[]) {
     if (this.dirty) throw new Error('Há alterações por guardar.');
@@ -67,6 +68,7 @@ export class ModelingStore {
     return model;
   }
   get dirty() { return [...this.entries.values()].some((s) => Boolean(s.task) || s.converting || s.archiving || JSON.stringify(s.desired) !== s.saved); }
+  stopAutosave() { this.stopped = true; for (const state of this.entries.values()) clearTimeout(state.timer); }
   project(id: string) { return this.models.find(m => m.id === id) ?? this.archivedModels.find(m => m.id === id); }
   archivedAt(id: string) { const s = this.entries.get(id); if (!s) throw new Error('Projecto inexistente.'); return s.archivedAt; }
   canEdit(id: string) { return this.canWrite && this.entries.has(id) && !this.entries.get(id)!.archivedAt; }
@@ -76,7 +78,7 @@ export class ModelingStore {
   }
   revision(id: string) { const s = this.entries.get(id); if (!s) throw new Error('Projecto inexistente.'); return s.revision; }
   change(model: UiModel) {
-    if (!this.canWrite) return; // Cenário/unidade de consulta ficam só na memória da página.
+    if (!this.canWrite || this.stopped) return; // Cenário/unidade de consulta ficam só na memória da página.
     const state = this.entries.get(model.id); if (!state) throw new Error('Projecto inexistente.');
     if (state.archivedAt) return;
     if (state.converting) throw new ModelingApiError(409, 'Aguarde pela conversão da moeda.');
@@ -86,6 +88,7 @@ export class ModelingStore {
     if (!state.error && JSON.stringify(state.desired) !== state.saved) state.timer = setTimeout(() => { this.flush(model.id).catch(() => {}); }, this.delay);
   }
   async flush(id?: string): Promise<void> {
+    if (this.stopped) return;
     if (!id) { await Promise.all([...this.entries.keys()].map((key) => this.flush(key))); return; }
     const s = this.entries.get(id); if (!s) throw new Error('Projecto inexistente.');
     if (s.converting) throw new ModelingApiError(409, 'Aguarde pela conversão da moeda.');
@@ -94,13 +97,13 @@ export class ModelingStore {
     if (s.error) throw s.error;
     if (!s.task && JSON.stringify(s.desired) !== s.saved) {
       s.task = (async () => {
-        while (JSON.stringify(s.desired) !== s.saved) {
+        while (!this.stopped && JSON.stringify(s.desired) !== s.saved) {
           const payload = copy(s.desired), fingerprint = JSON.stringify(payload);
           const updated = await this.request<ModelRecord>(`/models/${encodeURIComponent(id)}`, 'PUT', { ...payload, revision: s.revision });
           s.revision = updated.revision; s.saved = fingerprint;
         }
       })().catch((err) => {
-        s.error = err instanceof Error ? err : new Error(String(err)); this.onError(s.error); throw s.error;
+        s.error = err instanceof Error ? err : new Error(String(err)); if (!this.stopped) this.onError(s.error); throw s.error;
       }).finally(() => { s.task = undefined; });
     }
     await s.task;

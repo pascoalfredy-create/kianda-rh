@@ -35,10 +35,12 @@ describe('interface aprovada e documento autenticado', () => {
     expect(html).toContain('class="menu-close btn"');
     expect(html).toContain('<label for="mSel"');
     expect(html).toContain('id="integra-network-status"');
+    expect(html).toContain('id="integra-logout" data-act="logout">Terminar sessão</button>');
+    expect(html).toContain('<a class="btn modules-link" href="/modulos">Módulos e licenças</a>');
   });
-  it('o runtime distribuído não persiste dados ou exporta CSV/clipboard', () => {
+  it('o runtime distribuído não guarda pressupostos em armazenamento local nem exporta CSV/clipboard', () => {
     const js = readFileSync(new URL('../public/modeling-runtime.js', import.meta.url), 'utf8');
-    expect(js).not.toMatch(/localStorage|sessionStorage|clipboard|copyFS|repCopy/);
+    expect(js).not.toMatch(/localStorage\.setItem|sessionStorage\.setItem|clipboard|copyFS|repCopy/);
     expect(js).toContain('/api/v1/modeling');
   });
 });

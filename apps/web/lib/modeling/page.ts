@@ -10,6 +10,7 @@ export function modelingPage(session: ModelingSession | null, nonce: string, err
   shell = shell.replace('<div class="logo">', '<button class="menu-close btn" data-act="closeMenu" aria-label="Fechar menu">×</button><div class="logo">');
   shell = shell.replace('</aside>', '</aside><button class="menu-shade" data-act="closeMenu" aria-label="Fechar menu" tabindex="-1"></button>');
   shell = shell.replace('<header class="top">', '<header class="top"><button class="menu-toggle btn" id="integra-menu-toggle" data-act="toggleMenu" aria-label="Abrir menu" aria-expanded="false" aria-controls="integra-side">☰</button><a class="btn modules-link" href="/modulos">Módulos e licenças</a><button type="button" class="btn" id="integra-install" hidden>Instalar Kianda</button>');
+  shell = shell.replace('</header>', '<button type="button" class="btn" id="integra-logout" data-act="logout">Terminar sessão</button></header><div id="integra-session-status" class="network-status" role="alert" hidden></div>');
   shell = shell.replace('<span class="muted" style="font-size:12.5px">Modelo</span>', '<label for="mSel" class="muted" style="font-size:12.5px">Modelo</label>');
   shell = shell.replace('<main class="content"', '<div id="integra-network-status" class="network-status" role="status" aria-live="polite" hidden></div><main class="content"');
   if (session) shell = shell.replace('<main class="content" id="view"></main>', '<main class="content" id="view"><div class="screen-loading" role="status" aria-live="polite">A abrir a Modelagem…</div></main>');
