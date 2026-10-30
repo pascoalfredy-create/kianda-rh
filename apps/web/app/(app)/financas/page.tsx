@@ -1,3 +1,5 @@
+
+import { ExportLink } from '@/components/document-export';
 import { formatKz } from '@kianda/core';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
@@ -68,7 +70,7 @@ async function TrialBalance({ from, to, link }: { from: string; to: string; link
     <>
       <div className="page-head" style={{ marginBottom: 10 }}>
         <span>{tb.totals.balanced ? <span className="st approved">Débitos = créditos</span> : <span className="st rejected">Desequilibrado</span>} <span className="muted">{pt(from)} a {pt(to)}</span></span>
-        <a className="btn ghost sm" href={`/api/v1/ledger/trial-balance?from=${from}&to=${to}&format=csv`}>Exportar balancete (CSV)</a>
+        <ExportLink className="btn ghost sm" href={`/api/v1/ledger/trial-balance?from=${from}&to=${to}&format=csv`}>Exportar balancete (CSV)</ExportLink>
       </div>
       <div className="card" style={{ overflowX: 'auto' }}>
         <table className="dense">
@@ -172,8 +174,8 @@ async function Export({ from, to, editable }: { from: string; to: string; editab
       <div style={{ padding: 16, display: 'grid', gap: 12 }}>
         <p>{entries.length} lançamento(s) no período · <b>{pending}</b> por exportar.</p>
         <div className="actions" style={{ justifyContent: 'flex-start' }}>
-          <a className="btn" href={`/api/v1/ledger/export?from=${from}&to=${to}&onlyNew=1`}>Descarregar só os novos (CSV)</a>
-          <a className="btn ghost" href={`/api/v1/ledger/export?from=${from}&to=${to}`}>Descarregar todos (CSV)</a>
+          <ExportLink className="btn" href={`/api/v1/ledger/export?from=${from}&to=${to}&onlyNew=1`}>Descarregar só os novos (CSV)</ExportLink>
+          <ExportLink className="btn ghost" href={`/api/v1/ledger/export?from=${from}&to=${to}`}>Descarregar todos (CSV)</ExportLink>
           {editable && <MarkExported from={from} to={to} pending={pending} />}
         </div>
         <p className="muted">Fluxo recomendado: descarregar os novos → importar no ERP → marcar como exportados. Assim nenhum lançamento é importado duas vezes. Colunas: data, diário, referência, descrição, conta, descrição da linha, centro de custo, débito, crédito, origem (formato CSV para Excel; o mapeamento de colunas do ERP pode exigir ajuste).</p>

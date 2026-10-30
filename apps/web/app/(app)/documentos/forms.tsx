@@ -1,4 +1,6 @@
 'use client';
+import { DocumentPrintButton } from '@/components/document-export';
+
 
 import { DOCUMENT_CATEGORY, documentBlocks, type DocumentCategory } from '@kianda/core';
 import { useRouter } from 'next/navigation';
@@ -117,5 +119,5 @@ export function RevokeButton({ id }: { id: string }) {
 }
 
 export function PrintBtn() {
-  return <button className="btn ghost" onClick={() => window.print()}>Imprimir</button>;
+  return <DocumentPrintButton className="btn ghost">Imprimir</DocumentPrintButton>;
 }

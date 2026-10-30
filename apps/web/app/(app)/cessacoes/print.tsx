@@ -1,5 +1,7 @@
 'use client';
+import { DocumentPrintButton } from '@/components/document-export';
+
 
 export function PrintButton() {
-  return <button className="btn ghost sm" style={{ marginLeft: 10 }} onClick={() => window.print()}>Imprimir</button>;
+  return <DocumentPrintButton className="btn ghost sm" style={{ marginLeft: 10 }}>Imprimir</DocumentPrintButton>;
 }

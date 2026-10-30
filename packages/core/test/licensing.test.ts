@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cyclePrice, DEFAULT_TIERS, effectiveStatus, employeeLimit, kz, periodEnd, tierFor, trialEndDate, trialDaysRemaining } from '../src/index.js';
+import { canExportDocuments, cyclePrice, DEFAULT_TIERS, effectiveStatus, employeeLimit, kz, periodEnd, tierFor, trialEndDate, trialDaysRemaining } from '../src/index.js';
 
 describe('licenças', () => {
   it('a avaliação tem sete datas de calendário, incluindo registo e último dia, mesmo ao mudar de mês/ano', () => {
@@ -27,15 +27,19 @@ describe('licenças', () => {
   });
   it('preço por ciclo com desconto, arredondado ao kwanza', () => {
     const t1 = DEFAULT_TIERS[0]!;
-    expect(cyclePrice(t1, 'monthly')!.totalMinor).toBe(kz(99_999));
-    expect(cyclePrice(t1, 'semiannual')!.totalMinor).toBe(kz(540_000));
-    expect(cyclePrice(t1, 'annual')).toEqual({ grossMinor: kz(1_199_988), discountMinor: kz(239_998), totalMinor: kz(959_990) });
-    expect(cyclePrice(DEFAULT_TIERS[3]!, 'annual')!.totalMinor).toBe(kz(3_648_000));
-    expect(cyclePrice(DEFAULT_TIERS[4]!, 'monthly')!.totalMinor).toBe(kz(450_000));
+    expect(cyclePrice(t1, 'monthly')!.totalMinor).toBe(kz(29_900));
+    expect(cyclePrice(t1, 'semiannual')!.totalMinor).toBe(kz(161_460));
+    expect(cyclePrice(t1, 'annual')).toEqual({ grossMinor: kz(358_800), discountMinor: kz(53_820), totalMinor: kz(304_980) });
+    expect(cyclePrice(DEFAULT_TIERS[3]!, 'annual')!.totalMinor).toBe(kz(916_980));
+    expect(cyclePrice(DEFAULT_TIERS[4]!, 'monthly')!.totalMinor).toBe(kz(99_999));
   });
   it('reproduz todos os montantes comerciais aprovados para o RH', () => {
-    const expected = [[99999, 540000, 959990], [200000, 1080000, 1920000], [280000, 1512000, 2688000], [380000, 2052000, 3648000], [450000, 2430000, 4320000]];
+    const expected = [[29900, 161460, 304980], [49900, 269460, 508980], [69900, 377460, 712980], [89900, 485460, 916980], [99999, 539995, 1019990]];
     DEFAULT_TIERS.forEach((tier, i) => expect((['monthly', 'semiannual', 'annual'] as const).map(c => cyclePrice(tier, c)!.totalMinor)).toEqual(expected[i]!.map(kz)));
+  });
+  it('a avaliação permite trabalhar mas só uma licença paga ou em tolerância permite exportar documentos', () => {
+    for (const status of ['trial', 'suspended', 'cancelled'] as const) expect(canExportDocuments(status)).toBe(false);
+    for (const status of ['active', 'past_due'] as const) expect(canExportDocuments(status)).toBe(true);
   });
   it('fim do período', () => {
     expect(periodEnd('2026-01-15', 1)).toBe('2026-02-14');

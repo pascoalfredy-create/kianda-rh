@@ -9,11 +9,11 @@ export interface Tier { key: string; label: string; minEmployees: number; maxEmp
 
 /** Tabela comercial de faixas fixas (Kz/mês). A última faixa não tem limite de colaboradores. */
 export const DEFAULT_TIERS: Tier[] = [
-  { key: 't1', label: '1 a 100 colaboradores', minEmployees: 0, maxEmployees: 100, monthlyMinor: kz(99_999), cycleTotals: { semiannual: kz(540_000), annual: kz(959_990) } },
-  { key: 't2', label: '101 a 250 colaboradores', minEmployees: 101, maxEmployees: 250, monthlyMinor: kz(200_000) },
-  { key: 't3', label: '251 a 500 colaboradores', minEmployees: 251, maxEmployees: 500, monthlyMinor: kz(280_000) },
-  { key: 't4', label: '501 a 1 000 colaboradores', minEmployees: 501, maxEmployees: 1000, monthlyMinor: kz(380_000) },
-  { key: 't5', label: 'Mais de 1 000 colaboradores', minEmployees: 1001, maxEmployees: null, monthlyMinor: kz(450_000) },
+  { key: 't1', label: '1 a 100 colaboradores', minEmployees: 0, maxEmployees: 100, monthlyMinor: kz(29_900) },
+  { key: 't2', label: '101 a 250 colaboradores', minEmployees: 101, maxEmployees: 250, monthlyMinor: kz(49_900) },
+  { key: 't3', label: '251 a 500 colaboradores', minEmployees: 251, maxEmployees: 500, monthlyMinor: kz(69_900) },
+  { key: 't4', label: '501 a 1 000 colaboradores', minEmployees: 501, maxEmployees: 1000, monthlyMinor: kz(89_900) },
+  { key: 't5', label: 'Mais de 1 000 colaboradores', minEmployees: 1001, maxEmployees: null, monthlyMinor: kz(99_999) },
 ];
 /** Contratos personalizados anteriores continuam válidos, sem os oferecer na tabela pública. */
 export const LEGACY_CUSTOM_TIER: Tier = { key: 'custom', label: 'Contrato personalizado', minEmployees: 0, maxEmployees: null, monthlyMinor: null };
@@ -22,7 +22,7 @@ export type BillingCycle = 'monthly' | 'semiannual' | 'annual';
 export const CYCLES: Record<BillingCycle, { label: string; months: number; discountBps: number }> = {
   monthly: { label: 'Mensal', months: 1, discountBps: 0 },
   semiannual: { label: 'Semestral (−10%)', months: 6, discountBps: 1000 },
-  annual: { label: 'Anual (−20%)', months: 12, discountBps: 2000 },
+  annual: { label: 'Anual (−15%)', months: 12, discountBps: 1500 },
 };
 
 export const TRIAL_DAYS = 7;
@@ -90,8 +90,11 @@ export function effectiveStatus(s: { status: SubscriptionStatus; trialEndsAt: st
   return 'suspended';
 }
 
-/** Pode escrever (criar/alterar)? Em só leitura, a empresa consulta e exporta, e pode sempre tratar da subscrição. */
+/** Pode escrever (criar/alterar)? A avaliação permite trabalhar; em só leitura mantém a consulta. */
 export const canWrite = (status: SubscriptionStatus) => status === 'trial' || status === 'active' || status === 'past_due';
+
+/** Documentos de negócio: avaliação e consulta só permitem pré-visualizar. O pagamento liberta a exportação. */
+export const canExportDocuments = (status: SubscriptionStatus) => status === 'active' || status === 'past_due';
 
 /** Limite de colaboradores activos da faixa, sem acréscimos por colaborador. */
 export function employeeLimit(tier: Tier): number | null {

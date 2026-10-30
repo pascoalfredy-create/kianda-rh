@@ -2,7 +2,8 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { verify } from 'hono/jwt';
 import { getDb, withTenant } from '@kianda/db';
-import { moduleForPath, type ModuleAccess } from '@kianda/core';
+import { canExportDocuments, moduleForPath, type ModuleAccess } from '@kianda/core';
+import { isDocumentExport } from '../services/document-access.js';
 import { moduleLicence } from '../services/modules.js';
 import { licenceBlocks } from '../services/licence.js';
 
@@ -62,6 +63,7 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
     const access = await moduleLicence(getDb(), claims.companyId, module);
     c.set('moduleAccess', access);
     if (!access.canRead) return c.json({ error: 'modulo_nao_subscrito', message: 'A empresa não subscreveu este módulo.' }, 403);
+    if (isDocumentExport(c.req.path, c.req.query('format')) && !canExportDocuments(access.status)) return c.json({ error: 'exportacao_requer_subscricao', message: 'Os documentos estão disponíveis em pré-visualização. Active uma subscrição paga deste módulo para exportar ou imprimir.' }, 402);
     if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && !access.canWrite) blocked = 'A licença deste módulo está em modo de consulta.';
   } else {
     blocked = await licenceBlocks(getDb(), claims.companyId, c.req.method, c.req.path);

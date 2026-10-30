@@ -11,13 +11,14 @@ export function modelingPage(session: ModelingSession | null, nonce: string, err
   shell = shell.replace('<div class="logo">', '<button class="menu-close btn" data-act="closeMenu" aria-label="Fechar menu">×</button><div class="logo">');
   shell = shell.replace('</aside>', '</aside><button class="menu-shade" data-act="closeMenu" aria-label="Fechar menu" tabindex="-1"></button>');
   shell = shell.replace('<header class="top">', '<header class="top"><button class="menu-toggle btn" id="integra-menu-toggle" data-act="toggleMenu" aria-label="Abrir menu" aria-expanded="false" aria-controls="integra-side">☰</button><a class="btn modules-link" href="/modulos">Módulos e licenças</a><button type="button" class="btn" id="integra-install" hidden>Instalar Kianda</button>');
+  if (session && !session.formats?.pdf) shell = shell.replace('</head>', '<style>@media print{body>*{display:none!important}body::after{display:block!important;content:"Pré-visualização Kianda Integra. Active uma subscrição paga para imprimir ou exportar documentos.";padding:40px;font:18px sans-serif}}</style></head>');
   shell = shell.replace('</header>', '<button type="button" class="btn" id="integra-logout" data-act="logout">Terminar sessão</button></header><div id="integra-session-status" class="network-status" role="alert" hidden></div>');
   if (session?.licence?.status === 'trial' && session.licence.trialEndsAt) {
     const until = session.licence.trialEndsAt, days = trialDaysRemaining(until, luandaDate(new Date()));
     const remaining = days === 1 ? 'Último dia de avaliação' : `Avaliação gratuita · ${days} dias de calendário, incluindo hoje`;
-    shell = shell.replace('</header>', `</header><div class="network-status" role="status">${remaining} · até ${escape(until.split('-').reverse().join('/'))} inclusive, pela hora de Angola. <a class="modules-link" href="/modulos">Ver licença</a></div>`);
+    shell = shell.replace('</header>', `</header><div class="network-status" role="status">${remaining} · até ${escape(until.split('-').reverse().join('/'))} inclusive, pela hora de Angola. Documentos apenas em pré-visualização; active uma subscrição paga para exportar ou imprimir. <a class="modules-link" href="/modulos">Ver licença</a></div>`);
   } else if (session?.licence && ['suspended', 'cancelled'].includes(session.licence.status)) {
-    shell = shell.replace('</header>', '</header><div class="network-status" role="status">Módulo em consulta. Os dados guardados continuam disponíveis; para criar ou alterar projectos, regularize a licença com o proprietário da conta. <a class="modules-link" href="/modulos">Ver licença</a></div>');
+    shell = shell.replace('</header>', '</header><div class="network-status" role="status">Módulo em consulta. Os dados guardados e a pré-visualização continuam disponíveis; para criar, alterar, exportar ou imprimir, regularize a licença com o proprietário da conta. <a class="modules-link" href="/modulos">Ver licença</a></div>');
   }
   shell = shell.replace('<span class="muted" style="font-size:12.5px">Modelo</span>', '<label for="mSel" class="muted" style="font-size:12.5px">Modelo</label>');
   shell = shell.replace('<main class="content"', '<div id="integra-network-status" class="network-status" role="status" aria-live="polite" hidden></div><main class="content"');

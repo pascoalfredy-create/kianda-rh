@@ -1,5 +1,7 @@
 'use client';
+import { DocumentPrintButton } from '@/components/document-export';
+
 
 export function PrintButton() {
-  return <button className="btn" onClick={() => window.print()}>Imprimir / guardar PDF</button>;
+  return <DocumentPrintButton className="btn">Imprimir / guardar PDF</DocumentPrintButton>;
 }

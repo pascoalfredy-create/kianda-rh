@@ -10,14 +10,14 @@ describe('comercialização do Integra', () => {
   it('plano ilimitado não substitui o limite de cinco utilizadores', () => {
     expect(modelingCapacity({ projectLimit: null, extraUsers: 0 }, 100001, 5)).toMatchObject({ projectLimit: null, canCreateProject: true, userLimit: 5, canAddUser: false });
   });
-  it('reproduz os preços base publicados, incluindo a indisponibilidade mensal do ilimitado', () => {
-    const expected = [[300000, 1620000, 2880000], [600000, 3240000, 5760000], [1200000, 6480000, 11520000], [null, 8100000, 14400000]];
+  it('reproduz os preços base publicados, com 10% semestral e 15% anual, incluindo mensal ilimitado', () => {
+    const expected = [[69000, 372600, 703800], [120000, 648000, 1224000], [200000, 1080000, 2040000], [300000, 1620000, 3060000]];
     MODELING_PLANS.forEach((plan, i) => expect((['monthly', 'semiannual', 'annual'] as const).map(c => modelingPlanPrice(plan.key, c)?.totalMinor ?? null)).toEqual(expected[i]!.map(n => n === null ? null : kz(n))));
   });
   it('cobra apenas os lugares extra contratados, por cada mês do ciclo', () => {
-    expect(modelingPlanPrice('pme', 'monthly', 2)).toMatchObject({ totalMinor: kz(370000), extraMinor: kz(70000) });
-    expect(modelingPlanPrice('corporate', 'semiannual', 2)).toMatchObject({ totalMinor: kz(3660000), extraMinor: kz(420000), discountMinor: kz(360000) });
-    expect(modelingPlanPrice('unlimited', 'annual', 1)).toMatchObject({ totalMinor: kz(14820000), extraMinor: kz(420000) });
+    expect(modelingPlanPrice('pme', 'monthly', 2)).toMatchObject({ totalMinor: kz(139000), extraMinor: kz(70000) });
+    expect(modelingPlanPrice('corporate', 'semiannual', 2)).toMatchObject({ totalMinor: kz(1068000), extraMinor: kz(420000), discountMinor: kz(72000) });
+    expect(modelingPlanPrice('unlimited', 'annual', 1)).toMatchObject({ totalMinor: kz(3480000), extraMinor: kz(420000) });
     for (const n of [-1, 1.5, 100001]) expect(() => modelingPlanPrice('pme', 'monthly', n)).toThrow();
   });
   it('PME e Corporate escolhem sectores independentemente do número de projectos', () => {

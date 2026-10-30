@@ -22,7 +22,6 @@ describe('selecção de módulos antes da criação da conta', () => {
     const send = (extra: object) => app.inject({ method: 'POST', url: '/v1/auth/register', payload: registration(0, extra) });
     expect((await send({ modules: [] })).statusCode).toBe(400);
     expect((await send({ modules: ['modeling'], modelingPlan: { ...pme, sectors: ['mineracao', 'servicos', 'agro'] } })).json().error).toBe('sectores_invalidos');
-    expect((await send({ modules: ['modeling'], modelingPlan: { ...pme, key: 'unlimited', sectors: FINANCIAL_SECTORS } })).json().error).toBe('ciclo_indisponivel');
   });
 });
 
@@ -64,7 +63,11 @@ describe.skipIf(!process.env.DATABASE_URL)('conta comum, preços e direitos inde
   });
   it('protege projectos arquivados e relatórios de um sector não contratado, incluindo URL codificada', async () => {
     const row = (await getDb().execute(sql`insert into financial_models(company_id,name,sector,currency,assumptions,created_by,archived_at) values (${modelingId},'Arquivo sintético','petroleo','Kz','{}','test',now()) returning id`)).rows[0] as { id: string };
-    for (const suffix of ['', '/history', '/reports/sumario?format=pdf']) expect((await request(modeling, 'GET', `/v1/modeling/models/${row.id}${suffix}`)).json().error).toBe('sector_nao_contratado');
+    for (const suffix of ['', '/history']) expect((await request(modeling, 'GET', `/v1/modeling/models/${row.id}${suffix}`)).json().error).toBe('sector_nao_contratado');
+    expect((await request(modeling, 'GET', `/v1/modeling/models/${row.id}/reports/sumario?format=pdf`)).statusCode).toBe(402);
+    await getDb().execute(sql`update company_modules set status='active', paid_until='2099-12-31' where company_id=${modelingId} and module='modeling'`);
+    try { expect((await request(modeling, 'GET', `/v1/modeling/models/${row.id}/reports/sumario?format=pdf`)).json().error).toBe('sector_nao_contratado'); }
+    finally { await getDb().execute(sql`update company_modules set status='trial', paid_until=null where company_id=${modelingId} and module='modeling'`); }
     const encoded = `%${row.id.charCodeAt(0).toString(16)}${row.id.slice(1)}`;
     expect((await request(modeling, 'GET', `/v1/modeling/models/${encoded}`)).statusCode).toBe(403);
     expect((await request(modeling, 'GET', '/v1/modeling/models')).json().map((m: { id: string }) => m.id)).not.toContain(row.id);
@@ -80,7 +83,7 @@ describe.skipIf(!process.env.DATABASE_URL)('conta comum, preços e direitos inde
     const measured = await measureQueries(() => request(modeling, 'GET', '/v1/modeling/bootstrap'));
     expect(measured.value.statusCode).toBe(200); expect(measured.queries).toBeLessThanOrEqual(12);
     const data = measured.value.json();
-    expect(data).toMatchObject({ canWrite: true, permission: 'editor', formats: { pdf: true, xlsx: false, csv: false } });
+    expect(data).toMatchObject({ canWrite: true, permission: 'editor', formats: { pdf: false, xlsx: false, csv: false } });
     expect(data.bootstrap.models).toEqual((await request(modeling, 'GET', '/v1/modeling/models')).json());
     expect(data.bootstrap.templates).toEqual((await request(modeling, 'GET', '/v1/modeling/templates')).json());
     expect(data.usage).toEqual((await request(modeling, 'GET', '/v1/modeling/usage')).json());
@@ -94,9 +97,9 @@ describe.skipIf(!process.env.DATABASE_URL)('conta comum, preços e direitos inde
   });
   it('calcula preços no servidor e mantém os pedidos RH e Modelagem separados', async () => {
     const hrPay = await request(hr, 'POST', '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'semiannual', amountMinor: 1 });
-    expect(hrPay.json().amountMinor).toBe(54_000_000);
+    expect(hrPay.json().amountMinor).toBe(16_146_000);
     const pay = await request(hr, 'POST', '/v1/billing/requests', { kind: 'modeling_subscription', planKey: 'pme', cycle: 'monthly', extraUsers: 2, sectors: pme.sectors, amountMinor: 1 });
-    expect(pay.statusCode).toBe(201); expect(pay.json()).toMatchObject({ amountMinor: 37_000_000, projectLimit: 2, extraUsers: 2, status: 'pending', modelingSectors: ['mineracao', 'servicos'] });
+    expect(pay.statusCode).toBe(201); expect(pay.json()).toMatchObject({ amountMinor: 13_900_000, projectLimit: 2, extraUsers: 2, status: 'pending', modelingSectors: ['mineracao', 'servicos'] });
     expect((await request(hr, 'GET', '/v1/billing')).json().requests.filter((p: { status: string }) => p.status === 'pending')).toHaveLength(2);
     expect((await request(hr, 'GET', '/v1/modules')).json().modeling.subscribed).toBe(false);
     expect((await request(hr, 'POST', `/v1/platform/payment-requests/${pay.json().id}/confirm`, {})).json().status).toBe('paid');
@@ -106,14 +109,14 @@ describe.skipIf(!process.env.DATABASE_URL)('conta comum, preços e direitos inde
   it('pagar RH activa apenas RH e conserva a licença de Modelagem', async () => {
     const before = (await request(modeling, 'GET', '/v1/modules')).json().modeling;
     const pay = await request(modeling, 'POST', '/v1/billing/requests', { kind: 'subscription', tierKey: 't5', cycle: 'monthly' });
-    expect(pay.json().amountMinor).toBe(45_000_000);
+    expect(pay.json().amountMinor).toBe(9_999_900);
     expect((await request(hr, 'POST', `/v1/platform/payment-requests/${pay.json().id}/confirm`, {})).statusCode).toBe(200);
     const after = (await request(modeling, 'GET', '/v1/modules')).json();
     expect(after.hr).toMatchObject({ status: 'active', canAccess: true }); expect(after.modeling).toEqual(before);
   });
-  it('recusa mensal ilimitado, sectores repetidos e a remoção do sector principal', async () => {
+  it('aceita mensal ilimitado e recusa sectores repetidos ou a remoção do principal', async () => {
     const pay = (changes: object) => request(hr, 'POST', '/v1/billing/requests', { kind: 'modeling_subscription', planKey: 'pme', cycle: 'monthly', sectors: pme.sectors, ...changes });
-    expect((await pay({ planKey: 'unlimited', sectors: FINANCIAL_SECTORS })).json().error).toBe('ciclo_indisponivel');
+    expect((await pay({ planKey: 'unlimited', sectors: FINANCIAL_SECTORS })).json()).toMatchObject({ amountMinor: 30_000_000, status: 'pending' });
     expect((await pay({ sectors: ['mineracao', 'mineracao'] })).statusCode).toBe(400);
     expect((await pay({ sectors: ['servicos', 'agro'] })).statusCode).toBe(400);
   });

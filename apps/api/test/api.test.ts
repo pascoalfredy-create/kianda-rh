@@ -56,6 +56,8 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     owner = cookieOf(r);
     const rb = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Empresa B', nif: nifB }, name: 'Dono B', email: `dono+${stamp}@b.ao`, password: pw } });
     ownerB = cookieOf(rb);
+    // Os fluxos de negócio e de ficheiros abaixo exercitam uma licença paga.
+    for (const company of [r.json().company.id, rb.json().company.id]) await getDb().execute(sql`update subscriptions set status='active', paid_until='2099-12-31' where company_id=${company}`);
   });
 
   it('recusa palavra-passe fraca no registo', async () => {
@@ -1157,6 +1159,10 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
   });
 
   describe('licenças e plataforma (entrega 14)', () => {
+    beforeAll(async () => {
+      const me = (await app.inject({ method: 'GET', url: '/v1/auth/me', headers: as(owner) })).json();
+      await getDb().execute(sql`update subscriptions set status='trial', paid_until=null where company_id=${me.company.id}`);
+    });
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
     const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
     const patch = (cookie: string, url: string, payload: object) => app.inject({ method: 'PATCH', url, headers: as(cookie), payload });
@@ -1178,12 +1184,12 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect((Date.parse(b.trialEndsAt) - Date.parse(registeredOn)) / 86_400_000).toBe(6); // registo é dia 1; não oferece uma oitava data
     });
 
-    it('pedido de pagamento anual com 20% de desconto; o cliente indica a referência', async () => {
+    it('pedido de pagamento anual com 15% de desconto; o cliente indica a referência', async () => {
       expect((await get(employeeUser, '/v1/billing')).statusCode).toBe(403);
       const b = (await get(financeUser, '/v1/billing')).json();
-      expect(b.prices.find((t: { key: string }) => t.key === 't1').prices.annual.totalMinor).toBe(95_999_000);
+      expect(b.prices.find((t: { key: string }) => t.key === 't1').prices.annual.totalMinor).toBe(30_498_000);
       const r = await post(financeUser, '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'annual' });
-      expect(r.json()).toMatchObject({ amountMinor: 95_999_000, discountMinor: 23_999_800, status: 'pending', number: expect.stringMatching(/^PF-/) });
+      expect(r.json()).toMatchObject({ amountMinor: 30_498_000, discountMinor: 5_382_000, status: 'pending', number: expect.stringMatching(/^PF-/) });
       const me = (await get(owner, '/v1/auth/me')).json();
       expect(r.json().periodStart > me.licence.trialEndsAt).toBe(true); // começa depois do experimental
       expect((await get(financeUser, '/v1/billing')).json()).not.toHaveProperty('extraSeatMinor');
@@ -2200,11 +2206,12 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: versões aprovadas e downlo
     expect((await req('GET', `/v1/modeling/models/${modelId}/versions`)).json()).toHaveLength(2);
     expect((await report()).bytes).toEqual(snapshotPdf);
   });
-  it('arquivo e licença em consulta conservam downloads aprovados e bloqueiam novas aprovações', async () => {
+  it('arquivo e licença em consulta conservam a pré-visualização mas bloqueiam downloads e aprovações', async () => {
     expect((await req('POST', `/v1/modeling/models/${modelId}/archive`, { archived: true, revision: 3 })).statusCode).toBe(200);
     expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 4, label: 'Arquivo' })).statusCode).toBe(409);
     expect((await req('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'suspended' })).statusCode).toBe(200);
-    expect((await report('pdf', versionId, viewer)).bytes).toEqual(snapshotPdf);
+    expect((await report('pdf', versionId, viewer)).statusCode).toBe(402);
+    expect((await req('GET', `/v1/modeling/models/${modelId}/versions/${versionId}`, undefined, viewer)).json().payload.source.versionId).toBe(versionId);
     expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 4, label: 'Suspensa' })).statusCode).toBe(402);
   });
 });

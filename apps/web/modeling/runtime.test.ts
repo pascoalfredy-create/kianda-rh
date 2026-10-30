@@ -6,7 +6,7 @@ import { historicalInput } from '../../../packages/core/test/fixtures/financial-
 const runtime = readFileSync(new URL('../public/modeling-runtime.js', import.meta.url), 'utf8');
 const views = ['painel', 'pressupostos', 'demonstracoes', 'avaliacao', 'credito', 'sensibilidade', 'relatorios'];
 /** Teste do código distribuído e das vistas, sem simular um motor de layout de navegador. */
-async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, incomplete = false, withHistory = false, deferRead = false, historyInput:FinancialHistoricalInput=historicalInput, allowedSectors: readonly typeof FINANCIAL_SECTORS[number][] = FINANCIAL_SECTORS, projects: { bootstrap?: boolean; initialArchived?: boolean; restoreFails?: boolean; deferUsage?: boolean; historyFailsAfterRestore?: boolean; historyFailsOnRefresh?: boolean; logoutFails?: boolean; deferLogout?: boolean; bootFails?: boolean } = {}) {
+async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, incomplete = false, withHistory = false, deferRead = false, historyInput:FinancialHistoricalInput=historicalInput, allowedSectors: readonly typeof FINANCIAL_SECTORS[number][] = FINANCIAL_SECTORS, projects: { canExport?: boolean; bootstrap?: boolean; initialArchived?: boolean; restoreFails?: boolean; deferUsage?: boolean; historyFailsAfterRestore?: boolean; historyFailsOnRefresh?: boolean; logoutFails?: boolean; deferLogout?: boolean; bootFails?: boolean } = {}) {
   const template = financialTemplate(sector), handlers = new Map<string, Function>();
   const nodes = new Map<string, any>();
   const node = (selector: string) => {
@@ -16,7 +16,7 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
   const model = { id: 'm1', name: template.name, sector, currency: template.currency, revision: 1, createdAt: '2026-10-28', archivedAt: projects.initialArchived ? '2026-10-29T08:00:00Z' : null as string | null, assumptions: incomplete ? { pessoal: 1 } : template.assumptions };
   const records = [model], pendingUsage: (() => void)[] = [], pendingLogout: (() => void)[] = [];
   const redirects: string[] = [], windowHandlers = new Map<string, Function>();
-  node('#integra-session').textContent = JSON.stringify({ canWrite, permission: canWrite ? 'editor' : 'viewer', formats: { pdf: true, xlsx: false, csv: false }, usage: {}, ...(projects.bootstrap ? { bootstrap: { models: records, templates: allowedSectors.map(financialTemplate), firstHistory: projects.initialArchived ? null : { modelId: model.id, revision: model.revision, historical: withHistory ? { inputHash: 'a'.repeat(64), updatedAt: '2026-10-28', analysis: analyzeFinancialHistory(historyInput) } : null } } } : {}) });
+  node('#integra-session').textContent = JSON.stringify({ canWrite, permission: canWrite ? 'editor' : 'viewer', formats: { pdf: projects.canExport !== false, xlsx: false, csv: false }, usage: {}, ...(projects.bootstrap ? { bootstrap: { models: records, templates: allowedSectors.map(financialTemplate), firstHistory: projects.initialArchived ? null : { modelId: model.id, revision: model.revision, historical: withHistory ? { inputHash: 'a'.repeat(64), updatedAt: '2026-10-28', analysis: analyzeFinancialHistory(historyInput) } : null } } } : {}) });
   let restored=false,modelReads=0,historyRemoved=false;
   const requests: { path: string; method?: string; payload?: any }[] = [];
   const pendingReads: (()=>void)[]=[];
@@ -26,7 +26,7 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
   node('#integra-logout').dataset={act:'logout'};
   class Element { constructor(public dataset: Record<string, string>) {} closest(selector: string) { return selector === '[data-go]' && this.dataset.go || selector === '[data-act]' && this.dataset.act ? this : null; } }
   runInNewContext(runtime, {
-    document: { querySelector: node, querySelectorAll: (selector: string) => selector === '[data-p],[data-cen]' ? [field, baseScenario, currencyField] : selector === '[data-p]' ? [currencyField] : selector==='button,select' ? [node('#integra-logout'),node('#mSel')] : [], addEventListener: (name: string, fn: Function) => handlers.set(name, fn) },
+    document: { querySelector: node, querySelectorAll: (selector: string) => selector === '[data-p],[data-cen]' ? [field, baseScenario, currencyField] : selector === '[data-p]' ? [currencyField] : selector==='button,select' ? [node('#integra-logout'),node('#mSel')] : /^\[data-act="download(?:FS|Report)"\]$/.test(selector) ? [node(selector)] : [], addEventListener: (name: string, fn: Function) => handlers.set(name, fn) },
     Element, window: { addEventListener(name:string,fn:Function) { windowHandlers.set(name,fn); }, removeEventListener() {}, scrollTo() {}, location: { replace(path:string){redirects.push(path);},reload(){} } }, location: { hash: '' }, history: { replaceState() {} },
     setTimeout, clearTimeout, structuredClone, URL, URLSearchParams, TextDecoder, AbortController, AbortSignal, console,
     FileReader: class { result?: ArrayBuffer; onload?: () => void; readAsArrayBuffer(file: { buffer: ArrayBuffer }) { this.result=file.buffer;if(deferRead)pendingReads.push(()=>this.onload?.());else this.onload?.(); } },
@@ -51,6 +51,17 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
   return { node, field, baseScenario, requests, model, records, pendingReads, pendingUsage, pendingLogout, redirects, beforeUnload(){let blocked=false;windowHandlers.get('beforeunload')!({preventDefault(){blocked=true;}});return blocked;}, escape(){handlers.get('keydown')!({key:'Escape'});}, async select(id:string){node('#mSel').value=id;await node('#mSel').onchange();}, edit(id:string,value:string){node('#'+id).value=value;handlers.get('input')!({target:{id}});}, async currency(to:string){currencyField.value=to;await currencyField.onchange();},async act(act:string,extra:Record<string,string>={}){await handlers.get('click')!({target:new Element({act,...extra}),preventDefault(){}});}, async go(view: string) { await handlers.get('click')!({ target: new Element({ go: view }), preventDefault() {} }); return node('#view').innerHTML as string; }, async sub(k = 'pt', v = 'custos') { await handlers.get('click')!({ target: new Element({ act: 'sub', k, v }), preventDefault() {} }); return node('#view').innerHTML as string; } };
 }
 describe('runtime do protótipo ligado à API', () => {
+  it('o teste mantém os relatórios visíveis mas bloqueia o download, mesmo por acção directa', async () => {
+    const ui = await mount('servicos',true,false,false,false,historicalInput,FINANCIAL_SECTORS,{canExport:false});
+    await ui.go('relatorios');
+    expect(ui.node('#view').innerHTML).toContain('Sumário');
+    expect(ui.node('[data-act="downloadReport"]').disabled).toBe(true);
+    await ui.act('downloadReport');
+    expect(ui.requests.some(r=>r.path.includes('/reports/'))).toBe(false);
+    expect(ui.node('#view').innerHTML).toContain('pré-visualizar');
+    await ui.go('demonstracoes');
+    expect(ui.node('[data-act="downloadFS"]').disabled).toBe(true);
+  });
   it('consegue terminar sessão mesmo quando os projectos não carregaram', async () => {
     const ui = await mount('servicos',true,false,false,false,historicalInput,FINANCIAL_SECTORS,{bootFails:true});
     expect(ui.node('#view').innerHTML).toContain('Projectos indisponíveis');

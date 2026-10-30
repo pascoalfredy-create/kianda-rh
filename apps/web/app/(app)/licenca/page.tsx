@@ -84,7 +84,7 @@ export default async function Licenca() {
         </table>
       </div>
       <h2 id="modeling">Modelagem Financeira · Kianda Integra</h2>
-      <p className="sub">{b.modelingUsage.activeProjects} projecto(s) activo(s){b.modules.modeling.subscribed ? ` de ${b.modelingUsage.projectLimit === null ? 'ilimitados' : b.modelingUsage.projectLimit} · ${b.modelingUsage.enabledUsers} de ${b.modelingUsage.userLimit} utilizadores autorizados` : ' · módulo não subscrito'}. Clientes exportam apenas PDF.</p>
+      <p className="sub">{b.modelingUsage.activeProjects} projecto(s) activo(s){b.modules.modeling.subscribed ? ` de ${b.modelingUsage.projectLimit === null ? 'ilimitados' : b.modelingUsage.projectLimit} · ${b.modelingUsage.enabledUsers} de ${b.modelingUsage.userLimit} utilizadores autorizados` : ' · módulo não subscrito'}. Clientes com subscrição paga exportam apenas PDF. Durante a avaliação e em consulta, os documentos ficam em pré-visualização.</p>
       {b.modules.modeling.subscribed && <p className="muted">Sectores disponíveis: {b.modules.modeling.sectors.map(s => MODELING_SECTOR_LABELS[s]).join(' · ')}</p>}
       <div className="card section"><h2>Modelagem: subscrever, renovar ou mudar de plano</h2><ModelingPlanForm currentPlan={b.modules.modeling.planKey} currentCycle={b.modules.modeling.cycle} extraUsers={b.modules.modeling.extraUsers} activeProjects={b.modelingUsage.activeProjects} enabledUsers={b.modelingUsage.enabledUsers} primarySector={b.modules.modeling.primarySector ?? 'servicos'} currentSectors={b.modules.modeling.sectors} /></div>
       <div className="card section">

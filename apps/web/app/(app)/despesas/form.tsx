@@ -1,4 +1,6 @@
 'use client';
+import { DocumentPrintButton } from '@/components/document-export';
+
 
 import { EXPENSE_CATEGORIES, formatKz, PER_DIEM_ZONE } from '@kianda/core';
 import { useRouter } from 'next/navigation';
@@ -131,7 +133,7 @@ export function ClaimActions({ id, can, accounts }: { id: string; can: { submit:
         {can.pay && <button className="btn" onClick={() => setMode('pay')}>Registar reembolso…</button>}
         {can.reversePayment && <button className="btn ghost" onClick={() => setMode('reverse')}>Estornar reembolso…</button>}
         {can.cancel && <button className="btn danger" disabled={busy} onClick={() => { if (window.confirm('Anular esta nota de despesas?')) void run(`/v1/expenses/${id}/cancel`, 'POST', {}); }}>Anular nota</button>}
-        <button className="btn ghost" onClick={() => window.print()}>Imprimir</button>
+        <DocumentPrintButton className="btn ghost">Imprimir</DocumentPrintButton>
       </div>
       {mode === 'reject' && (
         <form className="actions" style={{ justifyContent: 'flex-start' }} onSubmit={async (e) => { e.preventDefault(); if (await run(`/v1/expenses/${id}/decision`, 'POST', { approve: false, note })) setMode(''); }}>
