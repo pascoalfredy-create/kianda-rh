@@ -1174,6 +1174,8 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(big.statusCode).toBe(201);
       const b = (await get(cookieOf(big), '/v1/billing')).json();
       expect(b).toMatchObject({ status: 'trial', tier: { key: 't3' }, limit: 500 });
+      const registeredOn = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Luanda', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(big.json().company.createdAt));
+      expect((Date.parse(b.trialEndsAt) - Date.parse(registeredOn)) / 86_400_000).toBe(6); // registo é dia 1; não oferece uma oitava data
     });
 
     it('pedido de pagamento anual com 20% de desconto; o cliente indica a referência', async () => {

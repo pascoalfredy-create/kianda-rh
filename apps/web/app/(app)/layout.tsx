@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/api';
 import { Suspense } from 'react';
 import { AppShell } from '@/components/app-shell';
+import { luandaDate, trialDaysRemaining } from '@kianda/core';
 
 /** Área autenticada: sem sessão válida (verificada pela API), redirecciona para o login. */
 /** Aviso de licença: experimental a terminar, pagamento em atraso ou só consulta. */
@@ -14,8 +15,8 @@ function LicenceBanner({ me }: { me: NonNullable<Awaited<ReturnType<typeof curre
   if (!l.canWrite) return <div className="alert no-print">Módulo RH em <b>modo de consulta</b> ({l.label.toLowerCase()}). {manage ? 'Regularize a licença do RH para voltar a gravar neste módulo.' : 'Fale com a administração da empresa.'}{link}</div>;
   if (l.status === 'past_due') return <div className="warn no-print">Pagamento da licença em atraso: a conta passa a modo de consulta em poucos dias.{link}</div>;
   if (l.status === 'trial' && l.trialEndsAt && manage) {
-    const days = Math.max(0, Math.ceil((Date.parse(l.trialEndsAt) - Date.now()) / 86_400_000));
-    return <div className="warn no-print">Período experimental: {days} dia(s) restante(s), até {l.trialEndsAt.split('-').reverse().join('/')}.{link}</div>;
+    const days = trialDaysRemaining(l.trialEndsAt, luandaDate(new Date()));
+    return <div className="warn no-print">Período experimental: {days === 1 ? 'último dia' : `${days} dias de calendário, incluindo hoje`}, até {l.trialEndsAt.split('-').reverse().join('/')} inclusive, pela hora de Angola.{link}</div>;
   }
   return null;
 }

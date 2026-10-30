@@ -10,6 +10,7 @@ assert.match(html, /<h1>Recursos Humanos e Modelagem Financeira para empresas em
 assert.match(html, /<meta name="robots" content="index, follow"/);
 assert.equal(new URL(/<link rel="canonical" href="([^"]+)"/.exec(html)?.[1]).href, 'https://kianda.yelaperformance.com/');
 assert.match(html, /application\/ld\+json/);
+for (const section of ['como-comecar', 'experimente', 'planos', 'precos-rh', 'precos-integra', 'duvidas']) assert(html.includes(`id="${section}"`), `Secção pública em falta: ${section}`);
 assert.equal(robots.status, 200); assert.match(await robots.text(), /Sitemap: https:\/\/kianda\.yelaperformance\.com\/sitemap.xml/);
 assert.equal(sitemap.status, 200);
 const xml = await sitemap.text();

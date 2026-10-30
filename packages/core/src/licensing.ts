@@ -27,6 +27,23 @@ export const CYCLES: Record<BillingCycle, { label: string; months: number; disco
 
 export const TRIAL_DAYS = 7;
 
+const DAY_MS = 86_400_000;
+function calendarDay(value: string): number {
+  const time = Date.parse(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(time) || new Date(time).toISOString().slice(0, 10) !== value) throw new RangeError('Data de calendário inválida.');
+  return time;
+}
+
+/** Avaliação por dias de calendário de Angola: o registo é o dia 1 e o último dia está incluído. */
+export function trialEndDate(registeredOn: string): string {
+  return new Date(calendarDay(registeredOn) + (TRIAL_DAYS - 1) * DAY_MS).toISOString().slice(0, 10);
+}
+
+/** Dias de calendário disponíveis, incluindo hoje; no último dia devolve 1, depois devolve 0. */
+export function trialDaysRemaining(until: string, today: string): number {
+  return Math.max(0, (calendarDay(until) - calendarDay(today)) / DAY_MS + 1);
+}
+
 export function tierFor(employees: number, tiers: Tier[] = DEFAULT_TIERS): Tier {
   return tiers.find((t) => employees >= t.minEmployees && (t.maxEmployees === null || employees <= t.maxEmployees)) ?? tiers[tiers.length - 1]!;
 }

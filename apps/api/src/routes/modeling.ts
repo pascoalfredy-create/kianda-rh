@@ -62,6 +62,7 @@ export function modelingRoutes() {
     const permission = c.get('modelingPermission');
     const session = { user: { id: a.actorId, name: a.session.name, role: a.role }, company: row!.company, permission,
       canWrite: permission === 'editor' && c.get('moduleAccess').canWrite, formats: await modelingExportOptions(db, a.actorId),
+      licence: { status: c.get('moduleAccess').status, trialEndsAt: row?.grant?.trialEndsAt ?? null, paidUntil: row?.grant?.paidUntil ?? null },
       usage: modelingCapacity({ projectLimit: row?.grant ? row.grant.projectLimit : 1, extraUsers: row?.grant?.extraUsers ?? 0 }, row?.projects ?? 0, row?.members ?? 0),
     };
     if (!bootstrap) return c.json(session);

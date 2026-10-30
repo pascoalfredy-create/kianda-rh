@@ -21,4 +21,33 @@
 .connection{padding:42px 0;max-width:800px}.connection h2{font-size:23px;margin-bottom:12px}
 .connection p{font-size:15px;line-height:1.7;color:var(--ink2);margin-top:10px}
 .footer{padding:24px 0 32px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--ink2)}
+.hero>p.trialNote{font-size:13px;margin-top:16px;color:var(--ink2)}.trialNote a{text-decoration:underline}
+.benefits{padding-left:19px;color:var(--ink2);line-height:1.65;display:grid;gap:8px;font-size:14px}
+.section{padding:48px 0 0;scroll-margin-top:24px}.sectionHead{max-width:800px;margin-bottom:24px}
+.sectionHead h2,.trial h2,.faq h2,.lastCall h2{font-size:28px;line-height:1.25;margin-bottom:12px;letter-spacing:-.3px}
+.sectionHead>p:last-child{font-size:16px;color:var(--ink2);line-height:1.65}
+.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;list-style:none;counter-reset:steps}
+.steps li{padding:22px;background:#fff;border:1px solid var(--line);border-radius:12px;min-width:0}
+.stepNumber{display:grid;place-items:center;width:32px;height:32px;background:#edf0f4;color:#253649;border-radius:8px;font-weight:700;margin-bottom:16px}
+.steps h3{font-size:16px;line-height:1.4;margin-bottom:10px}.steps p{font-size:14px;color:var(--ink2);line-height:1.65}
+.trial{display:grid;grid-template-columns:1.1fr 1fr;gap:34px;margin-top:48px;padding:32px;border:1px solid #d7dfe7;border-radius:12px;background:#edf1f5;scroll-margin-top:24px}
+.trial p{color:var(--ink2);line-height:1.7;margin-top:12px}.trial h3{font-size:17px;margin-bottom:14px}
+.trial ul{padding-left:18px;display:grid;gap:10px;font-size:14px;color:var(--ink2);line-height:1.65}.trial .button{margin-top:20px}
+.priceBlock{margin-top:24px;padding:26px;border:1px solid var(--line);border-radius:12px;background:#fff;scroll-margin-top:24px;min-width:0}
+.priceBlock h3{font-size:20px;margin-bottom:8px}.priceBlock>p{color:var(--ink2);font-size:14px;line-height:1.65;margin-bottom:18px}
+.priceScroll{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;border:1px solid var(--line);border-radius:8px}
+.priceScroll:focus-visible{outline:3px solid #677e98;outline-offset:3px}.priceScroll table{min-width:620px;width:100%;border-collapse:collapse}
+.priceScroll table caption{text-align:left;padding:12px;font-size:13px;color:var(--ink2);background:#f7f8fa}
+.priceScroll th,.priceScroll td{padding:14px 12px;border-bottom:1px solid var(--line);font-size:13px;text-transform:none;vertical-align:top}
+.priceScroll thead th{font-weight:700;color:var(--ink2);text-align:right;background:#f7f8fa;white-space:nowrap}
+.priceScroll thead th:first-child,.priceScroll tbody th{text-align:left}.priceScroll tbody th{font-weight:600;background:#fff;color:var(--ink);min-width:165px}
+.priceScroll td{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.priceScroll tr:last-child>*{border-bottom:0}
+.priceBlock>p.priceNote{font-size:13px;margin:16px 0 0}.sectorList{margin-top:16px;font-size:14px}
+.sectorList summary{cursor:pointer;min-height:44px;align-content:center;font-weight:600}.sectorList ul{padding:12px 0 0 18px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;color:var(--ink2)}
+.faq{padding-bottom:40px;scroll-margin-top:24px}.faq details{border-top:1px solid var(--line);padding:0 0 2px}.faq details:last-child{border-bottom:1px solid var(--line)}
+.faq summary{padding:18px 4px;cursor:pointer;font-size:15px;font-weight:600;line-height:1.5}.faq details p{padding:0 4px 18px;color:var(--ink2);max-width:880px;line-height:1.7;font-size:14px}
+.faq summary:focus-visible,.sectorList summary:focus-visible{outline:3px solid #677e98;outline-offset:2px}
+.lastCall{margin-bottom:44px;padding:30px;border:1px solid var(--line);border-radius:12px;background:#fff}.lastCall p{color:var(--ink2);line-height:1.7;max-width:760px;margin-bottom:20px}
+@media(max-width:900px){.steps{grid-template-columns:repeat(2,minmax(0,1fr))}.header{flex-wrap:wrap;padding:18px 0}.header nav{gap:14px}.trial{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:600px){.site{padding:0 18px}.header{min-height:86px;gap:12px;flex-wrap:wrap;padding:16px 0}.header nav{gap:12px;font-size:13px}.header nav>a:first-child{display:none}.hero{padding:36px 0 28px}.hero>p:not(.eyebrow){font-size:16px}.modules{grid-template-columns:minmax(0,1fr)}.modules article{padding:22px}.actions{gap:10px}.actions a{flex:1 1 160px}}
+@media(max-width:600px){.header .sectionNav{display:none}.section{padding-top:32px}.sectionHead h2,.trial h2,.faq h2,.lastCall h2{font-size:24px}.trial{padding:22px;gap:24px;margin-top:32px}.steps{grid-template-columns:minmax(0,1fr)}.steps li{padding:20px}.priceBlock{padding:18px}.priceBlock h3{font-size:19px}.sectorList ul{grid-template-columns:minmax(0,1fr)}.lastCall{padding:22px}.lastCall .button{width:100%}.hero>p.trialNote{font-size:13px}}

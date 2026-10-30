@@ -38,6 +38,15 @@ describe('interface aprovada e documento autenticado', () => {
     expect(html).toContain('id="integra-logout" data-act="logout">Terminar sessão</button>');
     expect(html).toContain('<a class="btn modules-link" href="/modulos">Módulos e licenças</a>');
   });
+  it('explica a data de avaliação e o modo de consulta sem confundir a licença com o perfil de utilizador', () => {
+    const trial = modelingPage({ canWrite: false, licence: { status: 'trial', trialEndsAt: '2099-12-31', paidUntil: null } } as ModelingSession, 'nonce');
+    expect(trial).toContain('31/12/2099 inclusive, pela hora de Angola');
+    expect(trial).not.toContain('regularize a licença com o proprietário');
+    const expired = modelingPage({ licence: { status: 'suspended', trialEndsAt: '2026-01-01', paidUntil: null } } as ModelingSession, 'nonce');
+    expect(expired).toContain('Módulo em consulta. Os dados guardados continuam disponíveis');
+    const viewer = modelingPage({ canWrite: false, licence: { status: 'active', trialEndsAt: null, paidUntil: '2099-12-31' } } as ModelingSession, 'nonce');
+    expect(viewer).not.toContain('regularize a licença com o proprietário');
+  });
   it('o runtime distribuído não guarda pressupostos em armazenamento local nem exporta CSV/clipboard', () => {
     const js = readFileSync(new URL('../public/modeling-runtime.js', import.meta.url), 'utf8');
     expect(js).not.toMatch(/localStorage\.setItem|sessionStorage\.setItem|clipboard|copyFS|repCopy/);
