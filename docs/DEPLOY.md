@@ -75,7 +75,9 @@ O custom domain cria automaticamente o registo DNS e o certificado HTTPS do subd
 
 ## Depois de publicado
 
-- **Regra de limite de tentativas** (recomendado): Cloudflare → o seu domínio → **Security → WAF → Rate limiting rules** → URI path `equals /api/v1/auth/login`, 10 pedidos / 1 minuto por IP → Block. O limite interno da API é por instância; esta regra é global.
+- **Regra de limite de tentativas** (recomendado): Cloudflare → domínio → **Security → Security rules** (painel antigo: Security → WAF) → **Rate limiting rules** → Create rule. O plano **gratuito** permite **uma** regra, contagem por IP, janela fixa de **10 s**, acção Block durante 10 s. Configuração: 5 pedidos / 10 s por IP → Block, com a expressão (todas as rotas de autenticação numa só regra):
+  `(http.host eq "kianda.yelaperformance.com" and http.request.method eq "POST" and http.request.uri.path in {"/api/v1/auth/login" "/api/v1/auth/login-pin" "/api/v1/auth/login/2fa" "/api/v1/auth/register" "/api/v1/auth/forgot"})`
+  O limite interno da API (por instância e só tentativas falhadas) mantém-se; esta regra é global. Num plano pago pode alargar-se a janela para 1 minuto (ex.: 10 pedidos/min).
 - **Logs**: Workers & Pages → `kianda-web` / `kianda-api` → **Logs** (observabilidade activa).
 - **Neon gratuito**: 0,5 GB e 100 horas de computação por mês por projecto — com suspensão automática quando parado, chega para dezenas de empresas pequenas. Ao crescer, o plano Launch não tem mensalidade mínima (paga-se o uso).
 - **Plano**: o plano gratuito dos Workers chega para começar. Com uso real (dezenas de utilizadores em simultâneo), o Workers Paid (5 USD/mês) aumenta o tempo de CPU por pedido e o número de pedidos.
