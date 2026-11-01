@@ -125,6 +125,7 @@ Cada integração liga-se sozinha quando o secret existir no GitHub (o deploy se
 O workflow **Cópia de segurança** (`.github/workflows/backup.yml`) corre todos os dias às 02:17 de Luanda (e manualmente em Actions → Cópia de segurança → Run workflow): `pg_dump` da base Neon, cifrado com AES-256 antes de sair do runner, guardado 30 dias como artefacto privado do repositório. Complementa o restauro de histórico do próprio Neon.
 
 - **Secret obrigatório:** `KIANDA_BACKUP_PASSPHRASE` — frase longa (20+ caracteres), gerada e guardada fora do GitHub (gestor de palavras-passe). Sem ela não há cópia (nunca se guardam dados de clientes sem cifra). **Perder a frase = perder as cópias.**
+- **Teste de restauro em cada cópia:** depois de cifrar, o workflow decifra o ficheiro com a frase gravada e lê-o com `pg_restore --list` (mínimo de 20 tabelas com dados, incluindo `companies`, `users`, `subscriptions`, `financial_models`). Se falhar, a execução fica vermelha. O registo mostra a impressão digital da frase (8 primeiros caracteres do SHA-256) para confirmar que coincide com a guardada: `printf %s 'FRASE' | sha256sum | cut -c1-8`.
 - **Restaurar:** descarregar o artefacto → `gpg --decrypt kianda-AAAA-MM-DD_HHMM.dump.gpg > kianda.dump` → criar um ramo (branch) novo no Neon → `pg_restore --no-owner --no-privileges -d "<ligação do ramo>" kianda.dump` → validar → apontar o Hyperdrive para o ramo restaurado (ou copiar só as tabelas necessárias).
 
 ## Domínio próprio

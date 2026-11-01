@@ -41,6 +41,25 @@ jobs:
           DATABASE_URL: ${{ secrets.KIANDA_DATABASE_URL }}
           PASSPHRASE: ${{ secrets.KIANDA_BACKUP_PASSPHRASE }}
 
+      # Prova, em cada cópia, que o ficheiro cifrado se decifra com a frase gravada e contém a base completa.
+      # Se falhar, a execução fica vermelha: uma cópia que não se restaura não conta como cópia.
+      - name: Teste de restauro (decifrar e ler a cópia)
+        run: |
+          set -euo pipefail
+          fail() { echo "::error title=Cópia de segurança::$1"; exit 1; }
+          gpg --batch --quiet --pinentry-mode loopback --passphrase "$PASSPHRASE" -d "/tmp/kianda-$STAMP.dump.gpg" > /tmp/check.dump || fail "A cópia não se decifra com a frase gravada"
+          docker run --rm -v /tmp:/w postgres:18 pg_restore --list /w/check.dump > /tmp/check.list || fail "A cópia decifrada não é legível pelo pg_restore"
+          shred -u /tmp/check.dump
+          tables=$(grep -c " TABLE DATA public " /tmp/check.list || true)
+          [ "$tables" -ge 20 ] || fail "A cópia tem apenas $tables tabelas com dados"
+          for t in companies users subscriptions financial_models; do grep -q " TABLE DATA public $t " /tmp/check.list || fail "Falta a tabela $t na cópia"; done
+          rm -f /tmp/check.list
+          echo "Restauro verificado: $tables tabelas com dados."
+          # Identifica a frase usada sem a revelar: compare com a da sua cópia guardada (docs/DEPLOY.md).
+          echo "Impressão digital da frase (SHA-256, 8 caracteres): $(printf %s "$PASSPHRASE" | sha256sum | cut -c1-8)"
+        env:
+          PASSPHRASE: ${{ secrets.KIANDA_BACKUP_PASSPHRASE }}
+
       - uses: actions/upload-artifact@v4
         with:
           name: kianda-db-${{ env.STAMP }}
