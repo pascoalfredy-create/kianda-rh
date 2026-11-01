@@ -1034,9 +1034,23 @@ export const modelingMembers = pgTable('modeling_members', {
   userId: text('user_id').notNull().references(() => users.id),
   enabled: boolean('enabled').notNull().default(true),
   permission: text('permission').notNull().default('editor'),
+  /** all = todos os projectos da empresa; selected = só os indicados em modeling_project_access. */
+  scope: text('scope').notNull().default('all'),
   addedBy: text('added_by').notNull(),
   createdAt: createdAt(),
 }, (t) => [uniqueIndex('modeling_members_company_user').on(t.companyId, t.userId)]);
+
+/** Acesso de um participante a um projecto concreto (participantes com scope = selected). */
+export const modelingProjectAccess = pgTable('modeling_project_access', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  modelId: text('model_id').notNull().references(() => financialModels.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id),
+  /** editor | viewer — nunca acima da permissão geral do participante. */
+  permission: text('permission').notNull().default('viewer'),
+  addedBy: text('added_by').notNull(),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex('modeling_project_access_model_user').on(t.modelId, t.userId), index('modeling_project_access_company_user').on(t.companyId, t.userId)]);
 
 /** Versão aprovada: pressupostos, cálculos e relatórios congelados, sem edição posterior. */
 export const financialModelVersions = pgTable('financial_model_versions', {
@@ -1054,3 +1068,5 @@ export const financialModelVersions = pgTable('financial_model_versions', {
   approvedBy: text('approved_by').notNull(),
   approvedAt: createdAt(),
 }, (t) => [uniqueIndex('financial_versions_model_number').on(t.modelId, t.versionNumber), uniqueIndex('financial_versions_model_revision_label').on(t.modelId, t.sourceRevision, t.label), index('financial_versions_company_model').on(t.companyId, t.modelId)]);
+
+export type ModelingMemberRow = typeof modelingMembers.$inferSelect;

@@ -51,7 +51,7 @@ replace('money(m.capex.reduce((s,c)=>s+ +c.valor,0))', 'assumptionMoney(m.capex.
 replace("'Financiamento em USD'", "'Financiamento em '+cur");
 replace("cur==='USD'?'US Treasury 10 anos':'Obrigações do Tesouro em Kz'", "cur==='Kz'?'Obrigações do Tesouro em Kz':'Taxa sem risco em '+cur");
 replace("cur==='USD'?'Risco Angola sobre activos em USD':'0 se a taxa sem risco já é em Kz'", "cur==='Kz'?'0 se a taxa sem risco já incorpora o risco país':'Prémio de risco país coerente com '+cur");
-replace("const closeModal=()=>$('#ov').classList.remove('on');", "function closeModal(){currencyDialog=null;projectDialog=null;$('#ov').classList.remove('on');}");
+replace("const closeModal=()=>$('#ov').classList.remove('on');", "function closeModal(){currencyDialog=null;projectDialog=null;versionDialog=null;importDialog=null;$('#ov').classList.remove('on');}");
 replace('data-act="copyFS">${ico(\'copy\')}Copiar (CSV)', 'data-act="downloadFS">${ico(\'doc\')}Descarregar PDF');
 replace('data-act="repCopy">${ico(\'copy\')}Copiar texto', 'data-act="downloadReport">${ico(\'doc\')}Descarregar PDF');
 // A análise usa o mesmo core no browser/API; os formulários e tabelas originais são preservados.
@@ -108,7 +108,7 @@ replace("t>=1&&k.debt[t-1]>0?brk(t):null", "t>=1&&(k.ds[t]>0||k.debt[t]>0)?brk(t
 span('function fsCSV(){', '/* ---------------- Eventos', '');
 source = source.slice(0, source.indexOf('/* ---------------- Eventos'));
 const adapter = (await readFile(new URL('modeling/adapter.js', web), 'utf8')).replace('__NEW_MODEL_DIALOG__', dialog);
-const imports = `import {runFinancialModel} from '${fileURLToPath(new URL('packages/core/src/modeling/engine.ts', root))}';\nimport {financialBreakEvenPrice} from '${fileURLToPath(new URL('packages/core/src/modeling/analysis.ts', root))}';\nimport {FinancialModelError} from '${fileURLToPath(new URL('packages/core/src/modeling/types.ts', root))}';\nimport {analyzeFinancialHistory,historicalPeriodLabel,parseHistoricalReference,HISTORICAL_RATIO_DEFINITIONS} from '${fileURLToPath(new URL('packages/core/src/modeling/historical.ts', root))}';\nimport {ModelingStore,modelingRequest} from '${fileURLToPath(new URL('modeling/store.ts', web))}';\nimport {extractPdfTrialBalance,PDF_IMPORT_LIMIT} from '${fileURLToPath(new URL('modeling/pdf-import.ts', web))}';\n`;
+const imports = `import {runFinancialModel} from '${fileURLToPath(new URL('packages/core/src/modeling/engine.ts', root))}';\nimport {financialBreakEvenPrice} from '${fileURLToPath(new URL('packages/core/src/modeling/analysis.ts', root))}';\nimport {FinancialModelError,FINANCIAL_ENGINE_VERSION} from '${fileURLToPath(new URL('packages/core/src/modeling/types.ts', root))}';\nimport {analyzeFinancialHistory,historicalPeriodLabel,parseHistoricalReference,HISTORICAL_RATIO_DEFINITIONS} from '${fileURLToPath(new URL('packages/core/src/modeling/historical.ts', root))}';\nimport {ModelingStore,modelingRequest,presentModel} from '${fileURLToPath(new URL('modeling/store.ts', web))}';\nimport {extractPdfTrialBalance,PDF_IMPORT_LIMIT} from '${fileURLToPath(new URL('modeling/pdf-import.ts', web))}';\n`;
 const documentImports = `import {extractWordTrialBalance,documentFormat,decodeDocumentText} from '${fileURLToPath(new URL('lib/document-import.ts', web))}';\n`;
 const mobileImports = `import {setupModelingMobile,prepareFinancialTables} from '${fileURLToPath(new URL('modeling/mobile.ts', web))}';\n`;
 const sessionImports = `import {endSession,reloadPrivatePageOnRestore} from '${fileURLToPath(new URL('lib/session-client.ts', web))}';\n`;

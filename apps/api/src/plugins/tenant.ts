@@ -26,7 +26,7 @@ export interface Actor {
   session: SessionClaims;
 }
 
-export type AppEnv = { Variables: { actor: Actor; companyGuarded: boolean; moduleAccess: ModuleAccess; modelingPermission: string } };
+export type AppEnv = { Variables: { actor: Actor; companyGuarded: boolean; moduleAccess: ModuleAccess; modelingPermission: string; modelingMember: import('@kianda/db').ModelingMemberRow } };
 export type Ctx = Context<AppEnv>;
 
 export const SESSION_COOKIE = 'kianda_session';

@@ -4,7 +4,7 @@
 
 Mesmo repositório, autenticação e PostgreSQL. RH e Modelagem têm direitos independentes. A interface aprovada é reutilizada na rota autenticada `/modelagem`, sem redesenho: o CSS e a estrutura HTML do protótipo são preservados. Os controlos comuns de contratação estão descritos em [MODULOS-LICENCAS.md](MODULOS-LICENCAS.md).
 
-O backend disponibiliza persistência, direitos comerciais e o motor financeiro anual, com modelos-tipo para os oito sectores, conforme os sectores contratados. Os ecrãs estão ligados à API para carregar, criar, duplicar, gravar, arquivar/restaurar e exportar PDF. Os participantes são geridos na licença comum. A selecção/aprovação de versões e a importação RH continuam disponíveis na API e pendentes de controlos na interface financeira. Não confundir `revision` (controlo de concorrência) com versões de comité/banco.
+O backend disponibiliza persistência, direitos comerciais e o motor financeiro anual, com modelos-tipo para os oito sectores, conforme os sectores contratados. Os ecrãs estão ligados à API para carregar, criar, duplicar, gravar, arquivar/restaurar e exportar PDF. Os participantes são geridos na licença comum, com acesso a todos os projectos ou só aos escolhidos. Na interface financeira: botão **Versões** (aprovar a revisão actual, consultar versões em só leitura, PDF da versão) e **Importar do RH** junto a 72 · Custos com o pessoal. Não confundir `revision` (controlo de concorrência) com versões de comité/banco.
 
 ## Compatibilidade comercial
 
@@ -25,6 +25,8 @@ O backend disponibiliza persistência, direitos comerciais e o motor financeiro 
 | GET/POST `/v1/modeling/models` | Listar/criar modelos da empresa; participantes autorizados (escrita: editor) |
 | GET/PUT `/v1/modeling/models/:id` | Consultar/editar; edição exige `revision` actual, conflito devolve 409 |
 | POST `/v1/modeling/models/:id/import-personnel` | Cópia explícita de custos do RH; exige ambos os módulos activos e `revision` actual |
+| GET `/v1/modeling/personnel-sources` | Origens importáveis, só para quem edita: orçamentos aprovados (com total anual) e janelas de 12 meses consecutivos fechados. Só totais da empresa |
+| GET `/v1/modeling/members` · PUT `/v1/modeling/members/:userId` | Proprietário: `enabled`, `permission` geral, `scope` (`all`/`selected`) e `projects[{modelId, permission}]` |
 
 Modelo: `name`, `sector` (as oito chaves do protótipo), `currency` (`Kz`, `USD`, `EUR`) e `assumptions` (objecto do protótipo, até 200 000 caracteres). Sem importação, `assumptions.pessoal` é introduzido manualmente.
 
@@ -57,7 +59,7 @@ Modelagem tem preço próprio, independente do número de funcionários e dos es
 - Um projecto corresponde ao registo `financial_models`. Alterar pressupostos não consome outro projecto. Versões/cenários futuros devem pertencer ao mesmo projecto, sem consumir quotas adicionais.
 - Arquivar liberta quota de projectos e mantém histórico e consulta. Projectos arquivados não podem ser editados nem receber importações. Restaurar exige vaga. Criação/restauro e admissão de utilizadores são serializados por empresa para impedir ultrapassagem por pedidos concorrentes.
 - O número de utilizadores autorizados conta os membros com `enabled=true`. Desactivar o acesso no Integra liberta lugar. A suspensão do utilizador no RH não altera automaticamente o contrato de acessos Integra.
-- Os participantes desta entrega têm acesso aos projectos da própria empresa segundo a permissão global Integra; atribuição restrita a projectos individuais é uma evolução pendente.
+- Acesso por projecto (migração `0037`, tabela `modeling_project_access` com RLS e verificação de empresa por trigger). `scope='all'` (omissão) mantém o comportamento anterior. `scope='selected'`: o participante só vê os projectos atribuídos; a permissão em cada projecto nunca excede a geral (consulta geral ⇒ consulta em todos). O proprietário da empresa vê sempre tudo. Projecto não atribuído responde **404** em todas as rotas `/models/:id/*` (leitura, gravação, versões, relatórios, histórico), sem revelar existência. Quem está restrito e cria um projecto (novo, duplicado ou a partir de balancetes) fica com ele atribuído como editor. Voltar a `all` apaga as atribuições. Listas (`/models`, `bootstrap`) trazem `permission` por projecto; a interface bloqueia campos nos projectos só de consulta.
 
 ### Rotas adicionais
 
@@ -183,3 +185,9 @@ O motor puro partilhado fornece a pré-visualização imediata nos ecrãs; não 
 Os comandos de cópia das demonstrações e dos relatórios descarregam PDF, conservando as posições e classes existentes. Excel continua exclusivamente na API do proprietário configurado. O selector de modelos inclui gestão de activos/arquivados no modal existente. Aprovação de versões e importação RH ainda não têm controlos nesta interface; licenças e participantes ficam na área comum. A área histórica depende de balancetes persistidos e não guarda dados históricos locais como se fossem dados da empresa.
 
 Verificação: testes de fila/revisão, falha de rede, conflito, consulta, quota e origem do PDF; comparação exacta com o HTML aprovado; isolamento do JSON da sessão; montagem das sete vistas nos oito sectores com o código distribuído. Um teste HTTP local do Next com uma API de teste verificou redireccionamento, recusa de licença, cabeçalhos, proxy, gravação e PDF. Esse teste não substitui os testes PostgreSQL do CI. O navegador remoto não alcançou o servidor local, pelo que não se afirma uma inspecção visual desta integração num navegador real. `pnpm --filter @kianda/web modeling:generate` regenera os ficheiros; o teste web recusa runtime desactualizado.
+
+## Interface: versões e importação do RH (entrega de 01/11/2026)
+
+**Versões.** Botão no cabeçalho. O proprietário aprova a revisão gravada com um destino (comité, banco, conselho, accionistas); o rascunho em edição é gravado antes, para aprovar exactamente o que está no ecrã. A lista mostra versão, destino, data/hora de Luanda, quem aprovou e revisão de origem, com PDF de qualquer relatório da versão (o relatório histórico só quando a versão o contém). *Consultar* abre a versão em só leitura: campos bloqueados, nada é gravado, selector mostra «Versão vN», faixa com «Voltar ao rascunho». O ecrã recalcula a partir dos pressupostos congelados e confirma que reproduz o VAL aprovado com o mesmo motor; se não reproduzir, avisa que os PDF da versão fazem fé. *Duplicar* numa versão cria um projecto novo a partir dela.
+
+**Importar do RH.** Em Pressupostos › Custos, junto ao campo 72. Origem: orçamento de pessoal aprovado ou custo real de 12 meses fechados. Mostra o novo valor no ano 1, o valor actual e avisa quando o ano do orçamento difere do ano 1 do projecto, ou quando o custo real é de um período anterior (o motor não o actualiza). Em USD/EUR exige câmbio (unidades da moeda por 1 Kz), pré-preenchido com a referência disponível. Histórico de importações com data, origem, totais e autor; o campo indica a última importação e se foi alterado manualmente depois.

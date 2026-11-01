@@ -1,7 +1,9 @@
 # Kianda RH — documento de passagem (handoff)
 
 > Para um novo agente/programador continuar o trabalho. Leia isto primeiro, depois `docs/ROADMAP.md` e `docs/DEPLOY.md`.
-> Última actualização: 27/10/2026 (entrega 19 publicada — revisão pela LGT e adiantamentos).
+> Última actualização: 01/11/2026 — Integra: versões e importação do RH na interface, participantes por projecto (migração 0037). Ver `docs/INTEGRA_MODULE.md`.
+> Integra (`/modelagem`): a interface é o protótipo aprovado montado por `scripts/build-modeling-ui.mjs` (substituições explícitas) + `apps/web/modeling/adapter.js`; depois de mexer, `pnpm --filter @kianda/web modeling:generate` (o CI verifica com `--check`).
+> Testes com datas fixas: comparar com `luandaDate(new Date())` quando o resultado depende do dia (ex.: alterações salariais «futuras»).
 
 ## 1. O que é
 

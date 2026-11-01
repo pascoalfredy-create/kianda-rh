@@ -5,7 +5,23 @@ export interface HistoricalRecord { inputHash: string; updatedAt: string; analys
 export interface ModelRecord {
   id: string; name: string; sector: string; currency: string; assumptions: Record<string, unknown>;
   revision: number; createdAt: string; archivedAt: string | null;
+  /** Permissão efectiva neste projecto (participantes restritos podem ter só consulta). */
+  permission?: 'editor' | 'viewer';
 }
+export interface VersionRecord {
+  id: string; versionNumber: number; label: string; sourceRevision: number; sourceHash: string; payloadHash: string;
+  engineVersion: string; reportVersion: string; approvedBy: string; approvedAt: string; approvedByName: string | null;
+}
+export interface PersonnelImportRecord {
+  id: string; source: 'budget' | 'actual'; sourceId: string | null; fromPeriod: string; toPeriod: string; importedAt: string; importedByName: string | null;
+  snapshot: { currency: string; exchangeRate: number; totalMinor: number; annualPersonnel: number; months: { period: string; costMinor: number; headcount: number }[] };
+}
+export interface PersonnelSources {
+  hr: { active: boolean; message?: string };
+  budgets: { id: string; year: number; approvedAt: string | null; totalMinor: number }[];
+  windows: { from: string; to: string }[]; closedPeriods?: number; lastClosed?: string | null;
+}
+export type PersonnelImportInput = ({ source: 'budget'; budgetId: string } | { source: 'actual'; from: string; to: string }) & { exchangeRate?: number };
 export interface UiModel extends Record<string, any> { id: string; nome: string; sector: string; moeda: string; criado: string }
 export interface ModelingSession {
   user: { id: string; name: string; role: string }; company: { id: string; name: string };
@@ -50,7 +66,7 @@ export function presentModel(record: ModelRecord): UiModel {
   for (const [key, texts] of [['receitas', ['nome', 'unid', 'ramp']], ['capex', ['nome']]] as const) result[key] = (Array.isArray(a[key]) ? a[key] : []).map((v) => Object.fromEntries(Object.entries(obj(v)).map(([k, n]) => [k, (texts as readonly string[]).includes(k) ? typeof n === 'string' ? n : '' : typeof n === 'number' && Number.isFinite(n) ? n : undefined])));
   return { ...result, id: record.id, nome: record.name, sector: record.sector, moeda: record.currency, criado: record.createdAt.slice(0, 10) };
 }
-interface Entry { revision: number; archivedAt: string | null; saved: string; desired: ReturnType<typeof modelPayload>; timer?: ReturnType<typeof setTimeout>; task?: Promise<void>; error?: Error; converting?: boolean; archiving?: boolean }
+interface Entry { revision: number; archivedAt: string | null; permission: 'editor' | 'viewer'; saved: string; desired: ReturnType<typeof modelPayload>; timer?: ReturnType<typeof setTimeout>; task?: Promise<void>; error?: Error; converting?: boolean; archiving?: boolean }
 export class ModelingStore {
   readonly models: UiModel[] = [];
   readonly archivedModels: UiModel[] = [];
@@ -65,23 +81,25 @@ export class ModelingStore {
   private accept(record: ModelRecord) {
     const model = presentModel(record), desired = modelPayload(model);
     (record.archivedAt ? this.archivedModels : this.models).push(model);
-    this.entries.set(model.id, { revision: record.revision, archivedAt: record.archivedAt, saved: JSON.stringify(desired), desired });
+    this.entries.set(model.id, { revision: record.revision, archivedAt: record.archivedAt, permission: record.permission ?? 'editor', saved: JSON.stringify(desired), desired });
     return model;
   }
   get dirty() { return [...this.entries.values()].some((s) => Boolean(s.task) || s.converting || s.archiving || JSON.stringify(s.desired) !== s.saved); }
   stopAutosave() { this.stopped = true; for (const state of this.entries.values()) clearTimeout(state.timer); }
   project(id: string) { return this.models.find(m => m.id === id) ?? this.archivedModels.find(m => m.id === id); }
   archivedAt(id: string) { const s = this.entries.get(id); if (!s) throw new Error('Projecto inexistente.'); return s.archivedAt; }
-  canEdit(id: string) { return this.canWrite && this.entries.has(id) && !this.entries.get(id)!.archivedAt; }
+  canEdit(id: string) { const s = this.entries.get(id); return this.canWrite && !!s && !s.archivedAt && s.permission === 'editor'; }
+  permission(id: string) { return this.entries.get(id)?.permission ?? null; }
   private writable(id: string) {
     if (!this.canWrite) throw new ModelingApiError(403, 'O seu acesso permite apenas consulta.');
     if (this.archivedAt(id)) throw new ModelingApiError(409, 'Projecto arquivado. Restaure-o antes de o alterar.');
+    if (this.entries.get(id)!.permission !== 'editor') throw new ModelingApiError(403, 'O seu acesso a este projecto é só de consulta.');
   }
   revision(id: string) { const s = this.entries.get(id); if (!s) throw new Error('Projecto inexistente.'); return s.revision; }
   change(model: UiModel) {
     if (!this.canWrite || this.stopped) return; // Cenário/unidade de consulta ficam só na memória da página.
     const state = this.entries.get(model.id); if (!state) throw new Error('Projecto inexistente.');
-    if (state.archivedAt) return;
+    if (state.archivedAt || state.permission !== 'editor') return;
     if (state.converting) throw new ModelingApiError(409, 'Aguarde pela conversão da moeda.');
     if (state.archiving) throw new ModelingApiError(409, 'Aguarde pela alteração do estado do projecto.');
     state.desired = modelPayload(model);
@@ -154,6 +172,42 @@ export class ModelingStore {
     await this.flush();
     const result = await this.request<{ model: ModelRecord; historical: HistoricalRecord; notes: string[] }>(`/models/${encodeURIComponent(id)}/history/to-model`, 'POST', { revision: this.revision(id) });
     return { model: this.accept(result.model), historical: result.historical, notes: result.notes };
+  }
+  /** Substitui o registo local pelo do servidor (depois de uma operação que altera o projecto no servidor). */
+  private replace(id: string, record: ModelRecord) {
+    const state = this.entries.get(id)!, model = this.project(id)!;
+    for (const key of Object.keys(model)) delete model[key];
+    Object.assign(model, presentModel(record));
+    state.revision = record.revision; state.desired = modelPayload(model); state.saved = JSON.stringify(state.desired);
+    return model;
+  }
+  /** Ficha do projecto no servidor, com o histórico de importações do RH. */
+  async detail(id: string) {
+    await this.flush(id);
+    return this.request<ModelRecord & { imports: PersonnelImportRecord[] }>(`/models/${encodeURIComponent(id)}`);
+  }
+  async personnelSources() { return this.request<PersonnelSources>('/personnel-sources'); }
+  /** Cópia explícita dos custos com pessoal do RH (substitui 72 · Custos com o pessoal do ano 1). */
+  async importPersonnel(id: string, input: PersonnelImportInput) {
+    this.writable(id);
+    await this.flush(id);
+    const state = this.entries.get(id)!;
+    if (state.converting || state.archiving) throw new ModelingApiError(409, 'Aguarde pela operação em curso neste projecto.');
+    state.converting = true;
+    try {
+      const result = await this.request<{ model: ModelRecord; import: PersonnelImportRecord }>(`/models/${encodeURIComponent(id)}/import-personnel`, 'POST', { ...input, revision: state.revision });
+      return { model: this.replace(id, result.model), import: result.import };
+    } finally { state.converting = false; }
+  }
+  async versions(id: string) { return this.request<VersionRecord[]>(`/models/${encodeURIComponent(id)}/versions`); }
+  async version(id: string, versionId: string) {
+    return this.request<VersionRecord & { payload: { inputAssumptions: Record<string, unknown>; source: Record<string, unknown>; result: { engineVersion: string; npv: number | null; scenario: string }; historical?: { input: FinancialHistoricalInput } } }>(`/models/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}`);
+  }
+  /** Aprova a revisão gravada (o rascunho em edição é gravado primeiro, para aprovar exactamente o que está no ecrã). */
+  async approve(id: string, label: string) {
+    this.writable(id);
+    await this.flush(id);
+    return this.request<VersionRecord>(`/models/${encodeURIComponent(id)}/versions`, 'POST', { revision: this.revision(id), label });
   }
   /** Não remove dados. Só muda a lista local depois da confirmação do servidor. */
   async setArchived(id: string, archived: boolean) {

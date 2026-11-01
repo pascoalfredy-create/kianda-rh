@@ -9,9 +9,10 @@ import { FINANCIAL_SECTORS, financialBreakEvenPrice, financialScenarios, financi
 import { financialCalculationSource, financialFingerprint, financialModelOf } from '../services/modeling-calculation.js';
 import { modelingExportOptions, modelingUsage, lockModelingCompany, requireProjectCapacity, requireModelingSector } from '../services/modeling-policy.js';
 import { companyModulesOverview, moduleLicence } from '../services/modules.js';
+import { accessOfMembers, grantCreator, projectPermission, visibleModels } from '../services/modeling-access.js';
 import { DomainError } from '../services/payroll.js';
 import { body, requireCompany, requireRole, type AppEnv, type Ctx } from '../plugins/tenant.js';
-import { and, auditLogs, companies, companyModules, desc, eq, financialModelVersions, financialModels, financialPersonnelImports, getDb, gte, inArray, lte, payrollLines, payrollRuns, personnelBudgetLines, personnelBudgets, modelingMembers, sql, users } from '@kianda/db';
+import { and, auditLogs, companies, companyModules, desc, eq, financialModelVersions, financialModels, financialPersonnelImports, getDb, gte, inArray, lte, payrollLines, payrollRuns, personnelBudgetLines, personnelBudgets, modelingMembers, modelingProjectAccess, sql, users } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
@@ -42,14 +43,22 @@ export function modelingRoutes() {
       }
     }
     if (!member?.enabled) return c.json({ error: 'sem_permissao', message: 'Solicite ao proprietário acesso à Modelagem.' }, 403);
-    c.set('modelingPermission', member.permission);
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && member.permission !== 'editor') return c.json({ error: 'sem_permissao', message: 'O seu acesso permite apenas consulta.' }, 403);
+    c.set('modelingMember', member);
+    let permission = member.permission;
     const encodedId = /^\/v1\/modeling\/models\/([^/]+)(?:\/|$)/.exec(c.req.path)?.[1];
     const projectId = encodedId ? decodeURIComponent(encodedId) : null;
     if (projectId) {
       const [project] = await db.select({ sector: financialModels.sector }).from(financialModels).where(and(eq(financialModels.id, projectId), eq(financialModels.companyId, a.companyId)));
-      if (project) await requireModelingSector(db, a.companyId, project.sector);
+      if (project) {
+        await requireModelingSector(db, a.companyId, project.sector);
+        // Participante restrito: um projecto não atribuído não existe para ele (mesma resposta que um identificador inválido).
+        const effective = await projectPermission(db, member, a.role, projectId);
+        if (!effective) return c.json({ error: 'nao_encontrado', message: 'Projecto inexistente' }, 404);
+        permission = effective;
+      }
     }
+    c.set('modelingPermission', permission);
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && permission !== 'editor') return c.json({ error: 'sem_permissao', message: 'O seu acesso permite apenas consulta.' }, 403);
     await next();
   });
 
@@ -67,7 +76,7 @@ export function modelingRoutes() {
     };
     if (!bootstrap) return c.json(session);
     const sectors = row?.grant?.modelingSectors ?? [];
-    const models = await db.select().from(financialModels).where(and(eq(financialModels.companyId, a.companyId), inArray(financialModels.sector, sectors))).orderBy(desc(financialModels.updatedAt));
+    const models = await visibleModels(db, c.get('modelingMember'), a.role, await db.select().from(financialModels).where(and(eq(financialModels.companyId, a.companyId), inArray(financialModels.sector, sectors))).orderBy(desc(financialModels.updatedAt)));
     const first = models.find(m => !m.archivedAt);
     const firstHistory = first ? { modelId: first.id, revision: first.revision, historical: await financialHistoryOf(db, first) } : null;
     return c.json({ ...session, bootstrap: { models, templates: FINANCIAL_SECTORS.filter(s => sectors.includes(s)).map(financialTemplate), firstHistory } });
@@ -110,11 +119,14 @@ export function modelingRoutes() {
   const versionMetadata = { id: financialModelVersions.id, versionNumber: financialModelVersions.versionNumber, label: financialModelVersions.label, sourceRevision: financialModelVersions.sourceRevision, sourceHash: financialModelVersions.sourceHash, payloadHash: financialModelVersions.payloadHash, engineVersion: financialModelVersions.engineVersion, reportVersion: financialModelVersions.reportVersion, approvedBy: financialModelVersions.approvedBy, approvedAt: financialModelVersions.approvedAt };
   app.get('/v1/modeling/models/:id/versions', async (c) => {
     const model = await financialModelOf(c);
-    return c.json(await getDb().select(versionMetadata).from(financialModelVersions).where(and(eq(financialModelVersions.companyId, c.get('actor').companyId), eq(financialModelVersions.modelId, model.id))).orderBy(desc(financialModelVersions.versionNumber)));
+    return c.json(await getDb().select({ ...versionMetadata, approvedByName: users.name }).from(financialModelVersions).leftJoin(users, eq(users.id, financialModelVersions.approvedBy))
+      .where(and(eq(financialModelVersions.companyId, c.get('actor').companyId), eq(financialModelVersions.modelId, model.id))).orderBy(desc(financialModelVersions.versionNumber)));
   });
   app.get('/v1/modeling/models/:id/versions/:versionId', async (c) => {
     const model = await financialModelOf(c);
-    return c.json(await financialVersionOf(getDb(), c.get('actor').companyId, model.id, z.uuid().parse(c.req.param('versionId'))));
+    const version = await financialVersionOf(getDb(), c.get('actor').companyId, model.id, z.uuid().parse(c.req.param('versionId')));
+    const [approver] = await getDb().select({ name: users.name }).from(users).where(eq(users.id, version.approvedBy));
+    return c.json({ ...version, approvedByName: approver?.name ?? version.payload.source.approvedByName ?? null });
   });
   app.post('/v1/modeling/models/:id/versions', requireRole(), async (c) => {
     const a = c.get('actor'), db = getDb();
@@ -157,28 +169,48 @@ export function modelingRoutes() {
   app.get('/v1/modeling/usage', async (c) => c.json(await modelingUsage(getDb(), c.get('actor').companyId)));
   app.get('/v1/modeling/export-options', async (c) => c.json(await modelingExportOptions(getDb(), c.get('actor').actorId, canExportDocuments(c.get('moduleAccess').status))));
   app.get('/v1/modeling/members', requireRole(), async (c) => {
-    return c.json(await getDb().select({ userId: modelingMembers.userId, permission: modelingMembers.permission, enabled: modelingMembers.enabled, name: users.name }).from(modelingMembers).innerJoin(users, eq(users.id, modelingMembers.userId)).where(eq(modelingMembers.companyId, c.get('actor').companyId)));
+    const db = getDb(), companyId = c.get('actor').companyId;
+    const rows = await db.select({ userId: modelingMembers.userId, permission: modelingMembers.permission, enabled: modelingMembers.enabled, scope: modelingMembers.scope, name: users.name, role: users.role })
+      .from(modelingMembers).innerJoin(users, eq(users.id, modelingMembers.userId)).where(eq(modelingMembers.companyId, companyId));
+    const access = await accessOfMembers(db, companyId, rows.map((r) => r.userId));
+    return c.json(rows.map((r) => ({ ...r, projects: access.filter((x) => x.userId === r.userId).map(({ modelId, permission }) => ({ modelId, permission })) })));
   });
   app.put('/v1/modeling/members/:userId', requireRole(), async (c) => {
     const a = c.get('actor'), db = getDb();
-    const input = z.object({ enabled: z.boolean(), permission: z.enum(['editor', 'viewer']).default('editor') }).parse(await body(c));
+    const input = z.object({
+      enabled: z.boolean(), permission: z.enum(['editor', 'viewer']).default('editor'), scope: z.enum(['all', 'selected']).default('all'),
+      projects: z.array(z.object({ modelId: z.string().min(1).max(64), permission: z.enum(['editor', 'viewer']) })).max(500).default([]),
+    }).refine((v) => new Set(v.projects.map((p) => p.modelId)).size === v.projects.length, { message: 'Projecto repetido', path: ['projects'] })
+      .refine((v) => v.permission === 'editor' || v.projects.every((p) => p.permission === 'viewer'), { message: 'Com acesso geral de consulta, os projectos atribuídos também são só de consulta.', path: ['projects'] })
+      .parse(await body(c));
     const userId = c.req.param('userId');
-    if (userId === a.actorId && (!input.enabled || input.permission !== 'editor')) throw new DomainError('proprio_acesso', 'Não pode retirar o seu próprio acesso de gestão.', 409);
+    if (userId === a.actorId && (!input.enabled || input.permission !== 'editor' || input.scope !== 'all')) throw new DomainError('proprio_acesso', 'Não pode retirar o seu próprio acesso de gestão.', 409);
     await lockModelingCompany(db, a.companyId);
     const [user] = await db.select().from(users).where(and(eq(users.id, userId), eq(users.companyId, a.companyId)));
     if (!user || user.disabledAt) throw new DomainError('nao_encontrado', 'Utilizador activo inexistente nesta empresa.', 404);
+    if (user.role === 'owner' && input.scope === 'selected') throw new DomainError('proprietario_todos_projectos', 'O proprietário da empresa tem sempre acesso a todos os projectos.', 409);
+    if (input.projects.length) {
+      const found = await db.select({ id: financialModels.id }).from(financialModels).where(and(eq(financialModels.companyId, a.companyId), inArray(financialModels.id, input.projects.map((p) => p.modelId))));
+      if (found.length !== input.projects.length) throw new DomainError('projecto_inexistente', 'Um dos projectos indicados não existe nesta empresa.', 404);
+    }
     const [before] = await db.select().from(modelingMembers).where(and(eq(modelingMembers.companyId, a.companyId), eq(modelingMembers.userId, userId)));
     if (input.enabled && !before?.enabled && !(await modelingUsage(db, a.companyId)).canAddUser) throw new DomainError('limite_utilizadores', 'O plano inclui cinco utilizadores. Contacte a plataforma para contratar acessos adicionais.', 409);
-    const [member] = await db.insert(modelingMembers).values({ ...input, userId, companyId: a.companyId, addedBy: a.actorId }).onConflictDoUpdate({ target: [modelingMembers.companyId, modelingMembers.userId], set: input }).returning();
-    await db.insert(auditLogs).values({ companyId: a.companyId, actorId: a.actorId, action: 'change_access', entity: 'modeling_member', entityId: member!.id, before: before ?? null, after: member });
-    return c.json(member);
+    const values = { enabled: input.enabled, permission: input.permission, scope: input.scope };
+    const beforeProjects = await accessOfMembers(db, a.companyId, [userId]);
+    const [member] = await db.insert(modelingMembers).values({ ...values, userId, companyId: a.companyId, addedBy: a.actorId }).onConflictDoUpdate({ target: [modelingMembers.companyId, modelingMembers.userId], set: values }).returning();
+    // As atribuições substituem as anteriores; com acesso a todos os projectos não ficam atribuições soltas.
+    await db.delete(modelingProjectAccess).where(and(eq(modelingProjectAccess.companyId, a.companyId), eq(modelingProjectAccess.userId, userId)));
+    const projects = input.scope === 'selected' ? input.projects : [];
+    if (projects.length) await db.insert(modelingProjectAccess).values(projects.map((p) => ({ companyId: a.companyId, userId, modelId: p.modelId, permission: p.permission, addedBy: a.actorId })));
+    await db.insert(auditLogs).values({ companyId: a.companyId, actorId: a.actorId, action: 'change_access', entity: 'modeling_member', entityId: member!.id, before: before ? { ...before, projects: beforeProjects.map(({ modelId, permission }) => ({ modelId, permission })) } : null, after: { ...member, projects } });
+    return c.json({ ...member, projects });
   });
 
 
   app.get('/v1/modeling/models', async (c) => {
     const db = getDb(), companyId = c.get('actor').companyId;
     const [grant] = await db.select().from(companyModules).where(and(eq(companyModules.companyId, companyId), eq(companyModules.module, 'modeling')));
-    return c.json(await db.select().from(financialModels).where(and(eq(financialModels.companyId, companyId), inArray(financialModels.sector, grant?.modelingSectors ?? []))).orderBy(desc(financialModels.updatedAt)));
+    return c.json(await visibleModels(db, c.get('modelingMember'), c.get('actor').role, await db.select().from(financialModels).where(and(eq(financialModels.companyId, companyId), inArray(financialModels.sector, grant?.modelingSectors ?? []))).orderBy(desc(financialModels.updatedAt))));
   });
   app.post('/v1/modeling/models', async (c) => {
     const a = c.get('actor'), db = getDb(), input = modelSchema.parse(await body(c));
@@ -186,8 +218,9 @@ export function modelingRoutes() {
     await requireProjectCapacity(db, a.companyId);
     await requireModelingSector(db, a.companyId, input.sector);
     const [model] = await db.insert(financialModels).values({ ...input, companyId: a.companyId, createdBy: a.actorId }).returning();
+    await grantCreator(db, c.get('modelingMember'), a.role, model!.id);
     await db.insert(auditLogs).values({ companyId: a.companyId, actorId: a.actorId, action: 'create', entity: 'financial_model', entityId: model!.id, after: { revision: 1 } });
-    return c.json(model, 201);
+    return c.json({ ...model!, permission: 'editor' }, 201);
   });
   app.post('/v1/modeling/models/:id/archive', async (c) => {
     const a = c.get('actor'), db = getDb();
@@ -204,8 +237,9 @@ export function modelingRoutes() {
   app.get('/v1/modeling/models/:id', async (c) => {
     const [model] = await getDb().select().from(financialModels).where(and(eq(financialModels.companyId, c.get('actor').companyId), eq(financialModels.id, c.req.param('id'))));
     if (!model) throw new DomainError('nao_encontrado', 'Modelo inexistente', 404);
-    const imports = await getDb().select().from(financialPersonnelImports).where(eq(financialPersonnelImports.modelId, model.id)).orderBy(desc(financialPersonnelImports.importedAt));
-    return c.json({ ...model, imports });
+    const imports = await getDb().select({ id: financialPersonnelImports.id, source: financialPersonnelImports.source, sourceId: financialPersonnelImports.sourceId, fromPeriod: financialPersonnelImports.fromPeriod, toPeriod: financialPersonnelImports.toPeriod, snapshot: financialPersonnelImports.snapshot, importedBy: financialPersonnelImports.importedBy, importedAt: financialPersonnelImports.importedAt, importedByName: users.name })
+      .from(financialPersonnelImports).leftJoin(users, eq(users.id, financialPersonnelImports.importedBy)).where(eq(financialPersonnelImports.modelId, model.id)).orderBy(desc(financialPersonnelImports.importedAt));
+    return c.json({ ...model, permission: c.get('modelingPermission'), imports });
   });
   app.put('/v1/modeling/models/:id', async (c) => {
     const a = c.get('actor'), db = getDb(), input = modelSchema.extend({ revision }).parse(await body(c));
@@ -223,6 +257,25 @@ export function modelingRoutes() {
     if (!model) throw new DomainError('revisao_invalida', 'Modelo inexistente ou alterado por outro utilizador. Volte a carregá-lo.', 409);
     await db.insert(auditLogs).values({ companyId: a.companyId, actorId: a.actorId, action: 'update', entity: 'financial_model', entityId: model.id, after: { revision: model.revision } });
     return c.json(model);
+  });
+
+  /**
+   * Origens disponíveis para importar custos com pessoal: orçamentos aprovados e janelas de 12 meses fechados.
+   * Só totais agregados da empresa (nunca nomes ou salários individuais); a consulta é para quem pode editar.
+   */
+  app.get('/v1/modeling/personnel-sources', async (c) => {
+    const a = c.get('actor'), db = getDb();
+    if (c.get('modelingPermission') !== 'editor') return c.json({ error: 'sem_permissao', message: 'A importação está disponível para quem edita projectos.' }, 403);
+    const hr = await moduleLicence(db, a.companyId, 'hr');
+    if (!hr.canWrite) return c.json({ hr: { active: false, message: 'A importação requer o módulo RH activo. Pode preencher os custos com pessoal manualmente.' }, budgets: [], windows: [] });
+    const budgets = await db.select({ id: personnelBudgets.id, year: personnelBudgets.year, approvedAt: personnelBudgets.approvedAt,
+      totalMinor: sql<number>`coalesce((select sum(l.cost_minor) from personnel_budget_lines l where l.budget_id = personnel_budgets.id), 0)`.mapWith(Number),
+    }).from(personnelBudgets).where(and(eq(personnelBudgets.companyId, a.companyId), eq(personnelBudgets.status, 'approved'))).orderBy(desc(personnelBudgets.year));
+    const closed = (await db.selectDistinct({ period: payrollRuns.period }).from(payrollRuns).where(and(eq(payrollRuns.companyId, a.companyId), eq(payrollRuns.status, 'closed')))).map((r) => r.period).sort();
+    const set = new Set(closed);
+    // Janelas de 12 meses consecutivos todos fechados (a mais recente primeiro).
+    const windows = closed.filter((from) => yearPeriods(from).every((p) => set.has(p))).map((from) => ({ from, to: yearPeriods(from)[11]! })).reverse();
+    return c.json({ hr: { active: true }, budgets, windows, closedPeriods: closed.length, lastClosed: closed.at(-1) ?? null });
   });
 
   /** Importação explícita; a base RH nunca altera um modelo posteriormente. */

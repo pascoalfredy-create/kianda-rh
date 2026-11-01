@@ -2,7 +2,7 @@ import { candidates, closeDb, employees as employeesTable, getDb, jobOpenings, p
 import { COMPANY_TABLES_PURGE_ORDER } from '../src/services/privacy.js';
 import { setObjectStore, type ObjectStore } from '../src/services/storage.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { totp } from '@kianda/core';
+import { luandaDate, totp } from '@kianda/core';
 import { buildApp } from '../src/app.js';
 import { testClient, type InjectResponse } from './inject.js';
 import { fixtureWord, fixtureZip } from '../../../packages/core/test/fixtures/document-import.js';
@@ -193,7 +193,7 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       const ficha = (await app.inject({ method: 'GET', url: `/v1/employees/${empId}`, headers: as(owner) })).json();
       expect(ficha.contracts).toHaveLength(2);
       expect(ficha.contracts[1]).toMatchObject({ terminatedAt: '2026-11-30', terminationReason: 'Substituído por novo contrato' });
-      expect(ficha.compensation.upcoming.map((c: { effectiveDate: string }) => c.effectiveDate)).toEqual(['2026-11-01', '2026-12-01']);
+      expect(ficha.compensation.upcoming.map((c: { effectiveDate: string }) => c.effectiveDate)).toEqual(['2026-11-01', '2026-12-01'].filter((d) => d > luandaDate(new Date()))); // "Futuras" depende do dia em que o teste corre.
       expect(ficha.manager).toMatchObject({ id: chiefId, name: 'Chefe Teste' });
     });
 
