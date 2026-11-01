@@ -6,6 +6,7 @@ import { body, type AppEnv, type Ctx } from '../plugins/tenant.js';
 import { financialFingerprint, financialModelOf } from '../services/modeling-calculation.js';
 import { financialHistoryOf } from '../services/modeling-versions.js';
 import { lockModelingCompany, requireProjectCapacity } from '../services/modeling-policy.js';
+import { grantCreator } from '../services/modeling-access.js';
 import { DomainError } from '../services/payroll.js';
 const revision = z.number().int().positive();
 async function lockedModel(c: Ctx, expected: number) {
@@ -56,8 +57,9 @@ export function modelingHistoryRoutes() {
     await requireProjectCapacity(db, actor.companyId);
     const [model] = await db.insert(financialModels).values({ ...values, companyId: actor.companyId, createdBy: actor.actorId }).returning();
     await db.insert(financialHistoricalInputs).values({ companyId: actor.companyId, modelId: model!.id, input: historical.analysis.input, inputHash: historical.inputHash, updatedBy: actor.actorId });
+    await grantCreator(db, c.get('modelingMember'), actor.role, model!.id);
     await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'create_from_trial_balance', entity: 'financial_model', entityId: model!.id, after: { sourceModelId: source.id, sourceRevision: source.revision, historicalHash: historical.inputHash, revision: 1 } });
-    return c.json({ model, historical, notes }, 201);
+    return c.json({ model: { ...model!, permission: 'editor' }, historical, notes }, 201);
   });
   return app;
 }

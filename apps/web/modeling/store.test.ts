@@ -187,3 +187,37 @@ describe('persistência da interface Integra', () => {
     expect(request).toHaveBeenCalledTimes(1); expect(store.dirty).toBe(false);
   });
 });
+
+describe('controlos do Integra: permissão por projecto, versões e importação do RH', () => {
+  it('um projecto só de consulta não grava nem aceita operações, mesmo com escrita na empresa', async () => {
+    vi.useFakeTimers(); const request = vi.fn(), store = new ModelingStore(true, request as unknown as ModelingTransport);
+    store.load([{ ...record('ed'), permission: 'editor' }, { ...record('ro'), permission: 'viewer' }]);
+    expect(store.canEdit('ed')).toBe(true); expect(store.canEdit('ro')).toBe(false); expect(store.permission('ro')).toBe('viewer');
+    const ro = store.project('ro')!; ro.pessoal = 1; store.change(ro); await vi.advanceTimersByTimeAsync(1000); await store.flush();
+    expect(request).not.toHaveBeenCalled();
+    await expect(store.approve('ro', 'Comité')).rejects.toThrow(/consulta/);
+    await expect(store.importPersonnel('ro', { source: 'budget', budgetId: 'b' })).rejects.toThrow(/consulta/);
+  });
+  it('registos antigos sem permissão continuam editáveis (compatibilidade)', () => {
+    const store = new ModelingStore(true, vi.fn() as unknown as ModelingTransport); store.load([record()]);
+    expect(store.canEdit('m1')).toBe(true);
+  });
+  it('aprovar grava primeiro o rascunho e aprova exactamente a revisão gravada', async () => {
+    vi.useFakeTimers();
+    const request = vi.fn(async (path: string, method?: string, body?: any) => method === 'PUT' ? { ...record(), revision: 2 } : { id: 'v1', versionNumber: 1, label: body.label, sourceRevision: body.revision });
+    const store = new ModelingStore(true, request as unknown as ModelingTransport); store.load([record()]);
+    const m = store.models[0]!; m.pessoal = 777; store.change(m);
+    const v = await store.approve('m1', 'Comité de investimento');
+    expect(vi.mocked(request).mock.calls.map((c) => c[1])).toEqual(['PUT', 'POST']);
+    expect(vi.mocked(request).mock.calls[1]![2]).toEqual({ revision: 2, label: 'Comité de investimento' });
+    expect(v).toMatchObject({ versionNumber: 1, sourceRevision: 2 });
+  });
+  it('a importação do RH substitui o modelo local pelo do servidor e avança a revisão', async () => {
+    const request = vi.fn(async (_path: string, _method?: string, body?: any) => ({ model: { ...record(), revision: 5, assumptions: { ...record().assumptions, pessoal: 4321 } }, import: { id: 'i1', source: body.source } }));
+    const store = new ModelingStore(true, request as unknown as ModelingTransport); store.load([{ ...record(), revision: 4 }]);
+    const result = await store.importPersonnel('m1', { source: 'actual', from: '2025-01', to: '2025-12', exchangeRate: 0.001 });
+    expect(vi.mocked(request).mock.calls[0]).toEqual(['/models/m1/import-personnel', 'POST', { source: 'actual', from: '2025-01', to: '2025-12', exchangeRate: 0.001, revision: 4 }]);
+    expect(result.model.pessoal).toBe(4321); expect(store.models[0]!.pessoal).toBe(4321);
+    expect(store.revision('m1')).toBe(5); expect(store.dirty).toBe(false);
+  });
+});

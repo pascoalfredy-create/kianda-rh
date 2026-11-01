@@ -20,6 +20,8 @@ export function modelingPage(session: ModelingSession | null, nonce: string, err
   } else if (session?.licence && ['suspended', 'cancelled'].includes(session.licence.status)) {
     shell = shell.replace('</header>', '</header><div class="network-status" role="status">Módulo em consulta. Os dados guardados e a pré-visualização continuam disponíveis; para criar, alterar, exportar ou imprimir, regularize a licença com o proprietário da conta. <a class="modules-link" href="/modulos">Ver licença</a></div>');
   }
+  // Versões aprovadas: ao lado de Duplicar, no mesmo estilo dos botões do cabeçalho.
+  shell = shell.replace('<button class="btn" data-act="dupM">Duplicar</button>', '<button class="btn" data-act="versions">Versões</button><button class="btn" data-act="dupM">Duplicar</button>');
   shell = shell.replace('<span class="muted" style="font-size:12.5px">Modelo</span>', '<label for="mSel" class="muted" style="font-size:12.5px">Modelo</label>');
   shell = shell.replace('<main class="content"', '<div id="integra-network-status" class="network-status" role="status" aria-live="polite" hidden></div><main class="content"');
   if (session) shell = shell.replace('<main class="content" id="view"></main>', '<main class="content" id="view"><div class="screen-loading" role="status" aria-live="polite">A abrir a Modelagem…</div></main>');

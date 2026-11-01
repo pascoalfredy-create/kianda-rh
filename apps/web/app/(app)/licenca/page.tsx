@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { api, currentUser } from '@/lib/api';
 import { ModelingPlanForm, NewReference, ReferenceForm, RenewForm } from './forms';
 import { ModuleCards } from '@/components/module-cards';
-import { ModelingMembers, type ModelingMember } from './modeling-members';
+import { ModelingMembers, type ModelingMember, type ModelingProject } from './modeling-members';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +25,9 @@ export default async function Licenca() {
   if (!['owner', 'finance'].includes(me.user.role)) redirect('/');
   const b = await api<Billing>('/v1/billing');
   const canManageMembers = me.user.role === 'owner' && b.modules.modeling.canAccess && b.modules.modeling.canWrite;
-  const [users, members] = canManageMembers ? await Promise.all([api<{ id: string; name: string }[]>('/v1/users'), api<ModelingMember[]>('/v1/modeling/members')]) : [[], []];
+  const [users, members, projects] = canManageMembers
+    ? await Promise.all([api<{ id: string; name: string; role?: string }[]>('/v1/users'), api<ModelingMember[]>('/v1/modeling/members'), api<ModelingProject[]>('/v1/modeling/models')])
+    : [[], [], []];
   const pending = b.requests.filter((r) => r.status === 'pending' && r.kind !== 'extra_seats');
   const today = luandaDate(new Date());
   const daysLeft = b.trialEndsAt && b.status === 'trial' ? trialDaysRemaining(b.trialEndsAt, today) : null;
@@ -92,7 +94,7 @@ export default async function Licenca() {
         <table className="dense"><thead><tr><th>Plano / projectos activos</th>{Object.values(b.cycles).map(c => <th key={c.label} className="num">{c.label}</th>)}</tr></thead><tbody>{b.modelingPlans.map(p => <tr key={p.key}><td>{p.label}<div className="muted">{p.projectLimit === null ? 'Projectos ilimitados' : `Até ${p.projectLimit} projectos`} · {p.sectorLimit} sectores · 5 utilizadores incluídos</div></td>{Object.keys(b.cycles).map(c => <td key={c} className="num">{p.prices[c] === null ? 'Não disponível' : formatKz(p.prices[c]!)}</td>)}</tr>)}</tbody></table>
         <p className="muted" style={{ padding: '0 16px 12px' }}>Utilizadores extra: {formatKz(b.modelingExtraUserMinor)}/mês por acesso além dos 5 incluídos. Cobrados durante os meses do ciclo, sem desconto nos extras. Pagamentos semestrais e anuais à vista.</p>
       </div>
-      {canManageMembers && <div className="card section"><h2>Utilizadores autorizados na Modelagem</h2><ModelingMembers users={users} members={members} self={me.user.sub} /></div>}
+      {canManageMembers && <div className="card section"><h2>Utilizadores autorizados na Modelagem</h2><ModelingMembers users={users} members={members} projects={projects} self={me.user.sub} /></div>}
       {b.requests.some((r) => r.status !== 'pending') && (
         <div className="card section">
           <h2>Histórico</h2>
