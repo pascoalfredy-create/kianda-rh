@@ -158,6 +158,11 @@ jobs:
         env:
           KIANDA_HOSTNAME: ${{ vars.KIANDA_HOSTNAME }}
 
+      # Regra de limite de tentativas no login/registo (idempotente; sem permissão do token só avisa).
+      - name: Limite de tentativas na Cloudflare (opcional)
+        if: vars.KIANDA_HOSTNAME != ''
+        run: node scripts/cf-ratelimit.mjs "$PRIMARY_HOST"
+
       - name: Armazenamento de ficheiros (R2, opcional)
         working-directory: apps/api
         run: |
