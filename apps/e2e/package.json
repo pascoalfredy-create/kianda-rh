@@ -1,0 +1,18 @@
+{
+  "name": "@kianda/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Testes de ponta a ponta no navegador (Playwright): RH, Integra e área pública, contra API e web locais com Postgres.",
+  "scripts": {
+    "e2e": "playwright test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "22.19.19",
+    "@types/pg": "8.23.1",
+    "pg": "8.23.1",
+    "typescript": "5.9.3"
+  }
+}

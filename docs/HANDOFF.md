@@ -76,6 +76,7 @@ pnpm -r typecheck && pnpm -r test                                    # core 113 
 (cd apps/web && npx next build && API_URL=http://localhost:4000 npx next start -p 3000)
 ```
 
+- **Testes no navegador (`apps/e2e`, Playwright 1.63):** `pnpm --filter @kianda/web build` e depois `DATABASE_URL=… pnpm --filter @kianda/e2e e2e` (arranca a API e a web sozinho; localmente reutiliza servidores já abertos em 3000/4000). Cada teste regista a sua própria empresa pela API; SQL directo só para cenários sem ecrã (licença paga, orçamento aprovado). Projectos `computador` (1440×900) e `telemovel` (Pixel 7, ficheiros `*mobile.spec.ts`). Falham com erros de JavaScript na consola (excepto fontes externas). No CI, falhas deixam o relatório e o trace como artefacto `playwright-report`. Ao mudar textos ou estrutura de um ecrã coberto, actualizar o teste.
 - Matar servidores: `fuser -k 3000/tcp 4000/tcp` (não usar `pkill -f "next start"`: mata a própria shell).
 - **Migrações novas:** `cd packages/db && npx drizzle-kit generate --name <nome>`. Se o drizzle-kit pedir confirmação interactiva (tabela que sai e outra que entra), dividir em duas migrações.
 - **Testes no browser:** Playwright global (`NODE_PATH=$(npm root -g) node script.js`); scripts de exemplo em `/tmp/e2e` (efémeros).

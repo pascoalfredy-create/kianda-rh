@@ -40,5 +40,5 @@ Ordem proposta a partir do protótipo HTML do Kianda RH (funcionalidades já val
 - [ ] Validação jurídica dos pontos listados em `AO_2026.toValidate`.
 - [x] Armazenamento de ficheiros (cópias digitalizadas de documentos) — entrega 20 (R2 ou base de dados).
 - [x] Recuperação de palavra-passe por email (entrega 20) e 2FA para `owner`/`finance` (entrega 15).
-- [ ] Testes de interface (Playwright) e cobertura mínima no core.
+- [x] Testes de interface (Playwright) — `apps/e2e`, job «Navegador (E2E)» obrigatório para publicar: área pública e login, 29 ecrãs do RH, colaboradores, processamento, Integra (importação do RH, versões, participante restrito) e telemóvel.
 - [ ] Política de cópias de segurança e retenção de dados.
