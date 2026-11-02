@@ -40,7 +40,7 @@ export const DEFAULT_CHECKLIST_TEMPLATES: Record<ChecklistKind, ChecklistTemplat
       { title: 'Confirmar os dados pessoais e bancários no portal', responsible: 'employee', offsetDays: 3 },
       { title: 'Formação inicial de higiene e segurança no trabalho', responsible: 'manager', offsetDays: 7 },
       { title: 'Incluir no processamento salarial do mês de admissão', responsible: 'finance', offsetDays: 0 },
-      { title: 'Avaliação do período experimental', responsible: 'manager', offsetDays: 55, description: 'Decidir antes do fim do período experimental (LGT, Lei n.º 12/23).' },
+      { title: 'Avaliação do período experimental', responsible: 'manager', offsetDays: 55, description: 'Decidir antes do fim do período experimental.' },
     ],
   },
   offboarding: {

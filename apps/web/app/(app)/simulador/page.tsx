@@ -24,7 +24,7 @@ export default function Simulador() {
   return (
     <>
       <h1>Simulador salarial</h1>
-      <p className="sub">IRT Grupo A, INSS 3% e 8%, subsídios isentos até ao limite legal — regras do pacote do ano escolhido</p>
+      <p className="sub">IRT Grupo A, INSS 3% e 8%, subsídios isentos até ao limite legal — regras do ano escolhido</p>
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="form">
           <label>Período<input value={period} onChange={(e) => setPeriod(e.target.value)} /></label>
@@ -53,7 +53,7 @@ export default function Simulador() {
               </tbody>
             </table>
           </div>
-          <p className="muted" style={{ marginTop: 10 }}>Regras: {result.r.packVersion} · matéria colectável {formatKz(result.r.irtTaxableMinor)}</p>
+          <p className="muted" style={{ marginTop: 10 }}>Matéria colectável {formatKz(result.r.irtTaxableMinor)}</p>
         </>
       )}
     </>

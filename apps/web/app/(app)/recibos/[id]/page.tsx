@@ -68,7 +68,7 @@ export default async function Recibo({ params }: { params: Promise<{ id: string 
           Encargos da entidade empregadora (não descontados): {employer.map((l) => `${l.name} ${formatKz(l.amountMinor)}`).join(' · ')}
         </div>
         <footer>
-          <span>Regras {p.packVersion} · IRT Grupo A, escalão {p.irtBracket}{p.closedAt ? ` · emitido em ${new Date(p.closedAt).toLocaleDateString('pt-PT')}` : ''}</span>
+          <span>IRT Grupo A, escalão {p.irtBracket}{p.closedAt ? ` · emitido em ${new Date(p.closedAt).toLocaleDateString('pt-PT')}` : ''}</span>
           <span>Código de verificação: <code>{p.hash.slice(0, 16).toUpperCase()}</code></span>
         </footer>
       </article>

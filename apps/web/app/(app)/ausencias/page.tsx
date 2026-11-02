@@ -27,7 +27,7 @@ export default async function Ausencias({ searchParams }: { searchParams: Promis
       <div className="page-head">
         <div>
           <h1>Férias &amp; Ausências</h1>
-          <p className="sub">Pedidos, aprovações pela chefia, mapa de férias e saldos — dias úteis com feriados nacionais (LGT, Lei n.º 12/23)</p>
+          <p className="sub">Pedidos, aprovações pela chefia, mapa de férias e saldos — dias úteis com feriados nacionais</p>
         </div>
       </div>
       <div style={{ marginBottom: 16 }}>

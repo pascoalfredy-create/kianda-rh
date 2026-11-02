@@ -43,7 +43,7 @@ export default async function Adiantamentos() {
   return (
     <>
       <h1>Adiantamentos salariais</h1>
-      <p className="sub">Pedido escrito, aprovação com plano de prestações e reembolso automático no processamento — até 3 salários base em dívida e prestações até 25% do salário líquido (LGT, art. 248.º).</p>
+      <p className="sub">Pedido escrito, aprovação com plano de prestações e reembolso automático no processamento — até 3 salários base em dívida e prestações até 25% do salário líquido.</p>
       {me.user.employeeId && (
         <div className="card section"><h2>Pedir um adiantamento</h2><RequestForm /></div>
       )}

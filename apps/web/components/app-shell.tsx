@@ -51,7 +51,7 @@ export function AppShell({ me, counts, children }: { me: Me; counts: { absences:
         <div id={`rh-nav-${index}`} hidden={!expanded[g.label]}>{g.items.map(item => <NavigationItem key={item.href} item={item} active={navActive(item.href, path, new URLSearchParams(search.toString()))} onNavigate={() => setOpen(false)} />)}</div>
       </div>)}</nav>
       <div className="who"><b>{me.user.name}</b><small>{ROLE_LABEL[me.user.role] ?? me.user.role}</small><Link href="/conta">A minha conta</Link><LogoutButton /></div>
-      <div className="side-foot">LGT (Lei 12/23) · IRT, OGE 2026 (Lei 14/25) · INSS<br />Kianda RH</div>
+      <div className="side-foot">Kianda RH</div>
     </aside>
     <div className="rh-main">
       <header className="rh-top no-print">

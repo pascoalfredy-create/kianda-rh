@@ -33,7 +33,7 @@ export default async function Processamento({ searchParams }: { searchParams: Pr
       <div className="page-head">
         <div>
           <h1>Processamento salarial</h1>
-          <p className="sub">IRT Grupo A, INSS, horas extra aprovadas, faltas, subsídios e variáveis do mês · {run?.packVersion ?? 'regras do ano'}</p>
+          <p className="sub">IRT Grupo A, INSS, horas extra aprovadas, faltas, subsídios e variáveis do mês</p>
         </div>
         <div className="month-nav">
           <Link className="btn ghost sm" href={`?mes=${shiftMonth(period, -1)}&s=${tab}`}>←</Link>
@@ -177,7 +177,7 @@ async function Journal({ period }: { period: string }) {
         </tbody>
         <tfoot><tr><td colSpan={3}><b>Totais</b> {d === c ? <span className="st approved">equilibrado</span> : <span className="st rejected">desequilibrado</span>}</td><td className="num"><b>{formatKz(d)}</b></td><td className="num"><b>{formatKz(c)}</b></td></tr></tfoot>
       </table>
-      <p className="muted" style={{ padding: '10px 16px' }}>Classe 7 (custos com o pessoal) a débito, por centro de custo; 34 (Estado: IRT e INSS) e 36 (Pessoal: remunerações a pagar, adiantamentos, outros) a crédito — PGC Angola, Decreto n.º 82/2001. Contas parametrizáveis por empresa.</p>
+      <p className="muted" style={{ padding: '10px 16px' }}>Classe 7 (custos com o pessoal) a débito, por centro de custo; 34 (Estado: IRT e INSS) e 36 (Pessoal: remunerações a pagar, adiantamentos, outros) a crédito. Contas parametrizáveis por empresa.</p>
     </div>
   );
 }

@@ -50,11 +50,11 @@ export default async function Home() {
       <div className="page-head"><div><h1>{hour < 12 ? 'Bom dia' : hour < 19 ? 'Boa tarde' : 'Boa noite'}, {me.user.name.split(' ')[0]}</h1><p className="sub">{new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Africa/Luanda' })} · {me.company?.name}</p></div><div className="actions"><NewAbsenceForm me={{ employeeId: me.user.employeeId, isHr: ['owner', 'hr_admin'].includes(me.user.role) }} people={balances} canRegisterOthers={decider} canApprove={decider} />{['owner', 'hr_admin'].includes(me.user.role) && <Link className="btn" href="/colaboradores?novo=1">+ Novo colaborador</Link>}</div></div>
       <PushSettings compact />
       {!overview && <div className="warn">Não foi possível carregar o resumo de pessoal. Actualize a página para tentar novamente.</div>}
-      {!fiscal && <div className="warn">Sem pacote fiscal publicado para {year}. O processamento salarial desse ano mantém-se bloqueado; as projecções identificam as regras de referência.</div>}
+      {!fiscal && <div className="warn">Sem regras fiscais publicadas para {year}. O processamento salarial desse ano mantém-se bloqueado até à sua publicação.</div>}
       <div className="rh-kpis">
         <div className="card kpi"><div className="l">Colaboradores activos</div><div className="v">{overview?.active ?? '—'}</div><div className="d">{overview?.fixedTerm ?? '—'} a termo · {overview?.interns ?? '—'} estagiário(s)</div></div>
         <Link href="/ausencias?s=calendario" className="card kpi"><div className="l">Ausentes hoje</div><div className="v">{current.length}</div><div className="d">{current.length ? current.slice(0, 3).map(a => a.employee.name.split(' ')[0]).join(', ') : 'Equipa completa'}</div></Link>
-        <div className="card kpi"><div className="l">Massa salarial bruta · {period}</div><div className="v">{financial ? formatKz(financial.grossMinor) : '—'}</div><div className="d">{financial ? `${financial.source === 'estimate' ? `Estimativa do quadro actual (${financial.packVersion ?? 'sem pacote'})` : financial.source === 'draft' ? 'Processamento em rascunho' : 'Processamento fechado'} · custo ${formatKz(financial.costMinor)}` : 'Sem acesso a dados salariais'}</div></div>
+        <div className="card kpi"><div className="l">Massa salarial bruta · {period}</div><div className="v">{financial ? formatKz(financial.grossMinor) : '—'}</div><div className="d">{financial ? `${financial.source === 'estimate' ? 'Estimativa do quadro actual' : financial.source === 'draft' ? 'Processamento em rascunho' : 'Processamento fechado'} · custo ${formatKz(financial.costMinor)}` : 'Sem acesso a dados salariais'}</div></div>
         <div className="card kpi"><div className="l">Retenções do mês</div><div className="v">{financial ? formatKz(financial.irtMinor + financial.inssMinor) : '—'}</div><div className="d">{financial ? `IRT ${formatKz(financial.irtMinor)} · INSS ${formatKz(financial.inssMinor)}` : 'Dados reservados ao RH e Finanças'}</div></div>
       </div>
       <div className="rh-columns"><div className="rh-stack">
@@ -73,12 +73,11 @@ export default async function Home() {
           {toReimburse.length > 0 && <Link className="rh-list-row" href="/despesas?v=pay">Reembolsos por pagar: {formatKz(toReimburse.reduce((s, c) => s + c.totalMinor, 0))} →</Link>}
         </div>
       </div><div className="rh-stack">
-        <div className="card"><div className="rh-card-head"><h2>Próximos prazos legais</h2></div>{deadlines ? <>{[['INSS', deadlines.inss], ['IRT', deadlines.irt]].map(([label, date]) => <Link className="rh-list-row" href="/obrigacoes" key={label}><span className="st pending">{pt(date!)}</span><div className="grow"><b>{label}</b><small>Período {period}</small></div></Link>)}</> : <div className="empty">Sem pacote fiscal do ano</div>}</div>
+        <div className="card"><div className="rh-card-head"><h2>Próximos prazos legais</h2></div>{deadlines ? <>{[['INSS', deadlines.inss], ['IRT', deadlines.irt]].map(([label, date]) => <Link className="rh-list-row" href="/obrigacoes" key={label}><span className="st pending">{pt(date!)}</span><div className="grow"><b>{label}</b><small>Período {period}</small></div></Link>)}</> : <div className="empty">Sem regras fiscais do ano</div>}</div>
         <div className="card"><div className="rh-card-head"><h2>Feriados nacionais</h2><Link href="/ausencias?s=feriados" className="muted">Ver todos</Link></div>{nextHolidays.map(h => <div className="rh-list-row" key={h.date}><span className="st pending">{pt(h.date)}</span><div className="grow">{h.name}</div></div>)}</div>
         <div className="card"><div className="rh-card-head"><h2>Aniversários (30 dias)</h2></div>{overview?.birthdays.length ? overview.birthdays.map(e => <Link className="rh-list-row" href={`/colaboradores/${e.id}`} key={e.id}><span className="avatar sm">{initials(e.name)}</span><div className="grow"><b>{e.name}</b><small>{new Date(`${e.date}T12:00:00Z`).toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', timeZone: 'UTC' })}</small></div></Link>) : <div className="empty">Nenhum nos próximos 30 dias</div>}</div>
         {mine && <Link href="/ausencias?s=saldos" className="card kpi"><div className="l">As minhas férias {year}</div><div className="v">{mine.available} dias</div></Link>}
       </div></div>
-      <p className="muted" style={{ marginTop: 6 }}>Regras fiscais: {fiscal ? fiscal.version : `sem pacote ${year}`} · Calendário laboral: Lei n.º 12/23</p>
     </>
   );
 }

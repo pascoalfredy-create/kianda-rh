@@ -35,9 +35,8 @@ export default async function LerDocumento({ params }: { params: Promise<{ id: s
           <tr><th>Data e hora (Luanda)</th><td>{dateTime(v.proof.acceptedAt)}</td></tr>
           <tr><th>Endereço de rede</th><td>{v.proof.ip ?? '—'}</td></tr>
           <tr><th>Navegador</th><td style={{ fontSize: 12 }}>{v.proof.userAgent || '—'}</td></tr>
-          <tr><th>Conteúdo aceite (SHA-256)</th><td style={{ fontFamily: 'monospace', fontSize: 11, wordBreak: 'break-all' }}>{v.proof.contentSha256}</td></tr>
         </tbody></table>
-        <p className="muted" style={{ padding: '8px 16px 14px', fontSize: 12.5 }}>A impressão digital identifica o texto e os anexos exactos desta versão: qualquer alteração produziria outro valor.</p>
+        <p className="muted" style={{ padding: '8px 16px 14px', fontSize: 12.5 }}>O registo identifica o texto e os anexos exactos desta versão.</p>
       </div>}
     </>
   );

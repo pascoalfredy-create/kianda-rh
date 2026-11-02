@@ -9,7 +9,7 @@ export function MinimizeEmployee({ id, number }: { id: string; number: string })
   const { busy, error, run } = useMutation();
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState('');
-  if (!open) return <button className="btn danger" onClick={() => setOpen(true)}>Eliminar dados pessoais (Lei 22/11)</button>;
+  if (!open) return <button className="btn danger" onClick={() => setOpen(true)}>Eliminar dados pessoais</button>;
   return (
     <div className="warn" style={{ display: 'grid', gap: 8 }}>
       <div><b>Eliminação irreversível</b> dos contactos, morada, IBAN, contacto de emergência, data de nascimento, documentos registados e respectivas cópias digitalizadas, justificativos de ausências, pedidos do portal e do acesso. Ficam o nome, n.º, BI, NIF, n.º INSS, contratos, recibos e lançamentos — obrigatórios para a AGT, o INSS e a contabilidade.</div>
@@ -31,7 +31,7 @@ export function DeleteCandidate({ id, back }: { id: string; back: string }) {
   return (
     <span>
       <button className="btn danger" disabled={busy} onClick={async () => {
-        if (!window.confirm('Eliminar definitivamente este candidato e todo o histórico? (Lei 22/11)')) return;
+        if (!window.confirm('Eliminar definitivamente este candidato e todo o histórico?')) return;
         setBusy(true);
         const r = await send(`/v1/privacy/candidates/${id}`, 'DELETE');
         setBusy(false);

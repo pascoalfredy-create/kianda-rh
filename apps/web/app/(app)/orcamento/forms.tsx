@@ -80,7 +80,7 @@ export function BudgetPlanner({ init, departments, budgetId }: { init: Assumptio
       {sim && (
         <div style={{ marginTop: 12 }}>
           <div className="warn" style={{ marginBottom: 8 }}>
-            Custo com pessoal previsto para {a.year}: <b>{formatKz(sim.totalMinor)}</b> · {sim.staff} trabalhador(es) no quadro actual · taxas do pacote {sim.packVersion}
+            Custo com pessoal previsto para {a.year}: <b>{formatKz(sim.totalMinor)}</b> · {sim.staff} trabalhador(es) no quadro actual
           </div>
           <table className="dense">
             <thead><tr><th>Mês</th>{sim.months.map((m) => <th key={m.period} className="num">{MONTHS[Number(m.period.slice(5)) - 1]!.slice(0, 3)}</th>)}</tr></thead>

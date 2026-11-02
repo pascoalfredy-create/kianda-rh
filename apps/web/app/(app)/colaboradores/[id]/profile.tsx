@@ -79,7 +79,7 @@ export default async function Ficha({ params, searchParams, panelBase }: { panel
       )}
 
       {p.status === 'terminated' && (p.dataMinimizedAt
-        ? <div className="warn">Dados pessoais eliminados a {fmtDate(p.dataMinimizedAt.slice(0, 10))} (Lei n.º 22/11). Conservam-se só os dados exigidos para as obrigações fiscais, de segurança social e contabilísticas.</div>
+        ? <div className="warn">Dados pessoais eliminados a {fmtDate(p.dataMinimizedAt.slice(0, 10))}. Conservam-se só os dados exigidos para as obrigações fiscais, de segurança social e contabilísticas.</div>
         : canEdit && ['owner', 'hr_admin'].includes(me?.user.role ?? '') && <div style={{ marginBottom: 14 }}><MinimizeEmployee id={p.id} number={p.number} /></div>)}
 
       <nav className="tabs">

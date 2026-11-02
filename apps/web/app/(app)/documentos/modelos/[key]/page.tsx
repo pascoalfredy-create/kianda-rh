@@ -17,7 +17,7 @@ export default async function Modelo({ params }: { params: Promise<{ key: string
     <>
       <div className="crumb"><Link href="/documentos?v=modelos">Modelos</Link> / {tpl.title}</div>
       <h1>{tpl.title}</h1>
-      <p className="sub">{tpl.source === 'empresa' ? `Versão da empresa (${tpl.version})` : `Modelo do Kianda (${tpl.version})`} — a gravação cria uma nova versão; os documentos já emitidos não mudam.</p>
+      <p className="sub">{tpl.source === 'empresa' ? `Versão da empresa (${tpl.version})` : 'Modelo do Kianda'} — a gravação cria uma nova versão; os documentos já emitidos não mudam.</p>
       <TemplateEditor tpl={tpl} fields={t.fields} />
       {versions.length > 0 && (
         <div className="card section">

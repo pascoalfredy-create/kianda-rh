@@ -181,8 +181,7 @@ export function financialPdfLayout(bundle: FinancialReportDocument, key: Financi
       }
     }
   }
-  const reference = key === 'analise' ? bundle.source.historicalHash ?? bundle.source.sourceHash : bundle.source.sourceHash;
-  pages.forEach((p, i) => { page = p; line(margin, 35, pageW - margin, 35); drawText('Integra - Modelagem Financeira', margin, 23, 7, 'sans', muted); drawText(`${i + 1}/${pages.length} - Ref. ${reference.slice(0, 12)}`, pageW - margin, 23, 7, 'sans', muted, 'right'); });
+  pages.forEach((p, i) => { page = p; line(margin, 35, pageW - margin, 35); drawText('Integra - Modelagem Financeira', margin, 23, 7, 'sans', muted); drawText(`${i + 1}/${pages.length}`, pageW - margin, 23, 7, 'sans', muted, 'right'); });
   return pages;
 }
 

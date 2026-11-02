@@ -7,7 +7,7 @@ export function renderFinancialXlsx(bundle: FinancialReportDocument, key: Financ
   if (!report) throw new Error('Relatório indisponível nesta versão.');
   const summary: Sheet = { name: 'Resumo', numberFormat: '#,##0.00', boldRows: [0, 1], widths: [48, 95], rows: [
     [{ value: report.title, format: 'text', wrap: true }], [{ value: source.projectName, format: 'text', wrap: true }], ['Empresa', report.entityName || source.promoter || source.companyName], ['NIF', report.entityName ? 'n/d' : source.promoter ? source.promoterNif || 'n/d' : source.companyNif], ['Moeda', report.currency ?? source.currency],
-    ['Estado', source.state === 'approved' ? `V${source.versionNumber} - ${source.versionLabel}` : 'Rascunho'], ['Revisão de origem', { value: source.revision, format: 'integer' }], ['Data de referência', source.asOf], ['Identificação da origem', key === 'analise' ? source.historicalHash ?? source.sourceHash : source.sourceHash],
+    ['Estado', source.state === 'approved' ? `V${source.versionNumber} - ${source.versionLabel}` : 'Rascunho'], ['Revisão de origem', { value: source.revision, format: 'integer' }], ['Data de referência', source.asOf],
     ['Natureza da exportação', 'Resultados calculados pelo Integra, sem fórmulas de recálculo.'],
     ...report.blocks.flatMap((b): Cell[][] => b.kind === 'metrics' ? b.items.map((v) => [v.label, value(v.cell)]) : b.kind === 'paragraph' ? [[b.title ?? '', { value: b.text, format: 'text', wrap: true }]] : []),
   ] };

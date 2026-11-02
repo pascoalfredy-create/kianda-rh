@@ -63,7 +63,7 @@ export function SettingsForm({ s }: { s: { inssNumber: string | null; address: s
           {MONTHS.map((m, i) => <option key={m} value={i + 1}>Em {m}, para todos</option>)}
         </select>
       </label>
-      <p className="muted wide">Ambos os subsídios correspondem a 50% do salário base (LGT, art. 238.º); sem um ano completo de serviço são proporcionais aos meses completos trabalhados. Nenhum subsídio é pago duas vezes no mesmo ano. A gratificação de férias deve ser paga até 15 dias antes do início das férias (art. 213.º, n.º 5).</p>
+      <p className="muted wide">Ambos os subsídios correspondem a 50% do salário base; sem um ano completo de serviço são proporcionais aos meses completos trabalhados. Nenhum subsídio é pago duas vezes no mesmo ano. A gratificação de férias deve ser paga até 15 dias antes do início das férias.</p>
       <label className="wide" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><input type="checkbox" name="allowancesOnVacation" defaultChecked={s.allowancesOnVacation} /> Pagar subsídios de alimentação e de transporte também nos dias de férias (por acordo — a regra da LGT, art. 213.º, n.º 2, é não pagar)</label>
       <h3>Ajudas de custo</h3>
       <label className="span2">Diária — território nacional (Kz)<input name="perDiemNational" inputMode="decimal" placeholder="Sem limite" defaultValue={s.perDiemNationalMinor ? String(s.perDiemNationalMinor / 100).replace('.', ',') : ''} /></label>

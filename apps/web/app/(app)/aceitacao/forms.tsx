@@ -114,7 +114,7 @@ export function AcceptForm({ requestId, contentSha256 }: { requestId: string; co
       <div style={{ padding: '4px 16px 16px', display: 'grid', gap: 10 }}>
         <label style={{ display: 'flex', flexDirection: 'row', gap: 10, alignItems: 'flex-start', fontWeight: 400 }}><input type="checkbox" checked={checked} onChange={e => setChecked(e.target.checked)} style={{ width: 'auto', marginTop: 3 }} />
           <span>Declaro que li o documento acima, incluindo os anexos, que tomei conhecimento do seu conteúdo e que o aceito.</span></label>
-        <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>Ficam registados a data e a hora, o seu utilizador, o endereço de rede e o navegador, e a impressão digital do conteúdo aceite.</p>
+        <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>Ficam registados a data e a hora, o seu utilizador, o endereço de rede, o navegador e o conteúdo exacto aceite.</p>
         <div>{error && <span className="err">{error} </span>}<button className="btn" disabled={busy || !checked} onClick={() => run(`/v1/acknowledgements/${requestId}/accept`, 'POST', { confirm: true, contentSha256 })}>Aceitar</button></div>
       </div>
     </div>

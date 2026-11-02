@@ -58,7 +58,7 @@ export function IssueForm({ templates, employees, initialEmployee, initialTempla
             {groups.map((g) => <optgroup key={g} label={DOCUMENT_CATEGORY[g]}>{templates.filter((t) => t.category === g).map((t) => <option key={t.key} value={t.key}>{t.title}</option>)}</optgroup>)}
           </select>
         </label>
-        {tpl && <p className="muted">{tpl.description} <span className="tag">{tpl.source === 'empresa' ? tpl.version : `Kianda ${tpl.version}`}</span></p>}
+        {tpl && <p className="muted">{tpl.description} <span className="tag">{tpl.source === 'empresa' ? tpl.version : 'Kianda'}</span></p>}
         {tpl?.inputs.map((i) => (
           <label key={i.key}>{i.label}{i.required ? ' *' : ''}
             <input value={inputs[i.key] ?? ''} placeholder={i.placeholder} onChange={(e) => setInputs({ ...inputs, [i.key]: e.target.value })} />
