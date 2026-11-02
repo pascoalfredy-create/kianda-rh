@@ -47,15 +47,14 @@ Uma conta, um repositório e uma base de dados para dois módulos com licenças 
 | #27/#28 | Limites reais da Cloudflare documentados; `scripts/cf-ratelimit.mjs` no deploy (idempotente). |
 | #29 | Procedimento manual «Administração — repor verificação em dois passos» (só administradores da plataforma, sem tocar na palavra-passe, com auditoria). |
 
-**Feito em 01–02/11/2026 (configuração de produção):** `KIANDA_BACKUP_PASSPHRASE` definido (impressão digital `33ec1a54`; cópia diária às 02:17 de Luanda com teste de restauro); `KIANDA_JWT_SECRET` rodado; `KIANDA_SEED_DEMO=false` (a empresa demo «Kwanza Logística» e as 3 contas continuam na base — eliminar pela consola se deixarem de servir); 2FA da conta de administrador reposta a pedido do dono (execução `41401754941`; não repetir como teste).
+**Feito em 01–02/11/2026 (configuração de produção):** `KIANDA_BACKUP_PASSPHRASE` definido (impressão digital `33ec1a54`; cópia diária às 02:17 de Luanda com teste de restauro); `KIANDA_JWT_SECRET` rodado; `KIANDA_SEED_DEMO=false` (a empresa demo «Kwanza Logística» e as 3 contas continuam na base — eliminar pela consola se deixarem de servir); 2FA da conta de administrador reposta a pedido do dono (execução `41401754941`; não repetir como teste); **regra de limite de tentativas activa na Cloudflare** desde 02/11 (token `kianda-rh-deploy` com «Zone WAF Rules · Edit»; zona `yelaperformance.com`, 5 pedidos/10 s por IP nas rotas de autenticação → Block 10 s; reaplicada de forma idempotente em cada publicação por `scripts/cf-ratelimit.mjs`).
 
 **Pendentes (do dono):**
-1. **Regra de limite de tentativas na Cloudflare — não está activa.** O deploy avisa `10000: Authentication error`: o token `CLOUDFLARE_API_TOKEN` não tem «Zone · Zone WAF · Edit». Com essa permissão, a próxima publicação cria a regra sozinha (5 pedidos/10 s por IP nas rotas de autenticação). Não apresentar a regra como activa até o registo do deploy o confirmar. O limite interno da API (por instância) mantém-se.
-2. IBAN, banco, titular e contactos de suporte na consola (Plataforma Kianda), quando a empresa nova tiver conta.
-3. Opcional: `KIANDA_MODELING_OWNER_USER_ID` (sem ela ninguém exporta Excel da Modelagem).
-4. Contratar ProxyPay, Resend e Vendus e definir os secrets (DEPLOY.md); Vendus quando a facturação electrónica geral entrar em vigor. Enquadramento de IVA das licenças. Domínio próprio (`KIANDA_HOSTNAME`).
-5. Validação jurídica de `AO_2026.toValidate` (em especial cessação, Lei n.º 12/23) e textos dos contratos; termos ainda versão de trabalho.
-6. **AO-2027:** registar o pacote quando o OGE 2027 for publicado — sem ele, o processamento de Janeiro de 2027 é recusado.
+1. IBAN, banco, titular e contactos de suporte na consola (Plataforma Kianda), quando a empresa nova tiver conta.
+2. Opcional: `KIANDA_MODELING_OWNER_USER_ID` (sem ela ninguém exporta Excel da Modelagem).
+3. Contratar ProxyPay, Resend e Vendus e definir os secrets (DEPLOY.md); Vendus quando a facturação electrónica geral entrar em vigor. Enquadramento de IVA das licenças. Domínio próprio (`KIANDA_HOSTNAME`).
+4. Validação jurídica de `AO_2026.toValidate` (em especial cessação, Lei n.º 12/23) e textos dos contratos; termos ainda versão de trabalho.
+5. **AO-2027:** registar o pacote quando o OGE 2027 for publicado — sem ele, o processamento de Janeiro de 2027 é recusado.
 
 **Cópias de segurança — o que está e não está provado:** cada cópia é cifrada, decifrada e lida com `pg_restore --list` antes de ser guardada (30 dias, artefacto privado). Não é um ensaio de restauro completo numa segunda base. O backup PostgreSQL **não inclui** os ficheiros do R2 (`kianda-files`).
 
@@ -124,7 +123,7 @@ Versões: TypeScript 5.9.3, Vitest 4.0.5, Hono 4.13, Zod 4.6, Next 16.4, React 1
 - **Base de dados:** Neon Postgres (Frankfurt) via **Hyperdrive** (id `139b36ef3c0e47f3b348311b60693147`, cache desligada).
 - **CI** (`.github/workflows/ci.yml`): jobs «Verificar e testar» (tipos, testes com Postgres, build OpenNext) e «Navegador (E2E)» em paralelo; só depois, em `main` com `vars.KIANDA_DEPLOY == 'true'`, «Publicar no Cloudflare»: valida secrets (uma linha, sem espaços) → migra → administradores da plataforma → seed (se `KIANDA_SEED_DEMO == 'true'`) → regra de limite de tentativas (`scripts/cf-ratelimit.mjs`, só avisa sem permissão) → `scripts/cf-prepare.mjs` → deploy API + `wrangler secret bulk` → build/deploy web → `/api/health` e smoke público (`scripts/verify-public-site.mjs`); o login de demonstração só é verificado com `KIANDA_SEED_DEMO=true`.
 - **Outros workflows:** «Cópia de segurança» (`backup.yml`, diário às 02:17, cifra + teste de restauro) e «Administração — repor verificação em dois passos» (`admin-reset-2fa.yml`, manual, input `email`, só administradores da plataforma).
-- **Secrets GitHub:** `CLOUDFLARE_API_TOKEN` (permissões de publicação; falta «Zone WAF: Edit» para a regra de limite), `CLOUDFLARE_ACCOUNT_ID`, `KIANDA_HYPERDRIVE_ID`, `KIANDA_DATABASE_URL`, `KIANDA_DATABASE_CA_CERT` (opcional), `KIANDA_JWT_SECRET`, `KIANDA_SEED_OWNER_PASSWORD`, `KIANDA_BACKUP_PASSPHRASE`.
+- **Secrets GitHub:** `CLOUDFLARE_API_TOKEN` (token `kianda-rh-deploy`: publicação + «Zone WAF Rules · Edit» para a regra de limite), `CLOUDFLARE_ACCOUNT_ID`, `KIANDA_HYPERDRIVE_ID`, `KIANDA_DATABASE_URL`, `KIANDA_DATABASE_CA_CERT` (opcional), `KIANDA_JWT_SECRET`, `KIANDA_SEED_OWNER_PASSWORD`, `KIANDA_BACKUP_PASSPHRASE`.
 - **Variáveis GitHub:** `KIANDA_DEPLOY=true`, `KIANDA_SEED_DEMO=false` (desde 01/11/2026), `KIANDA_HOSTNAME`, `KIANDA_MODELING_OWNER_USER_ID` (opcional, Excel da Modelagem), `KIANDA_PLATFORM_ADMINS=pascoalfredy@gmail.com`; integrações (opcionais): `KIANDA_PROXYPAY_ENV`, `KIANDA_PROXYPAY_ENTITY`, `KIANDA_MAIL_FROM`, `KIANDA_VENDUS_MODE`.
 - **Secrets opcionais (integrações):** `KIANDA_PROXYPAY_API_KEY`, `KIANDA_RESEND_API_KEY`, `KIANDA_VENDUS_API_KEY`.
 - Nas sessões de agente a área de **secrets e variables do GitHub está bloqueada (403)**: alterá-las é tarefa do dono. Logs e anotações dos jobs lêem-se com `gh api repos/…/actions/jobs/<id>/logs` e `…/check-runs/<id>/annotations`; `gh workflow run` funciona (publicar, cópia, procedimentos manuais).
