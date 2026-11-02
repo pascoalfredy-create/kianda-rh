@@ -1,0 +1,41 @@
+# Procedimento manual: conta interna do dono do produto — RH, Modelagem e Valora activos, sem limites,
+# nas empresas de que um administrador da plataforma é proprietário. Só aceita emails de KIANDA_PLATFORM_ADMINS.
+name: Administração — conta interna com todos os módulos
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: Email do administrador da plataforma (proprietário da empresa interna)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kianda-admin-internal-account
+  cancel-in-progress: false
+
+jobs:
+  grant:
+    if: vars.KIANDA_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @kianda/core build
+      - run: pnpm --filter @kianda/db build
+      - name: Activar todos os módulos na conta interna
+        run: pnpm --filter @kianda/db internal-account
+        env:
+          INTERNAL_EMAIL: ${{ inputs.email }}
+          DATABASE_URL: ${{ secrets.KIANDA_DATABASE_URL }}
+          DATABASE_CA_CERT: ${{ secrets.KIANDA_DATABASE_CA_CERT }}
+          KIANDA_PLATFORM_ADMINS: ${{ vars.KIANDA_PLATFORM_ADMINS }}
