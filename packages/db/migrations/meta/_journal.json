@@ -316,6 +316,13 @@
       "when": 1793640400000,
       "tag": "0044_document_acknowledgements",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1793640500000,
+      "tag": "0045_push_notifications",
+      "breakpoints": true
     }
   ]
 }

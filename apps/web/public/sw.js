@@ -66,3 +66,23 @@ self.addEventListener('fetch', (event) => {
     );
   }
 });
+
+/* Notificações no telemóvel (Web Push): o aviso só diz o tipo de evento; o conteúdo abre-se no Kianda, com sessão. */
+self.addEventListener('push', (event) => {
+  let data = { title: 'Kianda', body: 'Tem uma novidade no Kianda.', url: '/' };
+  try { data = { ...data, ...event.data.json() }; } catch { /* aviso sem conteúdo legível */ }
+  const url = typeof data.url === 'string' && data.url.startsWith('/') ? data.url : '/';
+  event.waitUntil(self.registration.showNotification(data.title, {
+    body: data.body, tag: data.tag, renotify: !!data.tag, icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data: { url }, lang: 'pt',
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = new URL((event.notification.data && event.notification.data.url) || '/', self.location.origin).href;
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    const open = list.find((c) => c.url.startsWith(self.location.origin));
+    if (open) return open.navigate(url).then((c) => (c || open).focus());
+    return self.clients.openWindow(url);
+  }));
+});

@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { body, clientIp, requireCompany, requireRole, type Actor, type AppEnv } from '../plugins/tenant.js';
 import { ackFiles, completeLinkedTasks, createRequests, documentHash } from '../services/acknowledgements.js';
 import { DomainError } from '../services/payroll.js';
+import { notifyEmployees } from '../services/push.js';
 import { removeFiles } from '../services/storage.js';
 
 const HR = (a: Actor) => a.role === 'owner' || a.role === 'hr_admin';
@@ -115,6 +116,8 @@ export function acknowledgementRoutes() {
       }
     }
     const created = await createRequests(db, u!);
+    const recipients = await db.select({ employeeId: ackRequests.employeeId }).from(ackRequests).where(and(eq(ackRequests.documentId, d.id), eq(ackRequests.status, 'pending')));
+    await notifyEmployees(db, actor.companyId, recipients.map(r => r.employeeId), { title: 'Documento para ler e aceitar', body: `${u!.title}${u!.version > 1 ? ` (versão ${u!.version})` : ''}`, url: '/aceitacao', tag: `aceitacao-${d.id}` });
     await audit(actor, 'publish', 'ack_document', d.id, null, { contentSha256: hash, version: u!.version, recipients: created, replacedPending: replaced, files: attached.map(f => ({ name: f.name, sha256: f.sha256 })) });
     return c.json({ ...u, recipients: created });
   });

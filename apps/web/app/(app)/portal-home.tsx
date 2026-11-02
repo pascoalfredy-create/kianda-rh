@@ -4,6 +4,7 @@ import { ClockCard } from '@/components/clock-card';
 import { api } from '@/lib/api';
 import type { Profile, BalanceRow } from '@/lib/types';
 import { RequestDeclaration } from './portal/forms';
+import { PushSettings } from '@/components/push-settings';
 
 interface Portal {
   lastPayslip: { id: string; period: string; netMinor: number } | null; pendingAbsences: number;
@@ -29,6 +30,7 @@ export async function PortalHome({ name, employeeId }: { name: string; employeeI
       <h1>Olá, {name.split(' ')[0]}</h1>
       <p className="sub">O seu espaço: ponto, recibos, férias, despesas, declarações e dados pessoais</p>
       <ClockCard />
+      <PushSettings compact />
       {p.review && (
         <Link href={`/desempenho/${p.review.id}`} className="warn" style={{ display: 'block' }}>
           {p.review.status === 'self' ? `Tem a auto-avaliação de "${p.review.cycle}" por fazer →` : `A sua avaliação de "${p.review.cycle}" está concluída: tome conhecimento →`}

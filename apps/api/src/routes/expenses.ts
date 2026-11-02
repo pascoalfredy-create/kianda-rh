@@ -12,6 +12,7 @@ import { body, requireCompany, requireRole, type Actor, type AppEnv } from '../p
 import { undoMatch } from '../services/payments.js';
 import { companyAccounts, DomainError } from '../services/payroll.js';
 import { canDecideFor, visibleEmployeeIds } from '../services/scope.js';
+import { notifyDeciders, notifyEmployees } from '../services/push.js';
 
 const STAFF = ['owner', 'hr_admin', 'finance'];
 const kz = z.number().nonnegative().max(1e11);
@@ -189,6 +190,8 @@ export function expenseRoutes() {
     if (problems.length) throw new DomainError('nota_incompleta', problems.join(' · '), 400);
     const [x] = await db.update(expenseClaims).set({ status: 'submitted', submittedAt: new Date(), decidedBy: null, decidedAt: null, decisionNote: null }).where(eq(expenseClaims.id, claim.id)).returning();
     await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'submit', entity: 'expense_claim', entityId: claim.id, after: x });
+    const [owner] = await db.select({ id: employees.id, name: employees.name, managerId: employees.managerId }).from(employees).where(and(eq(employees.id, claim.employeeId), eq(employees.companyId, actor.companyId)));
+    if (owner) await notifyDeciders(db, actor.companyId, owner, { title: 'Nota de despesas para decidir', body: `${owner.name} · ${claim.title}`, url: '/despesas?v=approve', tag: `despesa-${claim.id}` });
     return c.json(x);
   });
 
@@ -217,6 +220,7 @@ export function expenseRoutes() {
       await tx.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: b.approve ? 'approve' : 'reject', entity: 'expense_claim', entityId: claim.id, after: x });
       return x!;
     });
+    await notifyEmployees(db, actor.companyId, [claim.employeeId], { title: b.approve ? 'Nota de despesas aprovada' : 'Nota de despesas recusada', body: `${claim.title}${!b.approve && b.note ? ` · ${b.note}` : ''}`, url: `/despesas/${claim.id}`, tag: `despesa-${claim.id}` });
     return c.json(result);
   });
 
@@ -249,6 +253,7 @@ export function expenseRoutes() {
       await tx.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'pay', entity: 'expense_claim', entityId: claim.id, after: u });
       return u!;
     });
+    await notifyEmployees(db, actor.companyId, [claim.employeeId], { title: 'Despesas reembolsadas', body: `${claim.title} · transferência de ${b.paidOn.split('-').reverse().join('/')}`, url: `/despesas/${claim.id}`, tag: `despesa-${claim.id}` });
     return c.json(x);
   });
 

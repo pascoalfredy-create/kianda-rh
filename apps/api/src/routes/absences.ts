@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { body as readBody, requireCompany, type Actor, type AppEnv } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
 import { canDecideFor, visibleEmployeeIds } from '../services/scope.js';
+import { notifyDeciders, notifyEmployees } from '../services/push.js';
 
 const TYPES = ['vacation', 'sick', 'justified', 'unjustified', 'maternity', 'paternity', 'marriage', 'bereavement', 'training'] as const;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -136,6 +137,8 @@ export function absenceRoutes() {
       requestedBy: actor.actorId, status: approved ? 'approved' : 'pending', decidedBy: approved ? actor.actorId : null, decidedAt: approved ? new Date() : null,
     }).returning();
     await audit(db, actor, approved ? 'create_approved' : 'request', a!.id, null, a);
+    if (!approved) await notifyDeciders(db, actor.companyId, emp, { title: 'Novo pedido de ausência', body: `${emp.name} · ${policy.label} de ${pt(a!.startDate)} a ${pt(a!.endDate)}`, url: '/ausencias', tag: `ausencia-${a!.id}` });
+    else if (!isSelf) await notifyEmployees(db, actor.companyId, [emp.id], { title: `${policy.label} registada`, body: `De ${pt(a!.startDate)} a ${pt(a!.endDate)}`, url: '/ausencias', tag: `ausencia-${a!.id}` });
     return c.json(a, 201);
   });
 
@@ -191,6 +194,8 @@ export function absenceRoutes() {
     if (status === 'approved' && a.type === 'vacation') await assertVacation(db, e, a.startDate, a.endDate, a.id);
     const [after] = await db.update(absences).set({ status, decidedBy: actor.actorId, decidedAt: new Date(), decisionNote: note ?? null }).where(eq(absences.id, a.id)).returning();
     await audit(db, actor, status === 'approved' ? 'approve' : 'reject', a.id, { status: a.status }, { status, note: note ?? null, employeeId: a.employeeId });
+    const label = ABSENCE_POLICIES[a.type as AbsenceType]?.label ?? 'Ausência';
+    await notifyEmployees(db, actor.companyId, [a.employeeId], { title: status === 'approved' ? `${label}: pedido aprovado` : `${label}: pedido recusado`, body: `De ${pt(a.startDate)} a ${pt(a.endDate)}${status === 'rejected' && note ? ` · ${note}` : ''}`, url: '/ausencias', tag: `ausencia-${a.id}` });
     return c.json(after);
   };
   app.post('/v1/absences/:id/approve', decide('approved'));

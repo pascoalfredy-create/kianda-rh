@@ -5,9 +5,11 @@
  */
 import { luandaDate } from '@kianda/core';
 import { getDb, withRequestDb } from '@kianda/db';
+import type { ExecutionContext } from 'hono';
 import { buildApp, type App } from './app.js';
 import { syncGatewayPayments } from './services/billing.js';
 import { dailyReminders } from './services/jobs.js';
+import { dispatchPush, setPushRunner } from './services/push.js';
 import { r2Store, setObjectStore, type R2BucketLike } from './services/storage.js';
 
 interface Env {
@@ -35,12 +37,14 @@ let app: App | undefined;
 const connection = (env: Env) => env.HYPERDRIVE?.connectionString ?? env.DATABASE_URL;
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     loadEnv(env);
     app ??= buildApp();
     const connectionString = connection(env);
     if (!connectionString) return Response.json({ error: 'configuracao', message: 'Base de dados não configurada (HYPERDRIVE ou DATABASE_URL)' }, { status: 500 });
-    return withRequestDb(connectionString, async () => app!.fetch(request));
+    // O envio de notificações corre depois da resposta, com uma ligação própria (a do pedido fecha-se).
+    setPushRunner((work) => withRequestDb(connectionString, () => work(getDb())));
+    return withRequestDb(connectionString, async () => app!.fetch(request, env, ctx));
   },
 
   /** Tarefas agendadas: a cada 30 min sincroniza o Multicaixa; às 07:00 UTC (08:00 em Luanda) envia os avisos de licença. */
@@ -52,6 +56,8 @@ export default {
       const db = getDb();
       if (event.cron === '0 7 * * *') console.log('avisos', JSON.stringify(await dailyReminders(db, luandaDate(new Date()))));
       else console.log('multicaixa', JSON.stringify(await syncGatewayPayments(db)));
+      // Reserva: notificações que não saíram logo depois do pedido.
+      console.log('push', JSON.stringify(await dispatchPush(db)));
     });
   },
 };
