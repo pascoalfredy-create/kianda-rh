@@ -1,0 +1,1 @@
+ALTER TABLE "valuation_analyses" ADD COLUMN "restored_at" timestamp with time zone;

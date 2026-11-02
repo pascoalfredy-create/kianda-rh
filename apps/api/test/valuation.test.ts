@@ -38,11 +38,11 @@ describe.skipIf(!process.env.DATABASE_URL)('Valora: módulo de análise financei
 
   it('o registo abre o período experimental com as quotas do plano escolhido (Essencial por omissão)', async () => {
     const modules = (await req(owner, 'GET', '/v1/modules')).json();
-    expect(modules.valuation).toMatchObject({ subscribed: true, status: 'trial', canAccess: true, analysisLimit: 10, userLimit: 5, planKey: 'essencial', cycle: 'monthly' });
+    expect(modules.valuation).toMatchObject({ subscribed: true, status: 'trial', canAccess: true, analysisLimit: 3, userLimit: 5, planKey: 'essencial', cycle: 'monthly' });
     expect(modules.valuation.trialEndsAt).toBeTruthy();
     const boot = (await req(owner, 'GET', '/v1/valuation/bootstrap')).json();
     expect(boot).toMatchObject({ permission: 'editor', canWrite: true, analyses: [], current: null, hr: { available: true }, formats: { pdf: false, docx: false, xlsx: false } });
-    expect(boot.usage).toMatchObject({ analysisLimit: 10, activeAnalyses: 0, enabledUsers: 1, canCreateAnalysis: true });
+    expect(boot.usage).toMatchObject({ analysisLimit: 3, activeAnalyses: 0, enabledUsers: 1, canCreateAnalysis: true });
   });
 
   it('sem subscrição o módulo está fechado; os outros utilizadores precisam de acesso', async () => {
@@ -80,6 +80,23 @@ describe.skipIf(!process.env.DATABASE_URL)('Valora: módulo de análise financei
     expect((await req(editor, 'PUT', `/v1/valuation/analyses/${target}`, { revision: 1, name: 'X' })).json().error).toBe('analise_arquivada');
     expect((await req(editor, 'POST', '/v1/valuation/analyses', { name: 'Quarta', data: analysis('D') })).statusCode).toBe(201);
     expect((await req(editor, 'POST', `/v1/valuation/analyses/${target}/restore`)).json().error).toBe('limite_analises');
+  });
+
+  it('sem rotação: restaurada e de novo arquivada no mesmo mês, a análise continua a ocupar a vaga', async () => {
+    const list = (await req(owner, 'GET', '/v1/valuation/analyses')).json() as { id: string; name: string; archivedAt: string | null }[];
+    const quarta = list.find(a => a.name === 'Quarta' && !a.archivedAt)!;
+    // Arquivar uma análise nunca restaurada liberta a vaga; restaurar a outra usa-a.
+    const freed = await req(editor, 'POST', `/v1/valuation/analyses/${quarta.id}/archive`);
+    expect(freed.json().usage).toMatchObject({ activeAnalyses: 2, heldArchived: 0, canCreateAnalysis: true });
+    const restored = await req(editor, 'POST', `/v1/valuation/analyses/${target}/restore`);
+    expect(restored.json().usage).toMatchObject({ activeAnalyses: 3, canCreateAnalysis: false });
+    // Arquivada de novo no mesmo mês: a vaga continua ocupada e não se cria outra análise.
+    const again = await req(editor, 'POST', `/v1/valuation/analyses/${target}/archive`);
+    expect(again.json().usage).toMatchObject({ activeAnalyses: 3, heldArchived: 1, canCreateAnalysis: false });
+    expect((await req(editor, 'POST', '/v1/valuation/analyses', { name: 'Rotação', data: analysis('R') })).json().error).toBe('limite_analises');
+    // Voltar a activá-la não consome outra vaga.
+    expect((await req(editor, 'POST', `/v1/valuation/analyses/${target}/restore`)).statusCode).toBe(200);
+    expect((await req(editor, 'GET', '/v1/valuation/bootstrap')).json().usage).toMatchObject({ activeAnalyses: 3, heldArchived: 0 });
   });
 
   it('grava com controlo de revisão e nunca aceita dados que o motor não abre', async () => {
@@ -144,21 +161,21 @@ describe.skipIf(!process.env.DATABASE_URL)('Valora: módulo de análise financei
   it('o registo aceita o plano e o ciclo do Valora; a avaliação usa as quotas desse plano', async () => {
     const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Valora 7', sector: 'commerce', nif: String(Number(stamp.slice(-9)) * 10 + 7).padStart(10, '0').slice(-10) }, name: 'Proprietário', email: `${stamp}.7@valora.test`, password, acceptTerms: true, modules: ['valuation'], valuationPlan: { key: 'corporate', cycle: 'annual' } } });
     expect(r.statusCode).toBe(201);
-    expect((await req(cookieOf(r), 'GET', '/v1/modules')).json().valuation).toMatchObject({ status: 'trial', analysisLimit: 30, planKey: 'corporate', cycle: 'annual' });
+    expect((await req(cookieOf(r), 'GET', '/v1/modules')).json().valuation).toMatchObject({ status: 'trial', analysisLimit: 20, planKey: 'corporate', cycle: 'annual' });
     expect((await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Valora 8', sector: 'commerce', nif: '1234567808' }, name: 'P', email: `${stamp}.8@valora.test`, password, acceptTerms: true, modules: ['valuation'], valuationPlan: { key: 'gratis', cycle: 'monthly' } } })).statusCode).toBe(400);
   });
 
   it('subscrição paga: pedido com o preço do plano, confirmação pela plataforma activa a licença e o acesso do proprietário', async () => {
     const billing = (await req(hrOnly, 'GET', '/v1/billing')).json();
-    expect(billing.valuationPlans.map((p: { key: string; analysisLimit: number | null }) => [p.key, p.analysisLimit])).toEqual([['essencial', 10], ['pme', 20], ['corporate', 30], ['enterprise40', 40], ['unlimited', null]]);
+    expect(billing.valuationPlans.map((p: { key: string; analysisLimit: number | null }) => [p.key, p.analysisLimit])).toEqual([['essencial', 3], ['pme', 10], ['corporate', 20], ['enterprise40', 40], ['unlimited', null]]);
     expect(billing.valuationPlans[0].prices).toEqual({ monthly: 3_290_000, semiannual: 17_766_000, annual: 33_558_000 });
     const created = await req(hrOnly, 'POST', '/v1/billing/requests', { kind: 'valuation_subscription', planKey: 'pme', cycle: 'semiannual', extraUsers: 1 });
     expect(created.statusCode).toBe(201);
-    expect(created.json()).toMatchObject({ kind: 'valuation_subscription', tierKey: 'pme', projectLimit: 20, extraUsers: 1, amountMinor: 28_566_000 + 6_000_000 });
+    expect(created.json()).toMatchObject({ kind: 'valuation_subscription', tierKey: 'pme', projectLimit: 10, extraUsers: 1, amountMinor: 28_566_000 + 6_000_000 });
     expect((await req(hrOnly, 'GET', '/v1/valuation/bootstrap')).json().error).toBe('modulo_nao_subscrito');
     const confirmed = await req(owner, 'POST', `/v1/platform/payment-requests/${created.json().id}/confirm`, { invoiceRef: null });
     expect(confirmed.statusCode).toBe(200);
-    expect((await req(hrOnly, 'GET', '/v1/modules')).json().valuation).toMatchObject({ subscribed: true, status: 'active', canAccess: true, analysisLimit: 20, userLimit: 6, planKey: 'pme', cycle: 'semiannual' });
+    expect((await req(hrOnly, 'GET', '/v1/modules')).json().valuation).toMatchObject({ subscribed: true, status: 'active', canAccess: true, analysisLimit: 10, userLimit: 6, planKey: 'pme', cycle: 'semiannual' });
     expect((await req(hrOnly, 'GET', '/v1/valuation/session')).json().formats).toEqual({ pdf: true, docx: true, xlsx: true });
   });
 

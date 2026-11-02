@@ -42,3 +42,32 @@ test('Integra no telemóvel: menu, pressupostos e versões em cartões dentro do
   expect(box.x + box.width, 'o botão PDF tem de caber no ecrã').toBeLessThanOrEqual(width);
   expect(errors).toEqual([]);
 });
+
+test('Telemóvel: página pública com três módulos sem transbordar e Valora com menu ☰', async ({ page, context }) => {
+  const errors = watchErrors(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: /Kianda Valora/ }).first().click();
+  await expect(page.getByRole('heading', { name: 'Conheça o valor da empresa. Controle o exercício.' })).toBeVisible();
+  expect(await page.evaluate<number>('document.documentElement.scrollWidth - window.innerWidth')).toBeLessThanOrEqual(1);
+  await page.getByRole('button', { name: 'Ver condições do Kianda Valora' }).click();
+  await expect(page.locator('dialog[open]')).toContainText('ATÉ 3 ANÁLISES ACTIVAS');
+  await page.screenshot({ path: '/tmp/e2e/publico-03-telemovel-planos.png', fullPage: false });
+  await page.keyboard.press('Escape');
+
+  const company = await registerCompany({ name: 'Telemóvel Valora E2E', modules: ['valuation'] });
+  await signIn(context, company.token);
+  await page.goto('/valora');
+  await page.locator('#valoraFirst').click();
+  await page.locator('#vName').fill('Análise no telemóvel');
+  await page.locator('#vEnt').fill('Empresa Móvel, Lda.');
+  await page.locator('#vStart').selectOption('example');
+  await page.locator('#vCreate').click();
+  await expect(page.locator('#hdrEnt')).toHaveText('Empresa Móvel, Lda.');
+  await page.locator('#valoraMenu').click();
+  await page.locator('#nav a[data-v="orcamento"]').click();
+  await expect(page.locator('input[data-orc="vendas"]')).toBeVisible();
+  // O fundo da barra lateral do computador não fica pintado por trás do conteúdo no telefone.
+  expect(await page.evaluate<string>("getComputedStyle(document.querySelector('.app')).backgroundImage")).toBe('none');
+  await page.screenshot({ path: '/tmp/e2e/valora-06-telemovel.png', fullPage: false });
+  expect(errors).toEqual([]);
+});

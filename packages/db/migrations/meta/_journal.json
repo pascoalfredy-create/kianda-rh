@@ -288,6 +288,13 @@
       "when": 1793640000000,
       "tag": "0040_valuation_plans",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1793640100000,
+      "tag": "0041_valuation_restored_at",
+      "breakpoints": true
     }
   ]
 }

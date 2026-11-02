@@ -1128,6 +1128,8 @@ export const valuationAnalyses = pgTable('valuation_analyses', {
   ownCompany: boolean('own_company').notNull().default(false),
   revision: integer('revision').notNull().default(1),
   archivedAt: timestamp('archived_at', { withTimezone: true }),
+  /** Último restauro: arquivada de novo no mesmo mês, continua a ocupar a vaga até ao fim do mês. */
+  restoredAt: timestamp('restored_at', { withTimezone: true }),
   createdBy: text('created_by').notNull(),
   updatedBy: text('updated_by').notNull(),
   createdAt: createdAt(),
