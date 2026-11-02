@@ -5,12 +5,40 @@
  * Unidade: milhões de Kz (Mkz). Classificação: PGC Angola (Dec. 82/01) — classe 6 proveitos, classe 7 custos.
  */
 
+import { cyclePrice, CYCLES, type BillingCycle } from './licensing.js';
+import { kz } from './money.js';
+
 export const VALUATION_DATA_VERSION = 3;
 export const VALUATION_INCLUDED_USERS = 5;
-/** Análises activas no período experimental, até o preço e os planos serem publicados. */
+/** Limite por omissão quando não há plano gravado (licenças antigas ou activação manual sem plano). */
 export const VALUATION_TRIAL_ANALYSES = 3;
-/** O preço do Valora ainda não foi publicado: a activação paga é feita pela administração da plataforma. */
-export const VALUATION_PRICE_PUBLISHED = false;
+export const VALUATION_PRICE_PUBLISHED = true;
+/** Utilizador além dos 5 incluídos, por mês do ciclo, sem desconto. */
+export const VALUATION_EXTRA_USER_MONTHLY_MINOR = kz(10_000);
+/**
+ * Licenciado por análises activas (uma análise = uma entidade analisada), sem relação com o efectivo do RH nem com sectores.
+ * Semestral −10% e anual −15% à vista, como os outros módulos (`cyclePrice`).
+ */
+export const VALUATION_PLANS = [
+  { key: 'essencial', label: 'Essencial', analysisLimit: 10, monthlyMinor: kz(32_900) },
+  { key: 'pme', label: 'PME', analysisLimit: 20, monthlyMinor: kz(52_900) },
+  { key: 'corporate', label: 'Corporate', analysisLimit: 30, monthlyMinor: kz(72_900) },
+  { key: 'enterprise40', label: 'Grandes Empresas (Até 40)', analysisLimit: 40, monthlyMinor: kz(92_900) },
+  { key: 'unlimited', label: 'Grandes Empresas (Ilimitado)', analysisLimit: null, monthlyMinor: kz(102_999) },
+] as const;
+export type ValuationPlanKey = typeof VALUATION_PLANS[number]['key'];
+export const VALUATION_PLAN_KEYS = VALUATION_PLANS.map(p => p.key) as unknown as readonly [ValuationPlanKey, ...ValuationPlanKey[]];
+
+/** Preço de um ciclo do plano; os extras somam 10 000 Kz por utilizador e mês do ciclo, sem desconto. */
+export function valuationPlanPrice(planKey: string, cycle: BillingCycle, extraUsers = 0) {
+  if (!Number.isSafeInteger(extraUsers) || extraUsers < 0 || extraUsers > 100_000) throw new RangeError('Número de utilizadores extra inválido');
+  const plan = VALUATION_PLANS.find(p => p.key === planKey);
+  if (!plan) return null;
+  const months = CYCLES[cycle].months;
+  const extraMinor = extraUsers * VALUATION_EXTRA_USER_MONTHLY_MINOR * months;
+  const base = cyclePrice({ key: plan.key, label: plan.label, minEmployees: 0, maxEmployees: null, monthlyMinor: plan.monthlyMinor }, cycle)!;
+  return { grossMinor: base.grossMinor + extraMinor, discountMinor: base.discountMinor, totalMinor: base.totalMinor + extraMinor, extraMinor };
+}
 export const VALUATION_MAX_BYTES = 1_000_000;
 
 /** Rubricas de resultados (movimento do período). */

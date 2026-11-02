@@ -140,7 +140,7 @@ function openDialog(msg){
     <label class="check wide"><input type="checkbox" id="vNewOwn" ${LIST.some(x=>x.ownCompany&&!x.archivedAt)?'':'checked'}> É a nossa própria empresa</label></div>
     <div class="row-actions" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn pri" type="button" id="vCreate" ${USAGE&&!USAGE.canCreateAnalysis?'disabled':''}>Criar análise</button>
     <label class="btn" style="display:inline-flex;align-items:center;gap:6px">Importar cópia (JSON)<input type="file" id="vImport" accept="application/json,.json" style="display:none"></label></div>
-    ${USAGE&&!USAGE.canCreateAnalysis?'<p class="hint">Atingiu o número de análises activas da licença. Arquive uma análise ou contacte a plataforma para ampliar.</p>':''}</div>`:''}
+    ${USAGE&&!USAGE.canCreateAnalysis?'<p class="hint">Atingiu o número de análises activas da licença. Arquive uma análise ou mude de plano em <a href="/licenca#valuation">Módulos e licenças</a>.</p>':''}</div>`:''}
   ${archived.length?`<div class="valora-section"><h4>Arquivadas</h4><ul class="valora-list">${archived.map(x=>`<li><div class="grow"><b>${ESC(x.name)}</b><span class="hint">Arquivada em ${dateLbl(x.archivedAt)}</span></div><button class="btn" type="button" data-vopen="${ESC(x.id)}">Consultar</button>${write?`<button class="btn" type="button" data-vrestore="${ESC(x.id)}">Restaurar</button>`:''}</li>`).join('')}</ul></div>`:''}`;
   dlg.classList.add('on');
   $('#valoraClose').onclick=closeDialog;

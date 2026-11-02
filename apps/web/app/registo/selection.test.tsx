@@ -13,6 +13,13 @@ describe('passagem dos planos públicos para o registo', () => {
     expect(html).toContain('Plano de Modelagem'); expect(html).not.toContain('Pagamento RH');
     expect(html).toContain('1\u00a0224\u00a0000,00 Kz');
   });
+  it('abre o Valora no plano e ciclo escolhidos, com o preço do plano', async () => {
+    const query = Object.fromEntries(new URL(registrationHref('valuation', 'corporate', 'semiannual'), 'https://kianda.test').searchParams);
+    const html = renderToStaticMarkup(await Registo({ searchParams: Promise.resolve(query) }));
+    expect(html).toContain('Plano do Valora'); expect(html).toContain('<option value="corporate" selected="">');
+    expect(html).toContain('393\u00a0660,00 Kz'); expect(html).not.toContain('Pagamento RH');
+    expect(registrationSelection({ modulo: 'valuation', plano: 'x' })).toEqual({ module: 'valuation', planKey: 'essencial', cycle: 'monthly' });
+  });
   it('abre a faixa RH escolhida com o mesmo ciclo e sem activar Integra', async () => {
     const href = registrationHref('hr', 't3', 'semiannual');
     const query = Object.fromEntries(new URL(href, 'https://kianda.test').searchParams);

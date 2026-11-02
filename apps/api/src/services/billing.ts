@@ -1,6 +1,6 @@
-import { CYCLES, DEFAULT_TIERS, MODELING_PLANS, MODELING_SECTOR_LABELS, formatKz, luandaDate, type BillingCycle, type FinancialSector } from '@kianda/core';
+import { CYCLES, DEFAULT_TIERS, MODELING_PLANS, MODELING_SECTOR_LABELS, VALUATION_PLANS, formatKz, luandaDate, type BillingCycle, type FinancialSector } from '@kianda/core';
 import {
-  and, auditLogs, companies, companyModules, desc, eq, gatewayEvents, inArray, isNull, paymentRequests, platformAdmins, platformSettings, subscriptions, users, type Db,
+  and, auditLogs, companies, companyModules, desc, eq, gatewayEvents, inArray, isNull, paymentRequests, platformAdmins, platformSettings, subscriptions, users, valuationMembers, type Db,
 } from '@kianda/db';
 import {
   acknowledgePayment, appBaseUrl, createReference, deleteReference, pendingPayments, proxypayConfig, vendusConfig, vendusIssueInvoice,
@@ -10,6 +10,7 @@ import { platformSettingsGet } from './licence.js';
 import { sendMail } from './mail.js';
 import { DomainError } from './payroll.js';
 import { requireModelingPlanUsage, validateModelingSectors } from './modeling-policy.js';
+import { requireValuationPlanUsage } from './valuation-policy.js';
 
 type Request = typeof paymentRequests.$inferSelect;
 const pt = (d: string) => d.split('-').reverse().join('/');
@@ -17,9 +18,10 @@ const addDays = (d: string, n: number) => new Date(Date.parse(d) + n * 86_400_00
 /** Validade da referência Multicaixa. */
 export const REFERENCE_DAYS = 10;
 
+const CURRENT_KINDS = ['subscription', 'modeling_subscription', 'valuation_subscription'];
 /** Pedidos antigos de colaboradores extra ficam apenas no histórico; nunca voltam a ser cobrados. */
 function assertCurrentRequest(r: Pick<Request, 'kind'>) {
-  if (r.kind !== 'subscription' && r.kind !== 'modeling_subscription') throw new DomainError('cobranca_descontinuada', 'O RH utiliza apenas planos de faixas fixas. Escolha o plano correspondente ao efectivo.', 400);
+  if (!CURRENT_KINDS.includes(r.kind)) throw new DomainError('cobranca_descontinuada', 'O RH utiliza apenas planos de faixas fixas. Escolha o plano correspondente ao efectivo.', 400);
 }
 
 const DEFAULT_INVOICE: InvoiceSettings = { taxId: 'NOR', exemptionCode: null, exemptionLaw: null, paymentMethodId: null, registerId: null };
@@ -30,6 +32,10 @@ export async function invoiceSettingsGet(db: Pick<Db, 'select'>): Promise<Invoic
 
 /** Descrição do que se paga (pró-forma, email e factura). */
 export function requestDescription(r: Request) {
+  if (r.kind === 'valuation_subscription') {
+    const label = VALUATION_PLANS.find(p => p.key === r.tierKey)?.label ?? r.tierKey;
+    return `Licença Kianda Valora — ${label} — ${r.projectLimit === null ? 'análises ilimitadas' : `até ${r.projectLimit} análises activas`} — ${5 + (r.extraUsers ?? 0)} utilizadores — ${CYCLES[r.cycle as BillingCycle]?.label ?? r.cycle} (${pt(r.periodStart!)} a ${pt(r.periodEnd!)})`;
+  }
   if (r.kind === 'modeling_subscription') {
     const label = MODELING_PLANS.find(p => p.key === r.tierKey)?.label ?? r.tierKey;
     return `Licença Kianda Integra — ${label} — ${r.projectLimit === null ? 'projectos ilimitados' : `até ${r.projectLimit} projectos`} — sectores: ${(r.modelingSectors ?? []).map(s => MODELING_SECTOR_LABELS[s]).join(', ')} — ${5 + (r.extraUsers ?? 0)} utilizadores — ${CYCLES[r.cycle as BillingCycle]?.label ?? r.cycle} (${pt(r.periodStart!)} a ${pt(r.periodEnd!)})`;
@@ -110,7 +116,15 @@ export async function confirmPaymentRequest(db: Db, id: string, o: { actorId: st
     if (!r || r.status !== 'pending') throw new DomainError('nao_encontrado', 'Pedido inexistente ou já tratado', 404);
     assertCurrentRequest(r);
     const [sub] = await tx.select().from(subscriptions).where(eq(subscriptions.companyId, r.companyId));
-    if (r.kind === 'modeling_subscription') {
+    if (r.kind === 'valuation_subscription') {
+      await requireValuationPlanUsage(tx, r.companyId, { analysisLimit: r.projectLimit, extraUsers: r.extraUsers ?? 0 });
+      const [before] = await tx.select().from(companyModules).where(and(eq(companyModules.companyId, r.companyId), eq(companyModules.module, 'valuation')));
+      const values = { enabled: true, status: 'active', paidUntil: before?.paidUntil && before.paidUntil > r.periodEnd! ? before.paidUntil : r.periodEnd!, projectLimit: r.projectLimit, extraUsers: r.extraUsers ?? 0, planKey: r.tierKey, cycle: r.cycle, updatedAt: new Date() };
+      await tx.insert(companyModules).values({ companyId: r.companyId, module: 'valuation', ...values }).onConflictDoUpdate({ target: [companyModules.companyId, companyModules.module], set: values });
+      // Uma empresa que subscreve sem ter passado pela avaliação recebe o acesso do proprietário.
+      const [owner] = await tx.select({ id: users.id }).from(users).where(and(eq(users.companyId, r.companyId), eq(users.role, 'owner'))).limit(1);
+      if (owner) await tx.insert(valuationMembers).values({ companyId: r.companyId, userId: owner.id, addedBy: o.actorId }).onConflictDoNothing();
+    } else if (r.kind === 'modeling_subscription') {
       const sectors = validateModelingSectors(r.tierKey!, r.primarySector as FinancialSector, r.modelingSectors ?? []);
       await requireModelingPlanUsage(tx, r.companyId, { projectLimit: r.projectLimit, extraUsers: r.extraUsers ?? 0, sectors });
       const [before] = await tx.select().from(companyModules).where(and(eq(companyModules.companyId, r.companyId), eq(companyModules.module, 'modeling')));
@@ -141,7 +155,7 @@ export async function issueInvoice(db: Db, id: string, force = false): Promise<R
   try {
     const inv = await vendusIssueInvoice(cfg, settings, {
       number: r.number, client: { nif: co!.nif, name: co!.name, address: co!.address, email: owner ?? null },
-      item: { reference: r.kind === 'modeling_subscription' ? `INTEGRA-${(r.tierKey ?? '').toUpperCase()}` : r.kind === 'subscription' ? `KIANDA-${(r.tierKey ?? '').toUpperCase()}` : 'KIANDA-EXTRA', title: requestDescription(r), amountMinor: r.amountMinor },
+      item: { reference: r.kind === 'valuation_subscription' ? `VALORA-${(r.tierKey ?? '').toUpperCase()}` : r.kind === 'modeling_subscription' ? `INTEGRA-${(r.tierKey ?? '').toUpperCase()}` : r.kind === 'subscription' ? `KIANDA-${(r.tierKey ?? '').toUpperCase()}` : 'KIANDA-EXTRA', title: requestDescription(r), amountMinor: r.amountMinor },
     });
     const [u] = await db.update(paymentRequests).set({ invoiceProvider: 'vendus', invoiceExternalId: inv.id, invoiceRef: inv.number, invoiceIssuedAt: new Date(), invoiceError: null })
       .where(eq(paymentRequests.id, r.id)).returning();
@@ -192,7 +206,7 @@ export async function applyGatewayPayment(db: Db, p: GatewayPayment) {
   let message: string | null = null;
   if (!r) { outcome = 'unmatched'; message = `Referência ${p.reference} sem pedido no Kianda`; }
   else if (r.status !== 'pending') { outcome = 'not_pending'; message = `Pedido ${r.number} já estava ${r.status === 'paid' ? 'pago' : 'cancelado'} — verificar e devolver se necessário`; }
-  else if (r.kind !== 'subscription' && r.kind !== 'modeling_subscription') { outcome = 'retired_request'; message = `Pedido ${r.number}: cobrança de colaboradores extra descontinuada — rever o pagamento recebido`; }
+  else if (!CURRENT_KINDS.includes(r.kind)) { outcome = 'retired_request'; message = `Pedido ${r.number}: cobrança de colaboradores extra descontinuada — rever o pagamento recebido`; }
   else if (p.amountMinor !== r.amountMinor) { outcome = 'amount_mismatch'; message = `Pago ${formatKz(p.amountMinor)}; o pedido ${r.number} é de ${formatKz(r.amountMinor)}`; }
   const inserted = await db.insert(gatewayEvents).values({
     provider: 'proxypay', externalId: p.id, reference: p.reference, amountMinor: p.amountMinor, payload: p.raw as object, outcome, paymentRequestId: r?.id ?? null, message,

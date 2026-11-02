@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { CYCLES, cyclePrice, DEFAULT_TIERS, MODELING_EXTRA_USER_MONTHLY_MINOR, MODELING_INCLUDED_USERS, MODELING_PLANS, modelingPlanPrice, type BillingCycle } from '../src/index.js';
+import { CYCLES, cyclePrice, DEFAULT_TIERS, MODELING_EXTRA_USER_MONTHLY_MINOR, MODELING_INCLUDED_USERS, MODELING_PLANS, modelingPlanPrice, VALUATION_EXTRA_USER_MONTHLY_MINOR, VALUATION_INCLUDED_USERS, VALUATION_PLANS, valuationPlanPrice, type BillingCycle } from '../src/index.js';
 
 /**
  * A documentação comercial (docs/MODULOS-LICENCAS.md) tem de dizer o mesmo que o código.
@@ -45,6 +45,19 @@ describe('documentação comercial = código', () => {
       expect(row[3], `${plan.key}: sectores`).toBe(String(plan.sectorLimit));
       expect(row.slice(4), `${plan.key}: preços`).toEqual(CYCLE_ORDER.map((c) => kz(modelingPlanPrice(plan.key, c).totalMinor)));
     }
+  });
+
+  it('Valora: análises activas e preços por ciclo de cada plano; extras e utilizadores incluídos', () => {
+    const rows = table('tabela-valora');
+    expect(rows.map((r) => r[0])).toEqual(VALUATION_PLANS.map((p) => p.key));
+    for (const plan of VALUATION_PLANS) {
+      const row = rows.find((r) => r[0] === plan.key)!;
+      expect(row[1], `${plan.key}: nome`).toBe(plan.label);
+      expect(row[2], `${plan.key}: análises`).toBe(plan.analysisLimit === null ? 'Ilimitadas' : String(plan.analysisLimit));
+      expect(row.slice(3), `${plan.key}: preços`).toEqual(CYCLE_ORDER.map((c) => kz(valuationPlanPrice(plan.key, c)!.totalMinor)));
+    }
+    expect(licences).toContain(`**${kz(VALUATION_EXTRA_USER_MONTHLY_MINOR)} Kz por mês e utilizador**`);
+    expect(VALUATION_INCLUDED_USERS).toBe(5);
   });
 
   it('descontos, utilizadores incluídos, extras e o exemplo de cálculo', () => {

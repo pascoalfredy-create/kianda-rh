@@ -562,7 +562,7 @@ export const paymentRequests = pgTable('payment_requests', {
   id: id(),
   companyId: text('company_id').notNull().references(() => companies.id),
   number: text('number').notNull().unique(),
-  /** subscription (RH) | modeling_subscription. extra_seats só em registos históricos. */
+  /** subscription (RH) | modeling_subscription | valuation_subscription. extra_seats só em registos históricos. */
   kind: text('kind').notNull(),
   tierKey: text('tier_key'),
   cycle: text('cycle'),

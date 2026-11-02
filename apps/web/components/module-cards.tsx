@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { MODELING_PLANS, SUBSCRIPTION_STATUS, type CompanyModulesOverview } from '@kianda/core';
+import { MODELING_PLANS, SUBSCRIPTION_STATUS, VALUATION_PLANS, type CompanyModulesOverview } from '@kianda/core';
 
 const TITLES = { hr: 'Recursos Humanos · Kianda RH', modeling: 'Modelagem Financeira · Kianda Integra', valuation: 'Análise e Avaliação · Kianda Valora' } as const;
 const ENTRY = { hr: '/', modeling: '/modelagem', valuation: '/valora' } as const;
@@ -12,7 +12,7 @@ function detail(key: keyof typeof TITLES, modules: CompanyModulesOverview): stri
   }
   const v = modules.valuation;
   if (!v) return 'Demonstrações, orçamento, tesouraria e avaliação de empresas';
-  return v.subscribed ? `${v.analysisLimit === null ? 'Análises ilimitadas' : `Até ${v.analysisLimit} análise(s) activa(s)`} · ${v.userLimit} utilizadores · PDF, Word e Excel` : 'Demonstrações, orçamento, tesouraria e avaliação de empresas · 5 utilizadores incluídos';
+  return v.subscribed ? `${VALUATION_PLANS.find(p => p.key === v.planKey)?.label ?? 'Contrato personalizado'} · ${v.analysisLimit === null ? 'análises ilimitadas' : `até ${v.analysisLimit} análise(s) activa(s)`} · ${v.userLimit} utilizadores · PDF, Word e Excel` : 'Planos por análises activas · 5 utilizadores incluídos · PDF, Word e Excel';
 }
 
 /** Catálogo da mesma conta; só existe uma ligação de entrada quando a licença e o utilizador a permitem. */

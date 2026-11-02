@@ -1,6 +1,6 @@
 'use client';
 
-import { CYCLES, FINANCIAL_SECTORS, MODELING_PLANS, MODELING_EXTRA_USER_MONTHLY_MINOR, modelingPlanPrice, formatKz, type BillingCycle, type FinancialSector } from '@kianda/core';
+import { CYCLES, FINANCIAL_SECTORS, MODELING_PLANS, MODELING_EXTRA_USER_MONTHLY_MINOR, VALUATION_EXTRA_USER_MONTHLY_MINOR, VALUATION_PLANS, modelingPlanPrice, valuationPlanPrice, formatKz, type BillingCycle, type FinancialSector } from '@kianda/core';
 import { useState } from 'react';
 import { useMutation } from '@/lib/client';
 import { ModelingSectors } from '@/components/modeling-sectors';
@@ -24,6 +24,25 @@ export function ModelingPlanForm({ currentPlan, currentCycle, extraUsers, active
     <div className="wide">{price ? <>Total do ciclo: <b>{formatKz(price.totalMinor)}</b>{price.discountMinor ? <span className="muted"> · desconto do plano: {formatKz(price.discountMinor)}</span> : null}{extras > 0 && <div className="muted">Inclui {formatKz(price.extraMinor)} por {extras} utilizador(es) extra, a {formatKz(MODELING_EXTRA_USER_MONTHLY_MINOR)}/mês durante {CYCLES[cycle].months} mês(es), sem desconto nos extras.</div>}</> : 'Este plano não está disponível no ciclo escolhido.'}</div>
     <p className="muted wide">A quota só muda após confirmação do pagamento. O efectivo do RH não altera o número de acessos da Modelagem. Pode reduzir o plano depois de arquivar projectos ou retirar acessos excedentes.</p>
     <div className="form-actions wide">{error && <span className="err">{error}</span>}<button className="btn" disabled={busy || !price || extras < enabledUsers - 5 || sectors.length !== MODELING_PLANS.find(p => p.key === plan)!.sectorLimit} onClick={() => run('/v1/billing/requests', 'POST', { kind: 'modeling_subscription', planKey: plan, cycle, extraUsers: extras, sectors })}>Gerar pedido de pagamento da Modelagem</button></div>
+  </div>;
+}
+
+/** Valora: plano por análises activas, sem sectores; a quota só muda depois da confirmação do pagamento. */
+export function ValuationPlanForm({ currentPlan, currentCycle, extraUsers, activeAnalyses, enabledUsers }: { currentPlan: string | null; currentCycle: string | null; extraUsers: number; activeAnalyses: number; enabledUsers: number }) {
+  const { busy, error, run } = useMutation();
+  const suitable = (p: typeof VALUATION_PLANS[number]) => p.analysisLimit === null || p.analysisLimit >= activeAnalyses;
+  const initial = VALUATION_PLANS.find(p => p.key === currentPlan && suitable(p)) ?? VALUATION_PLANS.find(suitable)!;
+  const [plan, setPlan] = useState<string>(initial.key);
+  const [cycle, setCycle] = useState<BillingCycle>((currentCycle as BillingCycle) || 'monthly');
+  const [extras, setExtras] = useState(Math.max(extraUsers, enabledUsers - 5, 0));
+  const price = valuationPlanPrice(plan, cycle, extras);
+  return <div className="form" style={{ alignItems: 'end' }}>
+    <label>Plano do Valora<select value={plan} onChange={e => setPlan(e.target.value)}>{VALUATION_PLANS.map(p => <option key={p.key} value={p.key} disabled={!suitable(p)}>{p.label} · {p.analysisLimit === null ? 'análises ilimitadas' : `${p.analysisLimit} análises`}</option>)}</select></label>
+    <label>Pagamento<select value={cycle} onChange={e => setCycle(e.target.value as BillingCycle)}>{Object.entries(CYCLES).map(([key, c]) => <option key={key} value={key}>{c.label}</option>)}</select></label>
+    <label>Utilizadores extra além dos 5 incluídos<input type="number" min={Math.max(0, enabledUsers - 5)} max={100000} value={extras} onChange={e => setExtras(Math.max(0, Number(e.target.value) || 0))} /></label>
+    <div className="wide">{price && <>Total do ciclo: <b>{formatKz(price.totalMinor)}</b>{price.discountMinor ? <span className="muted"> · desconto do plano: {formatKz(price.discountMinor)}</span> : null}{extras > 0 && <div className="muted">Inclui {formatKz(price.extraMinor)} por {extras} utilizador(es) extra, a {formatKz(VALUATION_EXTRA_USER_MONTHLY_MINOR)}/mês durante {CYCLES[cycle].months} mês(es), sem desconto nos extras.</div>}</>}</div>
+    <p className="muted wide">Uma análise é uma entidade analisada (a própria empresa, uma participada ou um alvo). Arquivar uma análise liberta a vaga. A quota só muda após confirmação do pagamento.</p>
+    <div className="form-actions wide">{error && <span className="err">{error}</span>}<button className="btn" disabled={busy || !price || extras < enabledUsers - 5} onClick={() => run('/v1/billing/requests', 'POST', { kind: 'valuation_subscription', planKey: plan, cycle, extraUsers: extras })}>Gerar pedido de pagamento do Valora</button></div>
   </div>;
 }
 

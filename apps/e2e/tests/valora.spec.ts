@@ -12,7 +12,7 @@ test('Valora: cria uma análise, edita o orçamento e os dados ficam no servidor
   await page.goto('/modulos');
   const card = page.locator('#valuation');
   await expect(card).toContainText('Kianda Valora');
-  await expect(card).toContainText('Até 3 análise(s) activa(s)');
+  await expect(card).toContainText('Essencial · até 10 análise(s) activa(s)');
   await card.getByRole('link', { name: 'Abrir módulo' }).click();
 
   await expect(page).toHaveURL(/\/valora$/);
@@ -91,4 +91,26 @@ test('Valora: sem licença, a entrada leva aos módulos e a API recusa', async (
   await expect(page).toHaveURL(/\/modulos#valuation$/);
   await expect(page.locator('#valuation')).toContainText('Não subscrito');
   expect((await apiAs(owner.token, 'GET', '/v1/valuation/bootstrap')).status).toBe(403);
+});
+
+test('Valora: na licença, tabela de preços e pedido de pagamento do plano escolhido', async ({ page, context }) => {
+  const owner = await registerCompany({ modules: ['hr', 'valuation'] });
+  await signIn(context, owner.token);
+  const errors = watchErrors(page);
+  await page.goto('/licenca#valuation');
+  const table = page.locator('.card', { hasText: 'Tabela de preços · Kianda Valora' });
+  await expect(table).toContainText('Essencial');
+  await expect(table).toContainText('10 análises activas');
+  await expect(table).toContainText('Grandes Empresas (Ilimitado)');
+  await expect(table).toContainText('1\u00a0050\u00a0590,00');
+  const form = page.locator('.card', { hasText: 'Valora: subscrever, renovar ou mudar de plano' });
+  await form.getByLabel('Plano do Valora').selectOption('corporate');
+  await form.getByLabel('Pagamento').selectOption('annual');
+  await expect(form).toContainText('743\u00a0580,00');
+  await form.getByRole('button', { name: 'Gerar pedido de pagamento do Valora' }).click();
+  await expect(page.getByText(/Valora · Corporate · até 30 análises/).first()).toBeVisible();
+  await page.screenshot({ path: '/tmp/e2e/valora-05-licenca.png', fullPage: false });
+  const pending = await sql<{ amount_minor: string; tier_key: string }>(`select amount_minor, tier_key from payment_requests where company_id = $1 and kind = 'valuation_subscription' and status = 'pending'`, [owner.id]);
+  expect(pending).toEqual([{ amount_minor: '74358000', tier_key: 'corporate' }]);
+  expect(errors).toEqual([]);
 });

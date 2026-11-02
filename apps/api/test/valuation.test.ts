@@ -36,13 +36,13 @@ describe.skipIf(!process.env.DATABASE_URL)('Valora: módulo de análise financei
     }
   });
 
-  it('o registo abre o período experimental com três análises e cinco utilizadores', async () => {
+  it('o registo abre o período experimental com as quotas do plano escolhido (Essencial por omissão)', async () => {
     const modules = (await req(owner, 'GET', '/v1/modules')).json();
-    expect(modules.valuation).toMatchObject({ subscribed: true, status: 'trial', canAccess: true, analysisLimit: 3, userLimit: 5 });
+    expect(modules.valuation).toMatchObject({ subscribed: true, status: 'trial', canAccess: true, analysisLimit: 10, userLimit: 5, planKey: 'essencial', cycle: 'monthly' });
     expect(modules.valuation.trialEndsAt).toBeTruthy();
     const boot = (await req(owner, 'GET', '/v1/valuation/bootstrap')).json();
     expect(boot).toMatchObject({ permission: 'editor', canWrite: true, analyses: [], current: null, hr: { available: true }, formats: { pdf: false, docx: false, xlsx: false } });
-    expect(boot.usage).toMatchObject({ analysisLimit: 3, activeAnalyses: 0, enabledUsers: 1, canCreateAnalysis: true });
+    expect(boot.usage).toMatchObject({ analysisLimit: 10, activeAnalyses: 0, enabledUsers: 1, canCreateAnalysis: true });
   });
 
   it('sem subscrição o módulo está fechado; os outros utilizadores precisam de acesso', async () => {
@@ -72,6 +72,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Valora: módulo de análise financei
   });
 
   it('respeita o limite de análises activas; arquivar liberta um lugar', async () => {
+    await getDb().execute(sql`update company_modules set project_limit = 3 where company_id = ${companyId} and module = 'valuation'`);
     expect((await req(editor, 'POST', '/v1/valuation/analyses', { name: 'Terceira', data: analysis('C') })).statusCode).toBe(201);
     const full = await req(editor, 'POST', '/v1/valuation/analyses', { name: 'Quarta', data: analysis('D') });
     expect(full.statusCode).toBe(409); expect(full.json().error).toBe('limite_analises');
@@ -139,5 +140,35 @@ describe.skipIf(!process.env.DATABASE_URL)('Valora: módulo de análise financei
     expect((await req(owner, 'GET', '/v1/billing')).json().valuationUsage).toMatchObject({ enabledUsers: 3, canAddUser: true });
     expect((await req(hrOnly, 'GET', '/v1/billing')).json().valuationUsage).toMatchObject({ activeAnalyses: 0 });
     expect((await req(hrOnly, 'PUT', `/v1/platform/companies/${hrOnlyCompany}/modules/valuation`, { enabled: true, status: 'trial', trialEndsAt: '2099-01-01' })).statusCode).toBe(403);
+  });
+  it('o registo aceita o plano e o ciclo do Valora; a avaliação usa as quotas desse plano', async () => {
+    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Valora 7', sector: 'commerce', nif: String(Number(stamp.slice(-9)) * 10 + 7).padStart(10, '0').slice(-10) }, name: 'Proprietário', email: `${stamp}.7@valora.test`, password, acceptTerms: true, modules: ['valuation'], valuationPlan: { key: 'corporate', cycle: 'annual' } } });
+    expect(r.statusCode).toBe(201);
+    expect((await req(cookieOf(r), 'GET', '/v1/modules')).json().valuation).toMatchObject({ status: 'trial', analysisLimit: 30, planKey: 'corporate', cycle: 'annual' });
+    expect((await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Valora 8', sector: 'commerce', nif: '1234567808' }, name: 'P', email: `${stamp}.8@valora.test`, password, acceptTerms: true, modules: ['valuation'], valuationPlan: { key: 'gratis', cycle: 'monthly' } } })).statusCode).toBe(400);
+  });
+
+  it('subscrição paga: pedido com o preço do plano, confirmação pela plataforma activa a licença e o acesso do proprietário', async () => {
+    const billing = (await req(hrOnly, 'GET', '/v1/billing')).json();
+    expect(billing.valuationPlans.map((p: { key: string; analysisLimit: number | null }) => [p.key, p.analysisLimit])).toEqual([['essencial', 10], ['pme', 20], ['corporate', 30], ['enterprise40', 40], ['unlimited', null]]);
+    expect(billing.valuationPlans[0].prices).toEqual({ monthly: 3_290_000, semiannual: 17_766_000, annual: 33_558_000 });
+    const created = await req(hrOnly, 'POST', '/v1/billing/requests', { kind: 'valuation_subscription', planKey: 'pme', cycle: 'semiannual', extraUsers: 1 });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({ kind: 'valuation_subscription', tierKey: 'pme', projectLimit: 20, extraUsers: 1, amountMinor: 28_566_000 + 6_000_000 });
+    expect((await req(hrOnly, 'GET', '/v1/valuation/bootstrap')).json().error).toBe('modulo_nao_subscrito');
+    const confirmed = await req(owner, 'POST', `/v1/platform/payment-requests/${created.json().id}/confirm`, { invoiceRef: null });
+    expect(confirmed.statusCode).toBe(200);
+    expect((await req(hrOnly, 'GET', '/v1/modules')).json().valuation).toMatchObject({ subscribed: true, status: 'active', canAccess: true, analysisLimit: 20, userLimit: 6, planKey: 'pme', cycle: 'semiannual' });
+    expect((await req(hrOnly, 'GET', '/v1/valuation/session')).json().formats).toEqual({ pdf: true, docx: true, xlsx: true });
+  });
+
+  it('não aceita um plano abaixo do uso actual', async () => {
+    await getDb().execute(sql`update company_modules set project_limit = null where company_id = ${companyId} and module = 'valuation'`);
+    const active = (await req(owner, 'GET', '/v1/valuation/analyses')).json().filter((a: { archivedAt: string | null }) => !a.archivedAt).length;
+    expect(active).toBeGreaterThan(0);
+    // Três utilizadores com acesso: um plano sem extras chega; com o limite de análises abaixo do uso, recusa.
+    await getDb().execute(sql`update company_modules set project_limit = ${active} where company_id = ${companyId} and module = 'valuation'`);
+    const ok = await req(owner, 'POST', '/v1/billing/requests', { kind: 'valuation_subscription', planKey: 'essencial', cycle: 'monthly' });
+    expect(ok.statusCode).toBe(201);
   });
 });
