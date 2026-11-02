@@ -449,6 +449,32 @@ export const ackRequests = pgTable('ack_requests', {
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
 }, (t) => [uniqueIndex('ack_requests_document_employee').on(t.documentId, t.employeeId), index('ack_requests_employee').on(t.employeeId, t.status)]);
 
+/** Notificações no telemóvel: uma subscrição Web Push por dispositivo e utilizador (o navegador cria as chaves). */
+export const pushSubscriptions = pgTable('push_subscriptions', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  userId: text('user_id').notNull().references(() => users.id),
+  endpoint: text('endpoint').notNull().unique(),
+  p256dh: text('p256dh').notNull(),
+  auth: text('auth').notNull(),
+  userAgent: text('user_agent'),
+  createdAt: createdAt(),
+  lastSuccessAt: timestamp('last_success_at', { withTimezone: true }),
+  failures: integer('failures').notNull().default(0),
+}, (t) => [index('push_subscriptions_user').on(t.userId)]);
+
+/** Caixa de saída: o evento grava a notificação na mesma transacção; o envio acontece depois da resposta. */
+export const pushOutbox = pgTable('push_outbox', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  userId: text('user_id').notNull().references(() => users.id),
+  payload: jsonb('payload').$type<{ title: string; body: string; url: string; tag?: string }>().notNull(),
+  createdAt: createdAt(),
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+  attempts: integer('attempts').notNull().default(0),
+  error: text('error'),
+}, (t) => [index('push_outbox_pending').on(t.createdAt).where(sql`sent_at is null`)]);
+
 /** Localização registada numa marcação (só no instante da marcação). */
 export interface PunchLocationRecord {
   status: 'ok' | 'outside' | 'unavailable' | 'no_workplace';

@@ -7,6 +7,7 @@ import { api, currentUser } from '@/lib/api';
 import type { AbsenceRow, BalanceRow } from '@/lib/types';
 import { PortalHome } from './portal-home';
 import { redirect } from 'next/navigation';
+import { PushSettings } from '@/components/push-settings';
 
 const pt = (d: string) => d.split('-').reverse().join('/');
 
@@ -47,6 +48,7 @@ export default async function Home() {
   return (
     <>
       <div className="page-head"><div><h1>{hour < 12 ? 'Bom dia' : hour < 19 ? 'Boa tarde' : 'Boa noite'}, {me.user.name.split(' ')[0]}</h1><p className="sub">{new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Africa/Luanda' })} · {me.company?.name}</p></div><div className="actions"><NewAbsenceForm me={{ employeeId: me.user.employeeId, isHr: ['owner', 'hr_admin'].includes(me.user.role) }} people={balances} canRegisterOthers={decider} canApprove={decider} />{['owner', 'hr_admin'].includes(me.user.role) && <Link className="btn" href="/colaboradores?novo=1">+ Novo colaborador</Link>}</div></div>
+      <PushSettings compact />
       {!overview && <div className="warn">Não foi possível carregar o resumo de pessoal. Actualize a página para tentar novamente.</div>}
       {!fiscal && <div className="warn">Sem pacote fiscal publicado para {year}. O processamento salarial desse ano mantém-se bloqueado; as projecções identificam as regras de referência.</div>}
       <div className="rh-kpis">

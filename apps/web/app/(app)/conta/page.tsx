@@ -1,6 +1,7 @@
 import { api, currentUser } from '@/lib/api';
 import { TwoFactor } from './two-factor';
 import { PasswordForm } from './form';
+import { PushSettings } from '@/components/push-settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,8 @@ export default async function Conta() {
       <PasswordForm />
       <div style={{ height: 16 }} />
       <TwoFactor enabled={tf.enabled} recommended={tf.recommended} />
+      <div style={{ height: 16 }} />
+      <PushSettings />
     </>
   );
 }

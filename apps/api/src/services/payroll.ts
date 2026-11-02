@@ -8,6 +8,7 @@ import {
   absences, accountMappings, allowanceTypes, and, asc, employeeAllowances, isNull, or, workSchedules, attendanceEntries, attendanceMonths, auditLogs, companies, compensationChanges, contracts, departments, desc, employees, eq,
   gte, inArray, sql, journalEntries, journalLines, lte, ne, payrollLines, payrollRuns, payrollVariables, type Db,
 } from '@kianda/db';
+import { notifyEmployees } from './push.js';
 
 export class DomainError extends Error {
   constructor(public readonly code: string, message: string, public readonly status = 409) { super(message); }
@@ -355,6 +356,9 @@ export async function closePayroll(db: Db, companyId: string, runId: string, act
     await tx.insert(journalLines).values(entry.lines.map((l) => ({ entryId: je!.id, account: l.account, description: l.description, costCenter: l.costCenter, debitMinor: l.debitMinor, creditMinor: l.creditMinor })));
     const [closed] = await tx.update(payrollRuns).set({ status: 'closed', closedAt: new Date(), closedBy: actorId }).where(eq(payrollRuns.id, run.id)).returning();
     await tx.insert(auditLogs).values({ companyId, actorId, action: 'close', entity: 'payroll_run', entityId: run.id, before: run, after: closed });
+    // Recibos disponíveis: aviso no telemóvel de cada colaborador processado (sem montantes no aviso).
+    const month = new Date(`${run.period}-15T12:00:00Z`).toLocaleDateString('pt-PT', { month: 'long', year: 'numeric', timeZone: 'Africa/Luanda' });
+    await notifyEmployees(tx as unknown as Db, companyId, [...new Set(lines.map(x => x.l.employeeId))], { title: 'Recibo de vencimento disponível', body: `O seu recibo de ${month} já pode ser consultado.`, url: '/recibos', tag: `recibo-${run.period}` });
     return { run: closed, journalReference: entry.reference, totals };
   });
 }

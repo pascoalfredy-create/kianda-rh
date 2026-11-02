@@ -1,3 +1,4 @@
+import { disablePush } from './push-client';
 /** Limpa as páginas pessoais e os metadados locais partilhados pelo RH e Integra. */
 export async function clearOfflineData() {
   try { if ('caches' in window) await caches.delete('kianda-pages-v1'); } catch { /* armazenamento indisponível */ }
@@ -8,6 +9,8 @@ export async function clearOfflineData() {
 /** Só abandona a conta depois de o servidor confirmar o fim da sessão. */
 export async function endSession(afterLogout: () => void = () => {}) {
   let response: Response;
+  // Telemóvel partilhado: ao sair, este dispositivo deixa de receber as notificações desta conta.
+  try { await disablePush(); } catch { /* a saída continua */ }
   try {
     response = await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(15000) });
   } catch {
