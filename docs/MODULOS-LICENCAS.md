@@ -48,7 +48,7 @@ Licenciado por **análises activas** (uma análise = uma entidade analisada: a p
 | pme | PME | 20 | 52.900 | 285.660 | 539.580 |
 | corporate | Corporate | 30 | 72.900 | 393.660 | 743.580 |
 | enterprise40 | Grandes Empresas (Até 40) | 40 | 92.900 | 501.660 | 947.580 |
-| unlimited | Grandes Empresas (Ilimitado) | Ilimitadas | 102.999 | 556.195 | 1.050.590 |
+| unlimited | Grandes Empresas (Ilimitado) | Ilimitadas | 129.900 | 701.460 | 1.324.980 |
 
 - Todos os planos incluem **5 utilizadores**, contando o proprietário. Extras do Valora: **10.000 Kz por mês e utilizador**, em todos os meses do ciclo, sem desconto.
 - Avaliação de 7 dias com as quotas do plano escolhido no registo (por omissão, Essencial mensal). Uma empresa já registada subscreve em **Módulos e licenças → Valora** (pedido de pagamento); a licença só é activada pela confirmação do pagamento — a empresa não concede licenças a si própria (a base de dados recusa escrita em `company_modules` ao papel da aplicação). A plataforma pode ainda ajustar limites em **Plataforma Kianda → Valora**, nunca abaixo do uso.
