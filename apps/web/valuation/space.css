@@ -1,4 +1,15 @@
 /* Kianda Valora: ajustes da plataforma sobre a interface aprovada (menu no telemóvel, análises, estado de gravação). */
+/* Menu lateral claro, como no RH e no Integra (sem fundo escuro), nos dois temas. */
+:root,:root[data-theme="dark"]{--side:var(--surface);--side-ink:var(--ink-2);--side-ink-2:var(--ink-3);--side-act:var(--surface-2)}
+aside{border-right:1px solid var(--line)}
+.app{background:linear-gradient(90deg,var(--surface) 232px,transparent 232px)}
+.brand b{color:var(--ink)}
+nav a{color:var(--ink-2)}
+nav a:hover{background:var(--surface-2);color:var(--ink)}
+nav a.on{background:var(--surface-2);color:var(--ink);font-weight:600;box-shadow:none}
+nav a.on svg{opacity:1}
+.side-foot{border-top-color:var(--line)}
+.valora-menu{border-color:var(--line-2)}
 button.entity{font:inherit;color:inherit;cursor:pointer;text-align:left}
 button.entity:hover{border-color:var(--line-2)}
 header{flex-wrap:wrap;row-gap:8px}
@@ -33,7 +44,7 @@ header{flex-wrap:wrap;row-gap:8px}
 @media(max-width:760px){
   .valora-menu{display:inline-flex}
   .app{background:none}
-  aside{padding:12px 14px;gap:0}
+  aside{padding:12px 14px;gap:0;border-right:0;border-bottom:1px solid var(--line)}
   aside .brand{padding:4px 4px 4px}
   aside nav,aside .side-foot{display:none}
   aside.open nav,aside.open .side-foot{display:block}
