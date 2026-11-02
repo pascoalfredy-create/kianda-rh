@@ -72,8 +72,8 @@ function NavigationItem({ item, active, onNavigate }: { item: NavItem; active: b
   const [intent, setIntent] = useState(false);
   const content = <><RhIcon name={item.icon} /><span>{item.label}</span>{!!item.badge && <span className="nav-count">{item.badge}</span>}{item.locked && <span className="nav-lock" title="Sem acesso"><RhIcon name="lock" size={12} /><span className="sr-only">Sem acesso</span></span>}</>;
   const shared = { onClick: onNavigate, className: `${active ? 'nav-on' : ''} ${item.locked ? 'nav-locked' : ''}`, 'aria-current': active ? 'page' as const : undefined };
-  // O Integra é um documento independente, pelo que não deve receber pedidos RSC do Next.
-  return item.href === '/modelagem' ? <a href={item.href} {...shared}>{content}</a>
+  // O Integra e o Valora são documentos independentes, pelo que não devem receber pedidos RSC do Next.
+  return item.href === '/modelagem' || item.href === '/valora' ? <a href={item.href} {...shared}>{content}</a>
     : <Link href={item.href} prefetch={intent} onMouseEnter={() => setIntent(true)} onFocus={() => setIntent(true)} onTouchStart={() => setIntent(true)} {...shared}>{content}</Link>;
 }
 

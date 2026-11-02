@@ -1,9 +1,10 @@
-import { MODELING_SECTOR_LABELS, formatKz, luandaDate, trialDaysRemaining, type CompanyModulesOverview, type FinancialSector } from '@kianda/core';
+import { MODELING_SECTOR_LABELS, SUBSCRIPTION_STATUS, formatKz, luandaDate, trialDaysRemaining, type CompanyModulesOverview, type FinancialSector } from '@kianda/core';
 import { redirect } from 'next/navigation';
 import { api, currentUser } from '@/lib/api';
 import { ModelingPlanForm, NewReference, ReferenceForm, RenewForm } from './forms';
 import { ModuleCards } from '@/components/module-cards';
 import { ModelingMembers, type ModelingMember, type ModelingProject } from './modeling-members';
+import { ValuationMembers, type ValuationMember } from './valuation-members';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,7 @@ interface Billing {
   modelingPlans: { key: string; label: string; projectLimit: number | null; sectorLimit: number; prices: Record<string, number | null> }[];
   modelingExtraUserMinor: number;
   modelingUsage: { activeProjects: number; projectLimit: number | null; enabledUsers: number; userLimit: number };
+  valuationUsage: { activeAnalyses: number; analysisLimit: number | null; enabledUsers: number; userLimit: number };
 }
 const pt = (d: string) => d.split('-').reverse().join('/');
 const ST: Record<string, string> = { trial: 'st pending', active: 'st approved', past_due: 'st pending', suspended: 'st rejected', cancelled: 'tag' };
@@ -28,6 +30,11 @@ export default async function Licenca() {
   const [users, members, projects] = canManageMembers
     ? await Promise.all([api<{ id: string; name: string; role?: string }[]>('/v1/users'), api<ModelingMember[]>('/v1/modeling/members'), api<ModelingProject[]>('/v1/modeling/models')])
     : [[], [], []];
+  const v = b.modules.valuation;
+  const canManageValuation = me.user.role === 'owner' && v.canAccess && v.canWrite;
+  const [valuationUsers, valuationMembers] = canManageValuation
+    ? await Promise.all([users.length ? Promise.resolve(users) : api<{ id: string; name: string; role?: string }[]>('/v1/users'), api<ValuationMember[]>('/v1/valuation/members')])
+    : [[], []];
   const pending = b.requests.filter((r) => r.status === 'pending' && r.kind !== 'extra_seats');
   const today = luandaDate(new Date());
   const daysLeft = b.trialEndsAt && b.status === 'trial' ? trialDaysRemaining(b.trialEndsAt, today) : null;
@@ -95,10 +102,19 @@ export default async function Licenca() {
         <p className="muted" style={{ padding: '0 16px 12px' }}>Utilizadores extra: {formatKz(b.modelingExtraUserMinor)}/mês por acesso além dos 5 incluídos. Cobrados durante os meses do ciclo, sem desconto nos extras. Pagamentos semestrais e anuais à vista.</p>
       </div>
       {canManageMembers && <div className="card section"><h2>Utilizadores autorizados na Modelagem</h2><ModelingMembers users={users} members={members} projects={projects} self={me.user.sub} /></div>}
+      <h2 id="valuation">Análise e Avaliação · Kianda Valora</h2>
+      <p className="sub">{b.valuationUsage.activeAnalyses} análise(s) activa(s){v.subscribed ? ` de ${b.valuationUsage.analysisLimit === null ? 'ilimitadas' : b.valuationUsage.analysisLimit} · ${b.valuationUsage.enabledUsers} de ${b.valuationUsage.userLimit} utilizadores` : ''}</p>
+      <div className="card section">
+        <h2>Licença do Valora</h2>
+        <p style={{ padding: '0 16px' }}>{!v.subscribed ? 'Não subscrito.' : <>{v.status === 'trial' ? 'Período experimental' : 'Subscrição'} · <span className={ST[v.status]}>{SUBSCRIPTION_STATUS[v.status]}</span>{v.status === 'trial' && v.trialEndsAt ? ` até ${pt(v.trialEndsAt)}, inclusive` : v.paidUntil ? ` · pago até ${pt(v.paidUntil)}` : ''}</>}</p>
+        <p className="muted" style={{ padding: '0 16px 12px' }}>Demonstrações financeiras por PGC Angola, orçamento, tesouraria, controlo orçamental, rácios e avaliação (DCF, múltiplos e activos), com relatórios em PDF, Word e Excel. Inclui 5 utilizadores. Os planos do Valora ainda não estão publicados: a activação e os limites são acordados com a plataforma{b.supportEmail ? <> (<a href={`mailto:${b.supportEmail}?subject=${encodeURIComponent('Kianda Valora')}`}>{b.supportEmail}</a>)</> : ''}. Durante a avaliação, os documentos ficam em pré-visualização.</p>
+        {v.canAccess && <p style={{ padding: '0 16px 12px' }}><a className="btn sm" href="/valora">{v.canWrite ? 'Abrir o Valora' : 'Abrir em consulta'}</a></p>}
+      </div>
+      {canManageValuation && <div className="card section"><h2>Utilizadores autorizados no Valora</h2><ValuationMembers users={valuationUsers} members={valuationMembers} self={me.user.sub} userLimit={b.valuationUsage.userLimit} /></div>}
       {b.requests.some((r) => r.status !== 'pending') && (
         <div className="card section">
           <h2>Histórico</h2>
-          <table className="dense"><tbody>{b.requests.filter((r) => r.status !== 'pending').map((r) => <tr key={r.id}><td>{r.number}<div className="muted">{r.kind === 'modeling_subscription' ? 'Modelagem Financeira' : 'Recursos Humanos'}</div></td><td>{r.kind !== 'extra_seats' ? `${pt(r.periodStart!)} a ${pt(r.periodEnd!)}` : `${r.seats} extra`}</td><td className="num">{formatKz(r.amountMinor)}</td><td>{r.status === 'paid' ? <span className="st approved">Pago</span> : <span className="tag">Cancelado</span>}</td><td className="muted">{r.invoiceRef ? (r.invoiceProvider === 'vendus' ? <a href={`/api/v1/billing/requests/${r.id}/invoice`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand)', textDecoration: 'underline' }}>Factura {r.invoiceRef} (PDF)</a> : `Factura ${r.invoiceRef}`) : r.status === 'paid' ? 'factura em emissão' : ''}{r.confirmedVia === 'gateway' ? ' · Multicaixa' : ''}</td></tr>)}</tbody></table>
+          <table className="dense"><tbody>{b.requests.filter((r) => r.status !== 'pending').map((r) => <tr key={r.id}><td>{r.number}<div className="muted">{r.kind === 'modeling_subscription' ? 'Modelagem Financeira' : r.kind === 'valuation_subscription' ? 'Kianda Valora' : 'Recursos Humanos'}</div></td><td>{r.kind !== 'extra_seats' ? `${pt(r.periodStart!)} a ${pt(r.periodEnd!)}` : `${r.seats} extra`}</td><td className="num">{formatKz(r.amountMinor)}</td><td>{r.status === 'paid' ? <span className="st approved">Pago</span> : <span className="tag">Cancelado</span>}</td><td className="muted">{r.invoiceRef ? (r.invoiceProvider === 'vendus' ? <a href={`/api/v1/billing/requests/${r.id}/invoice`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand)', textDecoration: 'underline' }}>Factura {r.invoiceRef} (PDF)</a> : `Factura ${r.invoiceRef}`) : r.status === 'paid' ? 'factura em emissão' : ''}{r.confirmedVia === 'gateway' ? ' · Multicaixa' : ''}</td></tr>)}</tbody></table>
         </div>
       )}
     </>

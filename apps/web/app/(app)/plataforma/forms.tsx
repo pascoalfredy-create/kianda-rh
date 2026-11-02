@@ -42,6 +42,30 @@ export function EditSubscription({ c, tiers }: { c: Sub; tiers: { key: string; l
   );
 }
 
+interface ValuationGrant { subscribed: boolean; status: string; trialEndsAt: string | null; paidUntil: string | null; analysisLimit: number | null; extraUsers: number }
+/** Valora: a activação (experimental ou paga) e os limites são decisões da plataforma enquanto o preço não é publicado. */
+export function EditValuation({ companyId, v }: { companyId: string; v: ValuationGrant }) {
+  const { busy, error, run } = useMutation();
+  const [open, setOpen] = useState(false);
+  if (!open) return <button className="btn ghost sm" onClick={() => setOpen(true)}>Valora</button>;
+  return (
+    <form className="form" aria-label="Licença do Valora" style={{ gridTemplateColumns: 'repeat(3, 1fr)', padding: 8, minWidth: 520 }} onSubmit={async (e) => {
+      e.preventDefault();
+      const f = new FormData(e.currentTarget), status = String(f.get('status'));
+      const limit = String(f.get('analysisLimit') ?? '').trim();
+      const payload = { enabled: status !== 'cancelled', status, trialEndsAt: f.get('trialEndsAt') || null, paidUntil: f.get('paidUntil') || null, projectLimit: limit ? Number(limit) : null, extraUsers: Number(f.get('extraUsers') || 0) };
+      if (await run(`/v1/platform/companies/${companyId}/modules/valuation`, 'PUT', payload)) setOpen(false);
+    }}>
+      <label>Estado do Valora<select name="status" defaultValue={v.subscribed ? v.status : 'trial'}><option value="trial">Experimental</option><option value="active">Activa</option><option value="past_due">Pagamento em atraso</option><option value="suspended">Suspensa</option><option value="cancelled">Cancelada</option></select></label>
+      <label>Experimental até<input name="trialEndsAt" type="date" defaultValue={v.trialEndsAt ?? ''} /></label>
+      <label>Pago até<input name="paidUntil" type="date" defaultValue={v.paidUntil ?? ''} /></label>
+      <label>Análises activas (vazio = ilimitadas)<input name="analysisLimit" inputMode="numeric" defaultValue={v.analysisLimit ?? ''} /></label>
+      <label>Utilizadores extra (além de 5)<input name="extraUsers" inputMode="numeric" defaultValue={v.extraUsers} /></label>
+      <div className="actions wide" style={{ justifyContent: 'flex-start' }}>{error && <span className="err">{error}</span>}<button type="button" className="btn ghost sm" onClick={() => setOpen(false)}>Fechar</button><button className="btn sm" disabled={busy}>Gravar Valora</button></div>
+    </form>
+  );
+}
+
 export function SettingsForm({ s }: { s: { bank: { holder: string; bankName: string; iban: string } | null; supportEmail: string | null; supportPhone: string | null } }) {
   const { busy, error, run } = useMutation();
   const [ok, setOk] = useState('');

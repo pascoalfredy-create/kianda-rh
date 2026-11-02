@@ -16,7 +16,7 @@ let seq = 0;
 const unique = () => `${Date.now()}${process.pid % 1000}${seq++}`;
 
 export interface Company { id: string; email: string; token: string; name: string }
-type Modules = ('hr' | 'modeling')[];
+type Modules = ('hr' | 'modeling' | 'valuation')[];
 
 /** Regista uma empresa nova pela API (cada teste trabalha isolado). */
 export async function registerCompany(opts: { name?: string; modules?: Modules; sectors?: string[] } = {}): Promise<Company> {

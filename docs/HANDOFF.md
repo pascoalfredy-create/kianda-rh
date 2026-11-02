@@ -1,15 +1,17 @@
-# Kianda RH + Kianda Integra — documento de passagem
+# Kianda RH + Kianda Integra + Kianda Valora — documento de passagem
 
-> Para quem continua o trabalho (agente ou programador). Leia isto primeiro; depois `docs/MODULOS-LICENCAS.md` (comercial), `docs/INTEGRA_MODULE.md` (Modelagem) e `docs/DEPLOY.md` (produção).
+> Para quem continua o trabalho (agente ou programador). Leia isto primeiro; depois `docs/MODULOS-LICENCAS.md` (comercial), `docs/INTEGRA_MODULE.md` (Modelagem), secção Valora de `docs/MODULOS-LICENCAS.md` e `docs/DEPLOY.md` (produção).
 > **Última actualização: 02/11/2026** — alinhado com o código e com a produção no commit `576c165` (PR #29) e com a limpeza de documentação que se lhe seguiu.
 > **Fonte de verdade: o código e os testes.** Se um documento divergir do código, corrija o documento, nunca o contrário sem decisão do dono. A tabela comercial existe só em `MODULOS-LICENCAS.md`; um teste (`packages/core/test/docs-coherence.test.ts`) falha se ela divergir do código.
 
 ## 1. O que é
 
-Uma conta, um repositório e uma base de dados para dois módulos com licenças próprias:
+Uma conta, um repositório e uma base de dados para três módulos com licenças próprias:
 
 - **Kianda RH** — gestão de pessoas e processamento salarial para Angola (IRT, INSS, LGT), obrigações, finanças de pessoal em **PGC Angola (Decreto n.º 82/2001)**, conciliação, despesas, cessação, documentos, recrutamento, desempenho, portal e app móvel (PWA).
 - **Kianda Integra · Modelagem Financeira** — projectos de investimento e avaliação de empresas nos 8 sectores (mineração, petróleo, agro, comércio, serviços, indústria, imobiliário, tecnologia): demonstrações projectadas, DCF, crédito, cenários, 8 relatórios em PDF, versões aprovadas, análise de balancetes históricos (também de outros ERP) e importação opcional dos custos com pessoal do RH.
+
+- **Kianda Valora · Análise e Avaliação** — análise financeira de uma entidade (própria empresa, participada ou alvo): demonstrações PGC Angola, orçamento, tesouraria, controlo orçamental mensal, rácios e avaliação (DCF, múltiplos, activos), relatórios PDF/Word/Excel. Interface aprovada em `apps/web/valuation/prototype.html`, montada por `scripts/build-valuation-ui.mjs` (ajustes explícitos que falham se o texto mudar; regenerar com `pnpm --filter @kianda/web valuation:generate`); ligação à API em `apps/web/valuation/adapter.js`; servida em `/valora`.
 
 - **Dono do produto:** Pascoal Frederico — CFO e contabilista; decide ele próprio as questões fiscais e contabilísticas; especialista em PGC Angola. Faz software de gestão, não de facturação (a factura certificada vai para o Vendus).
 - **Produção:** https://kianda.yelaperformance.com · **Repositório:** `pascoalfredy-create/kianda-rh`, ramo `main`.
@@ -32,8 +34,8 @@ Uma conta, um repositório e uma base de dados para dois módulos com licenças 
 ## 3. Estado actual (02/11/2026)
 
 - Produção no commit `576c165` (PR #29), publicada com sucesso: testes, tipos, build, **E2E**, migrações, API, web e smoke público. `/api/health` → `{"status":"ok","packs":["AO-2026"]}`.
-- Testes: **core 283, API 266, web 160** (com Postgres no CI) + **15 E2E** no navegador. A contagem do core inclui o teste de coerência da documentação.
-- Última migração: **0038_punch_location** (ponto com localização).
+- Testes: **core 288, API 275, web 173** (com Postgres no CI) + **18 E2E** no navegador. A contagem do core inclui o teste de coerência da documentação.
+- Última migração: **0039_valuation_module** (Valora: `valuation_analyses`, `valuation_members`, com RLS).
 
 **Entregas recentes (ver também `docs/ROADMAP.md`):**
 
@@ -47,7 +49,8 @@ Uma conta, um repositório e uma base de dados para dois módulos com licenças 
 | #27/#28 | Limites reais da Cloudflare documentados; `scripts/cf-ratelimit.mjs` no deploy (idempotente). |
 | #29 | Procedimento manual «Administração — repor verificação em dois passos» (só administradores da plataforma, sem tocar na palavra-passe, com auditoria). |
 | #30/#31 | Documentação alinhada com o código (teste de coerência dos preços); regra de limite de tentativas activa. |
-| seguinte | **Ponto com localização** (entrega 25 do RH): locais com raio, regra off/registar/alertar/bloquear, GPS só na marcação (também offline), quiosque com QR/código rotativo, excepções na Assiduidade. Motor em `packages/core/src/geofence.ts`; rotas em `apps/api/src/routes/workplaces.ts` e `attendance.ts`; página `/locais`, ecrã público `/quiosque/[token]`. |
+| #32 | **Ponto com localização** (entrega 25 do RH): locais com raio, regra off/registar/alertar/bloquear, GPS só na marcação (também offline), quiosque com QR/código rotativo, excepções na Assiduidade. Motor em `packages/core/src/geofence.ts`; rotas em `apps/api/src/routes/workplaces.ts` e `attendance.ts`; página `/locais`, ecrã público `/quiosque/[token]`. |
+| seguinte | **Kianda Valora** (3.º módulo): licença própria (avaliação no registo; activação e limites pela Plataforma), análises por empresa no servidor com revisões, membros com edição/consulta, custos com o pessoal (72) do RH, exportações PDF/Word/Excel só com licença paga, nomes de ficheiro em ASCII (o Chromium ignora acentos). |
 
 **Feito em 01–02/11/2026 (configuração de produção):** `KIANDA_BACKUP_PASSPHRASE` definido (impressão digital `33ec1a54`; cópia diária às 02:17 de Luanda com teste de restauro); `KIANDA_JWT_SECRET` rodado; `KIANDA_SEED_DEMO=false` (a empresa demo «Kwanza Logística» e as 3 contas continuam na base — eliminar pela consola se deixarem de servir); 2FA da conta de administrador reposta a pedido do dono (execução `41401754941`; não repetir como teste); **regra de limite de tentativas activa na Cloudflare** desde 02/11 (token `kianda-rh-deploy` com «Zone WAF Rules · Edit»; zona `yelaperformance.com`, 5 pedidos/10 s por IP nas rotas de autenticação → Block 10 s; reaplicada de forma idempotente em cada publicação por `scripts/cf-ratelimit.mjs`).
 

@@ -25,6 +25,7 @@ import { reportRoutes } from './routes/reports.js';
 import { personnelRoutes } from './routes/personnel.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { modelingRoutes, moduleRoutes } from './routes/modeling.js';
+import { valuationRoutes } from './routes/valuation.js';
 import { budgetRoutes } from './routes/budget.js';
 import { authRoutes } from './routes/auth.js';
 import { employeeRoutes } from './routes/employees.js';
@@ -70,6 +71,7 @@ export function buildApp(opts: { logger?: boolean; rateLimit?: boolean } = {}) {
   app.route('/', reportRoutes());
   app.route('/', budgetRoutes());
   app.route('/', modelingRoutes());
+  app.route('/', valuationRoutes());
   app.route('/', moduleRoutes());
   app.route('/', absenceRoutes());
   app.route('/', attendanceRoutes());
