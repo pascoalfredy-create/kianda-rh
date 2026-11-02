@@ -1,0 +1,41 @@
+# Procedimento manual: desactivar a verificação em dois passos de um administrador da plataforma
+# que perdeu a app autenticadora. Só aceita emails de KIANDA_PLATFORM_ADMINS; fica na auditoria.
+name: Administração — repor verificação em dois passos
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: Email do administrador da plataforma
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kianda-admin-reset-2fa
+  cancel-in-progress: false
+
+jobs:
+  reset:
+    if: vars.KIANDA_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @kianda/core build
+      - run: pnpm --filter @kianda/db build
+      - name: Desactivar a verificação em dois passos
+        run: pnpm --filter @kianda/db reset-2fa
+        env:
+          RESET_2FA_EMAIL: ${{ inputs.email }}
+          DATABASE_URL: ${{ secrets.KIANDA_DATABASE_URL }}
+          DATABASE_CA_CERT: ${{ secrets.KIANDA_DATABASE_CA_CERT }}
+          KIANDA_PLATFORM_ADMINS: ${{ vars.KIANDA_PLATFORM_ADMINS }}
