@@ -62,6 +62,8 @@ Uma conta, um repositório e uma base de dados para três módulos com licenças
 
 **Feito pelo dono (confirmado em 02/11/2026):** IBAN do Banco Atlântico configurado na consola (Plataforma Kianda); os pedidos de pagamento mostram as instruções de transferência. Ficheiros anexados em R2 (`kianda-files`) activo.
 
+**Conta interna do dono (02/11/2026):** procedimento manual «Administração — conta interna com todos os módulos» (`.github/workflows/admin-internal-account.yml`, `packages/db/scripts/internal-account.ts`): só para emails de `KIANDA_PLATFORM_ADMINS`, nas empresas de que são proprietários — RH (faixa sem limite), Modelagem Ilimitado com os 8 sectores e Valora Ilimitado, pagos até 31/12/2099, acesso do proprietário e auditoria. Idempotente; correr de novo depois de recriar a conta.
+
 **Pendentes (do dono)** — estado lido do registo da publicação de 02/11/2026: o Worker só tem `API_JWT_SECRET` e `APP_BASE_URL`; ProxyPay, Resend, Vendus e `KIANDA_MODELING_OWNER_USER_ID` estão vazios.
 1. Confirmar na consola o email e o telefone de suporte (aparecem na licença e no Valora).
 2. Opcional: `KIANDA_MODELING_OWNER_USER_ID` (sem ela ninguém exporta Excel da Modelagem).
