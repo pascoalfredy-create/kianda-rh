@@ -295,6 +295,13 @@
       "when": 1793640100000,
       "tag": "0041_valuation_restored_at",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1793640200000,
+      "tag": "0042_valuation_align_trial_limits",
+      "breakpoints": true
     }
   ]
 }
