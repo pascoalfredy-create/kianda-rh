@@ -7,6 +7,7 @@ import { absenceRoutes } from './routes/absences.js';
 import { attendanceRoutes } from './routes/attendance.js';
 import { kioskRoutes, workplaceRoutes } from './routes/workplaces.js';
 import { checklistRoutes } from './routes/checklists.js';
+import { acknowledgementRoutes } from './routes/acknowledgements.js';
 import { obligationRoutes } from './routes/obligations.js';
 import { ledgerRoutes } from './routes/ledger.js';
 import { bankRoutes } from './routes/bank.js';
@@ -78,6 +79,7 @@ export function buildApp(opts: { logger?: boolean; rateLimit?: boolean } = {}) {
   app.route('/', attendanceRoutes());
   app.route('/', workplaceRoutes());
   app.route('/', checklistRoutes());
+  app.route('/', acknowledgementRoutes());
   app.route('/', kioskRoutes());
   app.route('/', payrollRoutes());
   app.route('/', obligationRoutes());

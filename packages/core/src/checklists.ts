@@ -12,7 +12,11 @@ export const TASK_RESPONSIBLES = ['hr', 'manager', 'employee', 'finance'] as con
 export type TaskResponsible = typeof TASK_RESPONSIBLES[number];
 export const TASK_RESPONSIBLE_LABELS: Record<TaskResponsible, string> = { hr: 'Recursos Humanos', manager: 'Chefia directa', employee: 'Colaborador', finance: 'Finanças' };
 
-export interface ChecklistTemplateItem { title: string; description?: string; responsible: TaskResponsible; offsetDays: number }
+/** link: a tarefa fica feita sozinha quando acontece o evento (ex.: «regulamento» = o colaborador aceita o regulamento interno no portal). */
+export const CHECKLIST_LINKS = ['regulamento'] as const;
+export type ChecklistLink = typeof CHECKLIST_LINKS[number];
+export const CHECKLIST_LINK_LABELS: Record<ChecklistLink, string> = { regulamento: 'Fica feita quando o colaborador aceita o regulamento interno no portal' };
+export interface ChecklistTemplateItem { title: string; description?: string; responsible: TaskResponsible; offsetDays: number; link?: ChecklistLink }
 export interface ChecklistTemplate { kind: ChecklistKind; name: string; autoStart: boolean; items: ChecklistTemplateItem[] }
 
 export const CHECKLIST_MAX_ITEMS = 60;
@@ -32,7 +36,7 @@ export const DEFAULT_CHECKLIST_TEMPLATES: Record<ChecklistKind, ChecklistTemplat
       { title: 'Posto de trabalho, equipamento e EPI preparados', responsible: 'manager', offsetDays: -1 },
       { title: 'Acessos criados (email, sistemas e portal do colaborador)', responsible: 'hr', offsetDays: 0 },
       { title: 'Apresentação à equipa e às regras da área', responsible: 'manager', offsetDays: 0 },
-      { title: 'Ler o regulamento interno e as regras de segurança', responsible: 'employee', offsetDays: 3 },
+      { title: 'Ler e aceitar o regulamento interno', responsible: 'employee', offsetDays: 3, link: 'regulamento' },
       { title: 'Confirmar os dados pessoais e bancários no portal', responsible: 'employee', offsetDays: 3 },
       { title: 'Formação inicial de higiene e segurança no trabalho', responsible: 'manager', offsetDays: 7 },
       { title: 'Incluir no processamento salarial do mês de admissão', responsible: 'finance', offsetDays: 0 },
@@ -108,6 +112,7 @@ export function checklistTemplateIssue(t: { name: string; items: ChecklistTempla
   for (const [i, item] of t.items.entries()) {
     if (!item.title.trim()) return `Tarefa ${i + 1}: indique o título.`;
     if (!TASK_RESPONSIBLES.includes(item.responsible)) return `Tarefa ${i + 1}: responsável inválido.`;
+    if (item.link !== undefined && !CHECKLIST_LINKS.includes(item.link)) return `Tarefa ${i + 1}: ligação inválida.`;
     if (!Number.isInteger(item.offsetDays) || Math.abs(item.offsetDays) > CHECKLIST_MAX_OFFSET_DAYS) return `Tarefa ${i + 1}: o prazo deve estar entre −${CHECKLIST_MAX_OFFSET_DAYS} e ${CHECKLIST_MAX_OFFSET_DAYS} dias.`;
   }
   return null;

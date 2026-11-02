@@ -5,13 +5,13 @@
  */
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { absences, and, auditLogs, desc, employeeDocuments, employees, eq, expenseClaims, files, getDb, type Db } from '@kianda/db';
+import { absences, ackDocuments, ackRequests, and, auditLogs, desc, employeeDocuments, employees, eq, expenseClaims, files, getDb, type Db } from '@kianda/db';
 import { requireCompany, type Actor, type AppEnv } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
 import { canSee } from '../services/scope.js';
 import { MAX_FILE_BYTES, readFileData, removeFiles, storeFile } from '../services/storage.js';
 
-export const FILE_ENTITIES = ['employee', 'employee_document', 'absence', 'expense_claim'] as const;
+export const FILE_ENTITIES = ['employee', 'employee_document', 'absence', 'expense_claim', 'ack_document'] as const;
 type Entity = (typeof FILE_ENTITIES)[number];
 
 const HR = (a: Actor) => a.role === 'owner' || a.role === 'hr_admin';
@@ -31,6 +31,13 @@ export async function fileAccess(db: Db, actor: Actor, entity: Entity, entityId:
     }
     // Documentos pessoais: só o RH e o próprio (a chefia não vê cópias do BI ou do passaporte).
     return { employeeId, read: HR(actor) || actor.employeeId === employeeId, write: HR(actor) };
+  }
+  if (entity === 'ack_document') {
+    // Documento para aceitação: o RH anexa enquanto é rascunho; lêem o RH e os destinatários.
+    const [d] = await db.select({ status: ackDocuments.status }).from(ackDocuments).where(and(eq(ackDocuments.id, entityId), eq(ackDocuments.companyId, actor.companyId)));
+    if (!d) throw notFound();
+    const recipient = !!actor.employeeId && (await db.select({ id: ackRequests.id }).from(ackRequests).where(and(eq(ackRequests.documentId, entityId), eq(ackRequests.employeeId, actor.employeeId)))).length > 0;
+    return { employeeId: null, read: HR(actor) || recipient, write: HR(actor) && d.status === 'draft' };
   }
   if (entity === 'absence') {
     const [a] = await db.select({ employeeId: absences.employeeId, status: absences.status, managerId: employees.managerId }).from(absences)

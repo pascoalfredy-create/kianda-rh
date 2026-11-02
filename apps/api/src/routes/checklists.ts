@@ -4,7 +4,7 @@
  * só as tarefas que lhe cabem na sua própria lista.
  */
 import {
-  CHECKLIST_KINDS, CHECKLIST_MAX_ITEMS, CHECKLIST_MAX_OFFSET_DAYS, canCompleteTask, checklistProgress, checklistTemplateIssue, luandaDate,
+  CHECKLIST_KINDS, CHECKLIST_LINKS, CHECKLIST_MAX_ITEMS, CHECKLIST_MAX_OFFSET_DAYS, canCompleteTask, checklistProgress, checklistTemplateIssue, luandaDate,
   TASK_RESPONSIBLES, taskState, type ChecklistKind, type TaskResponsible,
 } from '@kianda/core';
 import { and, asc, auditLogs, checklistTasks, checklistTemplates, desc, employeeChecklists, employees, eq, getDb, inArray, isNull, users, type Db } from '@kianda/db';
@@ -38,7 +38,7 @@ async function names(db: Db, ids: (string | null)[]) {
 function presentTask(actor: Actor, emp: Emp, t: TaskRow, today: string, who: Map<string, string>) {
   return {
     id: t.id, position: t.position, title: t.title, description: t.description, responsible: t.responsible as TaskResponsible, dueDate: t.dueDate,
-    doneAt: t.doneAt, doneByName: t.doneBy ? who.get(t.doneBy) ?? '—' : null, note: t.note, state: taskState(t, today),
+    doneAt: t.doneAt, doneByName: t.doneBy ? who.get(t.doneBy) ?? '—' : null, note: t.note, state: taskState(t, today), linkKey: t.linkKey,
     canComplete: canCompleteTask(actor, t.responsible as TaskResponsible, emp),
   };
 }
@@ -170,12 +170,12 @@ export function checklistRoutes() {
     const kind = kindSchema.parse(c.req.param('kind')) as ChecklistKind;
     const b = z.object({
       name: z.string().trim().min(2, 'Indique o nome do modelo').max(120), autoStart: z.boolean(),
-      items: z.array(z.object({ title: z.string().trim().min(2, 'Indique a tarefa').max(200), description: z.string().trim().max(500).optional(), responsible: responsibleSchema, offsetDays: z.number().int().min(-CHECKLIST_MAX_OFFSET_DAYS).max(CHECKLIST_MAX_OFFSET_DAYS) })).max(CHECKLIST_MAX_ITEMS),
+      items: z.array(z.object({ title: z.string().trim().min(2, 'Indique a tarefa').max(200), description: z.string().trim().max(500).optional(), responsible: responsibleSchema, offsetDays: z.number().int().min(-CHECKLIST_MAX_OFFSET_DAYS).max(CHECKLIST_MAX_OFFSET_DAYS), link: z.enum(CHECKLIST_LINKS).optional() })).max(CHECKLIST_MAX_ITEMS),
     }).parse(await body(c));
     const issue = checklistTemplateIssue(b);
     if (issue) throw new DomainError('modelo_invalido', issue);
     const before = await ensureTemplate(db, actor.companyId, kind);
-    const items = b.items.map(i => ({ title: i.title, responsible: i.responsible, offsetDays: i.offsetDays, ...(i.description ? { description: i.description } : {}) }));
+    const items = b.items.map(i => ({ title: i.title, responsible: i.responsible, offsetDays: i.offsetDays, ...(i.description ? { description: i.description } : {}), ...(i.link ? { link: i.link } : {}) }));
     const [u] = await db.update(checklistTemplates).set({ name: b.name, autoStart: b.autoStart, items, updatedBy: actor.actorId, updatedAt: new Date() }).where(eq(checklistTemplates.id, before.id)).returning();
     await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'update', entity: 'checklist_template', entityId: before.id, before: { name: before.name, autoStart: before.autoStart, items: before.items }, after: { name: u!.name, autoStart: u!.autoStart, items: u!.items } });
     return c.json({ kind, name: u!.name, autoStart: u!.autoStart, items: u!.items, updatedAt: u!.updatedAt });

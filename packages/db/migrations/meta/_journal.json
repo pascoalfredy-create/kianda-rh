@@ -309,6 +309,13 @@
       "when": 1793640300000,
       "tag": "0043_employee_checklists",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1793640400000,
+      "tag": "0044_document_acknowledgements",
+      "breakpoints": true
     }
   ]
 }

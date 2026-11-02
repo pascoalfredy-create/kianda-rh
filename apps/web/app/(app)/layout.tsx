@@ -25,7 +25,7 @@ function LicenceBanner({ me }: { me: NonNullable<Awaited<ReturnType<typeof curre
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const me = await currentUser();
   if (!me) redirect('/login');
-  const counts = me.notifications ?? { absences: 0, expenses: 0, tasks: 0 };
+  const counts = me.notifications ?? { absences: 0, expenses: 0, tasks: 0, acks: 0 };
   return <Suspense fallback={<div className="empty">A abrir o Kianda…</div>}>
     <DocumentExportAccess allowed={canExportDocuments(me.modules.hr.status)}><AppShell me={me} counts={counts}>
       <LicenceBanner me={me} />

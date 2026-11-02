@@ -39,7 +39,7 @@ export async function startChecklist(db: Db, o: StartChecklist) {
   if (template.items.length) {
     await db.insert(checklistTasks).values(template.items.map((item, position) => ({
       companyId: o.companyId, checklistId: list!.id, position, title: item.title, description: item.description ?? null,
-      responsible: item.responsible, dueDate: checklistDueDate(o.referenceDate, item.offsetDays),
+      responsible: item.responsible, dueDate: checklistDueDate(o.referenceDate, item.offsetDays), linkKey: item.link ?? null,
     })));
   }
   await db.insert(auditLogs).values({ companyId: o.companyId, actorId: o.actorId, action: o.automatic ? 'auto_create' : 'create', entity: 'employee_checklist', entityId: list!.id, after: { kind: o.kind, employeeId: o.employeeId, referenceDate: o.referenceDate, tasks: template.items.length } });

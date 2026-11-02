@@ -54,7 +54,7 @@ export interface Me {
   company: { id: string; name: string; nif: string; code?: string | null; hasLogo?: boolean } | null;
   licence?: { status: string; label: string; canWrite: boolean; trialEndsAt: string | null; paidUntil: string | null };
   platformAdmin?: boolean;
-  notifications?: { absences: number; expenses: number; tasks?: number };
+  notifications?: { absences: number; expenses: number; tasks?: number; acks?: number };
   modules: CompanyModulesOverview;
 }
 

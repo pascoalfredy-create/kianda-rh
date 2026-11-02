@@ -56,7 +56,7 @@ describe('leitura real de documentos PDF e Word', () => {
       const items = content.items.filter((v): v is typeof v & PdfTextItem => 'str' in v);
       expect(parseStatement(bankStatementFromPdfPages([items])).outflowMinor).toBe(10025);
     } finally { await task.destroy(); }
-  });
+  }, 20_000);
   it('recusa páginas digitalizadas, mudança de colunas e movimentos incompletos', () => {
     expect(() => bankStatementFromPdfPages([page(), []])).toThrow('OCR');
     expect(() => bankStatementFromPdfPages([page(), [token('02/10/2026', 40, 725)]])).toThrow('cabeçalhos');

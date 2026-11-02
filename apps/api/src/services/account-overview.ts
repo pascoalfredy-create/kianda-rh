@@ -2,7 +2,7 @@ import { and, companies, companyModules, eq, modelingMembers, sql, subscriptions
 import type { Actor } from '../plugins/tenant.js';
 import { licenceFromRows } from './licence.js';
 import { companyModulesOverview } from './modules.js';
-import { notificationColumns, taskCountColumn } from './notification-counts.js';
+import { ackCountColumn, notificationColumns, taskCountColumn } from './notification-counts.js';
 
 /** Uma leitura para a estrutura autenticada, sem transferir a imagem do logotipo ou contar efectivos. */
 export async function accountOverview(db: Db, actor: Actor) {
@@ -10,7 +10,7 @@ export async function accountOverview(db: Db, actor: Actor) {
     company: { id: companies.id, name: companies.name, nif: companies.nif, code: companies.code, hasLogo: sql<boolean>`coalesce(length(${companies.logoDataUrl}), 0) > 0` },
     sector: companies.sector, sub: subscriptions, grant: companyModules, memberEnabled: modelingMembers.enabled, valuationMemberEnabled: valuationMembers.enabled,
     platformAdmin: sql<boolean>`exists(select 1 from users u join platform_admins p on p.email = lower(u.email) where u.id = ${actor.actorId} and u.company_id = ${actor.companyId})`,
-    ...notificationColumns(actor), tasks: taskCountColumn(actor),
+    ...notificationColumns(actor), tasks: taskCountColumn(actor), acks: ackCountColumn(actor),
   }).from(companies)
     .leftJoin(subscriptions, eq(subscriptions.companyId, companies.id))
     .leftJoin(companyModules, eq(companyModules.companyId, companies.id))
@@ -27,7 +27,7 @@ export async function accountOverview(db: Db, actor: Actor) {
     licence: { status: licence.status, label: licence.statusLabel, canWrite: licence.canWrite, trialEndsAt: licence.sub?.trialEndsAt ?? null, paidUntil: licence.sub?.paidUntil ?? null },
     modules, platformAdmin: first?.platformAdmin ?? false,
     notifications: modules.hr.canAccess
-      ? { absences: first?.absences ?? 0, expenses: first?.expenses ?? 0, tasks: first?.tasks ?? 0 }
-      : { absences: 0, expenses: 0, tasks: 0 },
+      ? { absences: first?.absences ?? 0, expenses: first?.expenses ?? 0, tasks: first?.tasks ?? 0, acks: first?.acks ?? 0 }
+      : { absences: 0, expenses: 0, tasks: 0, acks: 0 },
   };
 }

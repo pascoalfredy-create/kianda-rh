@@ -362,7 +362,7 @@ export const checklistTemplates = pgTable('checklist_templates', {
   name: text('name').notNull(),
   /** Cria a lista automaticamente na admissão (acolhimento) ou ao registar a cessação (saída). */
   autoStart: boolean('auto_start').notNull().default(true),
-  items: jsonb('items').$type<{ title: string; description?: string; responsible: string; offsetDays: number }[]>().notNull().default([]),
+  items: jsonb('items').$type<{ title: string; description?: string; responsible: string; offsetDays: number; link?: string }[]>().notNull().default([]),
   updatedBy: text('updated_by'),
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -397,11 +397,57 @@ export const checklistTasks = pgTable('checklist_tasks', {
   /** hr | manager | employee | finance */
   responsible: text('responsible').notNull(),
   dueDate: date('due_date').notNull(),
+  /** Evento que fecha a tarefa sozinho (ex.: «regulamento» = aceitação do regulamento interno no portal). */
+  linkKey: text('link_key'),
   doneAt: timestamp('done_at', { withTimezone: true }),
   doneBy: text('done_by'),
   note: text('note'),
   createdAt: createdAt(),
 }, (t) => [index('checklist_tasks_checklist').on(t.checklistId, t.position), index('checklist_tasks_pending').on(t.companyId, t.dueDate).where(sql`done_at is null`)]);
+
+/**
+ * Aceitação electrónica: documento publicado para leitura e aceitação (regulamento, políticas, avisos).
+ * Depois de publicado o conteúdo fica congelado (impressão digital); uma alteração é uma nova versão.
+ */
+export const ackDocuments = pgTable('ack_documents', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  title: text('title').notNull(),
+  body: text('body').notNull().default(''),
+  category: text('category').notNull(),
+  version: integer('version').notNull().default(1),
+  /** Versão anterior (a nova versão substitui-a e anula os pedidos ainda por aceitar). */
+  previousId: text('previous_id'),
+  /** draft | published | archived */
+  status: text('status').notNull().default('draft'),
+  audience: jsonb('audience').$type<{ all: boolean; departmentIds: string[]; employeeIds: string[] }>().notNull(),
+  dueDate: date('due_date'),
+  contentSha256: text('content_sha256'),
+  createdBy: text('created_by').notNull(),
+  createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+  publishedBy: text('published_by'),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+}, (t) => [index('ack_documents_company').on(t.companyId, t.status)]);
+
+/** Um pedido por colaborador e documento; a aceitação guarda a prova (quem, quando, de onde, que conteúdo). */
+export const ackRequests = pgTable('ack_requests', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  documentId: text('document_id').notNull().references(() => ackDocuments.id),
+  employeeId: text('employee_id').notNull().references(() => employees.id),
+  /** pending | accepted | cancelled */
+  status: text('status').notNull().default('pending'),
+  createdAt: createdAt(),
+  acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+  acceptedBy: text('accepted_by'),
+  acceptedIp: text('accepted_ip'),
+  acceptedUserAgent: text('accepted_user_agent'),
+  /** Impressão digital do conteúdo que o colaborador tinha no ecrã ao aceitar (igual à do documento publicado). */
+  acceptedSha256: text('accepted_sha256'),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+}, (t) => [uniqueIndex('ack_requests_document_employee').on(t.documentId, t.employeeId), index('ack_requests_employee').on(t.employeeId, t.status)]);
 
 /** Localização registada numa marcação (só no instante da marcação). */
 export interface PunchLocationRecord {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CHECKLIST_KIND_LABELS, TASK_RESPONSIBLE_LABELS, TASK_RESPONSIBLES, luandaDate, type ChecklistKind, type TaskResponsible } from '@kianda/core';
+import { CHECKLIST_KIND_LABELS, CHECKLIST_LINK_LABELS, TASK_RESPONSIBLE_LABELS, TASK_RESPONSIBLES, luandaDate, type ChecklistKind, type TaskResponsible } from '@kianda/core';
 import { useMutation } from '@/lib/client';
 import type { TemplateData } from './types';
 
@@ -50,7 +50,7 @@ export function TemplateEditor({ template }: { template: TemplateData }) {
         <table className="dense">
           <thead><tr><th style={{ width: '50%' }}>Tarefa</th><th>Responsável</th><th>Prazo (dias)</th><th aria-label="Acções" /></tr></thead>
           <tbody>{items.map((it, i) => <tr key={i}>
-            <td><input aria-label={`Tarefa ${i + 1}`} value={it.title} onChange={e => change(i, { title: e.target.value })} maxLength={200} style={{ width: '100%' }} /></td>
+            <td><input aria-label={`Tarefa ${i + 1}`} value={it.title} onChange={e => change(i, { title: e.target.value })} maxLength={200} style={{ width: '100%' }} />{it.link && <div className="muted" style={{ fontSize: 12 }}>{CHECKLIST_LINK_LABELS[it.link]}</div>}</td>
             <td><select aria-label={`Responsável da tarefa ${i + 1}`} value={it.responsible} onChange={e => change(i, { responsible: e.target.value as TaskResponsible })}>{TASK_RESPONSIBLES.map(r => <option key={r} value={r}>{TASK_RESPONSIBLE_LABELS[r]}</option>)}</select></td>
             <td><input aria-label={`Prazo da tarefa ${i + 1}`} type="number" min={-365} max={365} step={1} value={it.offsetDays} onChange={e => change(i, { offsetDays: Math.trunc(Number(e.target.value) || 0) })} style={{ width: 84 }} /></td>
             <td className="num" style={{ whiteSpace: 'nowrap' }}>
