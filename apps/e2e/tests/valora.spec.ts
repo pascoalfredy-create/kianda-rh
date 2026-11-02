@@ -102,7 +102,7 @@ test('Valora: na licença, tabela de preços e pedido de pagamento do plano esco
   await expect(table).toContainText('Essencial');
   await expect(table).toContainText('10 análises activas');
   await expect(table).toContainText('Grandes Empresas (Ilimitado)');
-  await expect(table).toContainText('1\u00a0050\u00a0590,00');
+  await expect(table).toContainText('1\u00a0324\u00a0980,00');
   const form = page.locator('.card', { hasText: 'Valora: subscrever, renovar ou mudar de plano' });
   await form.getByLabel('Plano do Valora').selectOption('corporate');
   await form.getByLabel('Pagamento').selectOption('annual');

@@ -51,13 +51,13 @@ describe('Valora: contrato de dados e limites', () => {
 describe('Valora: planos por análises activas', () => {
   it('cinco planos de 10, 20, 30, 40 e ilimitadas análises, com os preços aprovados', () => {
     expect(VALUATION_PLANS.map(p => [p.key, p.analysisLimit, p.monthlyMinor / 100])).toEqual([
-      ['essencial', 10, 32_900], ['pme', 20, 52_900], ['corporate', 30, 72_900], ['enterprise40', 40, 92_900], ['unlimited', null, 102_999],
+      ['essencial', 10, 32_900], ['pme', 20, 52_900], ['corporate', 30, 72_900], ['enterprise40', 40, 92_900], ['unlimited', null, 129_900],
     ]);
   });
   it('semestral −10% e anual −15% à vista; extras a 10 000 Kz por mês do ciclo, sem desconto', () => {
     expect(valuationPlanPrice('essencial', 'monthly')!.totalMinor).toBe(kz(32_900));
     expect(valuationPlanPrice('essencial', 'semiannual')!.totalMinor).toBe(kz(177_660));
-    expect(valuationPlanPrice('unlimited', 'annual')!.totalMinor).toBe(kz(1_050_590));
+    expect(valuationPlanPrice('unlimited', 'annual')!.totalMinor).toBe(kz(1_324_980));
     const extra = valuationPlanPrice('pme', 'semiannual', 2)!;
     expect(extra.extraMinor).toBe(kz(120_000)); expect(extra.totalMinor).toBe(kz(285_660 + 120_000));
     expect(valuationPlanPrice('inexistente', 'monthly')).toBeNull();

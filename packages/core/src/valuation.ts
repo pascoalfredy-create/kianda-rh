@@ -24,7 +24,7 @@ export const VALUATION_PLANS = [
   { key: 'pme', label: 'PME', analysisLimit: 20, monthlyMinor: kz(52_900) },
   { key: 'corporate', label: 'Corporate', analysisLimit: 30, monthlyMinor: kz(72_900) },
   { key: 'enterprise40', label: 'Grandes Empresas (Até 40)', analysisLimit: 40, monthlyMinor: kz(92_900) },
-  { key: 'unlimited', label: 'Grandes Empresas (Ilimitado)', analysisLimit: null, monthlyMinor: kz(102_999) },
+  { key: 'unlimited', label: 'Grandes Empresas (Ilimitado)', analysisLimit: null, monthlyMinor: kz(129_900) },
 ] as const;
 export type ValuationPlanKey = typeof VALUATION_PLANS[number]['key'];
 export const VALUATION_PLAN_KEYS = VALUATION_PLANS.map(p => p.key) as unknown as readonly [ValuationPlanKey, ...ValuationPlanKey[]];
