@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blankValuationData, moduleForPath, personnelCostMkz, valuationCapacity, valuationDataIssue, VALUATION_BALANCE_KEYS, VALUATION_FLOW_KEYS } from '../src/index.js';
+import { blankValuationData, moduleForPath, personnelCostMkz, valuationCapacity, valuationDataIssue, VALUATION_BALANCE_KEYS, VALUATION_FLOW_KEYS, VALUATION_PLANS, valuationPlanPrice, kz } from '../src/index.js';
 
 describe('Valora: contrato de dados e limites', () => {
   it('as rotas /v1/valuation pertencem ao módulo próprio', () => {
@@ -45,5 +45,22 @@ describe('Valora: contrato de dados e limites', () => {
     expect(personnelCostMkz(300_000_000, 24_000_000)).toBe(3.24);
     expect(personnelCostMkz(0, 0)).toBe(0);
     expect(() => personnelCostMkz(1.5, 0)).toThrow(RangeError);
+  });
+});
+
+describe('Valora: planos por análises activas', () => {
+  it('cinco planos de 10, 20, 30, 40 e ilimitadas análises, com os preços aprovados', () => {
+    expect(VALUATION_PLANS.map(p => [p.key, p.analysisLimit, p.monthlyMinor / 100])).toEqual([
+      ['essencial', 10, 32_900], ['pme', 20, 52_900], ['corporate', 30, 72_900], ['enterprise40', 40, 92_900], ['unlimited', null, 102_999],
+    ]);
+  });
+  it('semestral −10% e anual −15% à vista; extras a 10 000 Kz por mês do ciclo, sem desconto', () => {
+    expect(valuationPlanPrice('essencial', 'monthly')!.totalMinor).toBe(kz(32_900));
+    expect(valuationPlanPrice('essencial', 'semiannual')!.totalMinor).toBe(kz(177_660));
+    expect(valuationPlanPrice('unlimited', 'annual')!.totalMinor).toBe(kz(1_050_590));
+    const extra = valuationPlanPrice('pme', 'semiannual', 2)!;
+    expect(extra.extraMinor).toBe(kz(120_000)); expect(extra.totalMinor).toBe(kz(285_660 + 120_000));
+    expect(valuationPlanPrice('inexistente', 'monthly')).toBeNull();
+    expect(() => valuationPlanPrice('pme', 'monthly', -1)).toThrow();
   });
 });

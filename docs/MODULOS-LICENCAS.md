@@ -37,10 +37,22 @@ Licenciada por projectos activos simultâneos, independente do efectivo do RH. F
 
 ## Análise e Avaliação (Kianda Valora)
 
-Terceiro módulo, com licença própria: demonstrações financeiras por PGC Angola (classe 6 proveitos, classe 7 custos), orçamento, tesouraria, controlo orçamental com dados reais mensais (introduzidos ou importados de CSV/Excel), rácios, análise de gestão e avaliação (DCF, múltiplos, activos reais e síntese), com relatórios em PDF, Word e Excel. Fonte no código: `packages/core/src/valuation.ts` e `apps/api/src/services/valuation-policy.ts`.
+Terceiro módulo, com licença própria: demonstrações financeiras por PGC Angola (classe 6 proveitos, classe 7 custos), orçamento, tesouraria, controlo orçamental com dados reais mensais (introduzidos ou importados de CSV/Excel), rácios, análise de gestão e avaliação (DCF, múltiplos, activos reais e síntese), com relatórios em PDF, Word e Excel.
 
-- **Preço ainda não publicado** (`VALUATION_PRICE_PUBLISHED = false`): não há plano pago em autosserviço. A activação paga, o limite de análises activas e os utilizadores extra são definidos pela administração em **Plataforma Kianda → Valora** (nunca abaixo do uso actual).
-- **Avaliação**: escolhida no registo, 7 dias como os outros módulos, até **3 análises activas** (`VALUATION_TRIAL_ANALYSES`) e **5 utilizadores** (`VALUATION_INCLUDED_USERS`). Uma empresa já registada pede a activação à plataforma: a empresa não pode conceder licenças a si própria (a base de dados recusa escrita em `company_modules` ao papel da aplicação).
+Licenciado por **análises activas** (uma análise = uma entidade analisada: a própria empresa, uma participada ou um alvo), como o Integra, sem relação com o efectivo do RH e sem sectores. Fonte no código: `VALUATION_PLANS`, `VALUATION_EXTRA_USER_MONTHLY_MINOR` e `valuationPlanPrice` em `packages/core/src/valuation.ts`.
+
+<!-- tabela-valora: gerada a partir do código; o teste packages/core/test/docs-coherence.test.ts falha se divergir -->
+| Chave | Plano | Análises activas | Mensal (Kz) | Semestral, à vista (Kz) | Anual, à vista (Kz) |
+| --- | --- | ---: | ---: | ---: | ---: |
+| essencial | Essencial | 10 | 32.900 | 177.660 | 335.580 |
+| pme | PME | 20 | 52.900 | 285.660 | 539.580 |
+| corporate | Corporate | 30 | 72.900 | 393.660 | 743.580 |
+| enterprise40 | Grandes Empresas (Até 40) | 40 | 92.900 | 501.660 | 947.580 |
+| unlimited | Grandes Empresas (Ilimitado) | Ilimitadas | 102.999 | 556.195 | 1.050.590 |
+
+- Todos os planos incluem **5 utilizadores**, contando o proprietário. Extras do Valora: **10.000 Kz por mês e utilizador**, em todos os meses do ciclo, sem desconto.
+- Avaliação de 7 dias com as quotas do plano escolhido no registo (por omissão, Essencial mensal). Uma empresa já registada subscreve em **Módulos e licenças → Valora** (pedido de pagamento); a licença só é activada pela confirmação do pagamento — a empresa não concede licenças a si própria (a base de dados recusa escrita em `company_modules` ao papel da aplicação). A plataforma pode ainda ajustar limites em **Plataforma Kianda → Valora**, nunca abaixo do uso.
+- Arquivar uma análise liberta a vaga e conserva os dados; restaurar exige vaga. Um plano nunca é aceite abaixo do uso actual (análises activas e utilizadores com acesso).
 - Os dados de cada análise ficam no servidor, por empresa (RLS), com controlo de revisão; nada da análise fica no armazenamento do navegador. Bibliotecas de PDF e Word servidas pela própria origem, sem CDN.
 - Com o RH na mesma conta, uma análise marcada como «própria empresa» traz os custos com o pessoal (conta 72) dos processamentos fechados.
 

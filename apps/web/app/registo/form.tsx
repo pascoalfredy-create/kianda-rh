@@ -1,6 +1,6 @@
 'use client';
 
-import { CYCLES, DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, MODELING_SECTOR_LABELS, defaultModelingSector, cyclePrice, modelingPlanPrice, formatKz, SECTORS, tierFor, TRIAL_DAYS, type BillingCycle, type FinancialSector, type ModelingPlanKey } from '@kianda/core';
+import { CYCLES, DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, MODELING_SECTOR_LABELS, VALUATION_PLANS, valuationPlanPrice, defaultModelingSector, cyclePrice, modelingPlanPrice, formatKz, SECTORS, tierFor, TRIAL_DAYS, type BillingCycle, type FinancialSector, type ModelingPlanKey } from '@kianda/core';
 import Link from 'next/link';
 import { useState } from 'react';
 import { ModelingSectors } from '../../components/modeling-sectors';
@@ -13,7 +13,10 @@ export function RegistoForm({ initial }: { initial: RegistrationSelection }) {
   const [error, setError] = useState('');
   const [hr, setHr] = useState(initial.module === 'hr');
   const [modeling, setModeling] = useState(initial.module === 'modeling');
-  const [valuation, setValuation] = useState(false);
+  const [valuation, setValuation] = useState(initial.module === 'valuation');
+  const [valuationKey, setValuationKey] = useState<string>(initial.module === 'valuation' ? initial.planKey : 'essencial');
+  const [valuationCycle, setValuationCycle] = useState<BillingCycle>(initial.module === 'valuation' ? initial.cycle : 'monthly');
+  const valuationPrice = valuationPlanPrice(valuationKey, valuationCycle);
   const [hrTier, setHrTier] = useState(initial.module === 'hr' ? initial.planKey : '');
   const [hrCycle, setHrCycle] = useState<BillingCycle>(initial.module === 'hr' ? initial.cycle : 'monthly');
   const [modelingKey, setModelingKey] = useState<ModelingPlanKey>(initial.module === 'modeling' ? initial.planKey as ModelingPlanKey : 'pme');
@@ -39,6 +42,7 @@ export function RegistoForm({ initial }: { initial: RegistrationSelection }) {
             name: f.get('name'), email: f.get('email'), password: f.get('password'), acceptTerms: f.get('terms') === 'on',
             modules: [hr ? 'hr' : '', modeling ? 'modeling' : '', valuation ? 'valuation' : ''].filter(Boolean),
             ...(hr ? { hrPlan: { tierKey: tier.key, cycle: hrCycle } } : {}),
+            ...(valuation ? { valuationPlan: { key: valuationKey, cycle: valuationCycle } } : {}),
             ...(modeling ? { modelingPlan: { key: modelingKey, cycle: modelingCycle, primarySector, sectors: modelingSectors } } : {}),
           }),
         });
@@ -81,7 +85,11 @@ export function RegistoForm({ initial }: { initial: RegistrationSelection }) {
           <div className="warn" style={{ margin: '4px 0 12px' }}>Modelagem: <b>{modelingPrice && formatKz(modelingPrice.totalMinor)}</b> por ciclo {modelingCycle === 'monthly' ? 'mensal' : modelingCycle === 'semiannual' ? 'semestral, à vista' : 'anual, à vista'}. Inclui 5 utilizadores. A exportação em PDF fica disponível com a subscrição paga. Utilizadores adicionais: 35.000 Kz/mês por acesso, contratados na licença.</div>
         </>}
         <label style={{ display: 'flex', gap: 8 }}><input type="checkbox" checked={valuation} onChange={e => setValuation(e.target.checked)} style={{ width: 'auto' }} />Análise e Avaliação · Kianda Valora</label>
-        {valuation && <div className="warn" style={{ margin: '4px 0 12px' }}>Valora: demonstrações por PGC Angola, orçamento, tesouraria e avaliação de empresas. Avaliação gratuita com até 3 análises e 5 utilizadores; os planos pagos são acordados com a plataforma.</div>}
+        {valuation && <>
+          <label>Plano do Valora<select value={valuationKey} onChange={e => setValuationKey(e.target.value)}>{VALUATION_PLANS.map(p => <option key={p.key} value={p.key}>{p.label} · {p.analysisLimit === null ? 'análises ilimitadas' : `${p.analysisLimit} análises activas`}</option>)}</select></label>
+          <label>Pagamento do Valora<select value={valuationCycle} onChange={e => setValuationCycle(e.target.value as BillingCycle)}>{Object.entries(CYCLES).map(([key, cycle]) => <option key={key} value={key}>{cycle.label}</option>)}</select></label>
+          <div className="warn" style={{ margin: '4px 0 12px' }}>Valora: <b>{valuationPrice && formatKz(valuationPrice.totalMinor)}</b> por ciclo {valuationCycle === 'monthly' ? 'mensal' : valuationCycle === 'semiannual' ? 'semestral, à vista' : 'anual, à vista'}. Inclui 5 utilizadores. A avaliação é gratuita e usa as quotas do plano; exportar exige o pagamento.</div>
+        </>}
         <h3 style={{ fontSize: 12, textTransform: 'uppercase', color: 'var(--ink3)', margin: '16px 0 8px' }}>Responsável pela conta</h3>
         <label>Nome<input name="name" required /></label>
         <label>Email<input name="email" type="email" required autoComplete="username" /></label>

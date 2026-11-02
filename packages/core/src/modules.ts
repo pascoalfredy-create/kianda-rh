@@ -14,7 +14,7 @@ export interface CompanyModulesOverview {
   hr: CompanyModuleAccess;
   modeling: CompanyModuleAccess & { projectLimit: number | null; extraUsers: number; userLimit: number; planKey: string | null; cycle: string | null; primarySector: FinancialSector | null; sectors: FinancialSector[] };
   /** Kianda Valora: análise financeira, orçamento, tesouraria e avaliação de empresas. */
-  valuation: CompanyModuleAccess & { analysisLimit: number | null; extraUsers: number; userLimit: number };
+  valuation: CompanyModuleAccess & { analysisLimit: number | null; extraUsers: number; userLimit: number; planKey: string | null; cycle: string | null };
 }
 /** Ausência de licença nunca concede Modelagem. RH conserva a licença existente. */
 export function moduleAccess(grant: ModuleGrant | null, today: string) {

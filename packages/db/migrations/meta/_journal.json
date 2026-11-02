@@ -281,6 +281,13 @@
       "when": 1793612154285,
       "tag": "0039_valuation_module",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1793640000000,
+      "tag": "0040_valuation_plans",
+      "breakpoints": true
     }
   ]
 }

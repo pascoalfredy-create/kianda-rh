@@ -1,7 +1,7 @@
 import { MODELING_SECTOR_LABELS, SUBSCRIPTION_STATUS, formatKz, luandaDate, trialDaysRemaining, type CompanyModulesOverview, type FinancialSector } from '@kianda/core';
 import { redirect } from 'next/navigation';
 import { api, currentUser } from '@/lib/api';
-import { ModelingPlanForm, NewReference, ReferenceForm, RenewForm } from './forms';
+import { ModelingPlanForm, NewReference, ReferenceForm, RenewForm, ValuationPlanForm } from './forms';
 import { ModuleCards } from '@/components/module-cards';
 import { ModelingMembers, type ModelingMember, type ModelingProject } from './modeling-members';
 import { ValuationMembers, type ValuationMember } from './valuation-members';
@@ -18,6 +18,8 @@ interface Billing {
   modelingExtraUserMinor: number;
   modelingUsage: { activeProjects: number; projectLimit: number | null; enabledUsers: number; userLimit: number };
   valuationUsage: { activeAnalyses: number; analysisLimit: number | null; enabledUsers: number; userLimit: number };
+  valuationPlans: { key: string; label: string; analysisLimit: number | null; prices: Record<string, number> }[];
+  valuationExtraUserMinor: number;
 }
 const pt = (d: string) => d.split('-').reverse().join('/');
 const ST: Record<string, string> = { trial: 'st pending', active: 'st approved', past_due: 'st pending', suspended: 'st rejected', cancelled: 'tag' };
@@ -60,7 +62,7 @@ export default async function Licenca() {
           <h2>Pagamentos por concluir</h2>
           {pending.map((r) => (
             <div key={r.id} style={{ padding: '6px 16px 14px', display: 'grid', gap: 8 }}>
-              <div><b>{r.number}</b> · {r.kind === 'modeling_subscription' ? `Modelagem · ${b.modelingPlans.find(p => p.key === r.tierKey)?.label} · ${r.projectLimit === null ? 'projectos ilimitados' : `até ${r.projectLimit} projectos`} · ${5 + (r.extraUsers ?? 0)} utilizadores · ${b.cycles[r.cycle!]?.label} · ${pt(r.periodStart!)} a ${pt(r.periodEnd!)}` : r.kind === 'subscription' ? `RH · ${b.prices.find((x) => x.key === r.tierKey)?.label} · ${b.cycles[r.cycle!]?.label} · ${pt(r.periodStart!)} a ${pt(r.periodEnd!)}` : `RH · ${r.seats} colaborador(es) extra`} · <b>{formatKz(r.amountMinor)}</b></div>
+              <div><b>{r.number}</b> · {r.kind === 'valuation_subscription' ? `Valora · ${b.valuationPlans.find(p => p.key === r.tierKey)?.label} · ${r.projectLimit === null ? 'análises ilimitadas' : `até ${r.projectLimit} análises`} · ${5 + (r.extraUsers ?? 0)} utilizadores · ${b.cycles[r.cycle!]?.label} · ${pt(r.periodStart!)} a ${pt(r.periodEnd!)}` : r.kind === 'modeling_subscription' ? `Modelagem · ${b.modelingPlans.find(p => p.key === r.tierKey)?.label} · ${r.projectLimit === null ? 'projectos ilimitados' : `até ${r.projectLimit} projectos`} · ${5 + (r.extraUsers ?? 0)} utilizadores · ${b.cycles[r.cycle!]?.label} · ${pt(r.periodStart!)} a ${pt(r.periodEnd!)}` : r.kind === 'subscription' ? `RH · ${b.prices.find((x) => x.key === r.tierKey)?.label} · ${b.cycles[r.cycle!]?.label} · ${pt(r.periodStart!)} a ${pt(r.periodEnd!)}` : `RH · ${r.seats} colaborador(es) extra`} · <b>{formatKz(r.amountMinor)}</b></div>
               {r.kind === 'modeling_subscription' && <div className="muted">Sectores contratados: {r.modelingSectors?.map(s => MODELING_SECTOR_LABELS[s]).join(' · ')}</div>}
               {r.gatewayReference && r.gatewayExpiresAt! >= today && (
                 <div className="card" style={{ padding: 14, borderColor: 'var(--brand)', background: 'var(--brand-soft)' }}>
@@ -106,9 +108,15 @@ export default async function Licenca() {
       <p className="sub">{b.valuationUsage.activeAnalyses} análise(s) activa(s){v.subscribed ? ` de ${b.valuationUsage.analysisLimit === null ? 'ilimitadas' : b.valuationUsage.analysisLimit} · ${b.valuationUsage.enabledUsers} de ${b.valuationUsage.userLimit} utilizadores` : ''}</p>
       <div className="card section">
         <h2>Licença do Valora</h2>
-        <p style={{ padding: '0 16px' }}>{!v.subscribed ? 'Não subscrito.' : <>{v.status === 'trial' ? 'Período experimental' : 'Subscrição'} · <span className={ST[v.status]}>{SUBSCRIPTION_STATUS[v.status]}</span>{v.status === 'trial' && v.trialEndsAt ? ` até ${pt(v.trialEndsAt)}, inclusive` : v.paidUntil ? ` · pago até ${pt(v.paidUntil)}` : ''}</>}</p>
-        <p className="muted" style={{ padding: '0 16px 12px' }}>Demonstrações financeiras por PGC Angola, orçamento, tesouraria, controlo orçamental, rácios e avaliação (DCF, múltiplos e activos), com relatórios em PDF, Word e Excel. Inclui 5 utilizadores. Os planos do Valora ainda não estão publicados: a activação e os limites são acordados com a plataforma{b.supportEmail ? <> (<a href={`mailto:${b.supportEmail}?subject=${encodeURIComponent('Kianda Valora')}`}>{b.supportEmail}</a>)</> : ''}. Durante a avaliação, os documentos ficam em pré-visualização.</p>
+        <p style={{ padding: '0 16px' }}>{!v.subscribed ? 'Não subscrito.' : <><span className={ST[v.status]}>{SUBSCRIPTION_STATUS[v.status]}</span>{v.status === 'trial' && v.trialEndsAt ? ` até ${pt(v.trialEndsAt)}, inclusive` : v.paidUntil ? ` · pago até ${pt(v.paidUntil)}` : ''}</>}</p>
+        <p className="muted" style={{ padding: '0 16px 12px' }}>Demonstrações financeiras por PGC Angola, orçamento, tesouraria, controlo orçamental, rácios e avaliação (DCF, múltiplos e activos), com relatórios em PDF, Word e Excel.{v.subscribed ? ` Plano: ${b.valuationPlans.find(p => p.key === v.planKey)?.label ?? 'contrato personalizado'}${v.cycle ? ` · ${b.cycles[v.cycle]?.label ?? v.cycle}` : ''}.` : ''} Durante a avaliação, os documentos ficam em pré-visualização.</p>
         {v.canAccess && <p style={{ padding: '0 16px 12px' }}><a className="btn sm" href="/valora">{v.canWrite ? 'Abrir o Valora' : 'Abrir em consulta'}</a></p>}
+      </div>
+      <div className="card section"><h2>Valora: subscrever, renovar ou mudar de plano</h2><ValuationPlanForm currentPlan={v.planKey} currentCycle={v.cycle} extraUsers={v.extraUsers} activeAnalyses={b.valuationUsage.activeAnalyses} enabledUsers={b.valuationUsage.enabledUsers} /></div>
+      <div className="card section">
+        <h2>Tabela de preços · Kianda Valora</h2>
+        <table className="dense"><thead><tr><th>Plano / análises activas</th>{Object.values(b.cycles).map(c => <th key={c.label} className="num">{c.label}</th>)}</tr></thead><tbody>{b.valuationPlans.map(p => <tr key={p.key} style={p.key === v.planKey ? { background: 'var(--brand-soft)' } : undefined}><td>{p.label}<div className="muted">{p.analysisLimit === null ? 'Análises ilimitadas' : `${p.analysisLimit} análises activas`} · 5 utilizadores</div></td>{Object.keys(b.cycles).map(c => <td key={c} className="num">{formatKz(p.prices[c]!)}</td>)}</tr>)}</tbody></table>
+        <p className="muted" style={{ padding: '0 16px 12px' }}>Utilizadores extra: {formatKz(b.valuationExtraUserMinor)}/mês por acesso além dos 5 incluídos, durante os meses do ciclo, sem desconto nos extras. Semestral e anual à vista.</p>
       </div>
       {canManageValuation && <div className="card section"><h2>Utilizadores autorizados no Valora</h2><ValuationMembers users={valuationUsers} members={valuationMembers} self={me.user.sub} userLimit={b.valuationUsage.userLimit} /></div>}
       {b.requests.some((r) => r.status !== 'pending') && (

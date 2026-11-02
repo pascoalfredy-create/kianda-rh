@@ -1,7 +1,7 @@
 import { modelingUsage, requireModelingPlanUsage, validateModelingSectors } from '../services/modeling-policy.js';
-import { valuationUsage } from '../services/valuation-policy.js';
+import { requireValuationPlanUsage, valuationUsage } from '../services/valuation-policy.js';
 import { storageMode } from '../services/storage.js';
-import { CYCLES, cyclePrice, DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, MODELING_EXTRA_USER_MONTHLY_MINOR, VALUATION_INCLUDED_USERS, VALUATION_TRIAL_ANALYSES, defaultModelingSector, modelingPlanPrice, luandaDate, periodEnd, SECTORS, type BillingCycle, type FinancialSector } from '@kianda/core';
+import { CYCLES, cyclePrice, DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, MODELING_EXTRA_USER_MONTHLY_MINOR, VALUATION_EXTRA_USER_MONTHLY_MINOR, VALUATION_INCLUDED_USERS, VALUATION_PLANS, VALUATION_PLAN_KEYS, VALUATION_TRIAL_ANALYSES, valuationPlanPrice, defaultModelingSector, modelingPlanPrice, luandaDate, periodEnd, SECTORS, type BillingCycle, type FinancialSector } from '@kianda/core';
 import {
   and, auditLogs, companyModules, companies, desc, employees, eq, ne, files, gatewayEvents, getDb, like, outboundEmails, paymentRequests, platformAdmins, platformSettings, sql, subscriptions, users, type Db,
 } from '@kianda/db';
@@ -46,7 +46,7 @@ export function billingRoutes() {
       status: l.status, statusLabel: l.statusLabel, canWrite: l.canWrite, tier: l.tier, cycle: l.cycle, limit: l.limit, activeEmployees: l.activeEmployees,
       trialEndsAt: l.sub?.trialEndsAt ?? null, paidUntil: l.sub?.paidUntil ?? null,
       prices: [...priceTable(), ...(l.tier.key === 'custom' ? [{ ...l.tier, prices: Object.fromEntries((Object.keys(CYCLES) as BillingCycle[]).map(cycle => [cycle, cyclePrice(l.tier, cycle)])) }] : [])], cycles: CYCLES, bank: settings.bank, supportEmail: settings.supportEmail, supportPhone: settings.supportPhone, requests,
-      modules, modelingPlans: MODELING_PLANS, modelingExtraUserMinor: MODELING_EXTRA_USER_MONTHLY_MINOR, modelingUsage: await modelingUsage(db, actor.companyId), valuationUsage: await valuationUsage(db, actor.companyId),
+      modules, modelingPlans: MODELING_PLANS, modelingExtraUserMinor: MODELING_EXTRA_USER_MONTHLY_MINOR, modelingUsage: await modelingUsage(db, actor.companyId), valuationUsage: await valuationUsage(db, actor.companyId), valuationPlans: VALUATION_PLANS.map(p => ({ ...p, prices: Object.fromEntries((Object.keys(CYCLES) as BillingCycle[]).map(cycle => [cycle, valuationPlanPrice(p.key, cycle)!.totalMinor])) })), valuationExtraUserMinor: VALUATION_EXTRA_USER_MONTHLY_MINOR,
       multicaixa: !!proxypayConfig(), invoicesOnline: !!vendusConfig(),
     });
   });
@@ -56,6 +56,7 @@ export function billingRoutes() {
     const actor = c.get('actor');
     const b = z.discriminatedUnion('kind', [
       z.object({ kind: z.literal('subscription'), tierKey: z.string(), cycle: z.enum(['monthly', 'semiannual', 'annual']) }),
+      z.object({ kind: z.literal('valuation_subscription'), planKey: z.enum(VALUATION_PLAN_KEYS), cycle: z.enum(['monthly', 'semiannual', 'annual']), extraUsers: z.number().int().min(0).max(100_000).default(0) }),
       z.object({ kind: z.literal('modeling_subscription'), planKey: z.enum(MODELING_PLANS.map(p => p.key) as [string, ...string[]]), cycle: z.enum(['monthly', 'semiannual', 'annual']), extraUsers: z.number().int().min(0).max(100_000).default(0), sectors: z.array(z.enum(FINANCIAL_SECTORS)).min(1).max(8) }),
     ]).parse(await body(c));
     const db = getDb();
@@ -63,7 +64,16 @@ export function billingRoutes() {
     const l = await licenceOf(db, actor.companyId);
     const today = luandaDate(new Date());
     let values: Partial<typeof paymentRequests.$inferInsert>;
-    if (b.kind === 'modeling_subscription') {
+    if (b.kind === 'valuation_subscription') {
+      const plan = VALUATION_PLANS.find(p => p.key === b.planKey)!;
+      const price = valuationPlanPrice(plan.key, b.cycle, b.extraUsers)!;
+      await requireValuationPlanUsage(db, actor.companyId, { analysisLimit: plan.analysisLimit, extraUsers: b.extraUsers });
+      const [grant] = await db.select().from(companyModules).where(and(eq(companyModules.companyId, actor.companyId), eq(companyModules.module, 'valuation')));
+      // O período pago começa depois do que já está pago ou do fim da avaliação: o cliente não perde dias grátis.
+      const after = [grant?.paidUntil, grant?.status === 'trial' ? grant.trialEndsAt : null].filter((d): d is string => !!d && d >= today).sort().at(-1);
+      const start = after ? addDays(after, 1) : today;
+      values = { kind: b.kind, tierKey: plan.key, cycle: b.cycle, projectLimit: plan.analysisLimit, extraUsers: b.extraUsers, periodStart: start, periodEnd: periodEnd(start, CYCLES[b.cycle].months), grossMinor: price.grossMinor, discountMinor: price.discountMinor, amountMinor: price.totalMinor };
+    } else if (b.kind === 'modeling_subscription') {
       const plan = MODELING_PLANS.find(p => p.key === b.planKey)!;
       const price = modelingPlanPrice(plan.key, b.cycle, b.extraUsers);
       if (!price) throw new DomainError('ciclo_indisponivel', 'O plano não está disponível no ciclo escolhido.', 400);

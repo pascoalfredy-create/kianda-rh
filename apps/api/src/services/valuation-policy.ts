@@ -1,4 +1,4 @@
-import { VALUATION_TRIAL_ANALYSES, valuationCapacity } from '@kianda/core';
+import { VALUATION_INCLUDED_USERS, VALUATION_TRIAL_ANALYSES, valuationCapacity } from '@kianda/core';
 import { and, companies, companyModules, eq, isNull, sql, valuationAnalyses, valuationMembers, type Db } from '@kianda/db';
 import { DomainError } from './payroll.js';
 
@@ -14,7 +14,14 @@ export async function valuationUsage(db: Db, companyId: string) {
   return valuationCapacity({ analysisLimit: grant ? grant.projectLimit : VALUATION_TRIAL_ANALYSES, extraUsers: grant?.extraUsers ?? 0 }, analyses?.n ?? 0, members?.n ?? 0);
 }
 
+/** Um plano (pago ou definido pela plataforma) nunca fica abaixo do uso actual: arquivar análises ou retirar acessos primeiro. */
+export async function requireValuationPlanUsage(db: Db, companyId: string, limits: { analysisLimit: number | null; extraUsers: number }) {
+  const usage = await valuationUsage(db, companyId);
+  if (limits.analysisLimit !== null && usage.activeAnalyses > limits.analysisLimit) throw new DomainError('limite_inferior_ao_uso', `A empresa tem ${usage.activeAnalyses} análises activas. Arquive análises antes de escolher um plano com ${limits.analysisLimit}.`, 409);
+  if (usage.enabledUsers > VALUATION_INCLUDED_USERS + limits.extraUsers) throw new DomainError('limite_inferior_ao_uso', `A empresa tem ${usage.enabledUsers} utilizadores com acesso ao Valora: acrescente utilizadores extra ou retire acessos.`, 409);
+}
+
 export async function requireAnalysisCapacity(db: Db, companyId: string) {
   await lockValuationCompany(db, companyId);
-  if (!(await valuationUsage(db, companyId)).canCreateAnalysis) throw new DomainError('limite_analises', 'Atingiu o número de análises activas contratado. Arquive uma análise ou contacte a plataforma para ampliar.', 409);
+  if (!(await valuationUsage(db, companyId)).canCreateAnalysis) throw new DomainError('limite_analises', 'Atingiu o número de análises activas contratado. Arquive uma análise ou mude de plano em Módulos e licenças.', 409);
 }

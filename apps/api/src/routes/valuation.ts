@@ -179,7 +179,7 @@ export function valuationRoutes() {
     const [user] = await db.select().from(users).where(and(eq(users.id, userId), eq(users.companyId, a.companyId)));
     if (!user || user.disabledAt) throw new DomainError('nao_encontrado', 'Utilizador activo inexistente nesta empresa.', 404);
     const [before] = await db.select().from(valuationMembers).where(and(eq(valuationMembers.companyId, a.companyId), eq(valuationMembers.userId, userId)));
-    if (input.enabled && !before?.enabled && !(await valuationUsage(db, a.companyId)).canAddUser) throw new DomainError('limite_utilizadores', 'O Valora inclui cinco utilizadores. Contacte a plataforma para contratar acessos adicionais.', 409);
+    if (input.enabled && !before?.enabled && !(await valuationUsage(db, a.companyId)).canAddUser) throw new DomainError('limite_utilizadores', 'O plano do Valora inclui cinco utilizadores. Acrescente utilizadores extra em Módulos e licenças.', 409);
     const values = { enabled: input.enabled, permission: input.permission };
     const [member] = await db.insert(valuationMembers).values({ ...values, userId, companyId: a.companyId, addedBy: a.actorId })
       .onConflictDoUpdate({ target: [valuationMembers.companyId, valuationMembers.userId], set: values }).returning();

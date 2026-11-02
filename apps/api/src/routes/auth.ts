@@ -1,4 +1,4 @@
-import { DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, isValidCompanyNif, luandaDate, SECTORS, tierFor, trialEndDate, TRIAL_DAYS, VALUATION_TRIAL_ANALYSES, verifyTotp } from '@kianda/core';
+import { DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, isValidCompanyNif, luandaDate, SECTORS, tierFor, trialEndDate, TRIAL_DAYS, VALUATION_PLANS, VALUATION_PLAN_KEYS, verifyTotp } from '@kianda/core';
 import { auditLogs, companies, companyModules, employees, getDb, modelingMembers, valuationMembers, platformAdmins, hashPassword, passwordProblems, subscriptions, users, verifyPassword, type Db } from '@kianda/db';
 import { and, eq } from '@kianda/db';
 import { Hono } from 'hono';
@@ -71,12 +71,15 @@ export function authRoutes() {
       acceptTerms: z.literal(true, { message: 'É necessário aceitar os termos de utilização' }).optional(),
       modules: z.array(z.enum(['hr', 'modeling', 'valuation'])).min(1, 'Escolha pelo menos um módulo').max(3).refine(v => new Set(v).size === v.length, 'Módulo repetido').default(['hr']),
       hrPlan: z.object({ tierKey: z.enum(DEFAULT_TIERS.map(t => t.key) as [string, ...string[]]), cycle: z.enum(['monthly', 'semiannual', 'annual']) }).optional(),
+      valuationPlan: z.object({ key: z.enum(VALUATION_PLAN_KEYS), cycle: z.enum(['monthly', 'semiannual', 'annual']) }).optional(),
       modelingPlan: z.object({ key: z.enum(MODELING_PLANS.map(p => p.key) as [string, ...string[]]), cycle: z.enum(['monthly', 'semiannual', 'annual']), primarySector: z.enum(FINANCIAL_SECTORS), sectors: z.array(z.enum(FINANCIAL_SECTORS)).min(1).max(8) }).optional(),
     }).parse(await body(c));
     const hasHr = b.modules.includes('hr'), hasModeling = b.modules.includes('modeling'), hasValuation = b.modules.includes('valuation');
     const hrTier = DEFAULT_TIERS.find(t => t.key === b.hrPlan?.tierKey) ?? tierFor(b.company.employeesEstimate ?? 1);
     if (hasHr && hrTier.maxEmployees !== null && hrTier.maxEmployees < (b.company.employeesEstimate ?? 1)) return c.json({ error: 'escalao_pequeno', message: 'Escolha uma faixa que inclua todos os colaboradores declarados.' }, 400);
     const modelingPlan = MODELING_PLANS.find(p => p.key === b.modelingPlan?.key) ?? MODELING_PLANS[0];
+    // Valora: a avaliação trabalha dentro das quotas do plano escolhido (por omissão, o Essencial mensal).
+    const valuationPlan = VALUATION_PLANS.find(p => p.key === b.valuationPlan?.key) ?? VALUATION_PLANS[0], valuationCycle = b.valuationPlan?.cycle ?? 'monthly';
     const modelingCycle = b.modelingPlan?.cycle ?? 'monthly';
     if (hasModeling && !b.modelingPlan) return c.json({ error: 'plano_obrigatorio', message: 'Escolha o plano, o sector principal e os sectores adicionais da Modelagem.' }, 400);
     const modelingSectors = hasModeling ? validateModelingSectors(modelingPlan.key, b.modelingPlan!.primarySector, b.modelingPlan!.sectors) : [];
@@ -91,14 +94,14 @@ export function authRoutes() {
       const [u] = await tx.insert(users).values({ companyId: co!.id, email: b.email.toLowerCase(), name: b.name, passwordHash, role: 'owner' }).returning();
       await tx.insert(companyModules).values([
         { companyId: co!.id, module: 'hr', enabled: hasHr, status: hasHr ? 'trial' : 'cancelled' },
-        ...(hasValuation ? [{ companyId: co!.id, module: 'valuation', enabled: true, status: 'trial', trialEndsAt: trialEnd, projectLimit: VALUATION_TRIAL_ANALYSES }] : []),
+        ...(hasValuation ? [{ companyId: co!.id, module: 'valuation', enabled: true, status: 'trial', trialEndsAt: trialEnd, projectLimit: valuationPlan.analysisLimit, planKey: valuationPlan.key, cycle: valuationCycle }] : []),
         ...(hasModeling ? [{ companyId: co!.id, module: 'modeling', enabled: true, status: 'trial', trialEndsAt: trialEnd, planKey: modelingPlan.key, cycle: modelingCycle, projectLimit: modelingPlan.projectLimit, primarySector: b.modelingPlan!.primarySector, modelingSectors }] : []),
       ]);
       if (hasModeling) await tx.insert(modelingMembers).values({ companyId: co!.id, userId: u!.id, addedBy: u!.id });
       if (hasValuation) await tx.insert(valuationMembers).values({ companyId: co!.id, userId: u!.id, addedBy: u!.id });
       // Pré-configuração do sector: regimes de horário e subsídios sugeridos (a empresa ajusta depois).
       if (hasHr) await applySectorPreset(tx, co!.id, co!.sector, u!.id);
-      await tx.insert(auditLogs).values({ companyId: co!.id, actorId: u!.id, action: 'register', entity: 'company', entityId: co!.id, after: { company: co, owner: { id: u!.id, email: u!.email }, modules: b.modules, hrPlan: hasHr ? { tierKey: hrTier.key, cycle: b.hrPlan?.cycle ?? 'monthly' } : null, modelingPlan: hasModeling ? { key: modelingPlan.key, cycle: modelingCycle } : null, valuation: hasValuation ? { analysisLimit: VALUATION_TRIAL_ANALYSES } : null } });
+      await tx.insert(auditLogs).values({ companyId: co!.id, actorId: u!.id, action: 'register', entity: 'company', entityId: co!.id, after: { company: co, owner: { id: u!.id, email: u!.email }, modules: b.modules, hrPlan: hasHr ? { tierKey: hrTier.key, cycle: b.hrPlan?.cycle ?? 'monthly' } : null, modelingPlan: hasModeling ? { key: modelingPlan.key, cycle: modelingCycle } : null, valuation: hasValuation ? { planKey: valuationPlan.key, cycle: valuationCycle, analysisLimit: valuationPlan.analysisLimit } : null } });
       return { company: co!, user: u!, trialEnd };
     });
     const token = await startSession(c, { sub: result.user.id, companyId: result.company.id, role: 'owner', employeeId: null, name: result.user.name });
