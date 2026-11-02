@@ -46,7 +46,7 @@ const ASSINATURAS = (a: string, b: string) => `--- assinaturas: ${a} | ${b}`;
 export const BUILTIN_TEMPLATES: DocumentTemplate[] = [
   {
     key: 'contrato_indeterminado', title: 'Contrato de trabalho por tempo indeterminado', category: 'contract',
-    description: 'Contrato regra da Lei Geral do Trabalho, com período experimental, remuneração e férias.',
+    description: 'Contrato por tempo indeterminado, com período experimental, remuneração e férias.',
     inputs: [{ key: 'pedido.local_trabalho', label: 'Local de trabalho', placeholder: 'Ex.: Luanda, instalações da empresa', required: true }],
     body: `# Contrato de trabalho por tempo indeterminado
 

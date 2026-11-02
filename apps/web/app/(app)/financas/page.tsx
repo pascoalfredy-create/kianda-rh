@@ -33,7 +33,7 @@ export default async function Financas({ searchParams }: { searchParams: Promise
   return (
     <>
       <h1>Finanças de pessoal</h1>
-      <p className="sub">Lançamentos do processamento e dos pagamentos segundo o PGC Angola (Decreto n.º 82/2001) — diário, balancete, razão e exportação para o ERP</p>
+      <p className="sub">Lançamentos do processamento e dos pagamentos — diário, balancete, razão e exportação para o ERP</p>
       <form className="card form" style={{ marginBottom: 14, gridTemplateColumns: 'auto 160px 160px auto auto 1fr', alignItems: 'end' }}>
         <input type="hidden" name="s" value={tab} />
         <div className="month-nav" style={{ alignSelf: 'end' }}>

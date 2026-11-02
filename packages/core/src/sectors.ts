@@ -118,8 +118,8 @@ const A = (key: string, code: string, label: string, calc: AllowanceCalc, v: num
   ({ key, code, label, calc, ...(calc === 'base_pct' ? { bps: v } : { valueMinor: v }), inInss: true, inIrt: true, note });
 
 export const ALLOWANCE_PRESETS: Record<string, AllowanceSpec> = {
-  shift: A('shift', 'SUBTURNO', 'Subsídio de turno', 'base_pct', 2000, 'Turnos rotativos: 20% do salário base, já inclui o nocturno (LGT, art. 162.º); não é devido em dois turnos fixos'),
-  night: A('night', 'SUBNOCT', 'Subsídio de trabalho nocturno', 'base_pct', 2000, 'Trabalho entre as 20h e as 6h (pelo menos 3 h por dia): 20% do salário base (LGT, arts. 179.º–182.º); não acumula com o subsídio de turno'),
+  shift: A('shift', 'SUBTURNO', 'Subsídio de turno', 'base_pct', 2000, 'Turnos rotativos: 20% do salário base, já inclui o nocturno; não é devido em dois turnos fixos'),
+  night: A('night', 'SUBNOCT', 'Subsídio de trabalho nocturno', 'base_pct', 2000, 'Trabalho entre as 20h e as 6h (pelo menos 3 h por dia): 20% do salário base; não acumula com o subsídio de turno'),
   risk: A('risk', 'SUBRISCO', 'Subsídio de risco', 'base_pct', 1000, 'Funções com exposição a risco (armas, explosivos, alturas, agentes químicos)'),
   isolation: A('isolation', 'SUBISOL', 'Subsídio de isolamento', 'per_day', 500_000, 'Por dia em local isolado (frentes de mina, estaleiros remotos)'),
   field: A('field', 'SUBCAMPO', 'Subsídio de campo', 'per_day', 300_000, 'Por dia de trabalho no campo/estaleiro'),

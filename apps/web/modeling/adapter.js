@@ -420,7 +420,7 @@ async function saveDownload(response,fallback){
 function versionBanner(){
   const v=versionView;if(!v)return '';
   return `<div class="alert ${v.matches?'g':'a'}" role="status">${ico(v.matches?'check':'alert',17)}<div style="flex:1"><b>Versão aprovada v${v.number} · ${esc(v.label)}</b> — aprovada por ${esc(v.approvedByName||'—')} em ${esc(luandaDateTime(v.approvedAt))}. Só consulta: os campos estão bloqueados e nada é gravado.
-    ${v.matches?' Os mapas no ecrã reproduzem o cálculo aprovado.':` <b>Atenção:</b> o cálculo no ecrã difere do aprovado (motor ${esc(v.engine)}). Os PDF da versão fazem fé.`} Os PDF descarregados aqui são os documentos aprovados.</div>
+    ${v.matches?' Os mapas no ecrã reproduzem o cálculo aprovado.':` <b>Atenção:</b> o cálculo no ecrã difere do aprovado. Os PDF da versão fazem fé.`} Os PDF descarregados aqui são os documentos aprovados.</div>
     <div class="rowact"><button class="btn sm" data-act="versions">Versões</button><button class="btn sm pri" data-act="leaveVersion">Voltar ao rascunho</button></div></div>`;
 }
 

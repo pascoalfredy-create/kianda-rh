@@ -9,8 +9,11 @@ const { build } = createRequire(new URL('package.json', web))('esbuild');
 const original = await readFile(new URL('modeling/prototype.html', web), 'utf8');
 const begin = original.indexOf('<script>'), end = original.lastIndexOf('</script>');
 if (begin < 0 || end < begin) throw new Error('Estrutura inesperada do protótipo');
-const shell = original.slice(0, begin), suffix = original.slice(end + '</script>'.length);
+const suffix = original.slice(end + '</script>'.length);
 let source = original.slice(begin + '<script>'.length, end);
+const SIDEFOOT = '<div class="sidefoot">Classificação PGC Angola (Decreto n.º 82/2001) · Classe 6 Proveitos · Classe 7 Custos. Submódulo independente do Orçamento.</div>';
+if (!original.slice(0, begin).includes(SIDEFOOT)) throw new Error('Rodapé lateral do Integra não encontrado');
+const shell = original.slice(0, begin).replace(SIDEFOOT, '<div class="sidefoot">Classe 6 Proveitos · Classe 7 Custos</div>');
 function span(start, stop, replacement) {
   const a = source.indexOf(start), b = source.indexOf(stop, a);
   if (a < 0 || b < a) throw new Error('Bloco não encontrado: ' + start);
@@ -70,7 +73,7 @@ replace('accept=".csv,.txt"', `accept="${documentAccept}"`);
 for (const number of [1,2]) replace(`id="anF${number}" accept="${documentAccept}" style="margin-top:6px;font-size:12px">`, `id="anF${number}" accept="${documentAccept}" aria-label="Importar balancete ${number===1?'comparativo N−1':'do período N'}" style="margin-top:6px;font-size:12px"><button type="button" class="btn sm" data-act="anClearImport" data-number="${number}" aria-label="Remover documento ${number===1?'comparativo N−1':'do período N'}">Remover documento</button><span class="import-status" id="anStatus${number}" role="status" aria-live="polite"></span>`);
 replace('<button class="btn" data-act="anDemo">Exemplo (distribuidora)</button>', '<button class="btn" data-act="anDemo">Exemplo (distribuidora)</button>${historicalRemovalButton()}');
 replace('Aceita colunas Saldo Devedor/Credor', 'Para um único ficheiro, use Balancete N; o comparativo é opcional. Referências: ano (2026) ou data (31/08/2026); podem ser meses do mesmo ano. PDF com texto, Word (.docx), CSV ou TXT. Confira as contas extraídas antes de premir Analisar. Aceita colunas Saldo Devedor/Credor');
-replace(' · balancete antes do apuramento de resultados.', ' · balancetes externos antes ou depois do apuramento PGC.');
+replace(' · balancete antes do apuramento de resultados.', ' · balancetes externos antes ou depois do apuramento de resultados.');
 replace("const {cN,c1,rN,r1}=A;const y=a.anos;", "const {cN,c1,rN,r1}=A;const y=[historicalPeriodLabel(a,'N1'),historicalPeriodLabel(a,'N')];");
 replace("if(tab==='fc'){if(!two)", "if(tab==='fc'){if(!A.cashFlow)");
 replace("  if(tab==='dados'||!A||A.err)", "  if(A&&!A.err)head+=historicalScopeNotes(A);\n  if(tab==='dados'||!A||A.err)");
@@ -105,6 +108,13 @@ replace('hBars(rows,{center:ex?R.eqVal:R.npv})', 'hBars(rows.filter(r=>Number.is
 replace("k.princ[t]>0&&k.dscr[t]<m.cov.dscr", "k.ds[t]>0&&k.dscr[t]<m.cov.dscr");
 replace("t>=1&&k.debt[t-1]>0&&brk(t).length", "t>=1&&(k.ds[t]>0||k.debt[t]>0)&&brk(t).length");
 replace("t>=1&&k.debt[t-1]>0?brk(t):null", "t>=1&&(k.ds[t]>0||k.debt[t]>0)?brk(t):null");
+// Fontes normativas ficam fora do ecrã e dos relatórios: o conteúdo continua conforme, sem citações.
+replace(' · classificação PGC Angola · ${unitLbl()}', ' · ${unitLbl()}');
+replace('Balancete PGC Angola → ', 'Balancete → ');
+replace('Fluxos de caixa (PGC Angola)', 'Fluxos de caixa');
+replace('Classificação por natureza — PGC Angola (Decreto n.º 82/2001)', 'Classificação por natureza');
+replace('Histórico: balancetes PGC, ', 'Histórico: balancetes, ');
+replace('Análise económico-financeira · PGC Angola', 'Análise económico-financeira');
 span('function fsCSV(){', '/* ---------------- Eventos', '');
 source = source.slice(0, source.indexOf('/* ---------------- Eventos'));
 const adapter = (await readFile(new URL('modeling/adapter.js', web), 'utf8')).replace('__NEW_MODEL_DIALOG__', dialog);

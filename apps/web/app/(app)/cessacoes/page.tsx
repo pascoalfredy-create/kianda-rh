@@ -17,7 +17,7 @@ export default async function Cessacoes() {
       <div className="page-head">
         <div>
           <h1>Cessação de contratos</h1>
-          <p className="sub">Fecho de contas por motivo (Lei Geral do Trabalho), integração no processamento e documentos de cessação</p>
+          <p className="sub">Fecho de contas por motivo, integração no processamento e documentos de cessação</p>
         </div>
         {canEdit && <Link className="btn" href="/cessacoes/nova">Nova cessação</Link>}
       </div>

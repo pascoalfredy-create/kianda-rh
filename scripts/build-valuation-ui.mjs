@@ -42,7 +42,9 @@ shell = spelling(shell); source = spelling(source);
 replaceShell('<div class="brand"><div class="brand-mark">V</div><div><b>Valora</b><small>Análise, gestão & avaliação</small></div></div>',
   '<div class="brand"><div class="brand-mark">V</div><div><b>Valora</b><small>Análise, gestão & avaliação</small></div><button type="button" class="btn valora-menu" id="valoraMenu" aria-label="Abrir menu" aria-expanded="false" aria-controls="nav">☰</button></div>');
 replaceShell('<div class="side-foot">Protótipo · dados fictícios<br>Valores em milhões de Kz (Mkz)<br>PGC Angola (Dec. 82/01) · IVA 14%</div>',
-  '<div class="side-foot"><span id="valoraFoot"></span>Valores em milhões de Kz (Mkz)<br>PGC Angola (Dec. 82/01) · IVA 14%<br><a href="/modulos" class="valora-link">Módulos e licenças</a> · <button type="button" class="valora-link" id="valoraLogout">Terminar sessão</button></div>');
+  '<div class="side-foot"><span id="valoraFoot"></span>Valores em milhões de Kz (Mkz)<br><a href="/modulos" class="valora-link">Módulos e licenças</a> · <button type="button" class="valora-link" id="valoraLogout">Terminar sessão</button></div>');
+replaceShell('<p class="intro">Demonstrações por natureza (PGC Angola: <b>', '<p class="intro">Demonstrações por natureza (<b>');
+replace(' segundo o PGC Angola, com exercício comparativo', ', com exercício comparativo');
 replaceShell('<div class="entity"><b id="hdrEnt">Kalunga Distribuição, S.A.</b><span class="pill" id="pillFecho">Fecho: Out 2026</span></div>',
   '<button type="button" class="entity" id="btnEntity" title="Mudar de análise"><b id="hdrEnt">—</b><span class="pill" id="pillFecho">—</span></button><span class="hint" id="valoraSave" role="status" aria-live="polite"></span><button class="btn pri" id="btnAnalyses">Análises</button>');
 replaceShell('<p class="sub">Mkz · 2021–2025 real, 2026 previsão, 2027–2030 projecção DCF</p>', '<p class="sub" id="valoraRevYears"></p>');

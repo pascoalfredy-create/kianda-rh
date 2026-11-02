@@ -34,7 +34,6 @@ export default async function DocumentoAceitacao({ params }: { params: Promise<{
         <div className="grid">
           <div className="card kpi"><div className="l">Aceites</div><div className="v">{accepted} de {active.length}</div></div>
           <div className="card kpi"><div className="l">Por aceitar</div><div className="v">{active.length - accepted}</div></div>
-          <div className="card kpi"><div className="l">Impressão digital do conteúdo</div><div className="muted" style={{ fontFamily: 'monospace', fontSize: 11, wordBreak: 'break-all', marginTop: 8 }}>{doc.contentSha256}</div></div>
         </div>
         <div className="card section">
           <h2>Destinatários</h2>

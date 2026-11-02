@@ -6,8 +6,12 @@ import { modelingHeaders, modelingPage } from '../lib/modeling/page';
 import type { ModelingSession } from './store';
 const prototype = readFileSync(new URL('./prototype.html', import.meta.url), 'utf8');
 describe('interface aprovada e documento autenticado', () => {
-  it('preserva byte a byte o CSS e a estrutura HTML anteriores ao JavaScript', () => {
-    expect(MODELING_SHELL).toBe(prototype.slice(0, prototype.indexOf('<script>')));
+  it('preserva byte a byte o CSS e a estrutura HTML anteriores ao JavaScript, salvo o rodapé lateral sem fontes', () => {
+    const shell = prototype.slice(0, prototype.indexOf('<script>'));
+    const foot = /<div class="sidefoot">[^<]*<\/div>/;
+    expect(MODELING_SHELL.replace(foot, '')).toBe(shell.replace(foot, ''));
+    expect(MODELING_SHELL).toContain('<div class="sidefoot">Classe 6 Proveitos · Classe 7 Custos</div>');
+    expect(MODELING_SHELL).not.toMatch(/PGC Angola|Decreto/);
     expect(MODELING_SUFFIX).toBe(prototype.slice(prototype.lastIndexOf('</script>') + 9));
     expect(MODELING_REFERENCE_HASH).toBe(createHash('sha256').update(prototype).digest('hex'));
   });

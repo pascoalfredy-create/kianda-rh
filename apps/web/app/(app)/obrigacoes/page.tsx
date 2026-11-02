@@ -86,7 +86,7 @@ export default async function Obrigacoes() {
           </div>
         );
       }))}
-      <p className="muted">Prazos: salários até ao último dia do mês processado; INSS até ao dia 10 do mês seguinte; IRT até ao fim do mês seguinte (pacote AO-2026). O mapa da AGT segue os templates oficiais do Portal do Contribuinte (A2.1 com 32 colunas, ou o simplificado) e inclui todos os trabalhadores do mês. A folha do INSS segue a Folha de Remuneração Normal do INSS Virtual. O ficheiro do banco sai em NOME, NIB, VALOR (outros formatos nas Definições).</p>
+      <p className="muted">Prazos: salários até ao último dia do mês processado; INSS até ao dia 10 do mês seguinte; IRT até ao fim do mês seguinte. O mapa da AGT segue os templates oficiais do Portal do Contribuinte (A2.1 com 32 colunas, ou o simplificado) e inclui todos os trabalhadores do mês. A folha do INSS segue a Folha de Remuneração Normal do INSS Virtual. O ficheiro do banco sai em NOME, NIB, VALOR (outros formatos nas Definições).</p>
     </>
   );
 }

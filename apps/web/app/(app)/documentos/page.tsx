@@ -42,7 +42,7 @@ export default async function Documentos({ searchParams }: { searchParams: Promi
                   <td><Link href={`/documentos/${d.id}`}><b>{d.number}</b></Link></td><td>{d.title}</td>
                   {staff && <td>{d.employeeNumber} · {d.employeeName}</td>}
                   <td>{new Date(d.issuedAt).toLocaleDateString('pt-PT', { timeZone: 'Africa/Luanda' })}</td>
-                  <td>{d.revokedAt ? <span className="st rejected">Anulado</span> : <span className="tag">{d.templateVersion}</span>}</td>
+                  <td>{d.revokedAt ? <span className="st rejected">Anulado</span> : <span className="st approved">Válido</span>}</td>
                 </tr>
               ))}
             </tbody>
@@ -54,19 +54,19 @@ export default async function Documentos({ searchParams }: { searchParams: Promi
       {view === 'modelos' && t && (
         <div className="card">
           <table>
-            <thead><tr><th>Modelo</th><th>Tipo</th><th>Versão</th><th /></tr></thead>
+            <thead><tr><th>Modelo</th><th>Tipo</th><th>Origem</th><th /></tr></thead>
             <tbody>
               {t.templates.map((x) => (
                 <tr key={x.key}>
                   <td><b>{x.title}</b><div className="muted">{x.description}</div></td>
                   <td>{DOCUMENT_CATEGORY[x.category]}</td>
-                  <td>{x.source === 'empresa' ? <span className="tag future">{x.version}</span> : <span className="tag">Kianda {x.version}</span>}</td>
+                  <td>{x.source === 'empresa' ? <span className="tag future">{x.version}</span> : <span className="tag">Kianda</span>}</td>
                   <td className="num"><Link className="btn ghost sm" href={`/documentos/modelos/${x.key}`}>Adaptar</Link></td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <p className="muted" style={{ padding: '10px 16px' }}>Os modelos do Kianda acompanham o pacote de regras do ano e estão assinalados para revisão jurídica. Ao adaptar um modelo, cada gravação cria uma versão nova; os documentos já emitidos não mudam.</p>
+          <p className="muted" style={{ padding: '10px 16px' }}>Os modelos do Kianda são actualizados pelo Kianda sempre que a lei muda. Ao adaptar um modelo, cada gravação cria uma versão nova; os documentos já emitidos não mudam.</p>
         </div>
       )}
     </>

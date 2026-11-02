@@ -29,7 +29,7 @@ export default async function Documento({ params }: { params: Promise<{ id: stri
         <Letterhead />
         <DocView text={d.body} />
         <div style={{ marginTop: 40, paddingTop: 10, borderTop: '1px solid #e5e7eb', fontSize: 11.5, color: '#6b7280', display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-          <span>{d.number} · emitido em {new Date(d.issuedAt).toLocaleDateString('pt-PT', { timeZone: 'Africa/Luanda' })} · modelo {d.templateVersion}</span>
+          <span>{d.number} · emitido em {new Date(d.issuedAt).toLocaleDateString('pt-PT', { timeZone: 'Africa/Luanda' })}</span>
           <span>Verificar: {verifyUrl}</span>
         </div>
       </div>

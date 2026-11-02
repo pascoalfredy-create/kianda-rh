@@ -4,7 +4,7 @@ import type { Metadata } from 'next';
 export const SITE_URL = 'https://kianda.yelaperformance.com';
 export const PUBLIC_METADATA: Metadata = {
   title: 'Kianda | Recursos Humanos, Modelagem Financeira e Avaliação de Empresas em Angola',
-  description: 'Kianda RH, Kianda Integra e Kianda Valora: gestão de pessoas, processamento salarial, projectos de viabilidade, demonstrações por PGC Angola, orçamento, tesouraria e avaliação de empresas em Angola.',
+  description: 'Kianda RH, Kianda Integra e Kianda Valora: gestão de pessoas, processamento salarial, projectos de viabilidade, demonstrações financeiras, orçamento, tesouraria e avaliação de empresas em Angola.',
   alternates: { canonical: SITE_URL },
   robots: { index: true, follow: true },
   openGraph: {
