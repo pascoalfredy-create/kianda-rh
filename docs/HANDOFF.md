@@ -58,8 +58,10 @@ Uma conta, um repositório e uma base de dados para três módulos com licenças
 
 **Próximas entregas acordadas (fechar lacunas face ao Factorial, uma de cada vez):** acolhimento e saída (listas de tarefas), aceitação electrónica de documentos no portal, notificações no telemóvel, planeamento de turnos. Reconhecimento facial e terminais biométricos ficam para depois (equipamento e risco jurídico).
 
-**Pendentes (do dono):**
-1. IBAN, banco, titular e contactos de suporte na consola (Plataforma Kianda), quando a empresa nova tiver conta.
+**Feito pelo dono (confirmado em 02/11/2026):** IBAN do Banco Atlântico configurado na consola (Plataforma Kianda); os pedidos de pagamento mostram as instruções de transferência. Ficheiros anexados em R2 (`kianda-files`) activo.
+
+**Pendentes (do dono)** — estado lido do registo da publicação de 02/11/2026: o Worker só tem `API_JWT_SECRET` e `APP_BASE_URL`; ProxyPay, Resend, Vendus e `KIANDA_MODELING_OWNER_USER_ID` estão vazios.
+1. Confirmar na consola o email e o telefone de suporte (aparecem na licença e no Valora).
 2. Opcional: `KIANDA_MODELING_OWNER_USER_ID` (sem ela ninguém exporta Excel da Modelagem).
 3. Contratar ProxyPay, Resend e Vendus e definir os secrets (DEPLOY.md); Vendus quando a facturação electrónica geral entrar em vigor. Enquadramento de IVA das licenças. Domínio próprio (`KIANDA_HOSTNAME`).
 4. Validação jurídica de `AO_2026.toValidate` (em especial cessação, Lei n.º 12/23) e textos dos contratos; termos ainda versão de trabalho.
