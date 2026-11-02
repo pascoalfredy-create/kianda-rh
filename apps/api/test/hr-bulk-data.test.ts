@@ -87,7 +87,7 @@ describe.skipIf(!process.env.DATABASE_URL)('leituras RH em conjunto: resultados,
   it('reflecte imediatamente uma decisão, sem reutilizar os dados de outro pedido', async () => {
     expect((await request(sessions.get('manager')!, 'POST', `/v1/absences/${pendingId}/reject`, { note: 'Rever calendário' })).statusCode).toBe(200);
     expect((await request(sessions.get('manager')!, 'GET', '/v1/notifications/counts')).json().absences).toBe(1);
-    expect((await request(other, 'GET', '/v1/notifications/counts')).json()).toEqual({ absences: 1, expenses: 1 });
+    expect((await request(other, 'GET', '/v1/notifications/counts')).json()).toEqual({ absences: 1, expenses: 1, tasks: 0 });
   });
 
   it('mantém saldos, férias entre anos e o âmbito da chefia e do colaborador', async () => {
@@ -183,7 +183,7 @@ describe.skipIf(!process.env.DATABASE_URL)('leituras RH em conjunto: resultados,
     try {
       expect((await request(owner, 'GET', '/v1/employees')).statusCode).toBe(403);
       expect((await request(owner, 'GET', '/v1/notifications/counts')).statusCode).toBe(403);
-      expect((await request(owner, 'GET', '/v1/auth/me')).json().notifications).toEqual({ absences: 0, expenses: 0 });
+      expect((await request(owner, 'GET', '/v1/auth/me')).json().notifications).toEqual({ absences: 0, expenses: 0, tasks: 0 });
     } finally { await getDb().update(companyModules).set({ enabled: true }).where(eq(companyModules.companyId, companyId)); }
   });
 

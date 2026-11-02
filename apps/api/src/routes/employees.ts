@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { body, requireCompany, requireRole, type Actor, type AppEnv } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
 import { licenceOf } from '../services/licence.js';
+import { startChecklist } from '../services/checklists.js';
 
 const STAFF = ['hr_admin', 'payroll', 'finance', 'manager'] as const;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -205,6 +206,8 @@ export function employeeRoutes() {
         baseMinor: c!.baseMinor, mealMinor: c!.mealMinor, transportMinor: c!.transportMinor, reason: 'Admissão', createdBy: req.actorId,
       });
       await tx.insert(auditLogs).values({ companyId: req.companyId, actorId: req.actorId, action: 'create', entity: 'employee', entityId: e!.id, after: { employee: e, contract: c } });
+      // Acolhimento: a lista de tarefas começa na admissão (se o modelo da empresa o prevê).
+      await startChecklist(tx as unknown as Db, { companyId: req.companyId, employeeId: e!.id, kind: 'onboarding', referenceDate: contract.startDate, actorId: req.actorId, automatic: true });
       if (cand) {
         // Recrutamento: o candidato passa a contratado e fica ligado à ficha.
         await tx.update(candidates).set({ stage: 'hired', employeeId: e!.id, hiredAt: new Date(), updatedAt: new Date() }).where(eq(candidates.id, cand.id));

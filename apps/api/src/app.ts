@@ -6,6 +6,7 @@ import { setRateLimitEnabled, type AppEnv } from './plugins/tenant.js';
 import { absenceRoutes } from './routes/absences.js';
 import { attendanceRoutes } from './routes/attendance.js';
 import { kioskRoutes, workplaceRoutes } from './routes/workplaces.js';
+import { checklistRoutes } from './routes/checklists.js';
 import { obligationRoutes } from './routes/obligations.js';
 import { ledgerRoutes } from './routes/ledger.js';
 import { bankRoutes } from './routes/bank.js';
@@ -76,6 +77,7 @@ export function buildApp(opts: { logger?: boolean; rateLimit?: boolean } = {}) {
   app.route('/', absenceRoutes());
   app.route('/', attendanceRoutes());
   app.route('/', workplaceRoutes());
+  app.route('/', checklistRoutes());
   app.route('/', kioskRoutes());
   app.route('/', payrollRoutes());
   app.route('/', obligationRoutes());
