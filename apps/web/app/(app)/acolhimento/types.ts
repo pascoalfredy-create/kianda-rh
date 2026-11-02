@@ -1,4 +1,4 @@
-import type { ChecklistKind, TaskResponsible, TaskState } from '@kianda/core';
+import type { ChecklistKind, ChecklistLink, TaskResponsible, TaskState } from '@kianda/core';
 
 export interface ChecklistProgress { total: number; done: number; overdue: number; percent: number; nextDue: string | null }
 export interface ChecklistRow {
@@ -11,7 +11,7 @@ export interface ChecklistTask {
 }
 export interface ChecklistDetail extends Omit<ChecklistRow, 'actionable'> { cancelReason: string | null; canManage: boolean; tasks: ChecklistTask[] }
 export interface MyTask { id: string; checklistId: string; kind: ChecklistKind; title: string; responsible: TaskResponsible; dueDate: string; state: TaskState; employee: { id: string; name: string } }
-export interface TemplateData { kind: ChecklistKind; name: string; autoStart: boolean; items: { title: string; description?: string; responsible: TaskResponsible; offsetDays: number }[]; updatedAt: string }
+export interface TemplateData { kind: ChecklistKind; name: string; autoStart: boolean; items: { title: string; description?: string; responsible: TaskResponsible; offsetDays: number; link?: ChecklistLink }[]; updatedAt: string }
 
 export const pt = (d: string) => d.split('-').reverse().join('/');
 export const STATE_TAG: Record<TaskState, [string, string]> = { done: ['Feita', 'st approved'], overdue: ['Em atraso', 'st rejected'], due_soon: ['A vencer', 'st pending'], pending: ['Por fazer', 'tag'] };

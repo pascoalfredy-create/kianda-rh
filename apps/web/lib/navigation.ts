@@ -4,7 +4,7 @@ export type NavIcon = 'home' | 'users' | 'clock' | 'cal' | 'money' | 'receipt' |
 export interface NavItem { href: string; label: string; icon: NavIcon; badge?: number; locked?: boolean }
 export interface NavGroup { label: string; items: NavItem[] }
 const staff = ['owner', 'hr_admin', 'payroll', 'finance', 'manager'];
-export function navigation(me: Me, counts: { absences: number; expenses: number; tasks?: number }) {
+export function navigation(me: Me, counts: { absences: number; expenses: number; tasks?: number; acks?: number }) {
   const groups: NavGroup[] = [];
   const role = me.user.role;
   const has = (...roles: string[]) => role === 'owner' || roles.includes(role);
@@ -33,7 +33,7 @@ export function navigation(me: Me, counts: { absences: number; expenses: number;
       has('payroll', 'finance', 'hr_admin') && item('/analitica', 'Centros de custo', 'brief'),
       has('payroll', 'finance') && item('/financas?s=plano', 'Plano de contas', 'gear'),
     ]);
-    add('Talento', [item('/acolhimento', 'Acolhimento e saída', 'check', counts.tasks), has('hr_admin', 'manager') && item('/recrutamento', 'Recrutamento', 'brief'), item('/desempenho', 'Desempenho', 'star'), item('/documentos', 'Documentos', 'doc')]);
+    add('Talento', [item('/acolhimento', 'Acolhimento e saída', 'check', counts.tasks), (has('hr_admin') || !!me.user.employeeId) && item('/aceitacao', has('hr_admin') ? 'Aceitação de documentos' : 'Para ler e aceitar', 'doc', counts.acks), has('hr_admin', 'manager') && item('/recrutamento', 'Recrutamento', 'brief'), item('/desempenho', 'Desempenho', 'star'), item('/documentos', 'Documentos', 'doc')]);
     add('Análise', [
       has('payroll', 'finance', 'hr_admin') && item('/relatorios', 'Relatórios', 'chart'),
       has('payroll', 'finance', 'hr_admin') && item('/bi', 'BI', 'chart'),
@@ -45,6 +45,7 @@ export function navigation(me: Me, counts: { absences: number; expenses: number;
       !!me.user.employeeId && item('/adiantamentos', 'Adiantamentos', 'money'),
       !!me.user.employeeId && item(`/colaboradores/${me.user.employeeId}`, 'A minha ficha', 'users'),
       !!me.user.employeeId && item('/acolhimento', 'As minhas tarefas', 'check', counts.tasks),
+      !!me.user.employeeId && item('/aceitacao', 'Para ler e aceitar', 'doc', counts.acks),
       !!me.user.employeeId && item('/portal/dados', 'Os meus dados', 'doc'), item('/desempenho', 'Desempenho', 'star'), item('/simulador', 'Simulador salarial', 'money'),
     ]);
   }

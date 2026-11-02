@@ -31,3 +31,10 @@ export function taskCountColumn(actor: Actor) {
   return sql<number>`(select count(*) from checklist_tasks t join employee_checklists l on l.id = t.checklist_id join employees e on e.id = l.employee_id
     where t.company_id = ${actor.companyId} and l.company_id = ${actor.companyId} and e.company_id = ${actor.companyId} and l.status = 'open' and t.done_at is null and t.due_date <= ${until} and ${allowed})`.mapWith(Number);
 }
+
+/** Documentos por ler e aceitar do próprio colaborador. */
+export function ackCountColumn(actor: Actor) {
+  if (!actor.employeeId) return sql<number>`0`.mapWith(Number);
+  return sql<number>`(select count(*) from ack_requests r join ack_documents d on d.id = r.document_id
+    where r.company_id = ${actor.companyId} and d.company_id = ${actor.companyId} and r.employee_id = ${actor.employeeId} and r.status = 'pending' and d.status = 'published')`.mapWith(Number);
+}
