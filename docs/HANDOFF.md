@@ -35,7 +35,7 @@ Uma conta, um repositório e uma base de dados para três módulos com licenças
 
 - Produção no commit `576c165` (PR #29), publicada com sucesso: testes, tipos, build, **E2E**, migrações, API, web e smoke público. `/api/health` → `{"status":"ok","packs":["AO-2026"]}`.
 - Testes: **core 291, API 279, web 174** (com Postgres no CI) + **21 E2E** no navegador. A contagem do core inclui o teste de coerência da documentação.
-- Última migração: **0041_valuation_restored_at** (regra sem rotação de análises no Valora).
+- Última migração: **0042_valuation_align_trial_limits** (avaliações do Valora abertas antes dos limites por segmento alinhadas ao plano, nunca abaixo do uso; auditoria `module_limits_aligned`).
 
 **Entregas recentes (ver também `docs/ROADMAP.md`):**
 
