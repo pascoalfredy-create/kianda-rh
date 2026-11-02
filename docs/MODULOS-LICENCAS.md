@@ -44,15 +44,17 @@ Licenciado por **análises activas** (uma análise = uma entidade analisada: a p
 <!-- tabela-valora: gerada a partir do código; o teste packages/core/test/docs-coherence.test.ts falha se divergir -->
 | Chave | Plano | Análises activas | Mensal (Kz) | Semestral, à vista (Kz) | Anual, à vista (Kz) |
 | --- | --- | ---: | ---: | ---: | ---: |
-| essencial | Essencial | 10 | 32.900 | 177.660 | 335.580 |
-| pme | PME | 20 | 52.900 | 285.660 | 539.580 |
-| corporate | Corporate | 30 | 72.900 | 393.660 | 743.580 |
-| enterprise40 | Grandes Empresas (Até 40) | 40 | 92.900 | 501.660 | 947.580 |
-| unlimited | Grandes Empresas (Ilimitado) | Ilimitadas | 129.900 | 701.460 | 1.324.980 |
+| essencial | Essencial | 3 | 32.900 | 177.660 | 335.580 |
+| pme | PME / Grupo | 10 | 52.900 | 285.660 | 539.580 |
+| corporate | Corporate | 20 | 72.900 | 393.660 | 743.580 |
+| enterprise40 | Profissional | 40 | 92.900 | 501.660 | 947.580 |
+| unlimited | Ilimitado | Ilimitadas | 129.900 | 701.460 | 1.324.980 |
+
+Segmentos: Essencial = a própria empresa e até duas participadas; PME / Grupo = grupos pequenos; Corporate = grupos e consultoras pequenas; Profissional = consultoras e contabilistas; Ilimitado = bancos, auditoras e fundos. As chaves são estáveis (gravadas em licenças e pedidos); só os nomes e limites mudaram em 02/11/2026.
 
 - Todos os planos incluem **5 utilizadores**, contando o proprietário. Extras do Valora: **10.000 Kz por mês e utilizador**, em todos os meses do ciclo, sem desconto.
-- Avaliação de 7 dias com as quotas do plano escolhido no registo (por omissão, Essencial mensal). Uma empresa já registada subscreve em **Módulos e licenças → Valora** (pedido de pagamento); a licença só é activada pela confirmação do pagamento — a empresa não concede licenças a si própria (a base de dados recusa escrita em `company_modules` ao papel da aplicação). A plataforma pode ainda ajustar limites em **Plataforma Kianda → Valora**, nunca abaixo do uso.
-- Arquivar uma análise liberta a vaga e conserva os dados; restaurar exige vaga. Um plano nunca é aceite abaixo do uso actual (análises activas e utilizadores com acesso).
+- Avaliação de 7 dias com as quotas do plano escolhido no registo (por omissão, Essencial mensal, 3 análises). Licenças activadas antes de 02/11/2026 conservam o limite gravado até ao próximo pagamento. Uma empresa já registada subscreve em **Módulos e licenças → Valora** (pedido de pagamento); a licença só é activada pela confirmação do pagamento — a empresa não concede licenças a si própria (a base de dados recusa escrita em `company_modules` ao papel da aplicação). A plataforma pode ainda ajustar limites em **Plataforma Kianda → Valora**, nunca abaixo do uso.
+- Arquivar uma análise liberta a vaga e conserva os dados; restaurar exige vaga. **Sem rotação:** uma análise restaurada e arquivada de novo no mesmo mês (hora de Luanda) continua a ocupar a vaga até ao fim do mês (`valuation_analyses.restored_at`, migração 0041); voltar a activá-la nesse mês não consome outra vaga. Um plano nunca é aceite abaixo do uso actual (análises activas e utilizadores com acesso).
 - Os dados de cada análise ficam no servidor, por empresa (RLS), com controlo de revisão; nada da análise fica no armazenamento do navegador. Bibliotecas de PDF e Word servidas pela própria origem, sem CDN.
 - Com o RH na mesma conta, uma análise marcada como «própria empresa» traz os custos com o pessoal (conta 72) dos processamentos fechados.
 

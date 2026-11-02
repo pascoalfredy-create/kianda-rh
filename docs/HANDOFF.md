@@ -34,8 +34,8 @@ Uma conta, um repositório e uma base de dados para três módulos com licenças
 ## 3. Estado actual (02/11/2026)
 
 - Produção no commit `576c165` (PR #29), publicada com sucesso: testes, tipos, build, **E2E**, migrações, API, web e smoke público. `/api/health` → `{"status":"ok","packs":["AO-2026"]}`.
-- Testes: **core 291, API 278, web 174** (com Postgres no CI) + **19 E2E** no navegador. A contagem do core inclui o teste de coerência da documentação.
-- Última migração: **0040_valuation_plans** (planos do Valora na licença e nos pedidos de pagamento).
+- Testes: **core 291, API 279, web 174** (com Postgres no CI) + **21 E2E** no navegador. A contagem do core inclui o teste de coerência da documentação.
+- Última migração: **0041_valuation_restored_at** (regra sem rotação de análises no Valora).
 
 **Entregas recentes (ver também `docs/ROADMAP.md`):**
 
@@ -51,7 +51,8 @@ Uma conta, um repositório e uma base de dados para três módulos com licenças
 | #30/#31 | Documentação alinhada com o código (teste de coerência dos preços); regra de limite de tentativas activa. |
 | #32 | **Ponto com localização** (entrega 25 do RH): locais com raio, regra off/registar/alertar/bloquear, GPS só na marcação (também offline), quiosque com QR/código rotativo, excepções na Assiduidade. Motor em `packages/core/src/geofence.ts`; rotas em `apps/api/src/routes/workplaces.ts` e `attendance.ts`; página `/locais`, ecrã público `/quiosque/[token]`. |
 | #33 | **Kianda Valora** (3.º módulo): licença própria (avaliação no registo; activação e limites pela Plataforma), análises por empresa no servidor com revisões, membros com edição/consulta, custos com o pessoal (72) do RH, exportações PDF/Word/Excel só com licença paga, nomes de ficheiro em ASCII (o Chromium ignora acentos). |
-| seguinte | **Planos do Valora** por análises activas (10/20/30/40/ilimitadas; 32.900 a 129.900 Kz/mês; extras 10.000 Kz), pedido de pagamento `valuation_subscription` confirmado pela plataforma, plano no registo (`/registo?modulo=valuation&plano=pme`). Migração 0040. |
+| #34/#35 | **Planos do Valora** por análises activas (primeira versão; 32.900 a 129.900 Kz/mês; extras 10.000 Kz), pedido de pagamento `valuation_subscription` confirmado pela plataforma, plano no registo (`/registo?modulo=valuation&plano=pme`). Migração 0040. |
+| seguinte | **Valora: limites por segmento** (Essencial 3 · PME / Grupo 10 · Corporate 20 · Profissional 40 · Ilimitado; preços iguais), regra sem rotação (migração 0041 `restored_at`), Valora na página pública (módulos, planos, perguntas, metadados) e no smoke da publicação. |
 
 **Feito em 01–02/11/2026 (configuração de produção):** `KIANDA_BACKUP_PASSPHRASE` definido (impressão digital `33ec1a54`; cópia diária às 02:17 de Luanda com teste de restauro); `KIANDA_JWT_SECRET` rodado; `KIANDA_SEED_DEMO=false` (a empresa demo «Kwanza Logística» e as 3 contas continuam na base — eliminar pela consola se deixarem de servir); 2FA da conta de administrador reposta a pedido do dono (execução `41401754941`; não repetir como teste); **regra de limite de tentativas activa na Cloudflare** desde 02/11 (token `kianda-rh-deploy` com «Zone WAF Rules · Edit»; zona `yelaperformance.com`, 5 pedidos/10 s por IP nas rotas de autenticação → Block 10 s; reaplicada de forma idempotente em cada publicação por `scripts/cf-ratelimit.mjs`).
 

@@ -32,6 +32,7 @@ header{flex-wrap:wrap;row-gap:8px}
 #valoraDialog .box{width:min(720px,94vw)}
 @media(max-width:760px){
   .valora-menu{display:inline-flex}
+  .app{background:none}
   aside{padding:12px 14px;gap:0}
   aside .brand{padding:4px 4px 4px}
   aside nav,aside .side-foot{display:none}

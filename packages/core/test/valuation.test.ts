@@ -49,9 +49,10 @@ describe('Valora: contrato de dados e limites', () => {
 });
 
 describe('Valora: planos por análises activas', () => {
-  it('cinco planos de 10, 20, 30, 40 e ilimitadas análises, com os preços aprovados', () => {
+  it('cinco planos de 3, 10, 20, 40 e ilimitadas análises, com os preços aprovados', () => {
+    expect(VALUATION_PLANS.map(p => p.label)).toEqual(['Essencial', 'PME / Grupo', 'Corporate', 'Profissional', 'Ilimitado']);
     expect(VALUATION_PLANS.map(p => [p.key, p.analysisLimit, p.monthlyMinor / 100])).toEqual([
-      ['essencial', 10, 32_900], ['pme', 20, 52_900], ['corporate', 30, 72_900], ['enterprise40', 40, 92_900], ['unlimited', null, 129_900],
+      ['essencial', 3, 32_900], ['pme', 10, 52_900], ['corporate', 20, 72_900], ['enterprise40', 40, 92_900], ['unlimited', null, 129_900],
     ]);
   });
   it('semestral −10% e anual −15% à vista; extras a 10 000 Kz por mês do ciclo, sem desconto', () => {

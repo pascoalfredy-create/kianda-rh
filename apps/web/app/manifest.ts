@@ -4,9 +4,9 @@ import type { MetadataRoute } from 'next';
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: '/',
-    name: 'Kianda — RH e Integra',
+    name: 'Kianda — RH, Integra e Valora',
     short_name: 'Kianda',
-    description: 'Recursos Humanos e Modelagem Financeira para empresas em Angola',
+    description: 'Recursos Humanos, Modelagem Financeira e Análise e Avaliação para empresas em Angola',
     start_url: '/?origem=app',
     scope: '/',
     display: 'standalone',

@@ -17,14 +17,16 @@ export const VALUATION_PRICE_PUBLISHED = true;
 export const VALUATION_EXTRA_USER_MONTHLY_MINOR = kz(10_000);
 /**
  * Licenciado por análises activas (uma análise = uma entidade analisada), sem relação com o efectivo do RH nem com sectores.
+ * Uma análise restaurada e de novo arquivada no mesmo mês continua a ocupar a vaga até ao fim do mês (sem rotação de clientes).
  * Semestral −10% e anual −15% à vista, como os outros módulos (`cyclePrice`).
  */
 export const VALUATION_PLANS = [
-  { key: 'essencial', label: 'Essencial', analysisLimit: 10, monthlyMinor: kz(32_900) },
-  { key: 'pme', label: 'PME', analysisLimit: 20, monthlyMinor: kz(52_900) },
-  { key: 'corporate', label: 'Corporate', analysisLimit: 30, monthlyMinor: kz(72_900) },
-  { key: 'enterprise40', label: 'Grandes Empresas (Até 40)', analysisLimit: 40, monthlyMinor: kz(92_900) },
-  { key: 'unlimited', label: 'Grandes Empresas (Ilimitado)', analysisLimit: null, monthlyMinor: kz(129_900) },
+  // Chaves estáveis (gravadas em licenças e pedidos); nomes e limites seguem os segmentos de cliente.
+  { key: 'essencial', label: 'Essencial', audience: 'A própria empresa e até duas participadas', analysisLimit: 3, monthlyMinor: kz(32_900) },
+  { key: 'pme', label: 'PME / Grupo', audience: 'Grupos pequenos', analysisLimit: 10, monthlyMinor: kz(52_900) },
+  { key: 'corporate', label: 'Corporate', audience: 'Grupos e consultoras pequenas', analysisLimit: 20, monthlyMinor: kz(72_900) },
+  { key: 'enterprise40', label: 'Profissional', audience: 'Consultoras e contabilistas', analysisLimit: 40, monthlyMinor: kz(92_900) },
+  { key: 'unlimited', label: 'Ilimitado', audience: 'Bancos, auditoras e fundos', analysisLimit: null, monthlyMinor: kz(129_900) },
 ] as const;
 export type ValuationPlanKey = typeof VALUATION_PLANS[number]['key'];
 export const VALUATION_PLAN_KEYS = VALUATION_PLANS.map(p => p.key) as unknown as readonly [ValuationPlanKey, ...ValuationPlanKey[]];

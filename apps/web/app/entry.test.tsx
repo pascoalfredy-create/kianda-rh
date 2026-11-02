@@ -19,13 +19,13 @@ import { SITE_URL } from '../lib/site';
 
 beforeEach(() => { state.cookie = false; state.me.mockReset(); });
 describe('entrada pública, sessão e descoberta do Kianda', () => {
-  it('entrega conteúdo indexável dos dois módulos sem depender da API nem de JavaScript no cliente', async () => {
+  it('entrega conteúdo indexável dos três módulos sem depender da API nem de JavaScript no cliente', async () => {
     const page = await EntryPage(), metadata = await generateMetadata();
     expect(page.type).toBe(PublicHome); expect(state.me).not.toHaveBeenCalled();
     const html = renderToStaticMarkup(page);
-    expect(html).toContain('Kianda RH'); expect(html).toContain('Kianda Integra');
+    expect(html).toContain('Kianda RH'); expect(html).toContain('Kianda Integra'); expect(html).toContain('Kianda Valora');
     expect(html).toMatch(/<h1>Cuide da sua equipa\.<br\s*\/?><em>Prepare o próximo investimento\.<\/em><\/h1>/);
-    expect(html).toContain('Recursos Humanos e Modelagem Financeira para empresas em Angola.');
+    expect(html).toContain('Recursos Humanos, Modelagem Financeira e Análise e Avaliação para empresas em Angola.');
     expect(html).toContain('Ver planos'); expect(html).toContain('<dialog');
     expect(html).not.toMatch(/<dialog[^>]*\sopen(?:[\s=>])/);
     expect(html).not.toContain('PROTÓTIPO PARA REVISÃO');

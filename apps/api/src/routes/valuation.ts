@@ -1,4 +1,4 @@
-import { canExportDocuments, personnelCostMkz, valuationDataIssue } from '@kianda/core';
+import { canExportDocuments, luandaDate, personnelCostMkz, valuationDataIssue } from '@kianda/core';
 import { and, auditLogs, companies, companyModules, desc, eq, getDb, gte, inArray, lte, payrollLines, payrollRuns, users, valuationAnalyses, valuationMembers } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -113,16 +113,20 @@ export function valuationRoutes() {
     if (current.archivedAt) return c.json({ id: current.id, archivedAt: current.archivedAt });
     const [row] = await db.update(valuationAnalyses).set({ archivedAt: new Date(), updatedBy: a.actorId }).where(and(eq(valuationAnalyses.id, current.id), eq(valuationAnalyses.companyId, a.companyId))).returning(summary);
     await db.insert(auditLogs).values({ companyId: a.companyId, actorId: a.actorId, action: 'archive', entity: 'valuation_analysis', entityId: current.id, after: { name: current.name } });
-    return c.json(row);
+    return c.json({ ...row, usage: await valuationUsage(db, a.companyId) });
   });
   app.post('/v1/valuation/analyses/:id/restore', async (c) => {
     const a = c.get('actor'), db = getDb();
-    await requireAnalysisCapacity(db, a.companyId);
+    await lockValuationCompany(db, a.companyId);
     const current = await analysisOf(c, true);
     if (!current.archivedAt) return c.json({ id: current.id, archivedAt: null });
-    const [row] = await db.update(valuationAnalyses).set({ archivedAt: null, updatedBy: a.actorId }).where(and(eq(valuationAnalyses.id, current.id), eq(valuationAnalyses.companyId, a.companyId))).returning(summary);
+    // Restaurada e arquivada neste mês: já ocupa a vaga, voltar a activá-la não consome outra.
+    const monthStart = new Date(`${luandaDate(new Date()).slice(0, 7)}-01T00:00:00+01:00`);
+    const held = !!current.restoredAt && new Date(current.restoredAt) >= monthStart && new Date(current.archivedAt) >= monthStart;
+    if (!held) await requireAnalysisCapacity(db, a.companyId);
+    const [row] = await db.update(valuationAnalyses).set({ archivedAt: null, restoredAt: new Date(), updatedBy: a.actorId }).where(and(eq(valuationAnalyses.id, current.id), eq(valuationAnalyses.companyId, a.companyId))).returning(summary);
     await db.insert(auditLogs).values({ companyId: a.companyId, actorId: a.actorId, action: 'restore', entity: 'valuation_analysis', entityId: current.id, after: { name: current.name } });
-    return c.json(row);
+    return c.json({ ...row, usage: await valuationUsage(db, a.companyId) });
   });
 
   /**

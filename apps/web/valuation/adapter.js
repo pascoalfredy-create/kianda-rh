@@ -115,7 +115,8 @@ function exampleData(entity){
 }
 function usageText(){
   if(!USAGE)return '';const lim=USAGE.analysisLimit;
-  return `${USAGE.activeAnalyses} ${lim===null?'análises activas (sem limite)':`de ${lim} análises activas`} · ${USAGE.enabledUsers} de ${USAGE.userLimit} utilizadores`;
+  const held=USAGE.heldArchived?` (inclui ${USAGE.heldArchived} restaurada${USAGE.heldArchived===1?'':'s'} e arquivada${USAGE.heldArchived===1?'':'s'} este mês, que ocupa${USAGE.heldArchived===1?'':'m'} a vaga até ao fim do mês)`:'';
+  return `${USAGE.activeAnalyses} ${lim===null?'análises activas (sem limite)':`de ${lim} vagas de análise`}${held} · ${USAGE.enabledUsers} de ${USAGE.userLimit} utilizadores`;
 }
 function openDialog(msg){
   const write=!!VS&&VS.canWrite,active=LIST.filter(x=>!x.archivedAt),archived=LIST.filter(x=>x.archivedAt);
@@ -156,7 +157,7 @@ async function dialogAction(fn){try{await fn()}catch(e){openDialog(ESC(e.message
 dlg.addEventListener('click',e=>{
   const t=e.target.closest('button');if(!t)return;
   if(t.dataset.vopen)return openAnalysis(t.dataset.vopen);
-  if(t.dataset.vrestore)return dialogAction(async()=>{const r=await api(`/analyses/${encodeURIComponent(t.dataset.vrestore)}/restore`,{method:'POST'});Object.assign(LIST.find(x=>x.id=== r.id),r);USAGE.activeAnalyses++;USAGE.canCreateAnalysis=USAGE.analysisLimit===null||USAGE.activeAnalyses<USAGE.analysisLimit;await openAnalysis(r.id)});
+  if(t.dataset.vrestore)return dialogAction(async()=>{const r=await api(`/analyses/${encodeURIComponent(t.dataset.vrestore)}/restore`,{method:'POST'});Object.assign(LIST.find(x=>x.id=== r.id),r);if(r.usage)USAGE=r.usage;await openAnalysis(r.id)});
   if(t.id==='vCreate')return dialogAction(async()=>{
     const ent=$('#vEnt').value.trim()||VS.company.name,name=$('#vName').value.trim()||ent,year=Number($('#vYear').value),start=$('#vStart').value;
     if(!Number.isInteger(year)||year<1990||year>2099)throw new Error('Indique o último exercício encerrado (ano entre 1990 e 2099).');
@@ -172,7 +173,7 @@ dlg.addEventListener('click',e=>{
   });
   if(t.id==='vArchive')return dialogAction(async()=>{
     if(!confirmArchive())return;await flushSave();
-    const r=await api(`/analyses/${encodeURIComponent(CUR.id)}/archive`,{method:'POST'});Object.assign(LIST.find(x=>x.id===r.id),r);USAGE.activeAnalyses--;USAGE.canCreateAnalysis=true;
+    const r=await api(`/analyses/${encodeURIComponent(CUR.id)}/archive`,{method:'POST'});Object.assign(LIST.find(x=>x.id===r.id),r);if(r.usage)USAGE=r.usage;
     const next=LIST.find(x=>!x.archivedAt);if(next)await openAnalysis(next.id);else{showEmpty();openDialog()}
   });
   if(t.id==='vHr')return dialogAction(async()=>{

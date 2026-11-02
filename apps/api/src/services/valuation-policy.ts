@@ -1,5 +1,5 @@
-import { VALUATION_INCLUDED_USERS, VALUATION_TRIAL_ANALYSES, valuationCapacity } from '@kianda/core';
-import { and, companies, companyModules, eq, isNull, sql, valuationAnalyses, valuationMembers, type Db } from '@kianda/db';
+import { luandaDate, VALUATION_INCLUDED_USERS, VALUATION_TRIAL_ANALYSES, valuationCapacity } from '@kianda/core';
+import { and, companies, companyModules, eq, gte, isNull, or, sql, valuationAnalyses, valuationMembers, type Db } from '@kianda/db';
 import { DomainError } from './payroll.js';
 
 /** Serializa admissões de utilizadores e criação/restauro de análises dentro da transacção da empresa. */
@@ -9,9 +9,12 @@ export async function lockValuationCompany(db: Db, companyId: string) {
 
 export async function valuationUsage(db: Db, companyId: string) {
   const [grant] = await db.select().from(companyModules).where(and(eq(companyModules.companyId, companyId), eq(companyModules.module, 'valuation')));
-  const [analyses] = await db.select({ n: sql<number>`count(*)::int` }).from(valuationAnalyses).where(and(eq(valuationAnalyses.companyId, companyId), isNull(valuationAnalyses.archivedAt)));
+  // Vagas ocupadas: análises activas + as restauradas e de novo arquivadas neste mês (hora de Luanda), contra a rotação de clientes.
+  const monthStart = new Date(`${luandaDate(new Date()).slice(0, 7)}-01T00:00:00+01:00`);
+  const [analyses] = await db.select({ n: sql<number>`count(*)::int`, held: sql<number>`count(*) filter (where ${valuationAnalyses.archivedAt} is not null)::int` }).from(valuationAnalyses)
+    .where(and(eq(valuationAnalyses.companyId, companyId), or(isNull(valuationAnalyses.archivedAt), and(gte(valuationAnalyses.restoredAt, monthStart), gte(valuationAnalyses.archivedAt, monthStart)))));
   const [members] = await db.select({ n: sql<number>`count(*)::int` }).from(valuationMembers).where(and(eq(valuationMembers.companyId, companyId), eq(valuationMembers.enabled, true)));
-  return valuationCapacity({ analysisLimit: grant ? grant.projectLimit : VALUATION_TRIAL_ANALYSES, extraUsers: grant?.extraUsers ?? 0 }, analyses?.n ?? 0, members?.n ?? 0);
+  return { ...valuationCapacity({ analysisLimit: grant ? grant.projectLimit : VALUATION_TRIAL_ANALYSES, extraUsers: grant?.extraUsers ?? 0 }, analyses?.n ?? 0, members?.n ?? 0), heldArchived: analyses?.held ?? 0 };
 }
 
 /** Um plano (pago ou definido pela plataforma) nunca fica abaixo do uso actual: arquivar análises ou retirar acessos primeiro. */

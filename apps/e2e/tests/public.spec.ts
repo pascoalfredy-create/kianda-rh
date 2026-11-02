@@ -13,6 +13,28 @@ test('a página pública abre e leva ao início de sessão', async ({ page }) =>
   expect(errors).toEqual([]);
 });
 
+test('página pública: o Valora aparece como terceiro módulo e os planos levam ao registo com a escolha', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto('/');
+  await expect(page.getByText('Uma conta. Três caminhos para gerir.')).toBeVisible();
+  await page.getByRole('button', { name: /Kianda Valora/ }).first().click();
+  await expect(page.getByRole('heading', { name: 'Conheça o valor da empresa. Controle o exercício.' })).toBeVisible();
+  await page.screenshot({ path: '/tmp/e2e/publico-01-valora.png', fullPage: false });
+  await page.getByRole('button', { name: 'Ver condições do Kianda Valora' }).click();
+  const dialog = page.locator('dialog[open]');
+  await expect(dialog.getByRole('button', { name: 'Kianda Valora' })).toHaveAttribute('aria-pressed', 'true');
+  for (const text of ['ATÉ 3 ANÁLISES ACTIVAS', 'PME / Grupo', 'Profissional', 'SEM LIMITE DE ANÁLISES', '10.000 Kz/mês']) await expect(dialog).toContainText(text);
+  await expect(dialog).toContainText(/129\s900,00/);
+  await dialog.getByLabel('Pagamento').selectOption('annual');
+  await expect(dialog).toContainText(/1\s324\s980,00/);
+  await page.screenshot({ path: '/tmp/e2e/publico-02-planos-valora.png', fullPage: false });
+  await dialog.locator('article', { hasText: 'Corporate' }).getByRole('link', { name: /Escolher Valora/ }).click();
+  await expect(page).toHaveURL(/\/registo\?modulo=valuation&plano=corporate&ciclo=annual/);
+  await expect(page.getByLabel('Plano do Valora')).toHaveValue('corporate');
+  await expect(page.getByLabel('Pagamento do Valora')).toHaveValue('annual');
+  expect(errors).toEqual([]);
+});
+
 test('login: palavra-passe errada é recusada e a certa entra na conta', async ({ page }) => {
   const company = await registerCompany();
   const errors = watchErrors(page);
