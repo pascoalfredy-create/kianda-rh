@@ -4,28 +4,44 @@ Uma conta e empresa partilhadas, no mesmo repositório e base de dados. `/regist
 
 ## Recursos Humanos
 
-| Colaboradores activos | Mensal (Kz) | Semestral, à vista (Kz) | Anual, à vista (Kz) |
-| --- | ---: | ---: | ---: |
-| 1–100 | 99.999 | 540.000 | 959.990 |
-| 101–250 | 200.000 | 1.080.000 | 1.920.000 |
-| 251–500 | 280.000 | 1.512.000 | 2.688.000 |
-| 501–1.000 | 380.000 | 2.052.000 | 3.648.000 |
-| Mais de 1.000 | 450.000 | 2.430.000 | 4.320.000 |
+Faixas fixas por colaboradores activos. Semestral −10%, anual −15%, à vista, arredondados ao kwanza. Fonte no código: `DEFAULT_TIERS`, `CYCLES` e `cyclePrice` em `packages/core/src/licensing.ts`.
 
-A primeira faixa usa os montantes comerciais indicados, incluindo o arredondamento semestral para 540.000 Kz. Contratos `custom` anteriores continuam reconhecidos e os pedidos já emitidos mantêm os valores gravados. O preço de RH nunca é utilizado para Modelagem. O RH não vende colaboradores extra: o limite corresponde apenas à faixa contratada e, quando necessário, a empresa muda para a faixa seguinte. O adicional de 3.000 Kz foi descontinuado. Pedidos antigos de extras ainda pendentes são cancelados com auditoria; pagamentos já confirmados mantêm os montantes e as facturas no histórico. Novas referências e confirmações desses extras são bloqueadas, incluindo pelo gateway. Valores legados de `extra_seats` não aumentam os limites actuais.
+<!-- tabela-rh: gerada a partir do código; o teste packages/core/test/docs-coherence.test.ts falha se divergir -->
+| Chave | Colaboradores activos | Mensal (Kz) | Semestral, à vista (Kz) | Anual, à vista (Kz) |
+| --- | --- | ---: | ---: | ---: |
+| t1 | 1–100 | 29.900 | 161.460 | 304.980 |
+| t2 | 101–250 | 49.900 | 269.460 | 508.980 |
+| t3 | 251–500 | 69.900 | 377.460 | 712.980 |
+| t4 | 501–1.000 | 89.900 | 485.460 | 916.980 |
+| t5 | Mais de 1.000 | 99.999 | 539.995 | 1.019.990 |
 
-## Modelagem Financeira
+A primeira faixa admite zero colaboradores durante a configuração. O RH não vende colaboradores extra: ao ultrapassar o limite, a empresa passa para a faixa seguinte. O antigo adicional de 3.000 Kz por colaborador foi descontinuado; pedidos antigos pendentes foram cancelados com auditoria, pagamentos confirmados mantêm montantes e facturas, e valores legados de `extra_seats` não aumentam limites. Contratos `custom` anteriores continuam reconhecidos e pedidos já emitidos mantêm os valores gravados. O preço do RH nunca é usado para a Modelagem.
 
-| Plano | Projectos simultâneos | Sectores | Mensal (Kz) | Semestral, à vista (Kz) | Anual, à vista (Kz) |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| PME | 2 | 2 | 300.000 | 1.620.000 | 2.880.000 |
-| Corporate | 5 | 4 | 600.000 | 3.240.000 | 5.760.000 |
-| Grandes Empresas (Até 10) | 10 | 8 | 1.200.000 | 6.480.000 | 11.520.000 |
-| Grandes Empresas (Ilimitado) | Ilimitados | 8 | Não disponível | 8.100.000 | 14.400.000 |
+## Modelagem Financeira (Integra)
 
-PME: sector principal confirmado no registo + 1 à escolha. Corporate: principal + 3 à escolha. Grandes Empresas: os 8 sectores financeiros. A actividade geral da empresa sugere o principal no registo; o cliente confirma o campo próprio da Modelagem. O principal fica guardado e não muda quando o RH altera a actividade da empresa.
+Licenciada por projectos activos simultâneos, independente do efectivo do RH. Fonte no código: `MODELING_PLANS`, `MODELING_EXTRA_USER_MONTHLY_MINOR` e `modelingPlanPrice` em `packages/core/src/modeling-policy.ts`.
 
-Os cinco utilizadores incluídos contam o proprietário da empresa. Extras a 35.000 Kz/mês por utilizador, durante todos os meses do ciclo e sem desconto nos extras. Exemplo: Corporate semestral com 2 extras = 3.240.000 + 2 × 35.000 × 6 = 3.660.000 Kz. Projectos ilimitados não significam utilizadores ilimitados. O efectivo RH não altera os lugares de Modelagem.
+<!-- tabela-integra: gerada a partir do código; o teste packages/core/test/docs-coherence.test.ts falha se divergir -->
+| Chave | Plano | Projectos activos | Sectores | Mensal (Kz) | Semestral, à vista (Kz) | Anual, à vista (Kz) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| pme | PME | 2 | 2 | 69.000 | 372.600 | 703.800 |
+| corporate | Corporate | 5 | 4 | 120.000 | 648.000 | 1.224.000 |
+| enterprise10 | Grandes Empresas (Até 10) | 10 | 8 | 200.000 | 1.080.000 | 2.040.000 |
+| unlimited | Grandes Empresas (Ilimitado) | Ilimitados | 8 | 300.000 | 1.620.000 | 3.060.000 |
+
+- Sectores: PME = sector principal confirmado no registo + 1 à escolha; Corporate = principal + 3; Grandes Empresas = os 8. A actividade da empresa sugere o principal; o cliente confirma-o no campo próprio da Modelagem, e ele não muda quando o RH altera a actividade.
+- O plano Ilimitado tem opção mensal (a antiga proibição foi removida na migração `0036`).
+- Todos os planos incluem **5 utilizadores**, contando o proprietário. Extras: **35.000 Kz por mês e utilizador**, em todos os meses do ciclo, sem desconto. Exemplo: Corporate semestral com 2 extras = 648.000 + 2 × 35.000 × 6 = **1.068.000 Kz**.
+- Projectos, sectores e utilizadores são limites distintos. Projectos ilimitados não significam utilizadores ilimitados; o efectivo RH não altera os lugares da Modelagem.
+- Arquivar um projecto liberta a vaga e conserva os registos; restaurar exige vaga e acesso ao sector.
+
+## Período experimental e exportações
+
+- **7 dias de calendário**, incluindo o dia do registo, pela hora de Luanda, para cada módulo escolhido no registo.
+- Durante a avaliação trabalha-se dentro das quotas do plano escolhido (criar, editar, calcular, importar, simular), mas os documentos gerados ficam **só em pré-visualização**: `canExportDocuments` só permite exportar em `active` e `past_due`; a API responde **402 `exportacao_requer_subscricao`** (não depende de esconder botões).
+- Depois de um período pago há 7 dias de tolerância (`past_due`), com escrita e exportação; depois, modo de consulta (ver dados e pré-visualizações, sem alterar nem exportar).
+- O pagamento antecipado activa logo as exportações e conserva os dias experimentais restantes no início do período pago. Sem cartão e sem cobrança automática.
+- Pagar o RH não desbloqueia exportações da Modelagem, e vice-versa. Anexos carregados pelo cliente, facturas/recibos da licença e a portabilidade JSON não estão sujeitos a este bloqueio.
 
 ## Pagamento e autorização
 
@@ -40,4 +56,4 @@ Os cinco utilizadores incluídos contam o proprietário da empresa. Extras a 35.
 
 Migrações aditivas `0032` e `0033`: identificadores de plano/ciclo, quota ilimitada representada por `NULL`, sector principal e sectores escolhidos; o pedido guarda a cópia do contrato a activar. RLS e a proibição de alteração de licenças pelo papel da empresa mantêm-se. Licenças antigas de Modelagem conservam os oito sectores e limites contratados, incluindo o acesso interno de acompanhamento; o registo novo selecciona explicitamente os sectores do plano.
 
-Testes verificam todos os preços publicados, sectores e quotas independentes, rejeição do ilimitado mensal, extras, pagamentos por módulo, URLs directas/codificadas, isolamento entre empresas, concorrência, PDF e preservação do protótipo. Os testes de integração correm com PostgreSQL no CI.
+Testes verificam todos os preços publicados (incluindo a coerência destas tabelas com o código), sectores e quotas independentes, ilimitado mensal, extras, pagamentos por módulo, URLs directas/codificadas, isolamento entre empresas, concorrência, PDF e preservação do protótipo. Os testes de integração correm com PostgreSQL no CI.

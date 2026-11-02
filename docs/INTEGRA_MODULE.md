@@ -34,7 +34,7 @@ Importação do orçamento: `{source:'budget', budgetId, revision}`. Só orçame
 
 Importação real: `{source:'actual', from:'AAAA-MM', to:'AAAA-MM', revision}`. Exige exactamente 12 meses consecutivos, todos com processamento fechado. Soma ilíquido e INSS patronal. Não transforma meses em falta em zero nem anualiza períodos incompletos.
 
-Se a moeda do modelo não é Kz, `exchangeRate` é obrigatório: **unidades da moeda de destino por 1 Kz**. Não há consulta automática de câmbio. Em Kz, a taxa é 1. Não se aplica inflação adicional à cópia de origem; o motor aplica os pressupostos de projecção do modelo.
+Se a moeda do modelo não é Kz, `exchangeRate` é obrigatório: **unidades da moeda de destino por 1 Kz**. A rota de importação não consulta câmbio sozinha; a interface pré-preenche a referência de `/v1/modeling/exchange-rate` e o utilizador confirma ou altera. Em Kz, a taxa é 1. Não se aplica inflação adicional à cópia de origem; o motor aplica os pressupostos de projecção do modelo.
 
 O campo anual `assumptions.pessoal` usa unidades da moeda do modelo (compatível com o protótipo). Na cópia de origem, `totalMinor` e `months[].costMinor` são cêntimos de Kz. A importação guarda taxa, moeda, período, origem, data e utilizador, sem identificação de colaboradores ou salários individuais. Alterações futuras no RH não a modificam. Uma nova importação cria novo registo e preserva o anterior. Alterações manuais posteriores dos pressupostos não apagam o histórico da importação.
 
@@ -79,7 +79,7 @@ No selector **Modelo**, a opção **Gerir projectos…** abre o modal existente,
 
 - Arquivar exige confirmação e guarda primeiro as edições dos pressupostos. Balancetes por analisar impedem o arquivo; não são descartados silenciosamente.
 - O projecto só muda de lista após confirmação da API. Uma falha de rede, conflito de revisão ou recusa por quota não cria um estado local fictício.
-- Arquivados podem ser abertos em consulta e exportados em PDF. Campos, conversão de moeda e importações ficam bloqueados. Duplicar continua a criar um novo projecto, sujeito à quota.
+- Arquivados podem ser abertos em consulta e exportados em PDF (com licença paga). Campos, conversão de moeda e importações ficam bloqueados. Duplicar continua a criar um novo projecto, sujeito à quota.
 - Restaurar usa a revisão arquivada e os limites/sectores são validados no servidor. A edição só volta a estar disponível após a resposta confirmada.
 - **Actualizar lista** incorpora alterações de outras sessões depois de guardar pressupostos; balancetes locais por analisar impedem essa substituição. Uma falha de leitura nunca apresenta o balancete anterior como se fosse de outro projecto.
 - Licenças em consulta e participantes `viewer` podem consultar o arquivo, sem comandos de arquivo/restauro.
@@ -150,7 +150,7 @@ A aprovação da versão é uma fixação de dados pelo proprietário da empresa
 | GET `/v1/modeling/models/:id/reports/:reportKey?format=pdf&version=:versionId` | Relatório a partir da versão aprovada, sem recalcular o rascunho nem consultar novamente o RH |
 | GET `/v1/modeling/models/:id/reports/:reportKey?format=xlsx&version=:versionId` | Excel de resultados, apenas para o ID exclusivo do proprietário do produto com estatuto de administrador da plataforma |
 
-Formatos diferentes de PDF/XLSX são recusados. Uma URL directa de Excel não contorna a autorização. PDF é permitido aos participantes com consulta; rascunhos incompletos não produzem ficheiros vazios, mas erro 422. O cenário escolhido em consulta entra na cópia temporária de cálculo, sem gravar no projecto; o hash corresponde aos pressupostos com esse cenário e o cabeçalho `x-source-scenario` identifica-o. Uma versão aprovada não admite substituição do cenário. Projectos arquivados e licenças em modo de consulta preservam downloads de versões aprovadas. As operações de aprovação e exportação têm registo de auditoria. Os ficheiros são respostas privadas, sem cache e sem ligações públicas estáticas.
+Formatos diferentes de PDF/XLSX são recusados. Uma URL directa de Excel não contorna a autorização. Com licença paga, PDF é permitido também aos participantes com permissão de consulta; rascunhos incompletos não produzem ficheiros vazios, mas erro 422. O cenário escolhido em consulta entra na cópia temporária de cálculo, sem gravar no projecto; o hash corresponde aos pressupostos com esse cenário e o cabeçalho `x-source-scenario` identifica-o. Uma versão aprovada não admite substituição do cenário. Projectos arquivados com licença activa preservam downloads de versões aprovadas. Exportar exige licença `active` ou `past_due`: na avaliação gratuita e em modo de consulta, versões e relatórios ficam só em pré-visualização (402 `exportacao_requer_subscricao`). As operações de aprovação e exportação têm registo de auditoria. Os ficheiros são respostas privadas, sem cache e sem ligações públicas estáticas.
 
 A migração `0030_integra_approved_versions` cria `financial_model_versions` com RLS e chave estrangeira para o projecto. Um trigger impede actualizações, mesmo pelo utilizador dono das tabelas; o papel da aplicação também não pode apagar versões. A eliminação integral autorizada da empresa pela plataforma continua possível e elimina as versões antes do projecto. Não existe endpoint de edição ou eliminação individual de versões.
 
