@@ -10,7 +10,7 @@ import { LogoutButton } from '@/app/(app)/logout-button';
 import { ClockCard } from './clock-card';
 import { RhIcon } from './rh-icon';
 
-export function AppShell({ me, counts, children }: { me: Me; counts: { absences: number; expenses: number }; children: React.ReactNode }) {
+export function AppShell({ me, counts, children }: { me: Me; counts: { absences: number; expenses: number; tasks?: number }; children: React.ReactNode }) {
   const path = usePathname();
   const search = useSearchParams();
   const [open, setOpen] = useState(false);
@@ -59,8 +59,8 @@ export function AppShell({ me, counts, children }: { me: Me; counts: { absences:
         {me.modules.hr.canAccess && me.user.role !== 'employee' ? <EmployeeSearch pathname={path} /> : <span className="top-company">{me.company?.name}</span>}
         <div className="top-clock">{me.modules.hr.canAccess && me.user.employeeId ? <ClockCard inline /> : <LuandaClock />}</div>
         <span className="top-role">{ROLE_LABEL[me.user.role]}</span>
-        <div className="top-notices"><button className="notice-button" aria-label="Notificações" aria-expanded={notices} onClick={() => setNotices(!notices)}><RhIcon name="bell" size={19} />{counts.absences + counts.expenses > 0 && <i />}</button>
-          {notices && <div className="notice-popover"><b>Pedidos por tratar</b>{counts.absences > 0 && <Link href="/ausencias">{counts.absences} pedido(s) de ausência</Link>}{counts.expenses > 0 && <Link href="/despesas?v=approve">{counts.expenses} nota(s) de despesas</Link>}{!counts.absences && !counts.expenses && <span className="muted">Sem pedidos pendentes.</span>}</div>}
+        <div className="top-notices"><button className="notice-button" aria-label="Notificações" aria-expanded={notices} onClick={() => setNotices(!notices)}><RhIcon name="bell" size={19} />{counts.absences + counts.expenses + (counts.tasks ?? 0) > 0 && <i />}</button>
+          {notices && <div className="notice-popover"><b>Pedidos por tratar</b>{counts.absences > 0 && <Link href="/ausencias">{counts.absences} pedido(s) de ausência</Link>}{counts.expenses > 0 && <Link href="/despesas?v=approve">{counts.expenses} nota(s) de despesas</Link>}{(counts.tasks ?? 0) > 0 && <Link href="/acolhimento">{counts.tasks} tarefa(s) de acolhimento ou saída a vencer</Link>}{!counts.absences && !counts.expenses && !counts.tasks && <span className="muted">Sem pedidos pendentes.</span>}</div>}
         </div>
       </header>
       <main id="conteudo" className="content">{children}</main>

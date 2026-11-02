@@ -10,6 +10,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { body, requireCompany, requireRole, type AppEnv } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
+import { cancelTerminationChecklist, shiftTerminationChecklist, startChecklist } from '../services/checklists.js';
 
 const READERS = ['hr_admin', 'payroll', 'finance'] as const;
 const ptDate = (d: string) => d.split('-').reverse().join('/');
@@ -149,6 +150,8 @@ export function terminationRoutes() {
       note: b.note ?? null, createdBy: actor.actorId,
     }).returning();
     await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'create', entity: 'termination', entityId: t!.id, after: t });
+    // Saída: a lista de tarefas começa ao registar a cessação, com prazos contados da data de cessação.
+    await startChecklist(db, { companyId: actor.companyId, employeeId: t!.employeeId, kind: 'offboarding', referenceDate: t!.effectiveDate, terminationId: t!.id, actorId: actor.actorId, automatic: true });
     return c.json(t, 201);
   });
 
@@ -167,6 +170,7 @@ export function terminationRoutes() {
       agreedCompensationMinor: b.agreedCompensationMinor ?? null, items: b.items ?? proposal.items, proposal: { ...proposal, items: undefined, vacation: ctx.vacation }, note: b.note ?? null,
     }).where(eq(terminations.id, t.id)).returning();
     await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'update', entity: 'termination', entityId: t.id, before: t, after: u });
+    await shiftTerminationChecklist(db, actor.companyId, t.id, u!.effectiveDate, actor.actorId);
     return c.json(u);
   });
 
@@ -241,6 +245,7 @@ export function terminationRoutes() {
       }
       const [x] = await tx.update(terminations).set({ status: 'cancelled', cancelledBy: actor.actorId, cancelledAt: new Date(), cancelNote: note }).where(eq(terminations.id, t.id)).returning();
       await tx.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'cancel', entity: 'termination', entityId: t.id, before: t, after: x });
+      await cancelTerminationChecklist(tx as unknown as Db, actor.companyId, t.id, actor.actorId);
       return x!;
     });
     return c.json(u);

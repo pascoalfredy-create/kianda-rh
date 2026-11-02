@@ -37,4 +37,5 @@ export * from './modeling/historical-report.js';
 export * from './modeling/currency.js';
 export * from './document-import.js';
 export * from './geofence.js';
+export * from './checklists.js';
 export * from './valuation.js';

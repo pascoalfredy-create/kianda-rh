@@ -46,6 +46,11 @@ describe('menu comum e permissões do protótipo RH', () => {
     const user = me('employee', true, false, true); user.modules.valuation.canAccess = false;
     expect(links(user).map(l => l.href)).not.toContain('/valora');
   });
+  it('acolhimento e saída: em Talento para quem gere, «As minhas tarefas» para o colaborador, com o contador do próprio', () => {
+    const groups = navigation(me('manager'), { absences: 0, expenses: 0, tasks: 4 });
+    expect(groups.find(g => g.label === 'Talento')!.items[0]).toMatchObject({ href: '/acolhimento', label: 'Acolhimento e saída', badge: 4 });
+    expect(links(me('employee')).find(l => l.href === '/acolhimento')).toMatchObject({ label: 'As minhas tarefas' });
+  });
   it('destaca uma só entrada nas páginas de detalhe e nos separadores de Finanças', () => {
     for (const path of ['/bi', '/sector', '/definicoes', '/pedidos', '/acessos']) expect(links(me('owner')).filter(l => navActive(l.href, path, new URLSearchParams()))).toHaveLength(1);
     expect(navActive('/', '/colaboradores/e', new URLSearchParams())).toBe(false);

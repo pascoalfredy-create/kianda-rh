@@ -7,7 +7,8 @@ import {
   CAN_EDIT, CONTRACT_LABEL, DOC_LABEL, ROLE_LABEL, STATUS_LABEL,
   ABSENCE_STATUS_LABEL, type AbsenceRow, type BalanceRow, type Department, type EmployeeRow, type HistoryEntry, type PersonRef, type Profile,
 } from '@/lib/types';
-import { ABSENCE_POLICIES, type AbsenceType } from '@kianda/core';
+import { ABSENCE_POLICIES, CHECKLIST_KIND_LABELS, type AbsenceType } from '@kianda/core';
+import { LIST_STATUS, type ChecklistRow } from '../../acolhimento/types';
 import { AbsenceActions, AbsenceFiles } from '../../ausencias/actions';
 import { CompensationForm, ContractForm, DeleteDocument, DocumentForm, PersonalForm } from './forms';
 import { AllowanceActions, AssignAllowance, RegimeForm } from './regime';
@@ -22,6 +23,7 @@ const TABS = [
   ['regime', 'Horário e subsídios'],
   ['ausencias', 'Ausências'],
   ['equipa', 'Hierarquia'],
+  ['acolhimento', 'Acolhimento e saída'],
   ['historico', 'Histórico'],
 ] as const;
 
@@ -50,7 +52,7 @@ export default async function Ficha({ params, searchParams, panelBase }: { panel
     throw e;
   }
   const regimeRoles = ['owner', 'hr_admin', 'payroll', 'finance'];
-  const tabs = TABS.filter(([k]) => (k !== 'historico' || canEdit) && (k !== 'regime' || regimeRoles.includes(me?.user.role ?? '')));
+  const tabs = TABS.filter(([k]) => (k !== 'historico' || canEdit) && (k !== 'regime' || regimeRoles.includes(me?.user.role ?? '')) && (k !== 'acolhimento' || isStaff));
   const firstStart = p.contracts.at(-1)?.startDate;
 
   return (
@@ -91,6 +93,7 @@ export default async function Ficha({ params, searchParams, panelBase }: { panel
       {tab === 'ausencias' && <AbsencesTab p={p} />}
       {tab === 'equipa' && <TeamTab p={p} />}
       {tab === 'historico' && canEdit && <HistoryTab id={p.id} />}
+      {tab === 'acolhimento' && isStaff && <ChecklistsTab id={p.id} />}
     </>
   );
 }
@@ -367,6 +370,25 @@ const FIELD: Record<string, string> = {
   birthDate: 'nascimento', nationality: 'nacionalidade', maritalStatus: 'estado civil', biNumber: 'BI', nif: 'NIF', inssNumber: 'INSS', iban: 'IBAN',
   bank: 'banco', email: 'email', phone: 'telefone', address: 'morada', emergencyContactName: 'contacto de emergência', emergencyContactPhone: 'telefone de emergência',
 };
+
+/** Listas de acolhimento e saída do colaborador (todas as situações). */
+async function ChecklistsTab({ id }: { id: string }) {
+  const lists = await api<ChecklistRow[]>(`/v1/checklists?employeeId=${id}&status=all`);
+  return (
+    <div className="card">
+      <table>
+        <thead><tr><th>Lista</th><th>Data de referência</th><th>Progresso</th><th>Situação</th></tr></thead>
+        <tbody>{lists.map(l => <tr key={l.id}>
+          <td><Link href={`/acolhimento/${l.id}`}><b>{CHECKLIST_KIND_LABELS[l.kind]}</b></Link><div className="muted">{l.title}</div></td>
+          <td>{fmtDate(l.referenceDate)}</td>
+          <td>{l.progress.done}/{l.progress.total}{l.progress.overdue > 0 && <span style={{ color: 'var(--red)' }}> · {l.progress.overdue} em atraso</span>}</td>
+          <td><span className={LIST_STATUS[l.status][1]}>{LIST_STATUS[l.status][0]}</span></td>
+        </tr>)}</tbody>
+      </table>
+      {!lists.length && <div className="empty">Sem listas de acolhimento ou saída. Pode iniciar uma em <Link href="/acolhimento">Acolhimento e saída</Link>.</div>}
+    </div>
+  );
+}
 
 async function HistoryTab({ id }: { id: string }) {
   const hist = await api<HistoryEntry[]>(`/v1/employees/${id}/history`);

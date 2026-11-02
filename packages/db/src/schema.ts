@@ -353,6 +353,56 @@ export const workplaces = pgTable('workplaces', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index('workplaces_company').on(t.companyId)]);
 
+/** Acolhimento e saída: um modelo por tipo e empresa; as tarefas do modelo ficam em JSON validado no core. */
+export const checklistTemplates = pgTable('checklist_templates', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  /** onboarding | offboarding */
+  kind: text('kind').notNull(),
+  name: text('name').notNull(),
+  /** Cria a lista automaticamente na admissão (acolhimento) ou ao registar a cessação (saída). */
+  autoStart: boolean('auto_start').notNull().default(true),
+  items: jsonb('items').$type<{ title: string; description?: string; responsible: string; offsetDays: number }[]>().notNull().default([]),
+  updatedBy: text('updated_by'),
+  createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex('checklist_templates_company_kind').on(t.companyId, t.kind)]);
+
+/** Lista de um colaborador (cópia do modelo no momento em que começa; mudar o modelo não altera listas em curso). */
+export const employeeChecklists = pgTable('employee_checklists', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  employeeId: text('employee_id').notNull().references(() => employees.id),
+  kind: text('kind').notNull(),
+  title: text('title').notNull(),
+  /** Início do contrato (acolhimento) ou data da cessação (saída). */
+  referenceDate: date('reference_date').notNull(),
+  /** open | completed | cancelled */
+  status: text('status').notNull().default('open'),
+  terminationId: text('termination_id').references(() => terminations.id),
+  createdBy: text('created_by').notNull(),
+  createdAt: createdAt(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelReason: text('cancel_reason'),
+}, (t) => [index('employee_checklists_company').on(t.companyId, t.status), index('employee_checklists_employee').on(t.employeeId)]);
+
+export const checklistTasks = pgTable('checklist_tasks', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  checklistId: text('checklist_id').notNull().references(() => employeeChecklists.id, { onDelete: 'cascade' }),
+  position: integer('position').notNull(),
+  title: text('title').notNull(),
+  description: text('description'),
+  /** hr | manager | employee | finance */
+  responsible: text('responsible').notNull(),
+  dueDate: date('due_date').notNull(),
+  doneAt: timestamp('done_at', { withTimezone: true }),
+  doneBy: text('done_by'),
+  note: text('note'),
+  createdAt: createdAt(),
+}, (t) => [index('checklist_tasks_checklist').on(t.checklistId, t.position), index('checklist_tasks_pending').on(t.companyId, t.dueDate).where(sql`done_at is null`)]);
+
 /** Localização registada numa marcação (só no instante da marcação). */
 export interface PunchLocationRecord {
   status: 'ok' | 'outside' | 'unavailable' | 'no_workplace';

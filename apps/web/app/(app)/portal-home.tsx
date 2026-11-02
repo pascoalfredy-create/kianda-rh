@@ -18,7 +18,7 @@ const STATUS: Record<string, [string, string]> = { pending: ['Pendente', 'st pen
 /** Início do colaborador: o essencial do dia-a-dia num só ecrã. */
 export async function PortalHome({ name, employeeId }: { name: string; employeeId: string }) {
   const year = new Date().getFullYear();
-  const [p, balances, profile] = await Promise.all([api<Portal>('/v1/portal'), api<BalanceRow[]>(`/v1/leave/balances?year=${year}`).catch(() => []), api<Profile>(`/v1/employees/${employeeId}`).catch(() => null)]);
+  const [p, balances, profile, tasks] = await Promise.all([api<Portal>('/v1/portal'), api<BalanceRow[]>(`/v1/leave/balances?year=${year}`).catch(() => []), api<Profile>(`/v1/employees/${employeeId}`).catch(() => null), api<{ id: string; state: string }[]>('/v1/checklists/my-tasks').catch(() => [])]);
   const firstContract = profile?.contracts.at(-1)?.startDate;
   const tenure = firstContract ? Math.max(0, (Date.now() - Date.parse(firstContract)) / (86400000 * 365.25)) : null;
   const mine = balances.find((b) => b.employee.id === employeeId);
@@ -32,6 +32,11 @@ export async function PortalHome({ name, employeeId }: { name: string; employeeI
       {p.review && (
         <Link href={`/desempenho/${p.review.id}`} className="warn" style={{ display: 'block' }}>
           {p.review.status === 'self' ? `Tem a auto-avaliação de "${p.review.cycle}" por fazer →` : `A sua avaliação de "${p.review.cycle}" está concluída: tome conhecimento →`}
+        </Link>
+      )}
+      {tasks.length > 0 && (
+        <Link href="/acolhimento" className="warn" style={{ display: 'block' }}>
+          {`Tem ${tasks.length === 1 ? '1 tarefa' : `${tasks.length} tarefas`} de acolhimento ou saída por fazer${tasks.some(t => t.state === 'overdue') ? ', com prazo ultrapassado' : ''} →`}
         </Link>
       )}
       <div className="rh-kpis">
