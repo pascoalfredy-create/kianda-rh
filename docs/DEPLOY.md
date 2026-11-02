@@ -75,7 +75,7 @@ O custom domain cria automaticamente o registo DNS e o certificado HTTPS do subd
 
 ## Depois de publicado
 
-- **Regra de limite de tentativas** (recomendado): Cloudflare → domínio → **Security → Security rules** (painel antigo: Security → WAF) → **Rate limiting rules** → Create rule. O plano **gratuito** permite **uma** regra, contagem por IP, janela fixa de **10 s**, acção Block durante 10 s. Configuração: 5 pedidos / 10 s por IP → Block, com a expressão (todas as rotas de autenticação numa só regra):
+- **Regra de limite de tentativas — activa desde 02/11/2026, aplicada pela publicação** (`scripts/cf-ratelimit.mjs`, idempotente, exige «Zone WAF Rules · Edit» no token). Referência para a criar à mão, se for preciso: Cloudflare → domínio → **Security → Security rules** (painel antigo: Security → WAF) → **Rate limiting rules** → Create rule. O plano **gratuito** permite **uma** regra, contagem por IP, janela fixa de **10 s**, acção Block durante 10 s. Configuração: 5 pedidos / 10 s por IP → Block, com a expressão (todas as rotas de autenticação numa só regra):
   `(http.host eq "kianda.yelaperformance.com" and http.request.method eq "POST" and http.request.uri.path in {"/api/v1/auth/login" "/api/v1/auth/login-pin" "/api/v1/auth/login/2fa" "/api/v1/auth/register" "/api/v1/auth/forgot"})`
   O limite interno da API (por instância e só tentativas falhadas) mantém-se; esta regra é global. Num plano pago pode alargar-se a janela para 1 minuto (ex.: 10 pedidos/min).
 - **Logs**: Workers & Pages → `kianda-web` / `kianda-api` → **Logs** (observabilidade activa).
