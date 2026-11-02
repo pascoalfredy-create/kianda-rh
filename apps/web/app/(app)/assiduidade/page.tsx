@@ -2,8 +2,9 @@ import { formatMinutes } from '@kianda/core';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ClockCard } from '@/components/clock-card';
-import { actorFromApi, apiWithActor } from '@/lib/api';
-import type { OverviewRow, Sheet } from '@/lib/types';
+import { actorFromApi, api, apiWithActor } from '@/lib/api';
+import type { LocationIssueRow, OverviewRow, Sheet } from '@/lib/types';
+import { LocationIssues } from './location-issues';
 import { SheetView } from './sheet-view';
 import { currentPeriod, monthLabel, shiftMonth as shift } from '@/lib/format';
 
@@ -37,6 +38,7 @@ export default async function Assiduidade({ searchParams }: { searchParams: Prom
       </div>
       <div style={{ borderBottom: '1px solid var(--line)', marginBottom: 16 }} />
       {tab === 'equipa' && staff && <Overview period={period} rows={opening.data.rows ?? []} />}
+      {tab === 'equipa' && staff && (opening.data.rows ?? []).some((r) => r.locationIssues) && <LocationIssues rows={await api<LocationIssueRow[]>(`/v1/attendance-locations/issues?period=${period}`)} />}
       {tab === 'meu' && hasFile && opening.data.sheet && <SheetView sheet={opening.data.sheet} period={period} />}
     </>
   );
@@ -53,7 +55,7 @@ function Overview({ period, rows }: { period: string; rows: OverviewRow[] }) {
           <tbody>
             {rows.map((r) => (
               <tr key={r.employee.id}>
-                <td><Link href={`/assiduidade/${r.employee.id}?mes=${period}`}><b>{r.employee.name}</b></Link><div className="muted">{r.employee.department ?? '—'}</div></td>
+                <td><Link href={`/assiduidade/${r.employee.id}?mes=${period}`}><b>{r.employee.name}</b></Link>{r.locationIssues ? <span className="flag" title="Marcações fora do local ou sem localização (ver lista abaixo)">📍 {r.locationIssues}</span> : null}<div className="muted">{r.employee.department ?? '—'}</div></td>
                 <td className="num">{formatMinutes(r.workedMinutes)}</td>
                 <td className="num">{formatMinutes(r.expectedMinutes)}</td>
                 <td className="num">{r.overtimeMinutes ? <b style={{ color: 'var(--brand)' }}>{formatMinutes(r.overtimeMinutes)}</b> : '—'}</td>

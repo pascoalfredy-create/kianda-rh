@@ -3,6 +3,8 @@
 import { formatMinutes } from '@kianda/core';
 import { useState } from 'react';
 import { useMutation } from '@/lib/client';
+import { describeLocation, mapLink } from '@/lib/punch-location';
+import type { PunchLocation } from '@/lib/types';
 
 /** Acrescentar registo manual num dia (chefia/RH). */
 export function AddEntry({ employeeId, date }: { employeeId: string; date: string }) {
@@ -25,7 +27,7 @@ export function AddEntry({ employeeId, date }: { employeeId: string; date: strin
 }
 
 /** Chip de um registo, com edição da saída e remoção (chefia/RH). */
-export function EntryChip({ e, editable }: { e: { id: string; in: string; out: string | null; source: string; note: string | null; offlineOut?: boolean }; editable: boolean }) {
+export function EntryChip({ e, editable }: { e: { id: string; in: string; out: string | null; source: string; note: string | null; offlineOut?: boolean; clockInLocation?: PunchLocation | null; clockOutLocation?: PunchLocation | null; locationIssue?: boolean }; editable: boolean }) {
   const { busy, error, run } = useMutation();
   const [editing, setEditing] = useState(false);
   const [start, setStart] = useState(e.in);
@@ -45,8 +47,10 @@ export function EntryChip({ e, editable }: { e: { id: string; in: string; out: s
     );
   }
   return (
-    <span className={`entry-chip ${e.source === 'manual' ? 'manual' : ''} ${e.source === 'offline' || e.offlineOut ? 'offline' : ''}`} title={e.note ?? (e.source === 'web' ? 'Registado pelo colaborador' : '')}>
+    <span className={`entry-chip ${e.source === 'manual' ? 'manual' : ''} ${e.source === 'offline' || e.offlineOut || e.locationIssue ? 'offline' : ''}`} title={[e.note ?? (e.source === 'web' ? 'Registado pelo colaborador' : ''), e.clockInLocation && `Entrada: ${describeLocation(e.clockInLocation)}`, e.clockOutLocation && `Saída: ${describeLocation(e.clockOutLocation)}`].filter(Boolean).join(' · ')}>
       {(e.source === 'offline' || e.offlineOut) && <span aria-label="Registado sem rede">📵</span>}
+      {e.locationIssue && <span aria-label="Marcação fora do local ou sem localização">⚠</span>}
+      {(mapLink(e.clockInLocation) || mapLink(e.clockOutLocation)) && <a href={(mapLink(e.clockInLocation) ?? mapLink(e.clockOutLocation))!} target="_blank" rel="noreferrer" aria-label="Ver a localização no mapa" style={{ textDecoration: 'none' }}>📍</a>}
       {e.in} – {e.out ?? <b style={{ color: 'var(--red)' }}>sem saída</b>}
       {editable && <button aria-label="Corrigir" onClick={() => setEditing(true)}>✎</button>}
     </span>

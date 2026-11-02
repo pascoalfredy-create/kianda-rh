@@ -45,9 +45,9 @@ export async function apiAs<T = any>(token: string, method: string, path: string
 }
 
 /** Cria um utilizador na empresa e devolve a sua sessão. */
-export async function addUser(owner: Company, name: string, role = 'finance') {
+export async function addUser(owner: Company, name: string, role = 'finance', employeeId?: string) {
   const email = `${name.toLowerCase().replace(/\W+/g, '.')}.${unique()}@e2e.kianda.test`;
-  const created = await apiAs(owner.token, 'POST', '/v1/users', { name, email, password: PASSWORD, role });
+  const created = await apiAs(owner.token, 'POST', '/v1/users', { name, email, password: PASSWORD, role, ...(employeeId ? { employeeId } : {}) });
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   const api = await request.newContext({ baseURL: API });
   const login = await api.post('/v1/auth/login', { data: { email, password: PASSWORD } });
