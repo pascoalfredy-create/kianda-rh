@@ -1,9 +1,10 @@
 import {
-  ABSENCE_POLICIES, describeSchedule, fromLuanda, labourRules, luandaDate, luandaTime, scheduledMinutes, summarizeMonth, type AbsenceType,
+  ABSENCE_POLICIES, describeSchedule, evaluatePunchLocation, fromLuanda, labourRules, luandaDate, luandaTime, parseKioskQr, scheduledMinutes, summarizeMonth, verifyKioskCode,
+  type AbsenceType, type LocationMode,
 } from '@kianda/core';
 import {
-  absences, and, asc, attendanceEntries, workSchedules, attendanceMonths, auditLogs, companies, contracts, departments, desc, eq, employees, getDb, gte, inArray, isNull, lte, payrollRuns, users,
-  type Db,
+  absences, and, asc, attendanceEntries, workSchedules, attendanceMonths, auditLogs, companies, contracts, departments, desc, eq, employees, getDb, gte, inArray, isNull, lte, payrollRuns, users, workplaces,
+  type Db, type PunchLocationRecord,
 } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -107,8 +108,28 @@ async function overviewFor(db: Db, actor: Actor, period: string) {
   return list.map(({ e, department }) => {
     const { summary, approval } = sheetFromData(e, period, data);
     const { days: _d, ...totals } = summary;
-    return { employee: { id: e.id, name: e.name, number: e.number, department }, ...totals, approval, canApprove: canDecideFor(actor, e) && !approval && period < data.today.slice(0, 7) };
+    const locationIssues = (data.entries.get(e.id) ?? []).filter((x) => x.locationIssue).length;
+    return { employee: { id: e.id, name: e.name, number: e.number, department }, ...totals, locationIssues, approval, canApprove: canDecideFor(actor, e) && !approval && period < data.today.slice(0, 7) };
   });
+}
+
+/** Regra da empresa e locais activos (com o segredo do quiosque, que nunca sai da API). */
+async function locationContext(db: Db, companyId: string) {
+  const [company] = await db.select({ mode: companies.punchLocationMode }).from(companies).where(eq(companies.id, companyId));
+  const mode = (company?.mode ?? 'off') as LocationMode;
+  const places = mode === 'off' ? [] : await db.select().from(workplaces).where(and(eq(workplaces.companyId, companyId), eq(workplaces.active, true)));
+  return { mode, places };
+}
+
+/** Código do quiosque: QR (identifica o local) ou só os 6 dígitos (procura nos quiosques activos da empresa). */
+async function resolveKiosk(places: (typeof workplaces.$inferSelect)[], input: string, at: Date): Promise<string | null> {
+  const qr = parseKioskQr(input);
+  const code = qr?.code ?? input.trim();
+  for (const w of places) {
+    if (!w.kioskSecret || (qr && qr.workplaceId !== w.id)) continue;
+    if (await verifyKioskCode(w.kioskSecret, code, at)) return w.id;
+  }
+  return null;
 }
 
 // ───────────────────────── Rotas ─────────────────────────
@@ -143,7 +164,11 @@ export function attendanceRoutes() {
     const forgotten = await db.select({ workDate: attendanceEntries.workDate }).from(attendanceEntries)
       .where(and(eq(attendanceEntries.employeeId, actor.employeeId), isNull(attendanceEntries.clockOut), lte(attendanceEntries.workDate, nextDayBefore(today))));
     const worked = entries.reduce((s, e) => s + Math.round(((e.clockOut ?? new Date()).getTime() - e.clockIn.getTime()) / 60_000), 0);
+    const { mode, places } = await locationContext(db, actor.companyId);
+    const [me] = await db.select({ workplaceId: employees.workplaceId }).from(employees).where(eq(employees.id, actor.employeeId));
+    const assigned = places.find((w) => w.id === me?.workplaceId);
     return c.json({
+      location: { mode, workplace: assigned?.name ?? null, kiosk: places.some((w) => !!w.kioskSecret) },
       today, now: luandaTime(new Date()), entries: entries.map(view), open: entries.some((e) => !e.clockOut), workedMinutes: worked,
       forgottenDays: [...new Set(forgotten.map((f) => f.workDate))],
     });
@@ -157,8 +182,13 @@ export function attendanceRoutes() {
   app.post('/v1/attendance/clock', async (c) => {
     const actor = c.get('actor');
     if (!actor.employeeId) return c.json({ error: 'sem_ficha', message: 'O seu utilizador não está associado a uma ficha de colaborador.' }, 409);
-    const b = z.object({ action: z.enum(['in', 'out']), at: z.iso.datetime({ offset: true }).optional(), clientRef: z.string().trim().min(8).max(64).optional() })
-      .refine((x) => !x.at === !x.clientRef, { message: 'Registo offline incompleto' }).parse(await body(c));
+    const b = z.object({
+      action: z.enum(['in', 'out']), at: z.iso.datetime({ offset: true }).optional(), clientRef: z.string().trim().min(8).max(64).optional(),
+      /** Posição no instante da marcação (só pedida quando a empresa usa o ponto com localização). */
+      location: z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180), accuracy: z.number().min(0).max(100_000) }).nullable().optional(),
+      /** Código do quiosque à entrada: conteúdo do QR ou os 6 dígitos. */
+      kiosk: z.string().trim().min(6).max(120).optional(),
+    }).refine((x) => !x.at === !x.clientRef, { message: 'Registo offline incompleto' }).parse(await body(c));
     const db = getDb();
     const serverNow = new Date();
     const offline = Boolean(b.at);
@@ -179,6 +209,26 @@ export function attendanceRoutes() {
       const [dup] = await db.select().from(attendanceEntries).where(and(eq(attendanceEntries.employeeId, emp.id), eq(attendanceEntries.workDate, today), eq(attendanceEntries.offlineOut, true), eq(attendanceEntries.clockOut, now)));
       if (dup) return c.json(view(dup), 200);
     }
+    // Ponto com localização: avaliado com a hora da marcação (também nas marcações feitas sem rede).
+    const { mode, places } = await locationContext(db, actor.companyId);
+    let location: PunchLocationRecord | null = null, locationIssue = false;
+    if (mode !== 'off') {
+      const kioskWorkplaceId = b.kiosk ? await resolveKiosk(places, b.kiosk, now) : null;
+      if (b.kiosk && !kioskWorkplaceId) throw new DomainError('codigo_quiosque', 'Código do quiosque inválido ou expirado. Leia de novo o código no ecrã à entrada.', 400);
+      const assignedWorkplaceId = places.some((w) => w.id === emp.workplaceId) ? emp.workplaceId : null;
+      const r = evaluatePunchLocation({ mode, assignedWorkplaceId, kioskWorkplaceId, fix: b.location ?? null,
+        workplaces: places.map((w) => ({ id: w.id, name: w.name, lat: w.latitude, lng: w.longitude, radius: w.radiusMeters })) });
+      if (!r.allowed) {
+        // Recusa sem excepção (a tentativa fica na auditoria, que uma excepção desfaria).
+        await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'punch_blocked', entity: 'employee', entityId: emp.id, after: { action: b.action, status: r.status, workplace: r.workplaceName, distance: r.distance, offline } });
+        return c.json({ error: 'fora_do_local', message: r.message, location: { status: r.status, workplace: r.workplaceName, distance: r.distance } }, 403);
+      }
+      if (r.status !== 'not_required') {
+        location = { status: r.status as PunchLocationRecord['status'], method: r.method, workplaceId: r.workplaceId, workplaceName: r.workplaceName, distance: r.distance, mode, capturedAt: now.toISOString(),
+          ...(r.method === 'gps' && b.location ? { lat: Math.round(b.location.lat * 1e6) / 1e6, lng: Math.round(b.location.lng * 1e6) / 1e6, accuracy: Math.round(b.location.accuracy) } : {}) };
+        locationIssue = r.issue;
+      }
+    }
     // O ponto regista factos: nunca é bloqueado por processamento fechado (é comum fechar a 20–25 do mês);
     // as horas desses dias seguem na aprovação do mês e no processamento seguinte.
     const [open] = await db.select().from(attendanceEntries).where(and(eq(attendanceEntries.employeeId, emp.id), eq(attendanceEntries.workDate, today), isNull(attendanceEntries.clockOut)));
@@ -187,13 +237,15 @@ export function attendanceRoutes() {
       const [e] = await db.insert(attendanceEntries).values({
         companyId: actor.companyId, employeeId: emp.id, workDate: today, clockIn: now, source: offline ? 'offline' : 'web', createdBy: actor.actorId,
         clientRef: b.clientRef ?? null, note: offline ? `Registado sem rede; enviado às ${luandaTime(serverNow)}` : null,
+        clockInLocation: location, locationIssue,
       }).returning();
       return c.json(view(e!), 201);
     }
     if (!open) throw new DomainError('sem_entrada', 'Não há entrada registada hoje. Registe a entrada primeiro.');
     if (now.getTime() - open.clockIn.getTime() < 60_000) throw new DomainError('demasiado_cedo', 'A saída tem de ser pelo menos 1 minuto depois da entrada.');
     const [e] = await db.update(attendanceEntries).set({
-      clockOut: now, ...(offline ? { offlineOut: true, note: [open.note, `Saída registada sem rede; enviada às ${luandaTime(serverNow)}`].filter(Boolean).join(' · ') } : {}),
+      clockOut: now, clockOutLocation: location, locationIssue: open.locationIssue || locationIssue,
+      ...(offline ? { offlineOut: true, note: [open.note, `Saída registada sem rede; enviada às ${luandaTime(serverNow)}`].filter(Boolean).join(' · ') } : {}),
     }).where(eq(attendanceEntries.id, open.id)).returning();
     return c.json(view(e!));
   });

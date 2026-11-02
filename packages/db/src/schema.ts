@@ -4,7 +4,7 @@
  */
 import { relations, sql } from 'drizzle-orm';
 import {
-  bigint, boolean, customType, date, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex,
+  bigint, boolean, customType, date, doublePrecision, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
 const money = (name: string) => bigint(name, { mode: 'number' }).notNull().default(0);
@@ -49,6 +49,8 @@ export const companies = pgTable('companies', {
   perDiemInternationalMinor: bigint('per_diem_international_minor', { mode: 'number' }),
   /** Portal: declarações pedidas pelo colaborador emitidas automaticamente (sem passar pelo RH). */
   autoIssueDeclarations: boolean('auto_issue_declarations').notNull().default(false),
+  /** Ponto com localização: off | record | alert | block (ver core/geofence.ts). */
+  punchLocationMode: text('punch_location_mode').notNull().default('off'),
   /** Pagar alimentação e transporte nos dias de férias (por acordo; a regra legal é não pagar — LGT, art. 213.º, n.º 2). */
   allowancesOnVacation: boolean('allowances_on_vacation').notNull().default(false),
   /** Sector de actividade (registo) — pré-configurações por sector. */
@@ -234,6 +236,8 @@ export const employees = pgTable('employees', {
   /** Regime de horário (vazio = horário normal da empresa, segunda a sexta) e início do ciclo próprio (turnos/rotação por equipa). */
   scheduleId: text('schedule_id'),
   scheduleAnchor: date('schedule_anchor'),
+  /** Local de trabalho para o ponto com localização (vazio = qualquer local activo da empresa). */
+  workplaceId: text('workplace_id'),
   /** Lei 22/11: dados pessoais não obrigatórios eliminados (ex-colaborador); ficam só os exigidos por lei. */
   dataMinimizedAt: timestamp('data_minimized_at', { withTimezone: true }),
   createdAt: createdAt(),
@@ -333,6 +337,32 @@ export const absences = pgTable('absences', {
 }, (t) => [index('absences_company_status').on(t.companyId, t.status), index('absences_employee_dates').on(t.employeeId, t.startDate)]);
 
 /** Registos de ponto: cada linha é um intervalo entrada → saída (vários por dia, ex.: manhã e tarde). Horas do servidor. */
+/** Locais de trabalho para o ponto com localização (raio) e quiosque com código rotativo. */
+export const workplaces = pgTable('workplaces', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  name: text('name').notNull(),
+  latitude: doublePrecision('latitude').notNull(),
+  longitude: doublePrecision('longitude').notNull(),
+  radiusMeters: integer('radius_meters').notNull().default(150),
+  active: boolean('active').notNull().default(true),
+  /** Segredo do código rotativo e token do endereço do quiosque (vazios = quiosque desligado). */
+  kioskSecret: text('kiosk_secret'),
+  kioskToken: text('kiosk_token').unique(),
+  createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('workplaces_company').on(t.companyId)]);
+
+/** Localização registada numa marcação (só no instante da marcação). */
+export interface PunchLocationRecord {
+  status: 'ok' | 'outside' | 'unavailable' | 'no_workplace';
+  method: 'gps' | 'kiosk' | 'none';
+  lat?: number; lng?: number; accuracy?: number;
+  workplaceId: string | null; workplaceName: string | null; distance: number | null;
+  mode: 'record' | 'alert' | 'block';
+  capturedAt: string;
+}
+
 export const attendanceEntries = pgTable('attendance_entries', {
   id: id(),
   companyId: text('company_id').notNull().references(() => companies.id),
@@ -347,6 +377,10 @@ export const attendanceEntries = pgTable('attendance_entries', {
   clientRef: text('client_ref'),
   /** Saída registada sem rede (hora do telemóvel) — a validar pela chefia. */
   offlineOut: boolean('offline_out').notNull().default(false),
+  clockInLocation: jsonb('clock_in_location').$type<PunchLocationRecord>(),
+  clockOutLocation: jsonb('clock_out_location').$type<PunchLocationRecord>(),
+  /** Marcação aceite com problema de localização (regras alertar/bloquear) — para a lista de excepções da chefia. */
+  locationIssue: boolean('location_issue').notNull().default(false),
   createdBy: text('created_by').notNull(),
   updatedBy: text('updated_by'),
   createdAt: createdAt(),

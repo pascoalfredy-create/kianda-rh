@@ -50,6 +50,7 @@ export function navigation(me: Me, counts: { absences: number; expenses: number 
   add('Configuração', [
     has('hr_admin') && item('/definicoes', 'Definições gerais', 'gear'),
     me.modules.hr.canAccess && has('payroll', 'finance', 'hr_admin') && item('/sector', 'Sector e regimes', 'brief'),
+    me.modules.hr.canAccess && has('hr_admin') && item('/locais', 'Locais de trabalho', 'clock'),
     me.modules.hr.canAccess && has('payroll', 'finance', 'hr_admin') && item('/conformidade', 'Conformidade', 'check'),
     has('hr_admin') && item('/acessos', 'Utilizadores e acessos', 'users'),
   ]);

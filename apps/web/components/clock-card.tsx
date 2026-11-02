@@ -1,9 +1,11 @@
 'use client';
 
 import { formatMinutes } from '@kianda/core';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { send } from '@/lib/client';
 import { enqueuePunch, flushPunches, isNetworkError, pendingPunches } from '@/lib/offline-punch';
+import { canScanQr, currentFix, describeLocation } from '@/lib/punch-location';
+import type { PunchLocation } from '@/lib/types';
 
 const ME_CACHE = 'kianda_me_cache';
 
@@ -12,8 +14,10 @@ interface Me {
   now: string;
   open: boolean;
   workedMinutes: number;
-  entries: { id: string; in: string; out: string | null; source: string }[];
+  entries: { id: string; in: string; out: string | null; source: string; clockInLocation?: PunchLocation | null; clockOutLocation?: PunchLocation | null; locationIssue?: boolean }[];
   forgottenDays: string[];
+  /** Ponto com localização (regra da empresa); ausente em respostas antigas guardadas no telemóvel. */
+  location?: { mode: 'off' | 'record' | 'alert' | 'block'; workplace: string | null; kiosk: boolean };
 }
 
 const pt = (d: string) => d.split('-').reverse().join('/');
@@ -26,6 +30,9 @@ export function ClockCard({ compact, inline }: { compact?: boolean; inline?: boo
   const [clock, setClock] = useState('');
   const [info, setInfo] = useState('');
   const [pending, setPending] = useState(0);
+  const [kiosk, setKiosk] = useState('');
+  const [kioskOpen, setKioskOpen] = useState(false);
+  const [scanning, setScanning] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -72,14 +79,23 @@ export function ClockCard({ compact, inline }: { compact?: boolean; inline?: boo
     setBusy(true);
     setError('');
     setInfo('');
+    // Localização só no instante da marcação e só se a empresa usa o ponto com localização; com o código do quiosque não é precisa.
+    const code = kiosk.trim() || undefined;
+    const needsLocation = !!me?.location && me.location.mode !== 'off' && !code;
+    if (needsLocation) setInfo('A obter a localização…');
+    const location = needsLocation ? await currentFix() : null;
+    if (needsLocation) setInfo('');
+    const extra = { ...(location ? { location } : {}), ...(code ? { kiosk: code } : {}) };
     try {
       if (!navigator.onLine) throw new TypeError('offline');
-      const r = await send('/v1/attendance/clock', 'POST', { action });
+      const r = await send('/v1/attendance/clock', 'POST', { action, ...extra });
       if (!r.ok) setError(r.message ?? 'Erro');
+      else { setKiosk(''); setKioskOpen(false); }
       await load();
     } catch (e) {
       if (!isNetworkError(e)) throw e;
-      const p = enqueuePunch(action);
+      const p = enqueuePunch(action, extra);
+      setKiosk(''); setKioskOpen(false);
       setMe((m) => (m ? { ...m, open: action === 'in' } : m));
       setPending(pendingPunches().length);
       setInfo(`Sem rede: ${action === 'in' ? 'entrada' : 'saída'} guardada no telemóvel às ${new Date(p.at).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Luanda' })}. É enviada sozinha quando houver rede (a chefia confirma a hora).`);
@@ -114,6 +130,20 @@ export function ClockCard({ compact, inline }: { compact?: boolean; inline?: boo
         <button className="btn big" disabled={busy || me.open} onClick={() => punch('in')}>Registar entrada</button>
         <button className="btn big ghost" disabled={busy || !me.open} onClick={() => punch('out')}>Registar saída</button>
       </div>
+      {me.location && me.location.mode !== 'off' && (
+        <div className="muted" style={{ marginTop: 8, fontSize: 12.5 }}>
+          📍 A sua localização é registada só no momento da marcação{me.location.workplace ? ` · Local de trabalho: ${me.location.workplace}` : ''}.
+          {me.location.kiosk && <>{' '}<button className="link" onClick={() => setKioskOpen(!kioskOpen)}>{kioskOpen ? 'Usar o GPS' : 'Usar o código do quiosque'}</button></>}
+        </div>
+      )}
+      {kioskOpen && (
+        <div className="inline-note" style={{ marginTop: 8, flexWrap: 'wrap' }}>
+          <input aria-label="Código do quiosque" inputMode="numeric" autoComplete="off" maxLength={120} placeholder="Código de 6 dígitos" value={kiosk} onChange={(e) => setKiosk(e.target.value.replace(/\s/g, ''))} style={{ flex: '1 1 200px', minWidth: 0, maxWidth: 280 }} />
+          {canScanQr() && <button className="btn ghost sm" type="button" onClick={() => setScanning(true)}>Ler QR com a câmara</button>}
+          <span className="muted" style={{ fontSize: 12 }}>Depois carregue em Registar entrada ou saída.</span>
+        </div>
+      )}
+      {scanning && <QrScanner onResult={(text) => { setKiosk(text); setScanning(false); }} onClose={() => setScanning(false)} />}
       {error && <div className="err" role="alert" style={{ color: 'var(--red)', marginTop: 8 }}>{error}</div>}
       {info && <div className="muted" role="status" style={{ marginTop: 8 }}>{info}</div>}
       {pending > 0 && <div className="warn" style={{ marginTop: 8, marginBottom: 0 }}>📵 {pending} registo(s) por enviar.{' '}<button className="link" onClick={() => void sync()}>Enviar agora</button></div>}
@@ -125,11 +155,46 @@ export function ClockCard({ compact, inline }: { compact?: boolean; inline?: boo
       {!compact && me.entries.length > 0 && (
         <div className="clock-entries">
           {me.entries.map((e) => (
-            <span key={e.id} className="tag">{e.in} – {e.out ?? '…'}{e.source === 'manual' ? ' (corrigido)' : e.source === 'offline' ? ' (sem rede)' : ''}</span>
+            <span key={e.id} className="tag" title={[describeLocation(e.clockInLocation), describeLocation(e.clockOutLocation)].filter(Boolean).join(' · ') || undefined}>{e.in} – {e.out ?? '…'}{e.source === 'manual' ? ' (corrigido)' : e.source === 'offline' ? ' (sem rede)' : ''}{e.locationIssue ? ' ⚠' : ''}</span>
           ))}
         </div>
       )}
       <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>{pending > 0 ? "Registos sem rede ficam com a hora do telemóvel e são confirmados pela chefia." : "A hora registada é a do servidor (hora de Luanda), não a do seu dispositivo; sem rede, fica a do telemóvel, confirmada pela chefia."}</p>
+    </div>
+  );
+}
+
+/** Leitor do QR do quiosque (câmara traseira + BarcodeDetector). Pára a câmara ao fechar ou ao ler. */
+function QrScanner({ onResult, onClose }: { onResult: (text: string) => void; onClose: () => void }) {
+  const video = useRef<HTMLVideoElement>(null);
+  const done = useRef(onResult);
+  done.current = onResult;
+  const [problem, setProblem] = useState('');
+  useEffect(() => {
+    let stream: MediaStream | null = null, stopped = false, timer: ReturnType<typeof setTimeout> | undefined;
+    (async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        if (stopped || !video.current) return;
+        video.current.srcObject = stream;
+        await video.current.play();
+        const Detector = (window as unknown as { BarcodeDetector: new (o: { formats: string[] }) => { detect: (v: HTMLVideoElement) => Promise<{ rawValue: string }[]> } }).BarcodeDetector;
+        const detector = new Detector({ formats: ['qr_code'] });
+        const tick = async () => {
+          if (stopped || !video.current) return;
+          const found = await detector.detect(video.current).catch(() => []);
+          const hit = found.find((f) => f.rawValue.startsWith('kianda-ponto:'));
+          if (hit) done.current(hit.rawValue); else timer = setTimeout(tick, 300);
+        };
+        void tick();
+      } catch { setProblem('Não foi possível abrir a câmara. Escreva o código de 6 dígitos.'); }
+    })();
+    return () => { stopped = true; clearTimeout(timer); stream?.getTracks().forEach((t) => t.stop()); };
+  }, []);
+  return (
+    <div className="card" style={{ marginTop: 8, padding: 10, textAlign: 'center' }}>
+      {problem ? <p className="muted">{problem}</p> : <video ref={video} playsInline muted style={{ width: '100%', maxWidth: 320, borderRadius: 8 }} />}
+      <div><button className="btn ghost sm" type="button" onClick={onClose}>Fechar câmara</button></div>
     </div>
   );
 }

@@ -9,7 +9,7 @@ describe('menu comum e permissões do protótipo RH', () => {
     const groups = navigation(me('owner'), { absences: 2, expenses: 3 });
     expect(groups.map(g => g.label)).toEqual(['Geral', 'Tempo', 'Remunerações', 'Finanças', 'Talento', 'Análise', 'Configuração', 'Plataforma']);
     expect(groups.find(g => g.label === 'Análise')!.items.map(i => i.label)).toEqual(['Relatórios', 'BI']);
-    expect(groups.find(g => g.label === 'Configuração')!.items.map(i => i.href)).toEqual(['/definicoes', '/sector', '/conformidade', '/acessos']);
+    expect(groups.find(g => g.label === 'Configuração')!.items.map(i => i.href)).toEqual(['/definicoes', '/sector', '/locais', '/conformidade', '/acessos']);
     expect(groups.find(g => g.label === 'Geral')!.items.some(i => i.href === '/pedidos')).toBe(true);
     expect(links(me('owner')).find(l => l.href === '/ausencias')?.badge).toBe(2);
     expect(links(me('owner')).find(l => l.href === '/despesas')?.badge).toBe(3);

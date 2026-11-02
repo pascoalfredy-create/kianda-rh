@@ -159,7 +159,11 @@ export interface DayRow {
   overtimeMinutes: number;
   flags: string[];
 }
-export interface EntryRow { id: string; workDate: string; in: string; out: string | null; source: 'web' | 'manual' | 'offline'; note: string | null; offlineOut?: boolean }
+/** Localização gravada numa marcação (ver core/geofence.ts). */
+export interface PunchLocation { status: 'ok' | 'outside' | 'unavailable' | 'no_workplace'; method: 'gps' | 'kiosk' | 'none'; lat?: number; lng?: number; accuracy?: number; workplaceId: string | null; workplaceName: string | null; distance: number | null; mode: 'record' | 'alert' | 'block'; capturedAt: string }
+/** Excepção de localização para a lista da chefia. */
+export interface LocationIssueRow { id: string; employee: { id: string; name: string; number: string }; workDate: string; clockIn: string; clockOut: string | null; clockInLocation: PunchLocation | null; clockOutLocation: PunchLocation | null }
+export interface EntryRow { id: string; workDate: string; in: string; out: string | null; source: 'web' | 'manual' | 'offline'; note: string | null; offlineOut?: boolean; clockInLocation?: PunchLocation | null; clockOutLocation?: PunchLocation | null; locationIssue?: boolean }
 export interface MonthTotals {
   period: string;
   workedMinutes: number;
@@ -182,6 +186,7 @@ export interface Sheet {
 }
 export interface OverviewRow extends MonthTotals {
   employee: { id: string; name: string; number: string; department: string | null };
+  locationIssues?: number;
   approval: Approval | null;
   canApprove: boolean;
 }

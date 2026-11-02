@@ -5,6 +5,7 @@ import { ZodError } from 'zod';
 import { setRateLimitEnabled, type AppEnv } from './plugins/tenant.js';
 import { absenceRoutes } from './routes/absences.js';
 import { attendanceRoutes } from './routes/attendance.js';
+import { kioskRoutes, workplaceRoutes } from './routes/workplaces.js';
 import { obligationRoutes } from './routes/obligations.js';
 import { ledgerRoutes } from './routes/ledger.js';
 import { bankRoutes } from './routes/bank.js';
@@ -72,6 +73,8 @@ export function buildApp(opts: { logger?: boolean; rateLimit?: boolean } = {}) {
   app.route('/', moduleRoutes());
   app.route('/', absenceRoutes());
   app.route('/', attendanceRoutes());
+  app.route('/', workplaceRoutes());
+  app.route('/', kioskRoutes());
   app.route('/', payrollRoutes());
   app.route('/', obligationRoutes());
   app.route('/', ledgerRoutes());
