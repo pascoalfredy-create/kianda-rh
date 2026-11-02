@@ -1104,3 +1104,35 @@ export const financialModelVersions = pgTable('financial_model_versions', {
 }, (t) => [uniqueIndex('financial_versions_model_number').on(t.modelId, t.versionNumber), uniqueIndex('financial_versions_model_revision_label').on(t.modelId, t.sourceRevision, t.label), index('financial_versions_company_model').on(t.companyId, t.modelId)]);
 
 export type ModelingMemberRow = typeof modelingMembers.$inferSelect;
+
+/** Kianda Valora: utilizadores autorizados; o proprietário ocupa um dos cinco acessos incluídos. */
+export const valuationMembers = pgTable('valuation_members', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  userId: text('user_id').notNull().references(() => users.id),
+  enabled: boolean('enabled').notNull().default(true),
+  /** editor | viewer */
+  permission: text('permission').notNull().default('editor'),
+  addedBy: text('added_by').notNull(),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex('valuation_members_company_user').on(t.companyId, t.userId)]);
+
+/** Uma análise por entidade analisada (a própria empresa, uma participada ou um alvo de aquisição). */
+export const valuationAnalyses = pgTable('valuation_analyses', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  name: text('name').notNull(),
+  /** Estrutura validada por valuationDataIssue (@kianda/core); valores em Mkz. */
+  data: jsonb('data').$type<Record<string, unknown>>().notNull(),
+  /** A própria empresa subscritora: permite trazer os custos com o pessoal do processamento salarial. */
+  ownCompany: boolean('own_company').notNull().default(false),
+  revision: integer('revision').notNull().default(1),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  createdBy: text('created_by').notNull(),
+  updatedBy: text('updated_by').notNull(),
+  createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('valuation_analyses_company').on(t.companyId, t.updatedAt)]);
+
+export type ValuationMemberRow = typeof valuationMembers.$inferSelect;
+export type ValuationAnalysisRow = typeof valuationAnalyses.$inferSelect;

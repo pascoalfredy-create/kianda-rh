@@ -13,6 +13,7 @@ export function RegistoForm({ initial }: { initial: RegistrationSelection }) {
   const [error, setError] = useState('');
   const [hr, setHr] = useState(initial.module === 'hr');
   const [modeling, setModeling] = useState(initial.module === 'modeling');
+  const [valuation, setValuation] = useState(false);
   const [hrTier, setHrTier] = useState(initial.module === 'hr' ? initial.planKey : '');
   const [hrCycle, setHrCycle] = useState<BillingCycle>(initial.module === 'hr' ? initial.cycle : 'monthly');
   const [modelingKey, setModelingKey] = useState<ModelingPlanKey>(initial.module === 'modeling' ? initial.planKey as ModelingPlanKey : 'pme');
@@ -28,7 +29,7 @@ export function RegistoForm({ initial }: { initial: RegistrationSelection }) {
       <form className="card auth" style={{ maxWidth: 560 }} onSubmit={async (e) => {
         e.preventDefault();
         const f = new FormData(e.currentTarget);
-        if (!hr && !modeling) return setError('Escolha pelo menos um módulo.');
+        if (!hr && !modeling && !valuation) return setError('Escolha pelo menos um módulo.');
         if (f.get('password') !== f.get('password2')) return setError('As palavras-passe não coincidem');
         setBusy(true); setError('');
         const res = await fetch('/api/v1/auth/register', {
@@ -36,7 +37,7 @@ export function RegistoForm({ initial }: { initial: RegistrationSelection }) {
           body: JSON.stringify({
             company: { name: f.get('companyName'), nif: String(f.get('nif')).replace(/\D/g, ''), sector: f.get('sector'), address: f.get('address') || null, ...(hr ? { employeesEstimate: estimate } : {}) },
             name: f.get('name'), email: f.get('email'), password: f.get('password'), acceptTerms: f.get('terms') === 'on',
-            modules: [hr ? 'hr' : '', modeling ? 'modeling' : ''].filter(Boolean),
+            modules: [hr ? 'hr' : '', modeling ? 'modeling' : '', valuation ? 'valuation' : ''].filter(Boolean),
             ...(hr ? { hrPlan: { tierKey: tier.key, cycle: hrCycle } } : {}),
             ...(modeling ? { modelingPlan: { key: modelingKey, cycle: modelingCycle, primarySector, sectors: modelingSectors } } : {}),
           }),
@@ -79,6 +80,8 @@ export function RegistoForm({ initial }: { initial: RegistrationSelection }) {
           <ModelingSectors planKey={modelingKey} primary={primarySector} selected={modelingSectors} onChange={setModelingSectors} />
           <div className="warn" style={{ margin: '4px 0 12px' }}>Modelagem: <b>{modelingPrice && formatKz(modelingPrice.totalMinor)}</b> por ciclo {modelingCycle === 'monthly' ? 'mensal' : modelingCycle === 'semiannual' ? 'semestral, à vista' : 'anual, à vista'}. Inclui 5 utilizadores. A exportação em PDF fica disponível com a subscrição paga. Utilizadores adicionais: 35.000 Kz/mês por acesso, contratados na licença.</div>
         </>}
+        <label style={{ display: 'flex', gap: 8 }}><input type="checkbox" checked={valuation} onChange={e => setValuation(e.target.checked)} style={{ width: 'auto' }} />Análise e Avaliação · Kianda Valora</label>
+        {valuation && <div className="warn" style={{ margin: '4px 0 12px' }}>Valora: demonstrações por PGC Angola, orçamento, tesouraria e avaliação de empresas. Avaliação gratuita com até 3 análises e 5 utilizadores; os planos pagos são acordados com a plataforma.</div>}
         <h3 style={{ fontSize: 12, textTransform: 'uppercase', color: 'var(--ink3)', margin: '16px 0 8px' }}>Responsável pela conta</h3>
         <label>Nome<input name="name" required /></label>
         <label>Email<input name="email" type="email" required autoComplete="username" /></label>
@@ -86,7 +89,7 @@ export function RegistoForm({ initial }: { initial: RegistrationSelection }) {
         <label>Confirmar palavra-passe<input name="password2" type="password" required autoComplete="new-password" /></label>
         <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontWeight: 400 }}><input type="checkbox" name="terms" required style={{ width: 'auto', marginTop: 3 }} /> <span>Li e aceito os <Link href="/termos" target="_blank">termos de utilização e a política de privacidade</Link>.</span></label>
         {error && <div className="alert" role="alert">{error}</div>}
-        <button className="btn" disabled={busy || !hr && !modeling || modeling && modelingSectors.length !== selectedModelingPlan.sectorLimit} style={{ width: '100%' }}>{busy ? 'A criar…' : 'Criar conta e começar'}</button>
+        <button className="btn" disabled={busy || !hr && !modeling && !valuation || modeling && modelingSectors.length !== selectedModelingPlan.sectorLimit} style={{ width: '100%' }}>{busy ? 'A criar…' : 'Criar conta e começar'}</button>
         <p className="muted" style={{ textAlign: 'center', marginTop: 14 }}>Já tem conta? <Link href="/login">Iniciar sessão</Link></p>
       </form>
     </div>

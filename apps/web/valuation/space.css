@@ -1,0 +1,43 @@
+/* Kianda Valora: ajustes da plataforma sobre a interface aprovada (menu no telemóvel, análises, estado de gravação). */
+button.entity{font:inherit;color:inherit;cursor:pointer;text-align:left}
+button.entity:hover{border-color:var(--line-2)}
+header{flex-wrap:wrap;row-gap:8px}
+#valoraSave{min-width:0;white-space:nowrap}
+#valoraSave.err{color:var(--crit,#c0392b);font-weight:600}
+.valora-link{background:none;border:0;padding:0;color:var(--side-ink);font:inherit;text-decoration:underline;cursor:pointer}
+.valora-menu{display:none;margin-left:auto;background:transparent;color:var(--side-ink);border-color:#ffffff33}
+.valora-banner{margin:14px 28px 0;padding:10px 14px;border-radius:8px;background:var(--accent-soft);color:var(--ink);font-size:12.8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.valora-banner[hidden]{display:none}
+.valora-banner.warn{background:color-mix(in srgb,#e3a008 18%,var(--surface))}
+.valora-banner.err{background:color-mix(in srgb,#e34948 16%,var(--surface))}
+.valora-banner .btn{margin-left:auto}
+.valora-list{list-style:none;margin:0;padding:0}
+.valora-list li{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.valora-list li:last-child{border-bottom:0}
+.valora-list .grow{flex:1;min-width:0}
+.valora-list .grow b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.valora-list .on{color:var(--accent);font-weight:600}
+.valora-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px;margin-top:8px}
+.valora-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--ink-2)}
+.valora-form label.wide{grid-column:1/-1}
+.valora-form label.check{flex-direction:row;align-items:center;gap:8px}
+.valora-form input[type=text],.valora-form input[type=number],.valora-form select{border:1px solid var(--line-2);border-radius:7px;padding:7px 9px;font:inherit;font-size:13px;background:var(--surface);color:var(--ink)}
+.valora-section{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+.valora-section h4{margin:0 0 6px;font-size:13px}
+.valora-empty{max-width:640px;margin:40px auto;text-align:left}
+.valora-readonly .wrap input:not([data-keep]),.valora-readonly .wrap select:not([data-keep]),.valora-readonly .wrap textarea:not([data-keep]){opacity:.75}
+/* Sem análise aberta: só o convite para criar a primeira. */
+.valora-none .view{display:none!important}
+.valora-none #pctl,.valora-none #btnData{display:none!important}
+#valoraDialog .box{width:min(720px,94vw)}
+@media(max-width:760px){
+  .valora-menu{display:inline-flex}
+  aside{padding:12px 14px;gap:0}
+  aside .brand{padding:4px 4px 4px}
+  aside nav,aside .side-foot{display:none}
+  aside.open nav,aside.open .side-foot{display:block}
+  header{padding:12px 16px}
+  .wrap{padding-left:16px!important;padding-right:16px!important}
+  .valora-banner{margin:12px 16px 0}
+  .valora-form{grid-template-columns:1fr}
+}

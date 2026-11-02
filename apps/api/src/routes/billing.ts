@@ -1,6 +1,7 @@
 import { modelingUsage, requireModelingPlanUsage, validateModelingSectors } from '../services/modeling-policy.js';
+import { valuationUsage } from '../services/valuation-policy.js';
 import { storageMode } from '../services/storage.js';
-import { CYCLES, cyclePrice, DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, MODELING_EXTRA_USER_MONTHLY_MINOR, defaultModelingSector, modelingPlanPrice, luandaDate, periodEnd, SECTORS, type BillingCycle, type FinancialSector } from '@kianda/core';
+import { CYCLES, cyclePrice, DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, MODELING_EXTRA_USER_MONTHLY_MINOR, VALUATION_INCLUDED_USERS, VALUATION_TRIAL_ANALYSES, defaultModelingSector, modelingPlanPrice, luandaDate, periodEnd, SECTORS, type BillingCycle, type FinancialSector } from '@kianda/core';
 import {
   and, auditLogs, companyModules, companies, desc, employees, eq, ne, files, gatewayEvents, getDb, like, outboundEmails, paymentRequests, platformAdmins, platformSettings, sql, subscriptions, users, type Db,
 } from '@kianda/db';
@@ -45,7 +46,7 @@ export function billingRoutes() {
       status: l.status, statusLabel: l.statusLabel, canWrite: l.canWrite, tier: l.tier, cycle: l.cycle, limit: l.limit, activeEmployees: l.activeEmployees,
       trialEndsAt: l.sub?.trialEndsAt ?? null, paidUntil: l.sub?.paidUntil ?? null,
       prices: [...priceTable(), ...(l.tier.key === 'custom' ? [{ ...l.tier, prices: Object.fromEntries((Object.keys(CYCLES) as BillingCycle[]).map(cycle => [cycle, cyclePrice(l.tier, cycle)])) }] : [])], cycles: CYCLES, bank: settings.bank, supportEmail: settings.supportEmail, supportPhone: settings.supportPhone, requests,
-      modules, modelingPlans: MODELING_PLANS, modelingExtraUserMinor: MODELING_EXTRA_USER_MONTHLY_MINOR, modelingUsage: await modelingUsage(db, actor.companyId),
+      modules, modelingPlans: MODELING_PLANS, modelingExtraUserMinor: MODELING_EXTRA_USER_MONTHLY_MINOR, modelingUsage: await modelingUsage(db, actor.companyId), valuationUsage: await valuationUsage(db, actor.companyId),
       multicaixa: !!proxypayConfig(), invoicesOnline: !!vendusConfig(),
     });
   });
@@ -177,10 +178,10 @@ export function platformRoutes() {
   });
 
   app.put('/v1/platform/companies/:id/modules/:module', async (c) => {
-    const module = z.enum(['hr', 'modeling']).parse(c.req.param('module'));
+    const module = z.enum(['hr', 'modeling', 'valuation']).parse(c.req.param('module'));
     const input = z.object({ enabled: z.boolean(), status: z.enum(['trial', 'active', 'past_due', 'suspended', 'cancelled']).default('trial'), trialEndsAt: z.iso.date().nullable().default(null), paidUntil: z.iso.date().nullable().default(null), projectLimit: z.number().int().min(1).max(100000).nullable().optional(), extraUsers: z.number().int().min(0).max(100000).optional(), planKey: z.enum(MODELING_PLANS.map(p => p.key) as [string, ...string[]]).nullable().optional(), cycle: z.enum(['monthly', 'semiannual', 'annual']).nullable().optional(), primarySector: z.enum(FINANCIAL_SECTORS).nullable().optional(), modelingSectors: z.array(z.enum(FINANCIAL_SECTORS)).min(1).max(8).optional() }).parse(await body(c));
-    if (module === 'modeling' && input.enabled && ['active', 'past_due'].includes(input.status) && !input.paidUntil) throw new DomainError('periodo_obrigatorio', 'Indique o fim do período pago.', 400);
-    if (module === 'modeling' && input.enabled && input.status === 'trial' && !input.trialEndsAt) throw new DomainError('periodo_obrigatorio', 'Indique o fim do período experimental.', 400);
+    if (module !== 'hr' && input.enabled && ['active', 'past_due'].includes(input.status) && !input.paidUntil) throw new DomainError('periodo_obrigatorio', 'Indique o fim do período pago.', 400);
+    if (module !== 'hr' && input.enabled && input.status === 'trial' && !input.trialEndsAt) throw new DomainError('periodo_obrigatorio', 'Indique o fim do período experimental.', 400);
     const companyId = c.req.param('id');
     return getDb().transaction(async (db) => {
     const [company] = await db.select({ id: companies.id, sector: companies.sector }).from(companies).where(eq(companies.id, companyId)).for('update');
@@ -196,6 +197,15 @@ export function platformRoutes() {
       if (planKey) validateModelingSectors(planKey, primarySector, sectors);
       await requireModelingPlanUsage(db, companyId, { projectLimit, extraUsers: input.extraUsers ?? before?.extraUsers ?? 0, sectors });
       values = { ...input, primarySector, modelingSectors: sectors };
+    }
+    if (module === 'valuation') {
+      // Limite de análises activas e acessos extra: decisão comercial explícita, nunca abaixo do uso actual.
+      const analysisLimit = input.projectLimit === undefined ? before ? before.projectLimit : VALUATION_TRIAL_ANALYSES : input.projectLimit;
+      const extraUsers = input.extraUsers ?? before?.extraUsers ?? 0;
+      const usage = await valuationUsage(db, companyId);
+      if (analysisLimit !== null && usage.activeAnalyses > analysisLimit) throw new DomainError('limite_inferior_ao_uso', `A empresa tem ${usage.activeAnalyses} análises activas. Arquive análises antes de reduzir o limite.`, 409);
+      if (usage.enabledUsers > VALUATION_INCLUDED_USERS + extraUsers) throw new DomainError('limite_inferior_ao_uso', `A empresa tem ${usage.enabledUsers} utilizadores com acesso ao Valora.`, 409);
+      values = { enabled: input.enabled, status: input.status, trialEndsAt: input.trialEndsAt, paidUntil: input.paidUntil, projectLimit: analysisLimit, extraUsers };
     }
     const [grant] = await db.insert(companyModules).values({ companyId, module, ...values }).onConflictDoUpdate({ target: [companyModules.companyId, companyModules.module], set: { ...values, updatedAt: new Date() } }).returning();
     await db.insert(auditLogs).values({ companyId, actorId: c.get('actor').actorId, action: 'module_subscription', entity: 'company_module', entityId: grant!.id, before: before ?? null, after: grant });
@@ -340,6 +350,8 @@ export function platformRoutes() {
     if (sub?.status !== 'cancelled') throw new DomainError('nao_cancelada', 'Cancele primeiro a licença da empresa (e entregue a exportação dos dados ao cliente)');
     const [modeling] = await db.select().from(companyModules).where(and(eq(companyModules.companyId, id), eq(companyModules.module, 'modeling')));
     if (modeling?.enabled && modeling.status !== 'cancelled') throw new DomainError('nao_cancelada', 'Cancele também a licença de Modelagem antes de eliminar a empresa.');
+    const [valuation] = await db.select().from(companyModules).where(and(eq(companyModules.companyId, id), eq(companyModules.module, 'valuation')));
+    if (valuation?.enabled && valuation.status !== 'cancelled') throw new DomainError('nao_cancelada', 'Cancele também a licença do Valora antes de eliminar a empresa.');
     if (confirmNif !== co.nif) throw new DomainError('confirmacao', 'Para confirmar, escreva o NIF da empresa', 422);
     const deleted = await purgeCompany(db, id);
     await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'purge_company', entity: 'company', entityId: id, after: { name: co.name, nif: co.nif, deleted } });

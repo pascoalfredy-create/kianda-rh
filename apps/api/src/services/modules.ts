@@ -1,5 +1,5 @@
-import { defaultModelingSector, moduleAccess, luandaDate, type CompanyModulesOverview, type FinancialSector, type PlatformModule, type SubscriptionStatus } from '@kianda/core';
-import { and, companies, subscriptions, companyModules, eq, modelingMembers, type Db } from '@kianda/db';
+import { VALUATION_INCLUDED_USERS, VALUATION_TRIAL_ANALYSES, defaultModelingSector, moduleAccess, luandaDate, type CompanyModulesOverview, type FinancialSector, type PlatformModule, type SubscriptionStatus } from '@kianda/core';
+import { and, companies, subscriptions, companyModules, eq, modelingMembers, valuationMembers, type Db } from '@kianda/db';
 import { licenceOf } from './licence.js';
 
 export async function moduleLicence(db: Db, companyId: string, module: PlatformModule) {
@@ -15,8 +15,8 @@ export async function moduleLicence(db: Db, companyId: string, module: PlatformM
   return moduleAccess(grant ? { ...grant, status: grant.status as SubscriptionStatus } : null, luandaDate(new Date()));
 }
 
-/** O catálogo comum mostra os dois módulos sem conceder a licença nem um lugar de utilizador. */
-export async function companyModulesOverview(db: Db, companyId: string, userId: string, role: string, loaded?: { licence: Awaited<ReturnType<typeof licenceOf>>; sector: string | null; grants?: (typeof companyModules.$inferSelect)[]; member?: { enabled: boolean } | null }): Promise<CompanyModulesOverview> {
+/** O catálogo comum mostra os módulos sem conceder a licença nem um lugar de utilizador. */
+export async function companyModulesOverview(db: Db, companyId: string, userId: string, role: string, loaded?: { licence: Awaited<ReturnType<typeof licenceOf>>; sector: string | null; grants?: (typeof companyModules.$inferSelect)[]; member?: { enabled: boolean } | null; valuationMember?: { enabled: boolean } | null }): Promise<CompanyModulesOverview> {
   const grants = loaded?.grants ?? await db.select().from(companyModules).where(eq(companyModules.companyId, companyId));
   const hrGrant = grants.find(g => g.module === 'hr');
   const modelingGrant = grants.find(g => g.module === 'modeling');
@@ -24,9 +24,13 @@ export async function companyModulesOverview(db: Db, companyId: string, userId: 
   const hrAccess = hrGrant?.enabled === false ? moduleAccess(null, luandaDate(new Date())) : { subscribed: true, status: hr.status, canRead: true, canWrite: hr.canWrite };
   const modeling = moduleAccess(modelingGrant ? { ...modelingGrant, status: modelingGrant.status as SubscriptionStatus } : null, luandaDate(new Date()));
   const member = loaded && 'member' in loaded ? loaded.member : (await db.select().from(modelingMembers).where(and(eq(modelingMembers.companyId, companyId), eq(modelingMembers.userId, userId))))[0];
+  const valuationGrant = grants.find(g => g.module === 'valuation');
+  const valuation = moduleAccess(valuationGrant ? { ...valuationGrant, status: valuationGrant.status as SubscriptionStatus } : null, luandaDate(new Date()));
+  const valuationMember = loaded && 'valuationMember' in loaded ? loaded.valuationMember : (await db.select().from(valuationMembers).where(and(eq(valuationMembers.companyId, companyId), eq(valuationMembers.userId, userId))))[0];
   const company = loaded ? { sector: loaded.sector } : (await db.select({ sector: companies.sector }).from(companies).where(eq(companies.id, companyId)))[0];
   return {
     hr: { ...hrAccess, canAccess: hrAccess.canRead, trialEndsAt: hr.sub?.trialEndsAt ?? null, paidUntil: hr.sub?.paidUntil ?? null },
     modeling: { ...modeling, canAccess: modeling.canRead && (member ? member.enabled : role === 'owner'), trialEndsAt: modelingGrant?.trialEndsAt ?? null, paidUntil: modelingGrant?.paidUntil ?? null, projectLimit: modelingGrant ? modelingGrant.projectLimit : 1, extraUsers: modelingGrant?.extraUsers ?? 0, userLimit: 5 + (modelingGrant?.extraUsers ?? 0), planKey: modelingGrant?.planKey ?? null, cycle: modelingGrant?.cycle ?? null, primarySector: modelingGrant?.primarySector as FinancialSector || defaultModelingSector(company?.sector), sectors: modelingGrant?.modelingSectors ?? [] },
+    valuation: { ...valuation, canAccess: valuation.canRead && (valuationMember ? valuationMember.enabled : role === 'owner'), trialEndsAt: valuationGrant?.trialEndsAt ?? null, paidUntil: valuationGrant?.paidUntil ?? null, analysisLimit: valuationGrant ? valuationGrant.projectLimit : VALUATION_TRIAL_ANALYSES, extraUsers: valuationGrant?.extraUsers ?? 0, userLimit: VALUATION_INCLUDED_USERS + (valuationGrant?.extraUsers ?? 0) },
   };
 }

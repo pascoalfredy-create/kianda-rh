@@ -35,13 +35,22 @@ Licenciada por projectos activos simultâneos, independente do efectivo do RH. F
 - Projectos, sectores e utilizadores são limites distintos. Projectos ilimitados não significam utilizadores ilimitados; o efectivo RH não altera os lugares da Modelagem.
 - Arquivar um projecto liberta a vaga e conserva os registos; restaurar exige vaga e acesso ao sector.
 
+## Análise e Avaliação (Kianda Valora)
+
+Terceiro módulo, com licença própria: demonstrações financeiras por PGC Angola (classe 6 proveitos, classe 7 custos), orçamento, tesouraria, controlo orçamental com dados reais mensais (introduzidos ou importados de CSV/Excel), rácios, análise de gestão e avaliação (DCF, múltiplos, activos reais e síntese), com relatórios em PDF, Word e Excel. Fonte no código: `packages/core/src/valuation.ts` e `apps/api/src/services/valuation-policy.ts`.
+
+- **Preço ainda não publicado** (`VALUATION_PRICE_PUBLISHED = false`): não há plano pago em autosserviço. A activação paga, o limite de análises activas e os utilizadores extra são definidos pela administração em **Plataforma Kianda → Valora** (nunca abaixo do uso actual).
+- **Avaliação**: escolhida no registo, 7 dias como os outros módulos, até **3 análises activas** (`VALUATION_TRIAL_ANALYSES`) e **5 utilizadores** (`VALUATION_INCLUDED_USERS`). Uma empresa já registada pede a activação à plataforma: a empresa não pode conceder licenças a si própria (a base de dados recusa escrita em `company_modules` ao papel da aplicação).
+- Os dados de cada análise ficam no servidor, por empresa (RLS), com controlo de revisão; nada da análise fica no armazenamento do navegador. Bibliotecas de PDF e Word servidas pela própria origem, sem CDN.
+- Com o RH na mesma conta, uma análise marcada como «própria empresa» traz os custos com o pessoal (conta 72) dos processamentos fechados.
+
 ## Período experimental e exportações
 
 - **7 dias de calendário**, incluindo o dia do registo, pela hora de Luanda, para cada módulo escolhido no registo.
 - Durante a avaliação trabalha-se dentro das quotas do plano escolhido (criar, editar, calcular, importar, simular), mas os documentos gerados ficam **só em pré-visualização**: `canExportDocuments` só permite exportar em `active` e `past_due`; a API responde **402 `exportacao_requer_subscricao`** (não depende de esconder botões).
 - Depois de um período pago há 7 dias de tolerância (`past_due`), com escrita e exportação; depois, modo de consulta (ver dados e pré-visualizações, sem alterar nem exportar).
 - O pagamento antecipado activa logo as exportações e conserva os dias experimentais restantes no início do período pago. Sem cartão e sem cobrança automática.
-- Pagar o RH não desbloqueia exportações da Modelagem, e vice-versa. Anexos carregados pelo cliente, facturas/recibos da licença e a portabilidade JSON não estão sujeitos a este bloqueio.
+- Pagar o RH não desbloqueia exportações da Modelagem ou do Valora, e vice-versa: cada módulo tem a sua licença. Anexos carregados pelo cliente, facturas/recibos da licença e a portabilidade JSON não estão sujeitos a este bloqueio.
 
 ## Pagamento e autorização
 

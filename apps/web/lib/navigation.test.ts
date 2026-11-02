@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { navigation, navActive } from './navigation';
 import type { Me } from './api';
 
-const me = (role: string, hr = true, modeling = false): Me => ({ user: { sub: 'u', role, employeeId: 'e', name: 'Pessoa de teste', companyId: 'co' }, company: { id: 'co', name: 'Empresa de teste', nif: '0000000000' }, modules: { hr: { subscribed: hr, canAccess: hr, canRead: hr, canWrite: hr, status: hr ? 'active' : 'cancelled', paidUntil: null, trialEndsAt: null }, modeling: { subscribed: modeling, canAccess: modeling, canRead: modeling, canWrite: modeling, status: modeling ? 'active' : 'cancelled', paidUntil: null, trialEndsAt: null, planKey: null, cycle: null, projectLimit: 2, extraUsers: 0, userLimit: 5, primarySector: null, sectors: [] } } });
+const me = (role: string, hr = true, modeling = false, valuation = false): Me => ({ user: { sub: 'u', role, employeeId: 'e', name: 'Pessoa de teste', companyId: 'co' }, company: { id: 'co', name: 'Empresa de teste', nif: '0000000000' }, modules: { hr: { subscribed: hr, canAccess: hr, canRead: hr, canWrite: hr, status: hr ? 'active' : 'cancelled', paidUntil: null, trialEndsAt: null }, modeling: { subscribed: modeling, canAccess: modeling, canRead: modeling, canWrite: modeling, status: modeling ? 'active' : 'cancelled', paidUntil: null, trialEndsAt: null, planKey: null, cycle: null, projectLimit: 2, extraUsers: 0, userLimit: 5, primarySector: null, sectors: [] }, valuation: { subscribed: valuation, canAccess: valuation, canRead: valuation, canWrite: valuation, status: valuation ? 'trial' : 'cancelled', paidUntil: null, trialEndsAt: null, analysisLimit: 3, extraUsers: 0, userLimit: 5 } } });
 const links = (user: Me) => navigation(user, { absences: 2, expenses: 3 }).flatMap(g => g.items);
 describe('menu comum e permissões do protótipo RH', () => {
   it('separa análise, configuração e plataforma, conservando os pedidos operacionais em Geral', () => {
@@ -37,6 +37,14 @@ describe('menu comum e permissões do protótipo RH', () => {
     const user = me('employee', true, true); user.modules.modeling.canAccess = false;
     expect(links(user).find(l => l.label === 'Modelagem Financeira')).toMatchObject({ href: '/modulos#modeling', locked: true });
     expect(links(user).map(l => l.href)).not.toContain('/modelagem');
+  });
+  it('o Valora aparece na Plataforma e só abre com licença e acesso individual', () => {
+    const locked = links(me('owner')).find(l => l.label === 'Análise e Avaliação');
+    expect(locked).toMatchObject({ href: '/modulos#valuation', locked: true });
+    const open = links(me('owner', true, false, true)).find(l => l.label === 'Análise e Avaliação');
+    expect(open).toMatchObject({ href: '/valora', locked: false });
+    const user = me('employee', true, false, true); user.modules.valuation.canAccess = false;
+    expect(links(user).map(l => l.href)).not.toContain('/valora');
   });
   it('destaca uma só entrada nas páginas de detalhe e nos separadores de Finanças', () => {
     for (const path of ['/bi', '/sector', '/definicoes', '/pedidos', '/acessos']) expect(links(me('owner')).filter(l => navActive(l.href, path, new URLSearchParams()))).toHaveLength(1);

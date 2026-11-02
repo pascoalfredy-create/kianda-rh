@@ -1,5 +1,5 @@
-import { DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, isValidCompanyNif, luandaDate, SECTORS, tierFor, trialEndDate, TRIAL_DAYS, verifyTotp } from '@kianda/core';
-import { auditLogs, companies, companyModules, employees, getDb, modelingMembers, platformAdmins, hashPassword, passwordProblems, subscriptions, users, verifyPassword, type Db } from '@kianda/db';
+import { DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, isValidCompanyNif, luandaDate, SECTORS, tierFor, trialEndDate, TRIAL_DAYS, VALUATION_TRIAL_ANALYSES, verifyTotp } from '@kianda/core';
+import { auditLogs, companies, companyModules, employees, getDb, modelingMembers, valuationMembers, platformAdmins, hashPassword, passwordProblems, subscriptions, users, verifyPassword, type Db } from '@kianda/db';
 import { and, eq } from '@kianda/db';
 import { Hono } from 'hono';
 import { deleteCookie, setCookie } from 'hono/cookie';
@@ -69,11 +69,11 @@ export function authRoutes() {
       email: z.email(),
       password,
       acceptTerms: z.literal(true, { message: 'É necessário aceitar os termos de utilização' }).optional(),
-      modules: z.array(z.enum(['hr', 'modeling'])).min(1, 'Escolha pelo menos um módulo').max(2).refine(v => new Set(v).size === v.length, 'Módulo repetido').default(['hr']),
+      modules: z.array(z.enum(['hr', 'modeling', 'valuation'])).min(1, 'Escolha pelo menos um módulo').max(3).refine(v => new Set(v).size === v.length, 'Módulo repetido').default(['hr']),
       hrPlan: z.object({ tierKey: z.enum(DEFAULT_TIERS.map(t => t.key) as [string, ...string[]]), cycle: z.enum(['monthly', 'semiannual', 'annual']) }).optional(),
       modelingPlan: z.object({ key: z.enum(MODELING_PLANS.map(p => p.key) as [string, ...string[]]), cycle: z.enum(['monthly', 'semiannual', 'annual']), primarySector: z.enum(FINANCIAL_SECTORS), sectors: z.array(z.enum(FINANCIAL_SECTORS)).min(1).max(8) }).optional(),
     }).parse(await body(c));
-    const hasHr = b.modules.includes('hr'), hasModeling = b.modules.includes('modeling');
+    const hasHr = b.modules.includes('hr'), hasModeling = b.modules.includes('modeling'), hasValuation = b.modules.includes('valuation');
     const hrTier = DEFAULT_TIERS.find(t => t.key === b.hrPlan?.tierKey) ?? tierFor(b.company.employeesEstimate ?? 1);
     if (hasHr && hrTier.maxEmployees !== null && hrTier.maxEmployees < (b.company.employeesEstimate ?? 1)) return c.json({ error: 'escalao_pequeno', message: 'Escolha uma faixa que inclua todos os colaboradores declarados.' }, 400);
     const modelingPlan = MODELING_PLANS.find(p => p.key === b.modelingPlan?.key) ?? MODELING_PLANS[0];
@@ -91,12 +91,14 @@ export function authRoutes() {
       const [u] = await tx.insert(users).values({ companyId: co!.id, email: b.email.toLowerCase(), name: b.name, passwordHash, role: 'owner' }).returning();
       await tx.insert(companyModules).values([
         { companyId: co!.id, module: 'hr', enabled: hasHr, status: hasHr ? 'trial' : 'cancelled' },
+        ...(hasValuation ? [{ companyId: co!.id, module: 'valuation', enabled: true, status: 'trial', trialEndsAt: trialEnd, projectLimit: VALUATION_TRIAL_ANALYSES }] : []),
         ...(hasModeling ? [{ companyId: co!.id, module: 'modeling', enabled: true, status: 'trial', trialEndsAt: trialEnd, planKey: modelingPlan.key, cycle: modelingCycle, projectLimit: modelingPlan.projectLimit, primarySector: b.modelingPlan!.primarySector, modelingSectors }] : []),
       ]);
       if (hasModeling) await tx.insert(modelingMembers).values({ companyId: co!.id, userId: u!.id, addedBy: u!.id });
+      if (hasValuation) await tx.insert(valuationMembers).values({ companyId: co!.id, userId: u!.id, addedBy: u!.id });
       // Pré-configuração do sector: regimes de horário e subsídios sugeridos (a empresa ajusta depois).
       if (hasHr) await applySectorPreset(tx, co!.id, co!.sector, u!.id);
-      await tx.insert(auditLogs).values({ companyId: co!.id, actorId: u!.id, action: 'register', entity: 'company', entityId: co!.id, after: { company: co, owner: { id: u!.id, email: u!.email }, modules: b.modules, hrPlan: hasHr ? { tierKey: hrTier.key, cycle: b.hrPlan?.cycle ?? 'monthly' } : null, modelingPlan: hasModeling ? { key: modelingPlan.key, cycle: modelingCycle } : null } });
+      await tx.insert(auditLogs).values({ companyId: co!.id, actorId: u!.id, action: 'register', entity: 'company', entityId: co!.id, after: { company: co, owner: { id: u!.id, email: u!.email }, modules: b.modules, hrPlan: hasHr ? { tierKey: hrTier.key, cycle: b.hrPlan?.cycle ?? 'monthly' } : null, modelingPlan: hasModeling ? { key: modelingPlan.key, cycle: modelingCycle } : null, valuation: hasValuation ? { analysisLimit: VALUATION_TRIAL_ANALYSES } : null } });
       return { company: co!, user: u!, trialEnd };
     });
     const token = await startSession(c, { sub: result.user.id, companyId: result.company.id, role: 'owner', employeeId: null, name: result.user.name });
@@ -105,7 +107,7 @@ export function authRoutes() {
     const trialEnd = result.trialEnd.split('-').reverse().join('/');
     await sendMail(db, {
       to: result.user.email, companyId: result.company.id, kind: 'boas_vindas', subject: 'Bem-vindo ao Kianda RH', title: `Bem-vindo ao Kianda RH, ${result.user.name.split(' ')[0]}`,
-      paragraphs: [`A conta de ${result.company.name} está criada, com ${TRIAL_DAYS} dias de calendário de período experimental, incluindo o dia do registo e até ${trialEnd}, inclusive, pela hora de Angola, nos módulos escolhidos: ${[hasHr ? 'Recursos Humanos' : '', hasModeling ? 'Modelagem Financeira' : ''].filter(Boolean).join(' e ')}.`, 'Sem cobrança automática. Durante a avaliação, os documentos ficam apenas em pré-visualização; exportar e imprimir exige uma subscrição paga. No fim da avaliação, os módulos sem pagamento ficam em consulta e os dados guardados são conservados. Consulte os módulos, planos e pagamentos na página Módulos e licenças. Cada módulo tem a sua subscrição.'],
+      paragraphs: [`A conta de ${result.company.name} está criada, com ${TRIAL_DAYS} dias de calendário de período experimental, incluindo o dia do registo e até ${trialEnd}, inclusive, pela hora de Angola, nos módulos escolhidos: ${new Intl.ListFormat('pt', { type: 'conjunction' }).format([hasHr ? 'Recursos Humanos' : '', hasModeling ? 'Modelagem Financeira' : '', hasValuation ? 'Análise e Avaliação (Valora)' : ''].filter(Boolean))}.`, 'Sem cobrança automática. Durante a avaliação, os documentos ficam apenas em pré-visualização; exportar e imprimir exige uma subscrição paga. No fim da avaliação, os módulos sem pagamento ficam em consulta e os dados guardados são conservados. Consulte os módulos, planos e pagamentos na página Módulos e licenças. Cada módulo tem a sua subscrição.'],
       facts: [['Código da empresa', result.company.code ?? '—']], button: base ? { label: 'Ver módulos e licenças', url: `${base}/licenca` } : null,
     });
     for (const a of await db.select().from(platformAdmins)) {

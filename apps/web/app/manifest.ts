@@ -22,6 +22,7 @@ export default function manifest(): MetadataRoute.Manifest {
     ],
     shortcuts: [
       { name: 'Modelagem Financeira', short_name: 'Integra', url: '/modelagem', icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }] },
+      { name: 'Análise e Avaliação', short_name: 'Valora', url: '/valora', icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }] },
       { name: 'Registar ponto', short_name: 'Ponto', url: '/assiduidade', icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }] },
       { name: 'Os meus recibos', short_name: 'Recibos', url: '/recibos', icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }] },
       { name: 'Pedir férias', short_name: 'Férias', url: '/ausencias', icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }] },

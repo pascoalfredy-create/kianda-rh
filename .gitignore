@@ -18,3 +18,4 @@ wrangler.deploy.json
 apps/web/public/modeling-pdf/
 apps/e2e/playwright-report/
 apps/e2e/test-results/
+apps/web/public/valuation-lib/

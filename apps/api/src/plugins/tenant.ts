@@ -26,7 +26,7 @@ export interface Actor {
   session: SessionClaims;
 }
 
-export type AppEnv = { Variables: { actor: Actor; companyGuarded: boolean; moduleAccess: ModuleAccess; modelingPermission: string; modelingMember: import('@kianda/db').ModelingMemberRow } };
+export type AppEnv = { Variables: { actor: Actor; companyGuarded: boolean; moduleAccess: ModuleAccess; modelingPermission: string; valuationPermission: string; modelingMember: import('@kianda/db').ModelingMemberRow } };
 export type Ctx = Context<AppEnv>;
 
 export const SESSION_COOKIE = 'kianda_session';
@@ -67,7 +67,7 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
     if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && !access.canWrite) blocked = 'A licença deste módulo está em modo de consulta.';
   } else {
     blocked = await licenceBlocks(getDb(), claims.companyId, c.req.method, c.req.path);
-    if (blocked && (await moduleLicence(getDb(), claims.companyId, 'modeling')).canWrite) blocked = null;
+    if (blocked && ((await moduleLicence(getDb(), claims.companyId, 'modeling')).canWrite || (await moduleLicence(getDb(), claims.companyId, 'valuation')).canWrite)) blocked = null;
   }
   if (blocked) return c.json({ error: 'licenca_inactiva', message: blocked }, 402);
   // Metadados da sessão já verificada para o servidor web; nunca são lidos de cabeçalhos do cliente.
