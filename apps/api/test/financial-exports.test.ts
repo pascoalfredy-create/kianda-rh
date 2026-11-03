@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeFinancialHistory, buildFinancialHistoricalReport, buildFinancialReportBundle, convertFinancialCurrency, FINANCIAL_REPORT_KEYS, financialTemplate } from '@kianda/core';
-import { historicalInput } from '../../../packages/core/test/fixtures/financial-history.js';
+import { buildFinancialReportBundle, convertFinancialCurrency, FINANCIAL_REPORT_KEYS, financialTemplate } from '@kianda/core';
 import { financialPdfLayout, renderFinancialPdf } from '../src/lib/financial-pdf.js';
 import { renderFinancialXlsx } from '../src/lib/financial-xlsx.js';
 import { FINANCIAL_FONTS } from '../src/lib/financial-fonts.js';
@@ -51,14 +50,14 @@ describe('downloads financeiros', () => {
     expect(files.get('xl/worksheets/sheet1.xml')).toContain(`t="n" s="3"><v>${bundle.result.irr}</v>`);
     expect(files.get('xl/styles.xml')).toContain('numFmtId="10"');
   });
-  it('o oitavo relatório pagina Balanço, DR, caixa e diagnóstico sem cortar conteúdo', () => {
-    const document = { source: bundle.source, reports: { analise: buildFinancialHistoricalReport(analyzeFinancialHistory(historicalInput)) } };
+  it('o relatório de análise do projecto pagina sínteses, rácios e diagnóstico sem cortar conteúdo', () => {
+    const document = bundle;
     const pages = financialPdfLayout(document, 'analise'); expect(pages.length).toBeGreaterThan(1);
     for (const p of pages) for (const b of p.bounds) {
       expect(b.x).toBeGreaterThanOrEqual(38); expect(b.x + b.width).toBeLessThanOrEqual(p.width - 38); expect(b.y).toBeGreaterThanOrEqual(17); expect(b.y + b.height).toBeLessThanOrEqual(p.height - 24);
     }
     expect(decode(renderFinancialPdf(document, 'analise')).startsWith('%PDF-1.7')).toBe(true);
-    expect(unzip(renderFinancialXlsx(document, 'analise')).get('xl/worksheets/sheet1.xml')).toContain('Empresa de teste');
+    expect([...unzip(renderFinancialXlsx(document, 'analise')).values()].some((xml) => xml.includes('Rácios por ano'))).toBe(true);
   });
   for(const currency of ['USD','EUR']as const)it(`os sete PDFs e livros de resultados identificam ${currency} e contêm os montantes convertidos`,()=>{
     const original=financialTemplate('mineracao').assumptions,rate=currency==='USD'?1:0.9;

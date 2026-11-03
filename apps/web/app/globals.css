@@ -452,9 +452,9 @@ tr.row-today td { background: #f2faf8; }
    Tipo: Schibsted Grotesk (servido pela própria aplicação). Camada final: sobrepõe-se aos estilos anteriores
    sem mudar a estrutura dos ecrãs. */
 :root {
-  --bg: #f4f1ea; --panel: #fffdf9; --ink: #1c1f1b; --ink2: #4b4f48; --ink3: #6b675e; --line: #e4ded3; --line-soft: #ece6db;
+  --bg: #ffffff; --panel: #ffffff; --ink: #1c1f1b; --ink2: #4b4f48; --ink3: #6b6b68; --line: #e6e6e4; --line-soft: #f1f1ef;
   --brand: #0e4a3c; --brand2: #16614f; --brand-soft: #e3ece6; --terra: #a4471f; --terra-ink: #7d3415; --terra-soft: #f6e4d8;
-  --sand: #ede7dc; --sand-2: #f9f7f2; --red: #b3361f; --red-soft: #fbe6e1; --amber: #94600f; --amber-soft: #f8ecd4;
+  --sand: #f3f3f2; --sand-2: #fafafa; --red: #b3361f; --red-soft: #fbe6e1; --amber: #94600f; --amber-soft: #f8ecd4;
   --font: 'Schibsted Grotesk Variable', 'Schibsted Grotesk', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 body { font-family: var(--font); background: var(--bg); color: var(--ink); font-size: 14.5px; -webkit-font-smoothing: antialiased; }
@@ -464,11 +464,11 @@ h1 { font-size: 27px; font-weight: 800; letter-spacing: -0.6px; line-height: 1.1
 .card, .rh-app .card { background: var(--panel); border-color: var(--line); border-radius: 16px; box-shadow: none; }
 th { background: var(--sand-2); color: var(--ink3); font-weight: 600; letter-spacing: .3px; }
 td { border-bottom-color: var(--line-soft); }
-input, select, textarea { background: #fff; border-color: #d9d1c3; border-radius: 10px; }
+input, select, textarea { background: #fff; border-color: #d6d6d3; border-radius: 10px; }
 input:focus, select:focus, textarea:focus { outline: 2px solid #16614f55; border-color: var(--brand2); }
-.btn { border-radius: 11px; height: 40px; padding: 0 18px; background: var(--brand); color: #f4f1ea; }
+.btn { border-radius: 11px; height: 40px; padding: 0 18px; background: var(--brand); color: #fff; }
 .btn:hover { background: var(--brand2); }
-.btn.ghost { background: var(--sand-2); border: 1px solid #d6cdbd; color: var(--ink); }
+.btn.ghost { background: var(--sand-2); border: 1px solid #d6d6d3; color: var(--ink); }
 .btn.ghost:hover { background: #fff; border-color: var(--brand2); color: var(--brand); }
 .btn.sm { height: 32px; border-radius: 9px; padding: 0 12px; }
 .btn.danger { background: transparent; border-color: #e7b9ad; color: var(--red); border-radius: 9px; }
@@ -503,7 +503,7 @@ a.btn, .btn { font-weight: 600; }
 .rh-app .side nav a.nav-on { background: var(--sand-2); color: var(--ink); font-weight: 700; box-shadow: 0 1px 0 #d8cfbf; }
 .rh-app .nav-group-toggle { color: #6b6457; font-size: 10.5px; letter-spacing: .9px; }
 .rh-app .nav-group-toggle:hover { background: #e4dccd; color: var(--ink); }
-.rh-app .who { border-top-color: #d8cfbf; color: #5f5a50; }
+.rh-app .who { border-top-color: var(--line); color: #5f5f5c; }
 .rh-app .who b { color: var(--ink); }
 .rh-app .who small { color: #5f5a50; }
 .rh-app .who > a { color: var(--brand); }
@@ -518,7 +518,7 @@ a.btn, .btn { font-weight: 600; }
 .rh-dialog, .rh-dialog-head { background: var(--panel); }
 .rh-dialog { border-radius: 18px; }
 .map th.name, .map td.name { background: var(--panel); }
-.map .we { background: #f3eee5; }
+.map .we { background: #f7f7f6; }
 .map .hol { background: var(--terra-soft); }
 .avatar { background: var(--brand-soft); color: var(--brand); border-radius: 50%; }
 .hero { border-radius: 16px; }
@@ -598,7 +598,7 @@ th { background: transparent; border-bottom: 1px solid var(--line); }
 .map th.name, .map td.name { background: var(--bg); }
 tr.row-today td { background: color-mix(in srgb, var(--brand) 6%, transparent); }
 .card.clock { background: transparent; color: var(--ink); border: 1.5px solid var(--brand); }
-.card.clock .btn.big { background: var(--brand); color: #f4f1ea; }
+.card.clock .btn.big { background: var(--brand); color: #fff; }
 .card.clock .btn.big.ghost, .card.clock .btn.ghost.sm { background: transparent; color: var(--brand); border-color: var(--brand); }
 .card.clock .chip, .card.clock .entry-chip, .card.clock .tag, .card.clock .st.cancelled { background: transparent; color: var(--ink2); border: 1px solid var(--line); }
 .card.clock .st.approved { background: var(--brand-soft); color: var(--brand); }
@@ -608,3 +608,8 @@ tr.row-today td { background: color-mix(in srgb, var(--brand) 6%, transparent); 
 .card.clock .err { color: var(--red); }
 /* Com este tipo de letra os algarismos tabulares afastam a vírgula decimal («3 246 000 , 00»): montantes sempre proporcionais. */
 .num, .rh-bar-row > b, .cash-column b, .entry-chip, .kpi .v { font-variant-numeric: proportional-nums; }
+
+/* Fundo branco, como uma folha de cálculo sem linhas de grelha: só ficam os contornos que organizam o conteúdo. */
+td { border-bottom-color: var(--line-soft); }
+.map.roster td.abs { background-image: repeating-linear-gradient(45deg, #f1f1f0 0 4px, transparent 4px 8px); }
+.auth-wrap { background: var(--bg); }

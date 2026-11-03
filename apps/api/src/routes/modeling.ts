@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { canExportDocuments, FINANCIAL_DOCUMENT_KEYS, FINANCIAL_REPORT_KEYS, FINANCIAL_REPORT_TITLES, type FinancialReportDocument } from '@kianda/core';
-import { financialHistoricalDocument, financialHistoryOf, financialReportBundle, financialVersionOf } from '../services/modeling-versions.js';
-import { modelingHistoryRoutes } from './modeling-history.js';
+import { financialReportBundle, financialVersionOf } from '../services/modeling-versions.js';
 import { modelingCurrencyRoutes } from './modeling-currency.js';
 import { renderFinancialPdf } from '../lib/financial-pdf.js';
 import { renderFinancialXlsx } from '../lib/financial-xlsx.js';
@@ -78,12 +77,10 @@ export function modelingRoutes() {
     const sectors = row?.grant?.modelingSectors ?? [];
     const models = await visibleModels(db, c.get('modelingMember'), a.role, await db.select().from(financialModels).where(and(eq(financialModels.companyId, a.companyId), inArray(financialModels.sector, sectors))).orderBy(desc(financialModels.updatedAt)));
     const first = models.find(m => !m.archivedAt);
-    const firstHistory = first ? { modelId: first.id, revision: first.revision, historical: await financialHistoryOf(db, first) } : null;
-    return c.json({ ...session, bootstrap: { models, templates: FINANCIAL_SECTORS.filter(s => sectors.includes(s)).map(financialTemplate), firstHistory } });
+    return c.json({ ...session, bootstrap: { models, templates: FINANCIAL_SECTORS.filter(s => sectors.includes(s)).map(financialTemplate) } });
   };
   app.get('/v1/modeling/session', opening(false));
   app.get('/v1/modeling/bootstrap', opening(true));
-  app.route('/', modelingHistoryRoutes());
   app.route('/', modelingCurrencyRoutes());
 
   const scenarioQuery = z.object({ scenario: z.enum(['base', 'otim', 'pess']).optional(), revision: z.coerce.number().int().positive().optional() });
@@ -147,8 +144,8 @@ export function modelingRoutes() {
   });
   app.get('/v1/modeling/models/:id/reports', async (c) => {
     const model = await financialModelOf(c, true), query = z.object({ version: z.uuid().optional() }).parse(c.req.query()), db = getDb();
-    const historical = query.version ? Boolean((await financialVersionOf(db, c.get('actor').companyId, model.id, query.version)).payload.reports.analise) : Boolean(await financialHistoryOf(db, model));
-    return c.json({ reports: [...FINANCIAL_REPORT_KEYS.map((key) => ({ key, title: FINANCIAL_REPORT_TITLES[key], available: true })), { key: 'analise', title: 'Relatório de análise económico-financeira', available: historical, ...(historical ? {} : { reason: 'Requer balancetes históricos analisados nesta revisão ou versão.' }) }], formats: await modelingExportOptions(db, c.get('actor').actorId, canExportDocuments(c.get('moduleAccess').status)) });
+    const frozen = query.version ? (await financialVersionOf(db, c.get('actor').companyId, model.id, query.version)).payload.reports : null;
+    return c.json({ reports: FINANCIAL_REPORT_KEYS.map((key) => { const available = !frozen || Boolean(frozen[key]); return { key, title: FINANCIAL_REPORT_TITLES[key], available, ...(available ? {} : { reason: 'Esta versão foi aprovada antes deste relatório existir. Aprove uma nova versão para o incluir.' }) }; }), formats: await modelingExportOptions(db, c.get('actor').actorId, canExportDocuments(c.get('moduleAccess').status)) });
   });
   app.get('/v1/modeling/models/:id/reports/:reportKey', async (c) => {
     const a = c.get('actor'), db = getDb();
@@ -157,8 +154,8 @@ export function modelingRoutes() {
     const model = await financialModelOf(c, true);
     const key = z.enum(FINANCIAL_DOCUMENT_KEYS).parse(c.req.param('reportKey'));
     if (!query.version && query.revision !== undefined && model.revision !== query.revision) throw new DomainError('revisao_invalida', 'Projecto alterado. Volte a carregá-lo antes de exportar.', 409);
-    const bundle: FinancialReportDocument = query.version ? (await financialVersionOf(db, a.companyId, model.id, query.version)).payload : key === 'analise' ? await financialHistoricalDocument(db, model) : await financialReportBundle(db, query.scenario ? { ...model, assumptions: { ...(model.assumptions as Record<string, unknown>), cen: query.scenario } } : model);
-    if (!bundle.reports[key]) throw new DomainError('historico_em_falta', 'Esta versão não contém balancetes históricos analisados.', 422);
+    const bundle: FinancialReportDocument = query.version ? (await financialVersionOf(db, a.companyId, model.id, query.version)).payload : await financialReportBundle(db, query.scenario ? { ...model, assumptions: { ...(model.assumptions as Record<string, unknown>), cen: query.scenario } } : model);
+    if (!bundle.reports[key]) throw new DomainError('relatorio_indisponivel', 'Esta versão foi aprovada antes deste relatório existir. Aprove uma nova versão para o incluir.', 422);
     const data = query.format === 'pdf' ? renderFinancialPdf(bundle, key) : renderFinancialXlsx(bundle, key);
     const ref = bundle.source.versionNumber ? 'v' + bundle.source.versionNumber : 'r' + bundle.source.revision;
     const filename = `Integra-${model.id.slice(0, 8)}-${ref}-${key}.${query.format}`;

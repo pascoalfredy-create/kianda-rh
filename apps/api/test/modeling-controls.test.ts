@@ -60,7 +60,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: participantes por projecto,
     expect(boot.bootstrap.models.map((m: { id: string }) => m.id)).toEqual([modelA]);
     for (const [method, url, payload] of [
       ['GET', `/v1/modeling/models/${modelB}`], ['GET', `/v1/modeling/models/${modelB}/versions`], ['GET', `/v1/modeling/models/${modelB}/calculation`],
-      ['GET', `/v1/modeling/models/${modelB}/reports/sumario?format=pdf`], ['GET', `/v1/modeling/models/${modelB}/history`],
+      ['GET', `/v1/modeling/models/${modelB}/reports/sumario?format=pdf`],
       ['PUT', `/v1/modeling/models/${modelB}`, { ...project('Intrusão'), revision: 1 }], ['POST', `/v1/modeling/models/${modelB}/archive`, { archived: true, revision: 1 }],
     ] as const) {
       const res = await req(editor, method, url, payload);
