@@ -81,3 +81,17 @@ body{font-family:'Schibsted Grotesk Variable',system-ui,sans-serif}
 .nav-group-toggle{color:#6b6457}
 .nav-group-toggle:hover{background:#e4dccd;color:#1c1f1b}
 aside{border-right:0}
+/* Fundos transparentes (Nov. 2026): cartões, menu, cabeçalho e tabelas deixam ver o papel da página.
+   Janelas, menus suspensos e campos mantêm-se opacos; as colunas fixas usam a cor da página para tapar o que desliza. */
+:root:not([data-theme="dark"]){--side:transparent}
+aside{border-right:1px solid var(--line)}
+.card,.rep-item,.entity,.note,tr.tot td,td.fut,.drop,.tag{background:transparent}
+th{background:transparent}
+.sticky1 td:first-child,.sticky1 th:first-child,.sticky1 tr.tot td:first-child{background:var(--bg)}
+header{background:color-mix(in srgb,var(--bg) 80%,transparent);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+:root:not([data-theme="dark"]) nav a:hover,.nav-group-toggle:hover{background:color-mix(in srgb,#1c1f1b 5%,transparent)}
+:root:not([data-theme="dark"]) nav a.on{background:color-mix(in srgb,#0e4a3c 9%,transparent);box-shadow:none}
+.app{background:none}
+/* Montantes por inteiro: algarismos proporcionais e numa só linha, para caberem no cartão. */
+.kpi .val{font-family:inherit;font-size:clamp(14px,1.1vw,19px);font-weight:700;letter-spacing:-.2px;white-space:nowrap;font-variant-numeric:proportional-nums}
+.kpi .val small{margin-left:4px}

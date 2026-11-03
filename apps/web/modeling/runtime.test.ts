@@ -358,7 +358,7 @@ describe('runtime do protótipo ligado à API', () => {
     await ui.currency('EUR');expect(ui.node('[data-p="moeda"]').value).toBe('USD');expect(ui.model.currency).toBe('USD');
     expect(ui.node('#modal').innerHTML).toContain('Moeda real dos valores actuais');
     await ui.act('applyCurrency');expect(ui.model.currency).toBe('EUR');expect(ui.model.assumptions.pessoal).toBe(before!*1000);
-    expect(await ui.go('painel')).toContain('M EUR');const html=await ui.go('pressupostos');expect(html).toContain('EUR: inflação esperada nesta moeda');expect(html).toContain('Última conversão');
+    {const p=await ui.go('painel');expect(p).toContain('valores em EUR');expect(p).not.toMatch(/\b(?:M|mil) EUR\b/);}const html=await ui.go('pressupostos');expect(html).toContain('EUR: inflação esperada nesta moeda');expect(html).toContain('Última conversão');
     expect(ui.requests.filter(r=>r.path.endsWith('/convert-currency'))).toHaveLength(1);
   });
   it('cancelar a mudança de moeda mantém valores, moeda e revisão sem gravar', async () => {
@@ -382,9 +382,9 @@ describe('runtime do protótipo ligado à API', () => {
     }
     await ui.go('demonstracoes');
     for(const [tab,label,amount] of [['dr','Resultado operacional (82)',result.k.ebit[1]],['bal','Total do activo',result.k.assets[1]],['fc','Caixa no fim do ano',result.k.cash[1]]]as const){
-      const html=await ui.sub('dt',tab);expect(html).toContain(caption);expect(html).toContain(currency+' · milhões');
+      const html=await ui.sub('dt',tab);expect(html).toContain(caption);expect(html).toContain(' · '+currency+' · Moeda global');expect(html).not.toContain(currency+' · milhões');
       const row=html.split(`<td>${label}</td>`)[1]!.split('</tr>')[0]!;
-      const value=money.format(Math.abs(amount!)/1e6);expect(row).toContain(amount!<0?'('+value+')':value);
+      const value=money.format(Math.abs(amount!));expect(row).toContain(amount!<0?'('+value+')':value);
     }
     for(const view of ['painel','avaliacao','credito','sensibilidade']){const html=await ui.go(view);expect(html,view).toContain(caption);expect(html,view).not.toMatch(/\b(?:M|mil) Kz\b/);}
     await ui.go('relatorios');for(const key of FINANCIAL_REPORT_KEYS){const html=await ui.sub('rep',key);expect(html,key).toContain(caption);expect(html,key).toContain(currency+' · cenário');expect(html,key).not.toMatch(/\b(?:M|mil) Kz\b/);}

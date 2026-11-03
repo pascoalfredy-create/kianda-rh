@@ -28,11 +28,11 @@ function scale(v: number) {
   const step = [1, 2, 5, 10].map((m) => m * exp).find((s) => s >= raw)!;
   return { max: Math.ceil(v / step) * step, step };
 }
-const short = (minor: number) => { const kz = minor / 100; return kz >= 1e6 ? `${String(Math.round((kz / 1e6) * 10) / 10).replace('.', ',')} M` : kz >= 1e3 ? `${Math.round(kz / 1e3)} mil` : String(Math.round(kz)); };
+const short = (minor: number) => formatKz(minor).replace(/\s?Kz$/, '');
 
 /** Orçado (claro) vs real (escuro) por mês; o real só existe nos meses com processamento fechado. */
 function Chart({ months }: { months: CmpMonth[] }) {
-  const W = 760, H = 240, L = 60, B = 30, T = 10;
+  const W = 820, H = 240, L = 112, B = 30, T = 10;
   const { max, step } = scale(Math.max(...months.map((m) => Math.max(m.budgetMinor, m.actualMinor ?? 0))));
   const slot = (W - L - 8) / 12;
   const bw = Math.min(16, slot * 0.36);

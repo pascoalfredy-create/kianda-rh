@@ -85,7 +85,7 @@ export function BudgetPlanner({ init, departments, budgetId }: { init: Assumptio
           <table className="dense">
             <thead><tr><th>Mês</th>{sim.months.map((m) => <th key={m.period} className="num">{MONTHS[Number(m.period.slice(5)) - 1]!.slice(0, 3)}</th>)}</tr></thead>
             <tbody>
-              <tr><td>Custo</td>{sim.months.map((m) => <td key={m.period} className="num">{Math.round(m.costMinor / 100_000).toLocaleString('pt-PT')} mil</td>)}</tr>
+              <tr><td>Custo</td>{sim.months.map((m) => <td key={m.period} className="num">{formatKz(m.costMinor)}</td>)}</tr>
               <tr><td>Efectivo</td>{sim.months.map((m) => <td key={m.period} className="num">{String(m.headcount).replace('.', ',')}</td>)}</tr>
             </tbody>
           </table>
@@ -122,10 +122,10 @@ export function BudgetGrid({ budgetId, year, departments, lines, editable }: { b
                   {editable
                     ? <input inputMode="decimal" aria-label={`${name(id)} ${monthLabel(p)}`} defaultValue={kzOut(value(id, p))} style={{ width: 92, textAlign: 'right' }}
                       onChange={(e) => setEdits({ ...edits, [`${id ?? ''}|${p}`]: kzIn(e.target.value) })} />
-                    : Math.round(value(id, p) / 100).toLocaleString('pt-PT')}
+                    : formatKz(value(id, p)).replace(/\s?Kz$/, '')}
                 </td>
               ))}
-              <td className="num"><b>{Math.round(periods.reduce((s, p) => s + cell(id, p), 0) / 100).toLocaleString('pt-PT')}</b></td>
+              <td className="num"><b>{formatKz(periods.reduce((s, p) => s + cell(id, p), 0)).replace(/\s?Kz$/, '')}</b></td>
             </tr>
           ))}
         </tbody>

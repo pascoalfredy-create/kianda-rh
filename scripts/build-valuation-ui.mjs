@@ -42,7 +42,7 @@ shell = spelling(shell); source = spelling(source);
 replaceShell('<div class="brand"><div class="brand-mark">V</div><div><b>Valora</b><small>Análise, gestão & avaliação</small></div></div>',
   '<div class="brand"><div class="brand-mark">V</div><div><b>Valora</b><small>Análise, gestão & avaliação</small></div><button type="button" class="btn valora-menu" id="valoraMenu" aria-label="Abrir menu" aria-expanded="false" aria-controls="nav">☰</button></div>');
 replaceShell('<div class="side-foot">Protótipo · dados fictícios<br>Valores em milhões de Kz (Mkz)<br>PGC Angola (Dec. 82/01) · IVA 14%</div>',
-  '<div class="side-foot"><span id="valoraFoot"></span>Valores em milhões de Kz (Mkz)<br><a href="/modulos" class="valora-link">Módulos e licenças</a> · <button type="button" class="valora-link" id="valoraLogout">Terminar sessão</button></div>');
+  '<div class="side-foot"><span id="valoraFoot"></span>Valores em Kz<br><a href="/modulos" class="valora-link">Módulos e licenças</a> · <button type="button" class="valora-link" id="valoraLogout">Terminar sessão</button></div>');
 // Sair do Valora para os outros módulos: sempre à vista no cabeçalho (como no Integra), também no telemóvel.
 replaceShell('<button class="btn" id="btnTheme" title="Alternar tema claro/escuro">Tema</button>\n</header>',
   '<button class="btn" id="btnTheme" title="Alternar tema claro/escuro">Tema</button>\n  <a class="btn valora-modules" href="/modulos" id="valoraModules">Módulos e licenças</a><button type="button" class="btn" id="valoraLogoutTop">Terminar sessão</button>\n</header>');
@@ -90,6 +90,48 @@ replace("const {jsPDF}=window.jspdf,doc=new jsPDF(", "valoraApplyAutoTable();con
 span('async function saveFile(name,data){', 'const fname=', 'async function saveFile(name,data){valoraDownload(name,data)}\n');
 replace("async function runExport(kind){const msg=$('#rep-msg'),btns=document.querySelectorAll('[data-exp]');", "async function runExport(kind){if(!valoraCanExport(kind))return;const msg=$('#rep-msg'),btns=document.querySelectorAll('[data-exp]');");
 replace("${rep.title.replace(/[^\\wÀ-ú]+/g,'_')}_${meta().ent.split(/[ ,]/)[0]}_", "${rep.title.replace(/[^\\wÀ-ú]+/g,'_')}_${(meta().ent.split(/[ ,]/)[0]||'analise').replace(/[^\\wÀ-ú-]+/g,'')}_");
+
+/* ---------- Montantes sempre por inteiro: os dados ficam em milhões de Kz, a apresentação é em Kz com 2 casas ---------- */
+replace("const f0=v=>v==null||!isFinite(v)?'—':Math.abs(v)<.5?'0':(Math.round(v)<0?'('+nf0.format(-v)+')':nf0.format(v));",
+  "const fd=v=>v==null||!isFinite(v)?'—':Math.abs(v)<.5?'0':(Math.round(v)<0?'('+nf0.format(-v)+')':nf0.format(v));\n" +
+  "const nfK=new Intl.NumberFormat('pt-PT',{minimumFractionDigits:2,maximumFractionDigits:2,useGrouping:'always'});\n" +
+  "const f0=v=>v==null||!isFinite(v)?'—':Math.abs(v*1e6)<.005?'0,00':(v<0?'('+nfK.format(-v*1e6)+')':nfK.format(v*1e6));");
+replace("function fs(v){return isFinite(v)?(v<0?'−':'+')+nf0.format(Math.abs(Math.round(v))):'—'}", "function fs(v){return isFinite(v)?(v<0?'−':'+')+nfK.format(Math.abs(v*1e6)):'—'}");
+// Prazos, percentagens e contagens continuam como números simples.
+for (const k of ['x.pms', 'x.pmr', 'x.pmp', 'x.ccc', 'py.pmr', 'py.pms', 'py.ccc', 'oy.pmr', 'pmrR', 'pmrO', 'o.subFer', 'o.subNat', 'cx/payD']) replace(`f0(${k})`, `fd(${k})`);
+for (const k of ['pmr', 'pmp', 'pms', 'ccc']) replace(`'${k}',f0,' d'`, `'${k}',fd,' d'`);
+replace("case 'd':return f0(v)+' d';", "case 'd':return fd(v)+' d';case 'i':return fd(v);");
+replace("{v:+c.prazo,k:'n'}", "{v:+c.prazo,k:'i'}");
+replace("{l:'Prazo médio de stocks (PMS)',g:p=>p.pms}", "{l:'Prazo médio de stocks (PMS)',g:p=>p.pms,fmt:fd}");
+replace("{l:'+ Prazo médio de recebimento (PMR)',g:p=>p.pmr}", "{l:'+ Prazo médio de recebimento (PMR)',g:p=>p.pmr,fmt:fd}");
+replace("{l:'− Prazo médio de pagamento (PMP)',g:p=>p.pmp}", "{l:'− Prazo médio de pagamento (PMP)',g:p=>p.pmp,fmt:fd}");
+replace("{l:'= Ciclo de conversão de caixa',g:p=>p.ccc,cls:'tot'}", "{l:'= Ciclo de conversão de caixa',g:p=>p.ccc,cls:'tot',fmt:fd}");
+replace("{l:'NFM em dias de receita',g:p=>p.nfm/(p.rec)*p.days}", "{l:'NFM em dias de receita',g:p=>p.nfm/(p.rec)*p.days,fmt:fd}");
+replace("{n:'PMP',c:css('--s3'),v:P.map(p=>p.pmp)}],{h:230})", "{n:'PMP',c:css('--s3'),v:P.map(p=>p.pmp)}],{h:230,fmt:fd})");
+replace("['Prazo médio de recebimento (dias)',p=>p.pmr,'c']]", "['Prazo médio de recebimento (dias)',p=>p.pmr,'c',0,fd]]");
+replace("CTL_ROWS.map(([l,g,type,b])=>{const a=g(r),c=g(o),d=a-c;return `<tr class=\"${b?'tot':''}\"><td>${l}</td><td class=\"num\">${f0(a)}</td><td class=\"num\">${f0(c)}</td><td class=\"num\">${d>=0?'+':''}${f0(d)}</td>",
+  "CTL_ROWS.map(([l,g,type,b,ff=f0])=>{const a=g(r),c=g(o),d=a-c;return `<tr class=\"${b?'tot':''}\"><td>${l}</td><td class=\"num\">${ff(a)}</td><td class=\"num\">${ff(c)}</td><td class=\"num\">${d>=0?'+':''}${ff(d)}</td>");
+replace("function calcRow(lbl,arr,cls='',fmt=f0)", "function calcRow(lbl,arr,cls='',fmt=fd)");
+replace("f1(payD)} Mkz/dia", "f0(payD)} Kz/dia");
+// Grelhas de introdução continuam em milhões de Kz (é assim que se escrevem os valores).
+replace("<thead><tr><th>Mkz</th>${D.years.map(y=>", "<thead><tr><th>Milhões de Kz</th>${D.years.map(y=>");
+replace("<table class=\"sticky1\"><thead><tr><th>Mkz</th>${MES.map(", "<table class=\"sticky1\"><thead><tr><th>Milhões de Kz</th>${MES.map(");
+replace("<p class=\"sub\">Mkz · alterações recalculam todo o modelo", "<p class=\"sub\">Valores em milhões de Kz · alterações recalculam todo o modelo");
+replace("<th>Mês</th><th>Valor</th><th>Vida útil (anos)</th><th>Amortização anual</th>", "<th>Mês</th><th>Valor (milhões Kz)</th><th>Vida útil (anos)</th><th>Amortização anual (Kz)</th>");
+replace("<th>Mês</th><th>Valor</th><th>Prazo (meses)</th><th>Prestação de capital</th>", "<th>Mês</th><th>Valor (milhões Kz)</th><th>Prazo (meses)</th><th>Prestação de capital (Kz)</th>");
+replace("<th>Activo</th><th>Valor contabilístico</th><th>Renda líquida anual</th><th>Taxa capitalização (%)</th><th>Justo valor</th><th>Diferença</th>", "<th>Activo</th><th>Valor contabilístico (milhões Kz)</th><th>Renda líquida anual (milhões Kz)</th><th>Taxa capitalização (%)</th><th>Justo valor (Kz)</th><th>Diferença (Kz)</th>");
+replace("<th>Activo</th><th>Valor contabilístico</th><th>Custo reposição novo</th>", "<th>Activo</th><th>Valor contabilístico (milhões Kz)</th><th>Custo reposição novo (milhões Kz)</th>");
+replace("Valores expressos em milhões de Kwanzas (Mkz).", "Valores expressos em Kwanzas.");
+// Restantes unidades de saída: Mkz → Kz.
+source = source.replaceAll('Mkz', 'Kz'); shell = shell.replaceAll('Mkz', 'Kz');
+// Gráficos: margem para eixos com valores por inteiro.
+replace('const W=cw(id),H=h,ml=54,mr=8,mt=10,mb=26', 'const W=cw(id),H=h,ml=fmt===f0?128:54,mr=8,mt=10,mb=26');
+replace('const W=cw(id),H=h,ml=54,mr=78,mt=12,mb=26', 'const W=cw(id),H=h,ml=fmt===f0?128:54,mr=78,mt=12,mb=26');
+replace('const W=cw(id),H=h,ml=50,mr=8,mt=16,mb=40', 'const W=cw(id),H=h,ml=128,mr=8,mt=16,mb=40');
+// Folha de cálculo: montantes em Kz com 2 casas.
+replace("(c.k==='pp'?v*100:v)", "(c.k==='pp'?v*100:(!c.k||c.k==='n'||c.k==='chk')?v*1e6:v)");
+replace(`const Z={n:'#,##0;(#,##0);"-"'`, `const Z={i:'0',n:'#,##0.00;(#,##0.00);"-"'`);
+replace(`chk:'#,##0;(#,##0);0'}`, `chk:'#,##0.00;(#,##0.00);0'}`);
 
 const adapter = await readFile(new URL('valuation/adapter.js', web), 'utf8');
 const imports = [

@@ -38,7 +38,8 @@ export function financialPdfLayout(bundle: FinancialReportDocument, key: Financi
   const pageW = report.landscape ? 841.89 : 595.28, pageH = report.landscape ? 595.28 : 841.89, margin = 42, usable = pageW - margin * 2, bottom = 49;
   let page: PdfPage, y = 0;
   const allMoney = report.blocks.flatMap((b) => b.kind === 'table' ? b.rows.flatMap((r) => r.cells.filter((c) => c.format === 'money').map((c) => Number(c.value ?? 0))) : b.kind === 'metrics' ? b.items.filter((v) => v.cell.format === 'money').map((v) => Number(v.cell.value ?? 0)) : []);
-  const scale = Math.max(0, ...allMoney.map(Math.abs)) >= 1e6 ? 1e6 : 1;
+  // Montantes sempre por inteiro (milhares separados e duas casas decimais), nunca em milhões.
+  const scale = 1; void allMoney;
   const currency = report.currency ?? bundle.source.currency;
   const unit = scale === 1 ? `Montantes em ${currency}` : `Montantes em milhões de ${currency}`;
   const decimal = new Intl.NumberFormat('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
