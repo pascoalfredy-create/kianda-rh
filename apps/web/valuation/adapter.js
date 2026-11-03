@@ -217,6 +217,28 @@ function valoraDownload(name,data){
 
 /* ---------- Menu no telemóvel e fim de sessão ---------- */
 $('#valoraMenu').onclick=()=>{const a=document.querySelector('aside'),open=!a.classList.contains('open');a.classList.toggle('open',open);$('#valoraMenu').setAttribute('aria-expanded',String(open))};
+/* Menu recolhível por grupos, como no RH e no Integra: só o grupo do ecrã actual fica aberto; um toque abre outro e fecha o anterior. */
+(function groupNav(){
+  const nav=$('#nav');if(!nav||nav.querySelector('.nav-group'))return;
+  const groups=[];let cur=null;
+  for(const el of [...nav.children]){
+    if(el.classList.contains('navlbl')){cur={label:el.textContent.trim(),items:[]};groups.push(cur);el.remove();}
+    else if(cur&&el.tagName==='A')cur.items.push(el);
+  }
+  groups.forEach((g,i)=>{
+    const sec=document.createElement('section');sec.className='nav-group';
+    const btn=document.createElement('button');btn.type='button';btn.className='nav-group-toggle';btn.setAttribute('aria-controls','valora-nav-'+i);btn.setAttribute('aria-expanded','false');
+    btn.innerHTML=`<span>${ESC(g.label)}</span><span class="nav-chevron" aria-hidden="true">⌄</span>`;
+    const box=document.createElement('div');box.id='valora-nav-'+i;box.hidden=true;g.items.forEach(a=>box.appendChild(a));
+    btn.onclick=()=>{const open=btn.getAttribute('aria-expanded')!=='true';nav.querySelectorAll('.nav-group').forEach(x=>setGroup(x,false));setGroup(sec,open);};
+    sec.append(btn,box);nav.appendChild(sec);
+  });
+  function setGroup(sec,open){sec.querySelector('.nav-group-toggle').setAttribute('aria-expanded',String(open));sec.querySelector('div').hidden=!open;}
+  function sync(){const on=nav.querySelector('a.on')||nav.querySelector('a');nav.querySelectorAll('.nav-group').forEach(x=>setGroup(x,x.contains(on)));}
+  sync();
+  nav.addEventListener('click',e=>{if(e.target.closest('a'))setTimeout(sync,0)});
+  window.addEventListener('hashchange',()=>setTimeout(sync,0));
+})();
 $('#nav').addEventListener('click',e=>{if(e.target.closest('a')){document.querySelector('aside').classList.remove('open');$('#valoraMenu').setAttribute('aria-expanded','false')}});
 for(const id of ['#valoraLogout','#valoraLogoutTop'])$(id).onclick=async()=>{const b=$(id);b.disabled=true;b.textContent='A terminar…';try{await flushSave()}catch(e){}try{await endSession()}catch(e){b.disabled=false;b.textContent='Terminar sessão';banner('err',ESC(e.message))}};
 reloadPrivatePageOnRestore();

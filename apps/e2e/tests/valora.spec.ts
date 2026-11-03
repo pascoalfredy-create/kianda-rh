@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { apiAs, closePool, registerCompany, signIn, sql, watchErrors } from './support.js';
+import { apiAs, closePool, registerCompany, signIn, sql, watchErrors, valoraGo } from './support.js';
 
 /** Kianda Valora: o protótipo aprovado a funcionar dentro da plataforma, com os dados no servidor. */
 test.afterAll(closePool);
@@ -26,7 +26,12 @@ test('Valora: cria uma análise, edita o orçamento e os dados ficam no servidor
   await page.screenshot({ path: '/tmp/e2e/valora-01-visao.png', fullPage: false });
 
   // Orçamento: alterar as vendas anuais recalcula e grava no servidor (com revisão).
-  await page.locator('#nav a[data-v="orcamento"]').click();
+  // Menu recolhível: só o grupo do ecrã actual está aberto.
+  await expect(page.locator('#nav .nav-group-toggle[aria-expanded="true"]')).toHaveCount(1);
+  await expect(page.locator('#nav a[data-v="orcamento"]')).toBeHidden();
+  await valoraGo(page, 'orcamento');
+  await expect(page.locator('#nav .nav-group-toggle[aria-expanded="true"]')).toHaveText(/Planeamento/);
+  await expect(page.locator('#nav a[data-v="visao"]')).toBeHidden();
   const vendas = page.locator('input[data-orc="vendas"]');
   await expect(vendas).toBeVisible();
   const before = await apiAs(owner.token, 'GET', '/v1/valuation/analyses');
@@ -40,18 +45,17 @@ test('Valora: cria uma análise, edita o orçamento e os dados ficam no servidor
   await page.screenshot({ path: '/tmp/e2e/valora-02-orcamento.png', fullPage: false });
 
   await page.reload();
-  await page.locator('#nav a[data-v="orcamento"]').click();
+  await valoraGo(page, 'orcamento');
   await expect(page.locator('input[data-orc="vendas"]')).toHaveValue('12345');
 
   // Avaliação e relatórios abrem sem erros; no período experimental não exporta.
   for (const view of ['demonstracoes', 'racios', 'dcf', 'sintese']) {
-    const link = page.locator(`#nav a[data-v="${view}"]`);
-    if (await link.count()) { await link.click(); await expect(page.locator(`#v-${view}`)).toHaveClass(/on/); }
+    if (await page.locator(`#nav a[data-v="${view}"]`).count()) { await valoraGo(page, view); await expect(page.locator(`#v-${view}`)).toHaveClass(/on/); }
   }
   await page.screenshot({ path: '/tmp/e2e/valora-03-avaliacao.png', fullPage: false });
   const relatorios = page.locator('#nav a[data-v="relatorios"]');
   if (await relatorios.count()) {
-    await relatorios.click();
+    await valoraGo(page, 'relatorios');
     const pdf = page.locator('[data-exp="pdf"]').first();
     if (await pdf.count()) { await pdf.click(); await expect(page.locator('#rep-msg')).toContainText('Pré-visualização'); }
   }
@@ -59,7 +63,7 @@ test('Valora: cria uma análise, edita o orçamento e os dados ficam no servidor
   await page.setViewportSize({ width: 1366, height: 640 });
   await page.locator('aside .side-foot').scrollIntoViewIfNeeded();
   await expect(page.locator('aside .side-foot').getByRole('link', { name: 'Módulos e licenças' })).toBeInViewport();
-  await expect(page.getByRole('button', { name: 'Terminar sessão' }).first()).toBeVisible();
+  await expect(page.locator('aside .side-foot').getByRole('button', { name: 'Terminar sessão' })).toBeInViewport();
   await page.screenshot({ path: '/tmp/e2e/valora-04-sair.png', fullPage: false });
   await page.locator('header').getByRole('link', { name: 'Módulos e licenças' }).click();
   await expect(page).toHaveURL(/\/modulos$/);
@@ -79,7 +83,7 @@ test('Valora: com licença paga exporta o relatório em PDF descarregado no nave
   await page.locator('#vStart').selectOption('example');
   await page.locator('#vCreate').click();
   await expect(page.locator('#hdrEnt')).toHaveText('Entidade Paga, Lda.');
-  await page.locator('#nav a[data-v="relatorios"]').click();
+  await valoraGo(page, 'relatorios');
   const download = page.waitForEvent('download', { timeout: 30_000 });
   await page.locator('[data-exp="pdf"]').first().click();
   const file = await download;

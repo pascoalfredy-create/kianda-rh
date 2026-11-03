@@ -56,3 +56,15 @@ header{flex-wrap:wrap;row-gap:8px}
 /* Menu lateral com scroll próprio: o rodapé (módulos, terminar sessão) nunca fica fora do ecrã. */
 aside{overflow-y:auto;overscroll-behavior:contain}
 a.btn.valora-modules{display:inline-flex;align-items:center;text-decoration:none}
+/* Grupos recolhíveis do menu (mesmo comportamento do RH e do Integra). */
+.nav-group-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 10px;margin-top:3px;border:0;border-radius:7px;background:transparent;color:var(--side-ink-2);font:inherit;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;cursor:pointer}
+.nav-group-toggle:hover{background:var(--surface-2);color:var(--ink)}
+.nav-group-toggle:focus-visible{outline:2px solid var(--ink-3);outline-offset:-2px}
+.nav-chevron{font-size:17px;line-height:1;transform:rotate(-90deg);transition:transform .15s}
+.nav-group-toggle[aria-expanded="true"] .nav-chevron{transform:none}
+.nav-group>[hidden]{display:none}
+@media(max-width:760px){.nav-group-toggle,nav a{min-height:44px}}
+.nav-group-toggle span:first-child{text-align:left}
+/* No computador «Terminar sessão» está no rodapé do menu (sempre visível); no telemóvel fica no cabeçalho. */
+#valoraLogoutTop{display:none}
+@media(max-width:760px){#valoraLogoutTop{display:inline-flex}}
