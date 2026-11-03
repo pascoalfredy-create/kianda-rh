@@ -218,7 +218,7 @@ function valoraDownload(name,data){
 /* ---------- Menu no telemóvel e fim de sessão ---------- */
 $('#valoraMenu').onclick=()=>{const a=document.querySelector('aside'),open=!a.classList.contains('open');a.classList.toggle('open',open);$('#valoraMenu').setAttribute('aria-expanded',String(open))};
 $('#nav').addEventListener('click',e=>{if(e.target.closest('a')){document.querySelector('aside').classList.remove('open');$('#valoraMenu').setAttribute('aria-expanded','false')}});
-$('#valoraLogout').onclick=async()=>{const b=$('#valoraLogout');b.disabled=true;b.textContent='A terminar…';try{await flushSave()}catch(e){}try{await endSession()}catch(e){b.disabled=false;b.textContent='Terminar sessão';banner('err',ESC(e.message))}};
+for(const id of ['#valoraLogout','#valoraLogoutTop'])$(id).onclick=async()=>{const b=$(id);b.disabled=true;b.textContent='A terminar…';try{await flushSave()}catch(e){}try{await endSession()}catch(e){b.disabled=false;b.textContent='Terminar sessão';banner('err',ESC(e.message))}};
 reloadPrivatePageOnRestore();
 
 function valoraStart(){

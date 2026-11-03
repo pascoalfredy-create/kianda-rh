@@ -69,5 +69,11 @@ test('Telemóvel: página pública com três módulos sem transbordar e Valora c
   // O fundo da barra lateral do computador não fica pintado por trás do conteúdo no telefone.
   expect(await page.evaluate<string>("getComputedStyle(document.querySelector('.app')).backgroundImage")).toBe('none');
   await page.screenshot({ path: '/tmp/e2e/valora-06-telemovel.png', fullPage: false });
+  // Sair do Valora no telemóvel: Módulos e Terminar sessão no cabeçalho, sem alargar a página.
+  await page.evaluate('window.scrollTo(0, 0)');
+  await expect(page.locator('header').getByRole('link', { name: 'Módulos e licenças' })).toBeVisible();
+  await expect(page.locator('#valoraLogoutTop')).toBeVisible();
+  expect(await page.evaluate<number>('document.documentElement.scrollWidth - window.innerWidth')).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: '/tmp/e2e/valora-07-telemovel-sair.png', fullPage: false });
   expect(errors).toEqual([]);
 });

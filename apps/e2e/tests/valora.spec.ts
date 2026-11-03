@@ -55,6 +55,15 @@ test('Valora: cria uma análise, edita o orçamento e os dados ficam no servidor
     const pdf = page.locator('[data-exp="pdf"]').first();
     if (await pdf.count()) { await pdf.click(); await expect(page.locator('#rep-msg')).toContainText('Pré-visualização'); }
   }
+  // Sair para os outros módulos a partir do cabeçalho; o rodapé do menu fica sempre ao alcance (menu com scroll próprio).
+  await page.setViewportSize({ width: 1366, height: 640 });
+  await page.locator('aside .side-foot').scrollIntoViewIfNeeded();
+  await expect(page.locator('aside .side-foot').getByRole('link', { name: 'Módulos e licenças' })).toBeInViewport();
+  await expect(page.getByRole('button', { name: 'Terminar sessão' }).first()).toBeVisible();
+  await page.screenshot({ path: '/tmp/e2e/valora-04-sair.png', fullPage: false });
+  await page.locator('header').getByRole('link', { name: 'Módulos e licenças' }).click();
+  await expect(page).toHaveURL(/\/modulos$/);
+  await expect(page.locator('#hr')).toContainText('Kianda RH');
   expect(errors).toEqual([]);
 });
 
