@@ -15,7 +15,7 @@ export function navigation(me: Me, counts: { absences: number; expenses: number;
   };
   if (me.modules.hr.canAccess && staff.includes(role)) {
     add('Geral', [item('/', 'Início', 'home'), item('/colaboradores', 'Colaboradores', 'users'), item('/organograma', 'Organograma', 'brief'), has('hr_admin') && item('/pedidos', 'Pedidos do portal', 'doc')]);
-    add('Tempo', [item('/assiduidade', 'Assiduidade & Ponto', 'clock'), item('/ausencias', 'Férias & Ausências', 'cal', counts.absences)]);
+    add('Tempo', [item('/assiduidade', 'Assiduidade & Ponto', 'clock'), item('/turnos', 'Planeamento de turnos', 'cal'), item('/ausencias', 'Férias & Ausências', 'cal', counts.absences)]);
     add('Remunerações', [
       has('payroll', 'finance', 'hr_admin') && item('/processamento', 'Processamento salarial', 'money'),
       has('payroll', 'finance', 'hr_admin') && item('/obrigacoes', 'AGT & INSS', 'receipt'),
@@ -41,7 +41,7 @@ export function navigation(me: Me, counts: { absences: number; expenses: number;
   } else if (me.modules.hr.canAccess) {
     add('O meu espaço', [
       item('/', 'Painel pessoal', 'home'), item('/recibos', 'Os meus recibos', 'money'), item('/ausencias', 'As minhas férias', 'cal'),
-      item('/despesas', 'As minhas despesas', 'receipt'), item('/documentos', 'Documentos', 'doc'), item('/assiduidade', 'Assiduidade & Ponto', 'clock'),
+      item('/despesas', 'As minhas despesas', 'receipt'), item('/documentos', 'Documentos', 'doc'), item('/assiduidade', 'Assiduidade & Ponto', 'clock'), !!me.user.employeeId && item('/turnos', 'Os meus turnos', 'cal'),
       !!me.user.employeeId && item('/adiantamentos', 'Adiantamentos', 'money'),
       !!me.user.employeeId && item(`/colaboradores/${me.user.employeeId}`, 'A minha ficha', 'users'),
       !!me.user.employeeId && item('/acolhimento', 'As minhas tarefas', 'check', counts.tasks),

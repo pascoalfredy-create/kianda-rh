@@ -51,6 +51,8 @@ export const companies = pgTable('companies', {
   autoIssueDeclarations: boolean('auto_issue_declarations').notNull().default(false),
   /** Ponto com localização: off | record | alert | block (ver core/geofence.ts). */
   punchLocationMode: text('punch_location_mode').notNull().default('off'),
+  /** Planeamento de turnos: intervalo mínimo entre o fim de um turno e o início do seguinte (minutos). */
+  shiftMinRestMinutes: integer('shift_min_rest_minutes').notNull().default(600),
   /** Pagar alimentação e transporte nos dias de férias (por acordo; a regra legal é não pagar — LGT, art. 213.º, n.º 2). */
   allowancesOnVacation: boolean('allowances_on_vacation').notNull().default(false),
   /** Sector de actividade (registo) — pré-configurações por sector. */
@@ -404,6 +406,50 @@ export const checklistTasks = pgTable('checklist_tasks', {
   note: text('note'),
   createdAt: createdAt(),
 }, (t) => [index('checklist_tasks_checklist').on(t.checklistId, t.position), index('checklist_tasks_pending').on(t.companyId, t.dueDate).where(sql`done_at is null`)]);
+
+/** Planeamento de turnos: tipos de turno da empresa (código curto, horas, intervalo, cobertura mínima). */
+export const shiftTypes = pgTable('shift_types', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  code: text('code').notNull(),
+  name: text('name').notNull(),
+  startTime: text('start_time').notNull(),
+  endTime: text('end_time').notNull(),
+  breakMinutes: integer('break_minutes').notNull().default(0),
+  color: text('color').notNull().default('blue'),
+  /** Pessoas mínimas por dia neste turno (null = sem mínimo). */
+  minStaff: integer('min_staff'),
+  active: boolean('active').notNull().default(true),
+  createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex('shift_types_company_code').on(t.companyId, t.code)]);
+
+/**
+ * Escala: um registo por colaborador e dia. O planeamento (kind/shift_type_id) é o rascunho; os campos pub_* são o que
+ * foi publicado (o colaborador só vê esses e o ponto usa-os). kind «none» = retirar um dia já publicado.
+ */
+export const shiftAssignments = pgTable('shift_assignments', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  employeeId: text('employee_id').notNull().references(() => employees.id),
+  workDate: date('work_date').notNull(),
+  /** shift | off | none */
+  kind: text('kind').notNull(),
+  shiftTypeId: text('shift_type_id').references(() => shiftTypes.id),
+  /** Publicado: shift | off (null = nunca publicado). Horas guardadas para não mudarem com o tipo de turno. */
+  pubKind: text('pub_kind'),
+  pubShiftTypeId: text('pub_shift_type_id').references(() => shiftTypes.id),
+  pubCode: text('pub_code'),
+  pubName: text('pub_name'),
+  pubStartTime: text('pub_start_time'),
+  pubEndTime: text('pub_end_time'),
+  pubBreakMinutes: integer('pub_break_minutes'),
+  pubColor: text('pub_color'),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+  publishedBy: text('published_by'),
+  updatedBy: text('updated_by').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex('shift_assignments_employee_date').on(t.employeeId, t.workDate), index('shift_assignments_company_date').on(t.companyId, t.workDate)]);
 
 /**
  * Aceitação electrónica: documento publicado para leitura e aceitação (regulamento, políticas, avisos).

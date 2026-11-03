@@ -60,7 +60,7 @@ Uma conta, um repositório e uma base de dados para três módulos com licenças
 
 **Feito em 01–02/11/2026 (configuração de produção):** `KIANDA_BACKUP_PASSPHRASE` definido (impressão digital `33ec1a54`; cópia diária às 02:17 de Luanda com teste de restauro); `KIANDA_JWT_SECRET` rodado; `KIANDA_SEED_DEMO=false` (a empresa demo «Kwanza Logística» e as 3 contas continuam na base — eliminar pela consola se deixarem de servir); 2FA da conta de administrador reposta a pedido do dono (execução `41401754941`; não repetir como teste); **regra de limite de tentativas activa na Cloudflare** desde 02/11 (token `kianda-rh-deploy` com «Zone WAF Rules · Edit»; zona `yelaperformance.com`, 5 pedidos/10 s por IP nas rotas de autenticação → Block 10 s; reaplicada de forma idempotente em cada publicação por `scripts/cf-ratelimit.mjs`).
 
-**Próximas entregas acordadas (fechar lacunas face ao Factorial, uma de cada vez):** ~~acolhimento e saída~~ (feito), ~~aceitação electrónica de documentos~~ (feito), ~~notificações no telemóvel~~ (feito), planeamento de turnos. Reconhecimento facial e terminais biométricos ficam para depois (equipamento e risco jurídico).
+**Próximas entregas acordadas (fechar lacunas face ao Factorial, uma de cada vez):** ~~acolhimento e saída~~ (feito), ~~aceitação electrónica de documentos~~ (feito), ~~notificações no telemóvel~~ (feito), ~~planeamento de turnos~~ (feito em 03/11/2026, migração 0046). Plano face ao Factorial concluído; próximos candidatos: trocas de turno pedidas pelo colaborador e faltas/subsídios por dia a seguir a escala publicada (hoje seguem o regime de horário). Reconhecimento facial e terminais biométricos ficam para depois (equipamento e risco jurídico).
 
 **Feito pelo dono (confirmado em 02/11/2026):** IBAN do Banco Atlântico configurado na consola (Plataforma Kianda); os pedidos de pagamento mostram as instruções de transferência. Ficheiros anexados em R2 (`kianda-files`) activo.
 
@@ -70,7 +70,7 @@ Uma conta, um repositório e uma base de dados para três módulos com licenças
 1. Confirmar na consola o email e o telefone de suporte (aparecem na licença e no Valora).
 2. Opcional: `KIANDA_MODELING_OWNER_USER_ID` (sem ela ninguém exporta Excel da Modelagem).
 3. Contratar ProxyPay, Resend e Vendus e definir os secrets (DEPLOY.md); Vendus quando a facturação electrónica geral entrar em vigor. Enquadramento de IVA das licenças. Domínio próprio (`KIANDA_HOSTNAME`).
-4. Validação jurídica de `AO_2026.toValidate` (em especial cessação, Lei n.º 12/23) e textos dos contratos; termos ainda versão de trabalho.
+4. Validação jurídica do intervalo mínimo entre turnos por omissão (10 h, ajustável por empresa em Turnos → Tipos de turno) e de `AO_2026.toValidate` (em especial cessação, Lei n.º 12/23) e textos dos contratos; termos ainda versão de trabalho.
 5. **AO-2027:** registar o pacote quando o OGE 2027 for publicado — sem ele, o processamento de Janeiro de 2027 é recusado.
 
 **Cópias de segurança — o que está e não está provado:** cada cópia é cifrada, decifrada e lida com `pg_restore --list` antes de ser guardada (30 dias, artefacto privado). Não é um ensaio de restauro completo numa segunda base. O backup PostgreSQL **não inclui** os ficheiros do R2 (`kianda-files`).

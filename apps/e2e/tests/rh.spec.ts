@@ -3,7 +3,7 @@ import { apiAs, closePool, registerCompany, signIn, watchErrors, type Company } 
 
 /** Ecrãs do RH para o proprietário de uma empresa nova (com dois colaboradores). */
 const ROUTES = [
-  '/', '/colaboradores', '/organograma', '/assiduidade', '/ausencias', '/processamento', '/obrigacoes', '/relatorios', '/analitica', '/bi',
+  '/', '/colaboradores', '/organograma', '/assiduidade', '/turnos', '/turnos?v=tipos', '/turnos?vista=mes', '/ausencias', '/processamento', '/obrigacoes', '/relatorios', '/analitica', '/bi',
   '/orcamento', '/financas', '/tesouraria', '/conciliacao', '/despesas', '/adiantamentos', '/documentos', '/recrutamento', '/desempenho',
   '/cessacoes', '/simulador', '/acessos', '/pedidos', '/sector', '/conformidade', '/definicoes', '/licenca', '/modulos', '/conta',
 ];

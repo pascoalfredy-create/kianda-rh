@@ -180,6 +180,8 @@ export interface Sheet {
   entries: EntryRow[];
   approval: Approval | null;
   schedule?: { id: string; name: string; description: string; anchor: string | null } | null;
+  /** Escala de turnos publicada: data → «M 06:00–14:00» ou «Folga». */
+  shifts?: Record<string, string>;
   canEdit: boolean;
   canApprove: boolean;
   canReopen: boolean;
