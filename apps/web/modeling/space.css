@@ -89,3 +89,12 @@ body{font-family:'Schibsted Grotesk Variable',system-ui,-apple-system,'Segoe UI'
 .card,.kpi,.panel{border-color:var(--line)}
 .btn.pri,.btn.primary{background:var(--brand);border-color:var(--brand)}
 .side .nav a{text-decoration:none}.top{background:var(--bg)}
+/* Fundos transparentes (Nov. 2026): cartões, menu, barra de topo e cabeçalhos de tabela deixam ver o papel da página.
+   Janelas, menus suspensos e campos mantêm-se opacos. */
+.card,.kpi,.panel{background:transparent!important;box-shadow:none}
+th{background:transparent!important}
+.side{background:transparent;border-right:1px solid var(--line)}
+.side .crumb{background:transparent}
+.side .nav a:hover,.nav-group-toggle:hover{background:color-mix(in srgb,#1c1f1b 5%,transparent)}
+.side .nav a.on{background:color-mix(in srgb,#0e4a3c 9%,transparent);box-shadow:none}
+.top{background:color-mix(in srgb,var(--bg) 80%,transparent);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}

@@ -64,7 +64,7 @@ describe('downloads financeiros', () => {
     const original=financialTemplate('mineracao').assumptions,rate=currency==='USD'?1:0.9;
     const converted=convertFinancialCurrency(original as unknown as Record<string,unknown>,'USD',currency,rate);
     const current=buildFinancialReportBundle(converted,{...bundle.source,currency,state:'draft'});
-    const heading=[...`Montantes em milhões de ${currency}`].map(c=>FINANCIAL_FONTS.sans.map[String(c.codePointAt(0))]!.toString(16).padStart(4,'0')).join('');
+    const heading=[...`Montantes em ${currency}`].map(c=>FINANCIAL_FONTS.sans.map[String(c.codePointAt(0))]!.toString(16).padStart(4,'0')).join('');
     for(const key of FINANCIAL_REPORT_KEYS){
       expect(decode(renderFinancialPdf(current,key)),key).toContain(heading);
       const workbook=unzip(renderFinancialXlsx(current,key));expect(workbook.get('xl/worksheets/sheet1.xml'),key).toContain(currency);

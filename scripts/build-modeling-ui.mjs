@@ -110,6 +110,16 @@ replace("t>=1&&k.debt[t-1]>0&&brk(t).length", "t>=1&&(k.ds[t]>0||k.debt[t]>0)&&b
 replace("t>=1&&k.debt[t-1]>0?brk(t):null", "t>=1&&(k.ds[t]>0||k.debt[t]>0)?brk(t):null");
 // Fontes normativas ficam fora do ecrã e dos relatórios: o conteúdo continua conforme, sem citações.
 replace(' · classificação PGC Angola · ${unitLbl()}', ' · ${unitLbl()}');
+// Valores sempre por inteiro, com milhares e duas casas decimais (nunca «5,5 M»): sem unidades de apresentação.
+replace("const nf=(v,d=0)=>(v??0).toLocaleString('pt-PT',{minimumFractionDigits:d,maximumFractionDigits:d});", "const nf=(v,d=0)=>(v??0).toLocaleString('pt-PT',{minimumFractionDigits:d,maximumFractionDigits:d,useGrouping:'always'});");
+replace("const s=Math.abs(x).toLocaleString('pt-PT',{minimumFractionDigits:d,maximumFractionDigits:d});", "const s=Math.abs(x).toLocaleString('pt-PT',{minimumFractionDigits:d,maximumFractionDigits:d,useGrouping:'always'});");
+replace("const UNITS={U:[1,''],K:[1e3,'mil'],M:[1e6,'M']};", "const UNITS={U:[1,''],K:[1,''],M:[1,'']};");
+replace("const d=dd??(S.unit==='M'?(m.moeda==='Kz'?1:2):0);", "const d=dd??2;");
+replace("const unitSel=()=>`<select class=\"sel\" id=\"unitSel\" title=\"Unidade de apresentação\">${Object.entries({U:'Unidades',K:'Milhares',M:'Milhões'}).map(([k,v])=>`<option value=\"${k}\" ${S.unit===k?'selected':''}>${v}</option>`).join('')}</select>`;", "const unitSel=()=>'';");
+replace("const fmtA=v=>v==null||!isFinite(v)?'—':(Math.abs(v)<0.5e6&&Math.abs(v)>0?nf(v/1e6,2):nf(v/1e6,1)).replace(/^-/,'(')+(v<0?')':'');", "const fmtA=v=>v==null||!isFinite(v)?'—':nf(v,2).replace(/^-/,'(')+(v<0?')':'');");
+replace('${a.moeda} · milhões', '${a.moeda}');
+replace('P={l:62', 'P={l:118');
+replace("m.moeda==='Kz'?0:2", '2');
 replace('Balancete PGC Angola → ', 'Balancete → ');
 replace('Fluxos de caixa (PGC Angola)', 'Fluxos de caixa');
 replace('Classificação por natureza — PGC Angola (Decreto n.º 82/2001)', 'Classificação por natureza');

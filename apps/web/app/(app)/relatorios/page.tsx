@@ -21,13 +21,8 @@ interface Report {
 const GROUPS: Group[] = ['base', 'allowances', 'annual', 'variable', 'exit'];
 const COLOR: Record<Group | 'inss', string> = { base: '#0f5c4d', allowances: '#4f9a89', annual: '#a9d3c8', variable: '#b7791f', exit: '#c2412d', inss: '#8a92a1' };
 const pctFmt = (v: number) => `${String(v.toFixed(1)).replace('.', ',')}%`;
-const short = (minor: number) => {
-  const kz = minor / 100;
-  if (kz >= 1e9) return `${(kz / 1e9).toFixed(1).replace('.', ',')} mM`;
-  if (kz >= 1e6) return `${String(Math.round((kz / 1e6) * 10) / 10).replace('.', ',')} M`;
-  if (kz >= 1e3) return `${Math.round(kz / 1e3)} mil`;
-  return String(Math.round(kz));
-};
+/** Eixos dos gráficos: o valor por inteiro, com milhares e duas casas decimais (nunca «1,2 M»). */
+const short = (minor: number) => formatKz(minor).replace(/\s?Kz$/, '');
 const mon = (p: string) => monthLabel(p).slice(0, 3) + ' ' + p.slice(2, 4);
 
 /** Escala com passos redondos (1, 2 ou 5 × 10^n) e 3 a 5 divisões. */
@@ -41,7 +36,7 @@ function scale(v: number) {
 
 /** Colunas empilhadas do custo mensal por rubrica (+ INSS da empresa); efectivo por baixo de cada mês. */
 function CostChart({ months, labels }: { months: Month[]; labels: Record<Group, string> }) {
-  const W = 760, H = 260, L = 64, B = 44, T = 12;
+  const W = 820, H = 260, L = 112, B = 44, T = 12;
   const { max, step } = scale(Math.max(...months.map((m) => m.costMinor)));
   const slot = (W - L - 8) / months.length;
   const bw = Math.min(42, slot * 0.62);

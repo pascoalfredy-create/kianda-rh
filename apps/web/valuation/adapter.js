@@ -70,7 +70,7 @@ new MutationObserver(()=>{if(!valoraCanWrite())lockInputs()}).observe(document.q
 /* ---------- Abrir uma análise ---------- */
 function syncYears(){
   document.querySelectorAll('.valora-ex').forEach(el=>el.textContent=EX);
-  const y=D.years;$('#valoraRevYears').textContent=`Mkz · ${y[0]}–${y[y.length-1]} real, ${EX} previsão, ${EX+1}–${EX+4} projecção DCF`;
+  const y=D.years;$('#valoraRevYears').textContent=`Kz · ${y[0]}–${y[y.length-1]} real, ${EX} previsão, ${EX+1}–${EX+4} projecção DCF`;
   TITLES.orcamento[1]='Orçamento '+EX;
 }
 function loadAnalysis(row){
@@ -179,7 +179,7 @@ dlg.addEventListener('click',e=>{
   if(t.id==='vHr')return dialogAction(async()=>{
     await flushSave();const r=await api(`/analyses/${encodeURIComponent(CUR.id)}/import-personnel`,{method:'POST',body:{revision:CUR.revision}});
     loadAnalysis(r.analysis);const after=r.months.filter(m=>m.month>=D.fecho);
-    openDialog(`Custos com o pessoal de ${r.year} trazidos do processamento salarial: ${r.months.map(m=>`${MES[m.month]} ${f1(m.mkz)} Mkz`).join(' · ')}.${after.length?` ${after.length===1?'Um mês fica':after.length+' meses ficam'} depois do mês de fecho e só entra${after.length===1?'':'m'} no cenário «Real» quando avançar o fecho.`:''}`);
+    openDialog(`Custos com o pessoal de ${r.year} trazidos do processamento salarial: ${r.months.map(m=>`${MES[m.month]} ${f0(m.mkz)} Kz`).join(' · ')}.${after.length?` ${after.length===1?'Um mês fica':after.length+' meses ficam'} depois do mês de fecho e só entra${after.length===1?'':'m'} no cenário «Real» quando avançar o fecho.`:''}`);
   });
   if(t.id==='vJson'){valoraDownload(`${(CUR.name||'analise').replace(/[^\wÀ-ú-]+/g,'_')}.json`,new Blob([JSON.stringify({kianda:'valora',name:CUR.name,data:D},null,1)],{type:'application/json'}));return}
 });
