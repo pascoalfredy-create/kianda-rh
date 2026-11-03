@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import type { Profile, BalanceRow } from '@/lib/types';
 import { RequestDeclaration } from './portal/forms';
 import { PushSettings } from '@/components/push-settings';
+import { dm, weekday, type MineData } from './turnos/types';
 
 interface Portal {
   lastPayslip: { id: string; period: string; netMinor: number } | null; pendingAbsences: number;
@@ -19,7 +20,7 @@ const STATUS: Record<string, [string, string]> = { pending: ['Pendente', 'st pen
 /** Início do colaborador: o essencial do dia-a-dia num só ecrã. */
 export async function PortalHome({ name, employeeId }: { name: string; employeeId: string }) {
   const year = new Date().getFullYear();
-  const [p, balances, profile, tasks, acks] = await Promise.all([api<Portal>('/v1/portal'), api<BalanceRow[]>(`/v1/leave/balances?year=${year}`).catch(() => []), api<Profile>(`/v1/employees/${employeeId}`).catch(() => null), api<{ id: string; state: string }[]>('/v1/checklists/my-tasks').catch(() => []), api<{ id: string; status: string; state: string }[]>('/v1/acknowledgements').catch(() => [])]);
+  const [p, balances, profile, tasks, acks, shifts] = await Promise.all([api<Portal>('/v1/portal'), api<BalanceRow[]>(`/v1/leave/balances?year=${year}`).catch(() => []), api<Profile>(`/v1/employees/${employeeId}`).catch(() => null), api<{ id: string; state: string }[]>('/v1/checklists/my-tasks').catch(() => []), api<{ id: string; status: string; state: string }[]>('/v1/acknowledgements').catch(() => []), api<MineData>('/v1/shifts/mine').catch(() => null)]);
   const firstContract = profile?.contracts.at(-1)?.startDate;
   const tenure = firstContract ? Math.max(0, (Date.now() - Date.parse(firstContract)) / (86400000 * 365.25)) : null;
   const mine = balances.find((b) => b.employee.id === employeeId);
@@ -57,6 +58,11 @@ export async function PortalHome({ name, employeeId }: { name: string; employeeI
           <div className="muted">{p.pendingAbsences ? `${p.pendingAbsences} pedido(s) à espera` : 'pedir férias ou ausência'}</div>
         </Link>
         <div className="card kpi"><div className="l">Antiguidade</div><div className="v">{tenure === null ? '—' : `${tenure.toFixed(1).replace('.', ',')} anos`}</div><div className="muted">{firstContract ? `desde ${firstContract.split('-').reverse().join('/')}` : 'Sem contrato registado'}</div></div>
+        {shifts?.next && <Link href="/turnos" className="card kpi">
+          <div className="l">Próximo turno</div>
+          <div className="v" style={{ fontSize: 18 }}>{shifts.next.date === shifts.today ? 'Hoje' : `${weekday(shifts.next.date)} ${dm(shifts.next.date)}`} · {shifts.next.startTime}–{shifts.next.endTime}</div>
+          <div className="muted">{shifts.next.name} · ver a escala</div>
+        </Link>}
         <div className="card kpi"><div className="l">Chefia directa</div><div className="v" style={{ fontSize: 16 }}>{profile?.manager?.name ?? '—'}</div><div className="muted">{profile?.manager?.jobTitle}</div></div>
       </div>
       <div className="grid">

@@ -323,6 +323,13 @@
       "when": 1793640500000,
       "tag": "0045_push_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1793640600000,
+      "tag": "0046_shift_planning",
+      "breakpoints": true
     }
   ]
 }

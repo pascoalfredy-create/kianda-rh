@@ -40,3 +40,4 @@ export * from './geofence.js';
 export * from './checklists.js';
 export * from './acknowledgements.js';
 export * from './valuation.js';
+export * from './shifts.js';

@@ -12,6 +12,7 @@ import { body, requireCompany, requireRole, type Actor, type AppEnv } from '../p
 import { groupBy } from '../lib/group-by.js';
 import { DomainError } from '../services/payroll.js';
 import { canDecideFor, canSee, visibleEmployeeIds } from '../services/scope.js';
+import { publishedRoster } from './shifts.js';
 
 const periodSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Período inválido (AAAA-MM)');
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Hora inválida (HH:MM)');
@@ -32,17 +33,18 @@ async function loadEmployee(db: Db, actor: Actor, id: string): Promise<Employee>
 async function monthData(db: Db, companyId: string, people: Employee[], period: string) {
   const from = `${period}-01`, to = lastDay(period), ids = people.map(e => e.id);
   const scheduleIds = [...new Set(people.flatMap(e => e.scheduleId ? [e.scheduleId] : []))];
-  const [company, entries, abs, approvals, terms, schedules] = await Promise.all([
+  const [company, entries, abs, approvals, terms, schedules, roster] = await Promise.all([
     db.select({ workdayMinutes: companies.workdayMinutes }).from(companies).where(eq(companies.id, companyId)),
     db.select().from(attendanceEntries).where(and(eq(attendanceEntries.companyId, companyId), inArray(attendanceEntries.employeeId, ids), gte(attendanceEntries.workDate, from), lte(attendanceEntries.workDate, to))).orderBy(asc(attendanceEntries.clockIn)),
     db.select().from(absences).where(and(eq(absences.companyId, companyId), inArray(absences.employeeId, ids), eq(absences.status, 'approved'), lte(absences.startDate, to), gte(absences.endDate, from))),
     db.select({ m: attendanceMonths, by: users.name }).from(attendanceMonths).leftJoin(users, eq(users.id, attendanceMonths.approvedBy)).where(and(eq(attendanceMonths.companyId, companyId), inArray(attendanceMonths.employeeId, ids), eq(attendanceMonths.period, period))),
     db.select({ employeeId: contracts.employeeId, startDate: contracts.startDate, endDate: contracts.endDate, terminatedAt: contracts.terminatedAt }).from(contracts).where(inArray(contracts.employeeId, ids)).orderBy(desc(contracts.startDate)),
     scheduleIds.length ? db.select().from(workSchedules).where(and(eq(workSchedules.companyId, companyId), inArray(workSchedules.id, scheduleIds))) : Promise.resolve([]),
+    publishedRoster(db, companyId, ids, from, to),
   ]);
   return { from, to, today: luandaDate(new Date()), dailyMinutes: company[0]?.workdayMinutes ?? 480,
     entries: groupBy(entries, e => e.employeeId), absences: groupBy(abs, a => a.employeeId),
-    approvals: new Map(approvals.map(a => [a.m.employeeId, a])), terms: groupBy(terms, t => t.employeeId), schedules: new Map(schedules.map(s => [s.id, s])),
+    approvals: new Map(approvals.map(a => [a.m.employeeId, a])), terms: groupBy(terms, t => t.employeeId), schedules: new Map(schedules.map(s => [s.id, s])), roster,
     holidays: labourRules('AO', Number(period.slice(0, 4))).holidays,
   };
 }
@@ -55,13 +57,18 @@ function sheetFromData(emp: Employee, period: string, data: Awaited<ReturnType<t
   const first = terms.at(-1), last = terms[0], sched = data.schedules.get(emp.scheduleId ?? '');
   const regime = sched ? { kind: sched.kind as 'weekly' | 'cycle', pattern: sched.pattern, anchorDate: sched.anchorDate } : null;
   const anchor = emp.scheduleAnchor ?? sched?.anchorDate ?? null;
-  const summary = summarizeMonth({ shiftRegime: regime?.kind === 'cycle', schedule: regime ? (d) => scheduledMinutes(regime, d, anchor) : undefined,
+  // A escala de turnos publicada prevalece sobre o regime nos dias planeados; nos restantes vale o regime (ou a semana normal).
+  const roster = data.roster.get(emp.id);
+  const schedule = roster?.size ? (d: string) => roster.get(d)?.minutes ?? (regime ? scheduledMinutes(regime, d, anchor) : undefined) as number
+    : regime ? (d: string) => scheduledMinutes(regime, d, anchor) : undefined;
+  const summary = summarizeMonth({ shiftRegime: regime?.kind === 'cycle', schedule,
     employedFrom: first?.startDate ?? null, employedUntil: emp.status === 'terminated' ? (last?.terminatedAt ?? last?.endDate ?? null) : null,
     period, dailyMinutes: data.dailyMinutes, holidays: data.holidays, absences: absenceByDate, today: data.today,
     punches: entries.map(e => ({ workDate: e.workDate, clockIn: e.clockIn, clockOut: e.clockOut })),
   });
-  const schedule = sched ? { id: sched.id, name: sched.name, description: describeSchedule(regime!), anchor } : null;
-  return { summary, entries, schedule, approval: approval ? { ...approval.m, approvedByName: approval.by } : null };
+  const scheduleInfo = sched ? { id: sched.id, name: sched.name, description: describeSchedule(regime!), anchor } : null;
+  const shifts = Object.fromEntries([...(roster ?? [])].map(([d, r]) => [d, r.label]));
+  return { summary, entries, schedule: scheduleInfo, shifts, approval: approval ? { ...approval.m, approvedByName: approval.by } : null };
 }
 
 /** Folha individual e visão da equipa usam exactamente o mesmo resumo. */

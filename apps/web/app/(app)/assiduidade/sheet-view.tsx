@@ -44,7 +44,7 @@ export function SheetView({ sheet, period }: { sheet: Sheet; period: string }) {
               const entries = byDate.get(d.date) ?? [];
               return (
                 <tr key={d.date} className={d.kind === 'rest' || d.kind === 'inactive' ? 'rest' : d.kind === 'holiday' ? 'holiday' : ''}>
-                  <td style={{ whiteSpace: 'nowrap' }}><b>{d.date.slice(8)}</b> <span className="muted">{WD[new Date(`${d.date}T00:00:00Z`).getUTCDay()]}</span></td>
+                  <td style={{ whiteSpace: 'nowrap' }}><b>{d.date.slice(8)}</b> <span className="muted">{WD[new Date(`${d.date}T00:00:00Z`).getUTCDay()]}</span>{sheet.shifts?.[d.date] && <div className="muted" style={{ fontSize: 12 }} title="Escala de turnos publicada">{sheet.shifts[d.date]}</div>}</td>
                   <td>
                     {entries.map((e) => <EntryChip key={e.id} e={e} editable={sheet.canEdit} />)}
                     {sheet.canEdit && d.date <= today && <AddEntry employeeId={sheet.employee.id} date={d.date} />}

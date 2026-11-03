@@ -22,7 +22,7 @@ export const COMPANY_TABLES_PURGE_ORDER: Scope[] = [
   { table: 'journal_entries' },
   { table: 'payroll_lines', via: { column: 'run_id', parent: 'payroll_runs' } },
   { table: 'payroll_payments' }, { table: 'payroll_runs' }, { table: 'payroll_variables' },
-  { table: 'checklist_tasks' }, { table: 'employee_checklists' }, { table: 'checklist_templates' }, { table: 'ack_requests' }, { table: 'ack_documents' }, { table: 'push_outbox' }, { table: 'push_subscriptions' },
+  { table: 'checklist_tasks' }, { table: 'employee_checklists' }, { table: 'checklist_templates' }, { table: 'ack_requests' }, { table: 'ack_documents' }, { table: 'push_outbox' }, { table: 'push_subscriptions' }, { table: 'shift_assignments' }, { table: 'shift_types' },
   { table: 'terminations' }, { table: 'issued_documents' }, { table: 'document_templates' }, { table: 'document_requests' }, { table: 'profile_change_requests' },
   { table: 'employee_allowances' }, { table: 'allowance_types' }, { table: 'work_schedules' },
   { table: 'compensation_changes' },

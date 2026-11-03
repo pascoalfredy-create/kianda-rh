@@ -8,7 +8,7 @@ const VERSION = 'v1';
 const STATIC = `kianda-static-${VERSION}`;
 const PAGES = 'kianda-pages-v1';
 const PRECACHE = ['/offline', '/icons/icon-192.png', '/icons/icon-512.png', '/manifest.webmanifest'];
-const PAGE_PATHS = [/^\/$/, /^\/recibos(\/.*)?$/, /^\/ausencias$/, /^\/assiduidade$/, /^\/adiantamentos$/, /^\/documentos$/, /^\/portal\/.*$/];
+const PAGE_PATHS = [/^\/$/, /^\/recibos(\/.*)?$/, /^\/ausencias$/, /^\/assiduidade$/, /^\/turnos$/, /^\/adiantamentos$/, /^\/documentos$/, /^\/portal\/.*$/];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(STATIC).then((c) => c.addAll(PRECACHE)).then(() => self.skipWaiting()));
