@@ -1,6 +1,6 @@
-import { kz } from '@kianda/core';
+import { kz, lastDayOfMonth, parseFxRate } from '@kianda/core';
 import {
-  and, asc, auditLogs, companies, departments, desc, employees, eq, getDb, journalEntries, payrollLines, payrollRuns, payrollVariables, users, type Db,
+  and, asc, auditLogs, companies, departments, desc, employees, eq, getDb, journalEntries, payrollLines, payrollRuns, payrollVariables, sql, users, type Db,
 } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -29,6 +29,23 @@ async function variablesFor(db: Db, companyId: string, period: string) {
   return rows.map(({ v, name, number }) => ({ ...v, employee: { id: v.employeeId, name, number } }));
 }
 
+/** Câmbio USD→Kz do dia (salários indexados): taxa com até 6 casas decimais, data e fonte. */
+const fxSchema = z.object({
+  rate: z.union([z.string(), z.number()]).transform((v, ctx) => { const r = parseFxRate(v); if (!r) ctx.addIssue({ code: 'custom', message: 'Câmbio inválido (ex.: 912,50)' }); return r ?? 0; }),
+  date: z.iso.date('Data do câmbio inválida'),
+  source: z.string().trim().max(80).optional().nullable(),
+});
+
+/** Colaboradores activos com salário indexado ao dólar no fim do período (para pedir o câmbio antes de preparar). */
+async function indexedCount(db: Db, companyId: string, period: string) {
+  const end = lastDayOfMonth(period);
+  const rows = await db.execute(sql`select count(*)::int as n from (
+    select distinct on (cc.employee_id) cc.salary_currency from compensation_changes cc join employees e on e.id = cc.employee_id
+    where cc.company_id = ${companyId} and cc.effective_date <= ${end} and e.status in ('active', 'terminated')
+    order by cc.employee_id, cc.effective_date desc) x where x.salary_currency = 'USD'`);
+  return Number((rows.rows[0] as { n: number } | undefined)?.n ?? 0);
+}
+
 export function payrollRoutes() {
   const app = new Hono<AppEnv>();
   for (const p of ['/v1/payroll-runs', '/v1/payroll-runs/*', '/v1/journal', '/v1/payroll-variables', '/v1/payroll-variables/*', '/v1/payslips', '/v1/payslips/*', '/v1/company/*']) app.use(p, requireCompany);
@@ -43,8 +60,8 @@ export function payrollRoutes() {
 
   app.post('/v1/payroll-runs', requireRole('payroll'), async (c) => {
     const { companyId, actorId } = c.get('actor');
-    const { period } = z.object({ period: z.string() }).parse(await body(c));
-    return c.json(await draftPayroll(getDb(), companyId, period, actorId), 201);
+    const { period, fx } = z.object({ period: z.string(), fx: fxSchema.optional() }).parse(await body(c));
+    return c.json(await draftPayroll(getDb(), companyId, period, actorId, fx), 201);
   });
 
   /** Folha e variáveis com uma só validação de sessão e licença. */
@@ -56,7 +73,9 @@ export function payrollRoutes() {
       db.select().from(payrollRuns).where(and(eq(payrollRuns.companyId, companyId), eq(payrollRuns.period, period))).limit(1),
       variablesFor(db, companyId, period),
     ]);
-    return c.json({ run: runs[0] ? await runDetail(db, runs[0]) : null, variables });
+    // Salários indexados: só interessa enquanto o mês pode ser (re)calculado; omitido quando não há nenhum.
+    const indexed = runs[0]?.status === 'closed' ? 0 : await indexedCount(db, companyId, period);
+    return c.json({ run: runs[0] ? await runDetail(db, runs[0]) : null, variables, ...(indexed ? { indexedEmployees: indexed } : {}) });
   });
 
   app.get('/v1/payroll-runs/:id', requireRole(...READERS), async (c) => {

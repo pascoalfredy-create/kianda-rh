@@ -1,5 +1,6 @@
 import { Attachments } from '@/components/attachments';
-import { formatKz } from '@kianda/core';
+import { formatKz, formatUsd } from '@kianda/core';
+import type { Compensation } from '@/lib/types';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { api, ApiError, currentUser } from '@/lib/api';
@@ -13,6 +14,9 @@ import { AbsenceActions, AbsenceFiles } from '../../ausencias/actions';
 import { CompensationForm, ContractForm, DeleteDocument, DocumentForm, PersonalForm } from './forms';
 import { AllowanceActions, AssignAllowance, RegimeForm } from './regime';
 import { MinimizeEmployee } from '@/components/privacy-actions';
+
+/** Salário base em Kz, ou em USD (indexado) com a referência em Kz. */
+const baseText = (c: Pick<Compensation, 'baseMinor' | 'salaryCurrency' | 'baseForeignMinor'>) => c.salaryCurrency === 'USD' && c.baseForeignMinor ? formatUsd(c.baseForeignMinor) : formatKz(c.baseMinor);
 
 export const dynamic = 'force-dynamic';
 
@@ -66,7 +70,7 @@ export default async function Ficha({ params, searchParams, panelBase }: { panel
         </div>
         <div className="facts">
           <div><small>Antiguidade</small><b>{firstStart ? tenure(firstStart) : '—'}</b></div>
-          <div><small>Salário base</small><b>{p.compensation.current ? formatKz(p.compensation.current.baseMinor) : '—'}</b></div>
+          <div><small>Salário base</small><b>{p.compensation.current ? baseText(p.compensation.current) : '—'}</b></div>
           <div><small>Contrato</small><b>{p.contract ? CONTRACT_LABEL[p.contract.type] : '—'}</b></div>
         </div>
       </div>
@@ -142,7 +146,7 @@ function ContractTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
           <h2>Remuneração em vigor</h2>
           {cur ? (
             <dl className="dl">
-              <div><dt>Salário base</dt><dd>{formatKz(cur.baseMinor)}</dd></div>
+              <div><dt>Salário base</dt><dd>{baseText(cur)}{cur.salaryCurrency === 'USD' && <div className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>Indexado ao dólar · pago em Kz ao câmbio do dia do processamento · referência {formatKz(cur.baseMinor)}</div>}</dd></div>
               <div><dt>Subsídio de alimentação</dt><dd>{formatKz(cur.mealMinor)}</dd></div>
               <div><dt>Subsídio de transporte</dt><dd>{formatKz(cur.transportMinor)}</dd></div>
               <div><dt>Desde</dt><dd>{fmtDate(cur.effectiveDate)}</dd></div>
@@ -176,7 +180,7 @@ function ContractTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
                 <tr key={h.id}>
                   <td>{fmtDate(h.effectiveDate)} {future && <span className="tag future">agendada</span>}{cur?.id === h.id && <span className="tag">em vigor</span>}</td>
                   <td>{h.reason}</td>
-                  <td className="num">{formatKz(h.baseMinor)}</td>
+                  <td className="num">{baseText(h)}</td>
                   <td className="num">{h.changeBps == null ? '—' : <span className="delta" style={{ color: h.changeBps < 0 ? 'var(--red)' : undefined }}>{h.changeBps >= 0 ? '+' : ''}{(h.changeBps / 100).toLocaleString('pt-PT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</span>}</td>
                   <td className="num">{formatKz(h.mealMinor)}</td>
                   <td className="num">{formatKz(h.transportMinor)}</td>

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { IbanField } from '@/components/iban-field';
+import { SalaryBaseFields } from '@/components/salary-base-fields';
 import { formObject, send } from '@/lib/client';
 import { PROVINCES, type Department, type PersonRef } from '@/lib/types';
 
@@ -14,11 +15,11 @@ export function NewEmployeeForm({ departments, people, nextNumber, prefill }: { 
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const f = formObject(e.currentTarget, ['base', 'meal', 'transport']);
-    const { type: ctype, startDate, endDate, termJustification, base, meal, transport, ...personal } = f;
+    const f = formObject(e.currentTarget, ['base', 'baseUsd', 'meal', 'transport']);
+    const { type: ctype, startDate, endDate, termJustification, base, meal, transport, currency, baseUsd, ...personal } = f;
     setBusy(true);
     setError('');
-    const r = await send<{ id: string }>('/v1/employees', 'POST', { ...personal, candidateId: prefill?.candidateId, contract: { type: ctype, startDate, endDate, termJustification, base, meal, transport } });
+    const r = await send<{ id: string }>('/v1/employees', 'POST', { ...personal, candidateId: prefill?.candidateId, contract: { type: ctype, startDate, endDate, termJustification, base, meal, transport, currency, baseUsd: currency === 'USD' ? baseUsd : undefined } });
     setBusy(false);
     if (!r.ok) return setError(r.message ?? 'Erro');
     window.location.assign(`/colaboradores/${r.data!.id}`);
@@ -62,7 +63,7 @@ export function NewEmployeeForm({ departments, people, nextNumber, prefill }: { 
           </label>
           <label>Data de início<input type="date" name="startDate" required /></label>
           <label>Data de fim{type === 'fixed_term' ? ' *' : ''}<input type="date" name="endDate" required={type === 'fixed_term'} /></label>
-          <label>Salário base (Kz)<input name="base" inputMode="decimal" required defaultValue={prefill?.expectedSalary ? String(prefill.expectedSalary / 100).replace(".", ",") : undefined} /></label>
+          <SalaryBaseFields baseKz={prefill?.expectedSalary ? String(prefill.expectedSalary / 100).replace('.', ',') : ''} />
           <label>Subsídio de alimentação (Kz)<input name="meal" inputMode="decimal" placeholder="0" /></label>
           <label>Subsídio de transporte (Kz)<input name="transport" inputMode="decimal" placeholder="0" /></label>
           {type === 'fixed_term' && <label className="wide">Fundamento do termo *<textarea name="termJustification" required /></label>}

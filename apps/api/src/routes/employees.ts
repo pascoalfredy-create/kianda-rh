@@ -24,19 +24,29 @@ const alertPack = (date: string) => packOrLatest('AO', Number(date.slice(0, 4)))
 const optionalText = z.string().trim().max(200).optional().nullable().transform((v) => (v === '' ? null : v));
 const optionalDate = z.union([z.iso.date(), z.literal(''), z.null()]).optional().transform((v) => (v === '' ? null : v));
 
-const money = z.object({
+const moneyFields = z.object({
+  /** Em USD (indexado): referência em Kz ao câmbio indicado na ficha; o processamento converte ao câmbio do dia. */
   base: z.number().nonnegative(),
   meal: z.number().nonnegative().default(0),
   transport: z.number().nonnegative().default(0),
+  currency: z.enum(['AOA', 'USD']).default('AOA'),
+  baseUsd: z.number().positive('Indique o salário base em USD').max(10_000_000).optional().nullable(),
 });
+const usdCheck = (m: { currency: string; baseUsd?: number | null }) => m.currency === 'AOA' || !!m.baseUsd;
+const usdMessage = { message: 'Indique o salário base em USD', path: ['baseUsd'] };
 
-const contractBody = money.extend({
+/** Colunas da moeda do salário (USD = base indexada ao dólar). */
+const salaryCols = (m: { currency: 'AOA' | 'USD'; baseUsd?: number | null }) =>
+  m.currency === 'USD' ? { salaryCurrency: 'USD', baseForeignMinor: Math.round(m.baseUsd! * 100) } : { salaryCurrency: 'AOA', baseForeignMinor: null };
+
+const contractBody = moneyFields.extend({
   type: z.enum(['indefinite', 'fixed_term', 'internship']),
   startDate: z.iso.date(),
   endDate: optionalDate,
   termJustification: optionalText,
 }).refine((c) => c.type !== 'fixed_term' || (c.endDate && c.termJustification), { message: 'Contrato a termo exige data de fim e fundamento do termo', path: ['endDate'] })
-  .refine((c) => !c.endDate || c.endDate > c.startDate, { message: 'A data de fim tem de ser posterior ao início', path: ['endDate'] });
+  .refine((c) => !c.endDate || c.endDate > c.startDate, { message: 'A data de fim tem de ser posterior ao início', path: ['endDate'] })
+  .refine(usdCheck, usdMessage);
 
 const personal = {
   name: z.string().trim().min(2),
@@ -64,7 +74,7 @@ const personal = {
 const createBody = z.object({ number: z.string().trim().min(1), ...personal, contract: contractBody, candidateId: z.string().optional() });
 const patchBody = z.object({ ...personal, status: z.enum(['active', 'suspended']), vacationCarryOver: z.coerce.number().int().min(0, 'Dias transitados não podem ser negativos').max(44, 'Máximo de 44 dias transitados') }).partial();
 
-const compensationBody = money.extend({ effectiveDate: z.iso.date(), reason: z.string().trim().min(3, 'Indique o motivo da alteração') });
+const compensationBody = moneyFields.extend({ effectiveDate: z.iso.date(), reason: z.string().trim().min(3, 'Indique o motivo da alteração') }).refine(usdCheck, usdMessage);
 
 const documentBody = z.object({
   type: z.enum(['bi', 'passport', 'residence_card', 'work_visa', 'driving_licence', 'professional_card', 'other']),
@@ -200,11 +210,11 @@ export function employeeRoutes() {
       const [e] = await tx.insert(employees).values({ companyId: req.companyId, ...data, biNumber: data.biNumber ?? null }).returning();
       const [c] = await tx.insert(contracts).values({
         employeeId: e!.id, type: contract.type, startDate: contract.startDate, endDate: contract.endDate, termJustification: contract.termJustification,
-        baseMinor: kz(contract.base), mealMinor: kz(contract.meal), transportMinor: kz(contract.transport),
+        baseMinor: kz(contract.base), mealMinor: kz(contract.meal), transportMinor: kz(contract.transport), ...salaryCols(contract),
       }).returning();
       await tx.insert(compensationChanges).values({
         companyId: req.companyId, employeeId: e!.id, contractId: c!.id, effectiveDate: contract.startDate,
-        baseMinor: c!.baseMinor, mealMinor: c!.mealMinor, transportMinor: c!.transportMinor, reason: 'Admissão', createdBy: req.actorId,
+        baseMinor: c!.baseMinor, mealMinor: c!.mealMinor, transportMinor: c!.transportMinor, ...salaryCols(contract), reason: 'Admissão', createdBy: req.actorId,
       });
       await tx.insert(auditLogs).values({ companyId: req.companyId, actorId: req.actorId, action: 'create', entity: 'employee', entityId: e!.id, after: { employee: e, contract: c } });
       // Acolhimento: a lista de tarefas começa na admissão (se o modelo da empresa o prevê).
@@ -299,12 +309,12 @@ export function employeeRoutes() {
       }
       const [c] = await tx.insert(contracts).values({
         employeeId: id, type: b.type, startDate: b.startDate, endDate: b.endDate, termJustification: b.termJustification,
-        baseMinor: kz(b.base), mealMinor: kz(b.meal), transportMinor: kz(b.transport),
+        baseMinor: kz(b.base), mealMinor: kz(b.meal), transportMinor: kz(b.transport), ...salaryCols(b),
       }).returning();
       await tx.insert(compensationChanges).values({
         companyId: req.companyId, employeeId: id, contractId: c!.id, effectiveDate: b.startDate,
-        baseMinor: c!.baseMinor, mealMinor: c!.mealMinor, transportMinor: c!.transportMinor, reason: 'Novo contrato', createdBy: req.actorId,
-      }).onConflictDoUpdate({ target: [compensationChanges.employeeId, compensationChanges.effectiveDate], set: { baseMinor: c!.baseMinor, mealMinor: c!.mealMinor, transportMinor: c!.transportMinor, reason: 'Novo contrato', contractId: c!.id } });
+        baseMinor: c!.baseMinor, mealMinor: c!.mealMinor, transportMinor: c!.transportMinor, ...salaryCols(b), reason: 'Novo contrato', createdBy: req.actorId,
+      }).onConflictDoUpdate({ target: [compensationChanges.employeeId, compensationChanges.effectiveDate], set: { baseMinor: c!.baseMinor, mealMinor: c!.mealMinor, transportMinor: c!.transportMinor, ...salaryCols(b), reason: 'Novo contrato', contractId: c!.id } });
       await tx.insert(auditLogs).values({ companyId: req.companyId, actorId: req.actorId, action: 'create', entity: 'contract', entityId: c!.id, before: prev ?? null, after: c });
       return c;
     });
@@ -329,7 +339,7 @@ export function employeeRoutes() {
     if (existing) throw new DomainError('duplicado', `Já existe uma alteração com efeito em ${b.effectiveDate}`);
     const [row] = await db.insert(compensationChanges).values({
       companyId: req.companyId, employeeId: id, contractId: c.id, effectiveDate: b.effectiveDate,
-      baseMinor: kz(b.base), mealMinor: kz(b.meal), transportMinor: kz(b.transport), reason: b.reason, createdBy: req.actorId,
+      baseMinor: kz(b.base), mealMinor: kz(b.meal), transportMinor: kz(b.transport), ...salaryCols(b), reason: b.reason, createdBy: req.actorId,
     }).returning();
     await audit(db, req, 'create', 'compensation', row!.id, compensationAt(history, b.effectiveDate), row);
     return ctx.json(row, 201);

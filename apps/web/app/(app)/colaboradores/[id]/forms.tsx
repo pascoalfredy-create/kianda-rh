@@ -1,5 +1,6 @@
 'use client';
 
+import { SalaryBaseFields } from '@/components/salary-base-fields';
 import { AGT_MUNICIPALITIES } from '@kianda/core';
 import { useState } from 'react';
 import { IbanField } from '@/components/iban-field';
@@ -117,14 +118,12 @@ export function CompensationForm({ p }: { p: Profile }) {
       style={{ marginTop: 12 }}
       onSubmit={async (e) => {
         e.preventDefault();
-        if (await run(`/v1/employees/${p.id}/compensation`, 'POST', formObject(e.currentTarget, ['base', 'meal', 'transport']))) setOpen(false);
+        if (await run(`/v1/employees/${p.id}/compensation`, 'POST', formObject(e.currentTarget, ['base', 'baseUsd', 'meal', 'transport']))) setOpen(false);
       }}
     >
       <label>Data de efeito<input type="date" name="effectiveDate" required defaultValue={firstOfNextMonth()} /></label>
-      <label>Salário base (Kz)
-        <input name="base" inputMode="decimal" required value={base} onChange={(e) => setBase(e.target.value)} />
-        {delta !== null && Number.isFinite(delta) && <span className="delta">{delta >= 0 ? '+' : ''}{delta.toLocaleString('pt-PT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% face ao actual</span>}
-      </label>
+      <SalaryBaseFields currency={cur?.salaryCurrency} baseKz={kzValue(cur?.baseMinor)} baseUsd={kzValue(cur?.baseForeignMinor)} onBaseKz={setBase} />
+      {delta !== null && Number.isFinite(delta) && <span className="delta" style={{ alignSelf: 'end', paddingBottom: 8 }}>{delta >= 0 ? '+' : ''}{delta.toLocaleString('pt-PT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% face ao actual</span>}
       <label>Subsídio de alimentação (Kz)<input name="meal" inputMode="decimal" defaultValue={kzValue(cur?.mealMinor)} /></label>
       <label>Subsídio de transporte (Kz)<input name="transport" inputMode="decimal" defaultValue={kzValue(cur?.transportMinor)} /></label>
       <label className="wide">Motivo<input name="reason" required placeholder="Actualização anual, promoção, revisão de função…" /></label>
@@ -148,7 +147,7 @@ export function ContractForm({ p }: { p: Profile }) {
       style={{ marginTop: 12 }}
       onSubmit={async (e) => {
         e.preventDefault();
-        if (await run(`/v1/employees/${p.id}/contracts`, 'POST', formObject(e.currentTarget, ['base', 'meal', 'transport']))) setOpen(false);
+        if (await run(`/v1/employees/${p.id}/contracts`, 'POST', formObject(e.currentTarget, ['base', 'baseUsd', 'meal', 'transport']))) setOpen(false);
       }}
     >
       <label>Tipo
@@ -160,7 +159,7 @@ export function ContractForm({ p }: { p: Profile }) {
       </label>
       <label>Início<input type="date" name="startDate" required defaultValue={p.contract?.endDate && p.contract.endDate >= today() ? nextDay(p.contract.endDate) : firstOfNextMonth()} /></label>
       <label>Fim{type === 'fixed_term' ? ' *' : ''}<input type="date" name="endDate" required={type === 'fixed_term'} /></label>
-      <label>Salário base (Kz)<input name="base" inputMode="decimal" required defaultValue={kzValue(cur?.baseMinor)} /></label>
+      <SalaryBaseFields currency={cur?.salaryCurrency} baseKz={kzValue(cur?.baseMinor)} baseUsd={kzValue(cur?.baseForeignMinor)} />
       <label>Subsídio de alimentação (Kz)<input name="meal" inputMode="decimal" defaultValue={kzValue(cur?.mealMinor)} /></label>
       <label>Subsídio de transporte (Kz)<input name="transport" inputMode="decimal" defaultValue={kzValue(cur?.transportMinor)} /></label>
       {type === 'fixed_term' && <label className="wide">Fundamento do termo *<textarea name="termJustification" required placeholder="Motivo justificativo da contratação a termo, nos termos da LGT" /></label>}
