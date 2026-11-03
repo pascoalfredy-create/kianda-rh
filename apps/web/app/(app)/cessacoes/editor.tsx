@@ -1,6 +1,6 @@
 'use client';
 
-import { formatKz, SETTLEMENT_LABEL, TERMINATION_REASONS, type SettlementItem, type TerminationReason } from '@kianda/core';
+import { formatKz, SETTLEMENT_LABEL, TERMINATION_REASONS, type SettlementItem, type TerminationReason, formatAmount, parseAmount } from '@kianda/core';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { send, useMutation } from '@/lib/client';
@@ -17,8 +17,8 @@ interface Preview {
 export interface EditorInit { id?: string; employeeId: string; reason: TerminationReason; effectiveDate: string; noticeDate: string | null; agreedCompensationMinor: number | null; items: SettlementItem[] | null; note: string | null }
 
 const pt = (d: string) => d.split('-').reverse().join('/');
-const toKz = (s: string) => { const t = s.trim().replace(/\s/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.'); return t === '' ? null : Math.round(Number(t) * 100); };
-const dec = (m: number) => (m / 100).toFixed(2).replace('.', ',');
+const toKz = (s: string) => parseAmount(s);
+const dec = (m: number) => formatAmount(m);
 
 export function TerminationEditor({ init, employees }: { init: EditorInit; employees?: { id: string; name: string; number: string }[] }) {
   const router = useRouter();

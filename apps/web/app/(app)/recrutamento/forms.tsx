@@ -1,10 +1,10 @@
 'use client';
 
-import { SOURCES, STAGE_LABEL, type Stage } from '@kianda/core';
+import { SOURCES, STAGE_LABEL, type Stage, parseAmount } from '@kianda/core';
 import { useState } from 'react';
 import { useMutation } from '@/lib/client';
 
-const num = (v: FormDataEntryValue | null) => { const t = String(v ?? '').trim().replace(/\s/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.'); return t === '' ? null : Number(t); };
+const num = (v: FormDataEntryValue | null) => { const t = String(v ?? '').trim(); const m = parseAmount(t); return t === '' ? null : m === null ? NaN : m / 100; };
 
 export function OpeningForm({ departments, people, init }: { departments: { id: string; name: string }[]; people: { id: string; name: string }[]; init?: Record<string, unknown> & { id: string } }) {
   const { busy, error, run } = useMutation();

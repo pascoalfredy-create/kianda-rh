@@ -1,4 +1,5 @@
 'use client';
+import { parseAmount } from '@kianda/core';
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -51,7 +52,7 @@ export function formObject(form: HTMLFormElement, numeric: string[] = []): Recor
   const out: Record<string, unknown> = {};
   for (const [k, v] of new FormData(form).entries()) {
     const s = String(v).trim();
-    out[k] = numeric.includes(k) ? (s === '' ? 0 : Number(s.replace(/\s/g, '').replace(',', '.'))) : s === '' ? null : s;
+    out[k] = numeric.includes(k) ? (s === '' ? 0 : (() => { const m = parseAmount(s); return m === null ? NaN : m / 100; })()) : s === '' ? null : s;
   }
   return out;
 }

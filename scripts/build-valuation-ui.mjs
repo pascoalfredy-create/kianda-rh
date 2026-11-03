@@ -133,8 +133,16 @@ replace("(c.k==='pp'?v*100:v)", "(c.k==='pp'?v*100:(!c.k||c.k==='n'||c.k==='chk'
 replace(`const Z={n:'#,##0;(#,##0);"-"'`, `const Z={i:'0',n:'#,##0.00;(#,##0.00);"-"'`);
 replace(`chk:'#,##0;(#,##0);0'}`, `chk:'#,##0.00;(#,##0.00);0'}`);
 
+/* ---------- Percentagens e números à portuguesa: milhares sempre separados e nunca «-0,0» ---------- */
+replace("const nf1=new Intl.NumberFormat('pt-PT',{minimumFractionDigits:1,maximumFractionDigits:1});", "const nf1=new Intl.NumberFormat('pt-PT',{minimumFractionDigits:1,maximumFractionDigits:1,useGrouping:'always'});");
+replace("const nf2=new Intl.NumberFormat('pt-PT',{minimumFractionDigits:2,maximumFractionDigits:2});", "const nf2=new Intl.NumberFormat('pt-PT',{minimumFractionDigits:2,maximumFractionDigits:2,useGrouping:'always'});");
+replace("const f1=v=>v==null||!isFinite(v)?'—':nf1.format(v);", "const f1=v=>v==null||!isFinite(v)?'—':nf1.format(+v.toFixed(1)||0);");
+replace("const f2=v=>v==null||!isFinite(v)?'—':nf2.format(v);", "const f2=v=>v==null||!isFinite(v)?'—':nf2.format(+v.toFixed(2)||0);");
+replace("const pct=v=>v==null||!isFinite(v)?'—':nf1.format(v*100)+'%';", "const pct=v=>v==null||!isFinite(v)?'—':nf1.format(+(v*100).toFixed(1)||0)+'%';");
+
 const adapter = await readFile(new URL('valuation/adapter.js', web), 'utf8');
 const imports = [
+  `import {setupNumberFields} from '${fileURLToPath(new URL('lib/number-fields.ts', web))}';`,
   `import {readXlsxRows,utils as xlsxUtils,write as xlsxWrite} from '${fileURLToPath(new URL('valuation/xlsx.ts', web))}';`,
   `import {blankValuationData,valuationDataIssue} from '${fileURLToPath(new URL('packages/core/src/valuation.ts', root))}';`,
   `import {endSession,reloadPrivatePageOnRestore} from '${fileURLToPath(new URL('lib/session-client.ts', web))}';`,

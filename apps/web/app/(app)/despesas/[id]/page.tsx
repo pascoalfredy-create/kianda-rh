@@ -1,4 +1,4 @@
-import { EXPENSE_CATEGORIES, formatKz, luandaDate, PER_DIEM_ZONE } from '@kianda/core';
+import { EXPENSE_CATEGORIES, formatKz, luandaDate, PER_DIEM_ZONE, formatAmount } from '@kianda/core';
 import Link from 'next/link';
 import { Attachments } from '@/components/attachments';
 import { api, currentUser } from '@/lib/api';
@@ -18,7 +18,7 @@ interface Detail {
   can: { edit: boolean; submit: boolean; decide: boolean; pay: boolean; reversePayment: boolean; cancel: boolean };
 }
 const pt = (d: string) => d.split('-').reverse().join('/');
-const dec = (m: number | null) => (m === null ? '' : String(m / 100).replace('.', ','));
+const dec = (m: number | null) => (m === null ? '' : formatAmount(m));
 
 export default async function Nota({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

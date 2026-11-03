@@ -82,7 +82,7 @@ VIEWS.pressupostos.after=()=>{
 };
 async function applyCurrency(){
   const context=currencyDialog;if(!context||context.modelId!==M()?.id)throw Error('Seleccione novamente a moeda do projecto.');
-  const from=$('#fxFrom').value,rate=Number($('#fxRate').value),rateDate=$('#fxDate').value,source=$('#fxSource').value.trim();
+  const from=$('#fxFrom').value,rate=parseNumberInput($('#fxRate').value),rateDate=$('#fxDate').value,source=$('#fxSource').value.trim();
   if(!Number.isFinite(rate)||rate<=0||!rateDate||!source)throw Error('Indique taxa positiva, data e fonte para converter os valores.');
   const q=context.quote,reference=!!q&&q.from===from&&q.rate===rate&&q.rateDate===rateDate&&q.source===source;
   await store.convertCurrency(context.modelId,{from,to:context.to,rate,rateDate,source,reference});
@@ -350,7 +350,7 @@ function renderImportDialog(){
 }
 function importChoice(){
   const context=importDialog,source=document.querySelector('[name=hrSource]:checked')?.value;if(!context||!source)return null;
-  const model=store.project(context.modelId),rate=model.moeda==='Kz'?1:Number($('#hrRate')?.value);
+  const model=store.project(context.modelId),rate=model.moeda==='Kz'?1:parseNumberInput($('#hrRate')?.value??'');
   if(source==='budget'){const b=context.sources.budgets.find(x=>x.id===$('#hrBudget').value);return b?{source,budget:b,rate}:null;}
   const [from,to]=($('#hrWindow').value||'').split('|');return from&&to?{source,from,to,rate}:null;
 }
@@ -426,6 +426,7 @@ $('#mSel').onchange=async()=>{
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();setMenuOpen(false);}});
 window.addEventListener('beforeunload',e=>{if(!leaving&&store?.dirty){e.preventDefault();e.returnValue='';}});
 async function boot(){
+  try{setupNumberFields(document);}catch{}
   try {
     session=JSON.parse($('#integra-session').textContent);
     store=new ModelingStore(session.canWrite,modelingRequest,showError);

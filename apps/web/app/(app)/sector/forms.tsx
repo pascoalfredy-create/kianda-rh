@@ -1,6 +1,6 @@
 'use client';
 
-import { describeSchedule, formatKz, scheduleStats, type ScheduleKind } from '@kianda/core';
+import { describeSchedule, formatKz, scheduleStats, type ScheduleKind, formatPercent } from '@kianda/core';
 import { useState } from 'react';
 import { useMutation } from '@/lib/client';
 
@@ -205,7 +205,7 @@ export function AllowanceList({ rows, canEdit }: { rows: TypeView[]; canEdit: bo
                   <span className="tag">{t.code}</span>,
                   <><b>{t.label}</b>{!t.active && <span className="tag" style={{ marginLeft: 6 }}>inactivo</span>}{t.note && <div className="muted" style={{ fontSize: 12 }}>{t.note}</div>}</>,
                   CALC[t.calc],
-                  <span className="num" style={{ display: 'block' }}>{t.calc === 'base_pct' ? `${String((t.bps ?? 0) / 100).replace('.', ',')}%` : KZ(t.valueMinor ?? 0)}</span>,
+                  <span className="num" style={{ display: 'block' }}>{t.calc === 'base_pct' ? formatPercent((t.bps ?? 0) / 100, 2) : KZ(t.valueMinor ?? 0)}</span>,
                   `${t.inInss ? 'Sim' : 'Não'} / ${t.inIrt ? 'Sim' : 'Não'}`,
                   <span className="num" style={{ display: 'block' }}>{t.employees}</span>,
                 ]}

@@ -100,3 +100,13 @@ th{background:transparent!important}
 .top{background:color-mix(in srgb,var(--bg) 80%,transparent);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
 /* Com este tipo de letra os algarismos tabulares afastam a vírgula decimal: montantes sempre proporcionais. */
 .kpi .v,.num,td,.ft td{font-variant-numeric:proportional-nums}
+/* Uniformização (Nov. 2026): o mesmo tipo de letra e as mesmas tabelas em RH, Integra e Valora, incluindo os documentos. */
+body,svg text,.docv .page,.docv h1,.docv .subt,.docv h3,.docv .lh,.docv .foot,.docv table.t,.docv .box,.docv .sig,.docv .legend,.docv .tg,.inp,select,button{font-family:'Schibsted Grotesk Variable',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif!important}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;font-weight:600;color:var(--ink3);background:transparent!important;border-bottom:1px solid #e6e6e4;padding:9px 12px}
+td{font-size:13.5px;border-bottom:1px solid #f1f1ef;padding:8px 12px;font-variant-numeric:proportional-nums}
+.ft td{font-size:13.5px}
+.ft tr.tot td,tr.tot td{font-weight:700;background:#fafafa}
+.docv table.t th{background:transparent!important;color:var(--ink3)}
+input.kianda-number{text-align:right;font-variant-numeric:proportional-nums}
+/* Algarismos proporcionais em todo o lado: com este tipo de letra os tabulares afastam a vírgula («64 ,9%»). */
+*{font-variant-numeric:proportional-nums!important}
