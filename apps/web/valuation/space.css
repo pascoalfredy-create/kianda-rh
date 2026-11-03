@@ -68,3 +68,16 @@ a.btn.valora-modules{display:inline-flex;align-items:center;text-decoration:none
 /* No computador «Terminar sessão» está no rodapé do menu (sempre visível); no telemóvel fica no cabeçalho. */
 #valoraLogoutTop{display:none}
 @media(max-width:760px){#valoraLogoutTop{display:inline-flex}}
+/* Identidade Kianda (Nov. 2026): papel quente, verde da marca, acento terra, Schibsted Grotesk e o símbolo sona. */
+@font-face{font-family:'Schibsted Grotesk Variable';font-style:normal;font-display:swap;font-weight:400 900;src:url(/fonts/schibsted-grotesk-latin-ext-wght-normal.woff2) format('woff2-variations');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:'Schibsted Grotesk Variable';font-style:normal;font-display:swap;font-weight:400 900;src:url(/fonts/schibsted-grotesk-latin-wght-normal.woff2) format('woff2-variations');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+:root{--bg:#f4f1ea;--surface:#fffdf9;--surface-2:#f3eee5;--line:#e4ded3;--line-2:#d6cdbd;--ink:#1c1f1b;--ink-2:#4b4f48;--ink-3:#6b675e;--accent:#0e4a3c;--accent-soft:#e3ece6}
+:root:not([data-theme="dark"]){--side:#ede7dc;--side-ink:#3d4039;--side-ink-2:#5f5a50;--side-act:#f9f7f2}
+body{font-family:'Schibsted Grotesk Variable',system-ui,sans-serif}
+.brand-mark{font-size:0!important;color:transparent!important;background:url(/icons/kianda-mark.svg) center/100% no-repeat!important;border-radius:10px}
+.brand b{font-weight:800}
+:root:not([data-theme="dark"]) nav a:hover{background:#e4dccd}
+:root:not([data-theme="dark"]) nav a.on{background:#f9f7f2;color:#1c1f1b;font-weight:700;box-shadow:0 1px 0 #d8cfbf}
+.nav-group-toggle{color:#6b6457}
+.nav-group-toggle:hover{background:#e4dccd;color:#1c1f1b}
+aside{border-right:0}

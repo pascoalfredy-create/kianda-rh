@@ -48,7 +48,7 @@ test('colaborador: fora do local a marcação é recusada; dentro é aceite, com
   const page = await context.newPage();
   const errors = watchErrors(page);
   await page.goto('/assiduidade');
-  await expect(page.getByText('A sua localização é registada só no momento da marcação')).toBeVisible();
+  await expect(page.getByText('A sua localização só é guardada no momento em que marca')).toBeVisible();
   await page.locator('.card.clock').getByRole('button', { name: 'Registar entrada' }).click();
   await expect(page.locator('.card.clock').getByRole('alert')).toContainText(/km do local «Sede — Marginal»/);
   await expect(page.locator('.card.clock').getByText('Fora de serviço')).toBeVisible();
@@ -102,7 +102,7 @@ test('alertar: a marcação fora do local é aceite e aparece nas excepções da
   const errors = watchErrors(page);
   await page.goto('/assiduidade?s=equipa');
   const row = page.locator('tr', { hasText: 'Domingos Kiala' }).first();
-  await expect(row.locator('.flag', { hasText: '📍' })).toContainText('1');
+  await expect(row.locator('.flag', { hasText: 'fora do local' })).toContainText('1');
   const issues = page.locator('.card', { hasText: 'Excepções de localização' });
   await expect(issues).toContainText('Domingos Kiala');
   await expect(issues).toContainText(/Fora do local: a .* de «Sede — Marginal» \(GPS ±10 m\)/);

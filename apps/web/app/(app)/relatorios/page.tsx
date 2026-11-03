@@ -95,7 +95,7 @@ export default async function Relatorios({ searchParams }: { searchParams: Promi
     return (
       <>
         <h1>Relatórios</h1>
-        <p className="sub">Indicadores de gestão de pessoas e custo com pessoal</p>
+        <p className="sub">Quanto custa a equipa, quem entra e quem sai, e quanto se falta.</p>
         <PeopleSnapshot data={overview} />
         <div className="card empty">Os relatórios usam os processamentos fechados — ainda não há nenhum. <Link href="/processamento" style={{ color: 'var(--brand)' }}>Ir para o processamento →</Link></div>
       </>
@@ -111,7 +111,7 @@ export default async function Relatorios({ searchParams }: { searchParams: Promi
       <div className="page-head">
         <div>
           <h1>Relatórios</h1>
-          <p className="sub">{monthLabel(r.from)} a {monthLabel(r.to)} · processamentos fechados · custo com pessoal = ilíquido + INSS da empresa</p>
+          <p className="sub">{monthLabel(r.from)} a {monthLabel(r.to)} · meses fechados · custo = salário bruto mais o INSS da empresa</p>
         </div>
         <form className="actions" style={{ alignItems: 'center' }}>
           <select name="de" defaultValue={r.from} aria-label="De">{r.available.map((p) => <option key={p} value={p}>{monthLabel(p)}</option>)}</select>

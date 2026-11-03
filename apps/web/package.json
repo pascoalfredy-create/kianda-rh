@@ -16,6 +16,7 @@
     "valuation:generate": "node ../../scripts/build-valuation-ui.mjs"
   },
   "dependencies": {
+    "@fontsource-variable/schibsted-grotesk": "5.3.0",
     "@kianda/core": "workspace:*",
     "@opennextjs/cloudflare": "1.20.13",
     "docx": "9.15.1",

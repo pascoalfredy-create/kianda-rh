@@ -37,7 +37,7 @@ export default async function Organograma() {
   return (
     <>
       <h1>Organograma</h1>
-      <p className="sub">Construído a partir da chefia directa de cada ficha. Para alterar, edite a chefia na ficha do colaborador.</p>
+      <p className="sub">Quem responde a quem. Para mudar, altere a chefia na ficha da pessoa.</p>
       {error && <div className="alert">{error}</div>}
       {withTeams.length > 0 && <div className="card org" style={{ marginBottom: 16 }}><Branch nodes={withTeams} /></div>}
       {loose.length > 0 && (

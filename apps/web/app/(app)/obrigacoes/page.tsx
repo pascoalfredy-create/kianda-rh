@@ -30,8 +30,8 @@ export default async function Obrigacoes() {
 
   return (
     <>
-      <h1>Obrigações e pagamentos</h1>
-      <p className="sub">Salários, Segurança Social e IRT de cada processamento fechado · prazos legais · mapas e ficheiro de transferência</p>
+      <h1>IRT, INSS e pagamentos</h1>
+      <p className="sub">O que há a pagar depois de fechar o mês: salários, INSS e IRT, com os mapas e o ficheiro do banco.</p>
       <div className="grid">
         <div className="card kpi"><div className="l">Em atraso</div><div className="v" style={{ color: overdue.length ? 'var(--red)' : undefined }}>{overdue.length}</div><div className="muted" style={{ fontSize: 12 }}>{formatKz(overdue.reduce((s, o) => s + o.amountMinor, 0))}</div></div>
         <div className="card kpi"><div className="l">A vencer (7 dias)</div><div className="v" style={{ color: soon.length ? 'var(--amber)' : undefined }}>{soon.length}</div><div className="muted" style={{ fontSize: 12 }}>{formatKz(soon.reduce((s, o) => s + o.amountMinor, 0))}</div></div>

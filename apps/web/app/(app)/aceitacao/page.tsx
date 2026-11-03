@@ -20,7 +20,7 @@ export default async function Aceitacao() {
       <div className="page-head">
         <div>
           <h1>{hr ? 'Aceitação de documentos' : 'Para ler e aceitar'}</h1>
-          <p className="sub">{hr ? 'Regulamento interno, políticas e avisos lidos e aceites no portal, com prova de data, hora e conteúdo' : 'Documentos da empresa que lhe pedem para ler e aceitar'}</p>
+          <p className="sub">{hr ? 'Regulamento, políticas e avisos que a equipa lê e aceita no telemóvel. Fica registado quem aceitou e quando.' : 'Documentos da empresa que lhe pedem para ler e aceitar.'}</p>
         </div>
         {hr && <NewAckDocument />}
       </div>

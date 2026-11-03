@@ -26,7 +26,7 @@ test('Aceitação: publicar o regulamento interno, aceitar no portal e ver a pro
 
   await signIn(context, teresa.token);
   await page.goto('/');
-  await page.getByRole('link', { name: /1 documento da empresa para ler e aceitar/ }).click();
+  await page.getByRole('link', { name: /ler e aceitar um documento/ }).click();
   await page.getByRole('link', { name: 'Ler e aceitar', exact: true }).click();
   await expect(page.getByText('Artigo 2.º — Uso obrigatório do cartão de identificação.')).toBeVisible();
   const accept = page.getByRole('button', { name: 'Aceitar' });

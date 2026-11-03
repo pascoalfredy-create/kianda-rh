@@ -44,7 +44,7 @@ test('Acolhimento: o RH acompanha a lista, ajusta o modelo e o colaborador vê s
 
   await signIn(context, joana.token);
   await page.goto('/');
-  await expect(page.getByRole('link', { name: /tarefas de acolhimento ou saída por fazer/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /tarefas? por fazer/ })).toBeVisible();
   await page.goto('/acolhimento');
   await expect(page.getByRole('heading', { name: 'As minhas tarefas', level: 1 })).toBeVisible();
   const mine = page.locator('.card', { hasText: 'As minhas tarefas' }).getByRole('row');

@@ -81,7 +81,7 @@ export default async function Orcamento({ searchParams }: { searchParams: Promis
       <div className="page-head">
         <div>
           <h1>Orçamento de pessoal {d.year}</h1>
-          <p className="sub">Custo com pessoal previsto (ilíquido + INSS da empresa) por mês e departamento, comparado com os processamentos fechados{b ? <> · <span className={`st ${b.status === 'approved' ? 'approved' : 'pending'}`}>{b.status === 'approved' ? 'Aprovado' : 'Rascunho'}</span></> : null}</p>
+          <p className="sub">Quanto prevê gastar com a equipa, mês a mês, e quanto gastou de facto{b ? <> · <span className={`st ${b.status === 'approved' ? 'approved' : 'pending'}`}>{b.status === 'approved' ? 'Aprovado' : 'Rascunho'}</span></> : null}</p>
         </div>
         <div className="actions" style={{ alignItems: 'center' }}>
           <form><select name="ano" defaultValue={d.year} aria-label="Ano">{years.map((y) => <option key={y} value={y}>{y}</option>)}</select> <button className="btn ghost sm">Ver</button></form>

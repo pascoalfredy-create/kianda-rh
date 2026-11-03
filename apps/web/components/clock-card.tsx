@@ -132,7 +132,7 @@ export function ClockCard({ compact, inline }: { compact?: boolean; inline?: boo
       </div>
       {me.location && me.location.mode !== 'off' && (
         <div className="muted" style={{ marginTop: 8, fontSize: 12.5 }}>
-          📍 A sua localização é registada só no momento da marcação{me.location.workplace ? ` · Local de trabalho: ${me.location.workplace}` : ''}.
+          A sua localização só é guardada no momento em que marca{me.location.workplace ? ` · Local de trabalho: ${me.location.workplace}` : ''}.
           {me.location.kiosk && <>{' '}<button className="link" onClick={() => setKioskOpen(!kioskOpen)}>{kioskOpen ? 'Usar o GPS' : 'Usar o código do quiosque'}</button></>}
         </div>
       )}
@@ -146,7 +146,7 @@ export function ClockCard({ compact, inline }: { compact?: boolean; inline?: boo
       {scanning && <QrScanner onResult={(text) => { setKiosk(text); setScanning(false); }} onClose={() => setScanning(false)} />}
       {error && <div className="err" role="alert" style={{ color: 'var(--red)', marginTop: 8 }}>{error}</div>}
       {info && <div className="muted" role="status" style={{ marginTop: 8 }}>{info}</div>}
-      {pending > 0 && <div className="warn" style={{ marginTop: 8, marginBottom: 0 }}>📵 {pending} registo(s) por enviar.{' '}<button className="link" onClick={() => void sync()}>Enviar agora</button></div>}
+      {pending > 0 && <div className="warn" style={{ marginTop: 8, marginBottom: 0 }}>{pending === 1 ? 'Uma marcação feita sem rede ainda não foi enviada.' : `${pending} marcações feitas sem rede ainda não foram enviadas.`}{' '}<button className="link" onClick={() => void sync()}>Enviar agora</button></div>}
       {me.forgottenDays.length > 0 && (
         <div className="warn" style={{ marginTop: 10, marginBottom: 0 }}>
           Ficou por registar a saída em {me.forgottenDays.map(pt).join(', ')}. Peça à sua chefia para corrigir.
@@ -155,11 +155,11 @@ export function ClockCard({ compact, inline }: { compact?: boolean; inline?: boo
       {!compact && me.entries.length > 0 && (
         <div className="clock-entries">
           {me.entries.map((e) => (
-            <span key={e.id} className="tag" title={[describeLocation(e.clockInLocation), describeLocation(e.clockOutLocation)].filter(Boolean).join(' · ') || undefined}>{e.in} – {e.out ?? '…'}{e.source === 'manual' ? ' (corrigido)' : e.source === 'offline' ? ' (sem rede)' : ''}{e.locationIssue ? ' ⚠' : ''}</span>
+            <span key={e.id} className="tag" title={[describeLocation(e.clockInLocation), describeLocation(e.clockOutLocation)].filter(Boolean).join(' · ') || undefined}>{e.in} – {e.out ?? '…'}{e.source === 'manual' ? ' (corrigido)' : e.source === 'offline' ? ' (sem rede)' : ''}{e.locationIssue ? ' (fora do local)' : ''}</span>
           ))}
         </div>
       )}
-      <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>{pending > 0 ? "Registos sem rede ficam com a hora do telemóvel e são confirmados pela chefia." : "A hora registada é a do servidor (hora de Luanda), não a do seu dispositivo; sem rede, fica a do telemóvel, confirmada pela chefia."}</p>
+      <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>{pending > 0 ? "As marcações sem rede ficam com a hora do telemóvel e a chefia confirma-as." : "Conta a hora de Luanda. Sem rede, guardamos no telemóvel e enviamos depois."}</p>
     </div>
   );
 }

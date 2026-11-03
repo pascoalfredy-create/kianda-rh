@@ -16,8 +16,8 @@ export default async function NovaCessacao({ searchParams }: { searchParams: Pro
   return (
     <>
       <div className="crumb"><Link href="/cessacoes">Cessações</Link> / Nova</div>
-      <h1>Nova cessação de contrato</h1>
-      <p className="sub">O Kianda propõe o fecho de contas segundo a lei; pode ajustar valores acordados antes de gravar. Nada muda na ficha até confirmar.</p>
+      <h1>Registar uma saída</h1>
+      <p className="sub">O Kianda calcula o fecho de contas; ajuste o que tiver sido acordado. A ficha só muda quando confirmar.</p>
       <TerminationEditor init={{ employeeId: sp.colaborador ?? '', reason: 'resignation', effectiveDate: last, noticeDate: null, agreedCompensationMinor: null, items: null, note: null }} employees={employees} />
     </>
   );

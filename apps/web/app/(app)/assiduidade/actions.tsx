@@ -48,9 +48,9 @@ export function EntryChip({ e, editable }: { e: { id: string; in: string; out: s
   }
   return (
     <span className={`entry-chip ${e.source === 'manual' ? 'manual' : ''} ${e.source === 'offline' || e.offlineOut || e.locationIssue ? 'offline' : ''}`} title={[e.note ?? (e.source === 'web' ? 'Registado pelo colaborador' : ''), e.clockInLocation && `Entrada: ${describeLocation(e.clockInLocation)}`, e.clockOutLocation && `Saída: ${describeLocation(e.clockOutLocation)}`].filter(Boolean).join(' · ')}>
-      {(e.source === 'offline' || e.offlineOut) && <span aria-label="Registado sem rede">📵</span>}
-      {e.locationIssue && <span aria-label="Marcação fora do local ou sem localização">⚠</span>}
-      {(mapLink(e.clockInLocation) || mapLink(e.clockOutLocation)) && <a href={(mapLink(e.clockInLocation) ?? mapLink(e.clockOutLocation))!} target="_blank" rel="noreferrer" aria-label="Ver a localização no mapa" style={{ textDecoration: 'none' }}>📍</a>}
+      {(e.source === 'offline' || e.offlineOut) && <span className="tag" title="Marcado sem rede, com a hora do telemóvel">sem rede</span>}
+      {e.locationIssue && <span className="tag terra" title="Marcação fora do local ou sem localização">fora do local</span>}
+      {(mapLink(e.clockInLocation) || mapLink(e.clockOutLocation)) && <a href={(mapLink(e.clockInLocation) ?? mapLink(e.clockOutLocation))!} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>mapa</a>}
       {e.in} – {e.out ?? <b style={{ color: 'var(--red)' }}>sem saída</b>}
       {editable && <button aria-label="Corrigir" onClick={() => setEditing(true)}>✎</button>}
     </span>

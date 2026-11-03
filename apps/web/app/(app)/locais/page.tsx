@@ -12,7 +12,7 @@ export default async function Locais() {
   return (
     <>
       <h1>Locais de trabalho</h1>
-      <p className="sub">Ponto com localização: onde se pode marcar a entrada e a saída, e o que fazer quando a marcação é feita fora do local</p>
+      <p className="sub">Onde a equipa pode marcar o ponto e o que acontece quando marca fora do sítio.</p>
       <ModeForm mode={data.mode} modes={data.modes} workplaces={data.workplaces.filter((w) => w.active).length} />
       <WorkplaceList workplaces={data.workplaces} />
       {data.workplaces.length > 0 && <AssignmentsForm employees={data.employees} workplaces={data.workplaces} />}

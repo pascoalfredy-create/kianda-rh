@@ -2,6 +2,7 @@
 
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
+import { KiandaMark } from '@/components/kianda-mark';
 
 function LoginForm() {
   const next = useSearchParams().get('voltar') ?? '/';
@@ -58,7 +59,7 @@ function LoginForm() {
   return (
     <form onSubmit={submit} className="card auth">
       <div className="logo" style={{ padding: 0, marginBottom: 18 }}>
-        <div className="mark">K</div>
+        <KiandaMark size={34} />
         <div><b style={{ color: 'var(--ink)' }}>Kianda RH</b><small style={{ color: 'var(--ink3)' }}>Gestão de Pessoas · Angola</small></div>
       </div>
       <h1 style={{ fontSize: 19, marginBottom: 14 }}>{ticket ? 'Verificação em dois passos' : 'Iniciar sessão'}</h1>

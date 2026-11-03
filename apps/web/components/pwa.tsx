@@ -40,7 +40,7 @@ export function PwaSetup({ invite = true }: { invite?: boolean }) {
 
   return (
     <>
-      {offline && <div className="offline-bar" role="status">📵 Sem rede — está a ver a última versão guardada. O ponto fica guardado no telemóvel e é enviado depois.</div>}
+      {offline && <div className="offline-bar" role="status">Está sem rede. Mostramos a última versão guardada. O ponto fica guardado no telemóvel e é enviado depois.</div>}
       {!hidden && (deferred || ios) && (
         <div className="install-bar" role="dialog" aria-label="Instalar a app">
           <img src="/icons/icon-192.png" alt="" width={36} height={36} />

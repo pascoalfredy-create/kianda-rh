@@ -10,7 +10,7 @@ export default async function Recibos() {
   return (
     <>
       <h1>Os meus recibos</h1>
-      <p className="sub">Recibos de vencimento dos processamentos fechados. Pode imprimir ou guardar em PDF.</p>
+      <p className="sub">Os seus recibos, mês a mês. Pode imprimir ou guardar em PDF.</p>
       <div className="card">
         <table>
           <thead><tr><th>Mês</th><th className="num">Ilíquido</th><th className="num">Líquido</th><th>Emitido</th><th /></tr></thead>
@@ -26,7 +26,7 @@ export default async function Recibos() {
             ))}
           </tbody>
         </table>
-        {!list.length && <div className="empty">Ainda não há recibos disponíveis</div>}
+        {!list.length && <div className="empty">Ainda não há recibos. Aparecem aqui quando o mês for fechado.</div>}
       </div>
     </>
   );

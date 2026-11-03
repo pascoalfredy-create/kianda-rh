@@ -131,5 +131,5 @@ export function AbsenceFiles({ id, count, canAttach }: { id: string; count: numb
   const [open, setOpen] = useState(false);
   if (open) return <div style={{ marginTop: 4 }}><Attachments entity="absence" entityId={id} compact /></div>;
   if (!count && !canAttach) return null;
-  return <button type="button" className="btn ghost sm" style={{ marginTop: 4 }} onClick={() => setOpen(true)}>{count ? `📎 ${count} ficheiro(s)` : '📎 Anexar justificativo'}</button>;
+  return <button type="button" className="btn ghost sm" style={{ marginTop: 4 }} onClick={() => setOpen(true)}>{count ? `${count} ${count === 1 ? 'anexo' : 'anexos'}` : 'Anexar justificativo'}</button>;
 }

@@ -18,7 +18,7 @@ const escape = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '
 export function valuationPage(session: ValuationSession | null, nonce: string, error?: string): string {
   let shell = VALUATION_SHELL;
   shell = shell.replace('<title>Valora — Análise Financeira e Avaliação de Activos</title>', '<title>Kianda Valora — Análise financeira e avaliação</title>');
-  shell = shell.replace('</head>', `<meta name="robots" content="noindex, nofollow"><meta name="theme-color" content="#13212f"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Kianda"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/icons/favicon-32.png"><link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"><style>${VALUATION_SPACE_CSS}</style></head>`);
+  shell = shell.replace('</head>', `<meta name="robots" content="noindex, nofollow"><meta name="theme-color" content="#0e4a3c"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Kianda"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/icons/favicon-32.png"><link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"><style>${VALUATION_SPACE_CSS}</style></head>`);
   shell = shell.replace('width=device-width, initial-scale=1', 'width=device-width, initial-scale=1, viewport-fit=cover');
   if (error) shell = shell.replace('<div class="wrap">', `<div class="wrap"><div class="card valora-empty" role="alert"><h3>Valora indisponível</h3><p class="intro">${escape(error)}</p><p><a class="btn" href="/modulos">Módulos e licenças</a></p></div>`);
   if (session?.licence.status === 'trial' && session.licence.trialEndsAt) {

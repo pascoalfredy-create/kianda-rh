@@ -5,12 +5,12 @@ import type { Me } from './api';
 const me = (role: string, hr = true, modeling = false, valuation = false): Me => ({ user: { sub: 'u', role, employeeId: 'e', name: 'Pessoa de teste', companyId: 'co' }, company: { id: 'co', name: 'Empresa de teste', nif: '0000000000' }, modules: { hr: { subscribed: hr, canAccess: hr, canRead: hr, canWrite: hr, status: hr ? 'active' : 'cancelled', paidUntil: null, trialEndsAt: null }, modeling: { subscribed: modeling, canAccess: modeling, canRead: modeling, canWrite: modeling, status: modeling ? 'active' : 'cancelled', paidUntil: null, trialEndsAt: null, planKey: null, cycle: null, projectLimit: 2, extraUsers: 0, userLimit: 5, primarySector: null, sectors: [] }, valuation: { subscribed: valuation, canAccess: valuation, canRead: valuation, canWrite: valuation, status: valuation ? 'trial' : 'cancelled', paidUntil: null, trialEndsAt: null, analysisLimit: 10, extraUsers: 0, userLimit: 5, planKey: null, cycle: null } } });
 const links = (user: Me) => navigation(user, { absences: 2, expenses: 3 }).flatMap(g => g.items);
 describe('menu comum e permissões do protótipo RH', () => {
-  it('separa análise, configuração e plataforma, conservando os pedidos operacionais em Geral', () => {
+  it('separa relatórios, definições e módulos, conservando os pedidos operacionais em Equipa', () => {
     const groups = navigation(me('owner'), { absences: 2, expenses: 3 });
-    expect(groups.map(g => g.label)).toEqual(['Geral', 'Tempo', 'Remunerações', 'Finanças', 'Talento', 'Análise', 'Configuração', 'Plataforma']);
-    expect(groups.find(g => g.label === 'Análise')!.items.map(i => i.label)).toEqual(['Relatórios', 'BI']);
-    expect(groups.find(g => g.label === 'Configuração')!.items.map(i => i.href)).toEqual(['/definicoes', '/sector', '/locais', '/conformidade', '/acessos']);
-    expect(groups.find(g => g.label === 'Geral')!.items.some(i => i.href === '/pedidos')).toBe(true);
+    expect(groups.map(g => g.label)).toEqual(['Equipa', 'Tempo', 'Salários', 'Finanças', 'Talento', 'Relatórios', 'Definições', 'Módulos']);
+    expect(groups.find(g => g.label === 'Relatórios')!.items.map(i => i.label)).toEqual(['Relatórios', 'BI']);
+    expect(groups.find(g => g.label === 'Definições')!.items.map(i => i.href)).toEqual(['/definicoes', '/sector', '/locais', '/conformidade', '/acessos']);
+    expect(groups.find(g => g.label === 'Equipa')!.items.some(i => i.href === '/pedidos')).toBe(true);
     expect(links(me('owner')).find(l => l.href === '/ausencias')?.badge).toBe(2);
     expect(links(me('owner')).find(l => l.href === '/despesas')?.badge).toBe(3);
   });
@@ -28,10 +28,10 @@ describe('menu comum e permissões do protótipo RH', () => {
   });
   it('uma conta só de Modelagem não recebe ligações operacionais do RH', () => {
     const groups = navigation(me('owner', false, true), { absences: 0, expenses: 0 });
-    expect(groups.map(g => g.label)).toEqual(['Configuração', 'Plataforma']);
-    expect(groups.find(g => g.label === 'Configuração')!.items.map(i => i.href)).toEqual(['/definicoes', '/acessos']);
-    expect(groups.find(g => g.label === 'Plataforma')!.items.find(l => l.label === 'Recursos Humanos')).toMatchObject({ href: '/modulos#hr', locked: true });
-    expect(groups.find(g => g.label === 'Plataforma')!.items.find(l => l.href === '/modelagem')?.locked).toBe(false);
+    expect(groups.map(g => g.label)).toEqual(['Definições', 'Módulos']);
+    expect(groups.find(g => g.label === 'Definições')!.items.map(i => i.href)).toEqual(['/definicoes', '/acessos']);
+    expect(groups.find(g => g.label === 'Módulos')!.items.find(l => l.label === 'Recursos Humanos')).toMatchObject({ href: '/modulos#hr', locked: true });
+    expect(groups.find(g => g.label === 'Módulos')!.items.find(l => l.href === '/modelagem')?.locked).toBe(false);
   });
   it('uma licença de Modelagem não ultrapassa a atribuição individual', () => {
     const user = me('employee', true, true); user.modules.modeling.canAccess = false;
@@ -67,7 +67,7 @@ describe('menu comum e permissões do protótipo RH', () => {
       for (const path of ['/bi', '/relatorios', '/definicoes', '/sector', '/conformidade', '/acessos']) expect(hrefs).not.toContain(path);
     }
     for (const role of ['finance', 'payroll']) {
-      const config = navigation(me(role), { absences: 0, expenses: 0 }).find(g => g.label === 'Configuração')!;
+      const config = navigation(me(role), { absences: 0, expenses: 0 }).find(g => g.label === 'Definições')!;
       expect(config.items.map(i => i.href)).toEqual(['/sector', '/conformidade']);
     }
   });
