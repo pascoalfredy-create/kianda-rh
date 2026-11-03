@@ -225,7 +225,8 @@ describe.skipIf(!process.env.DATABASE_URL)('leituras RH em conjunto: resultados,
     expect(data.variables).toHaveLength(2);
     expect(data.run).toEqual((await request(owner, 'GET', `/v1/payroll-runs/${data.run.id}`)).json());
     expect(data.variables).toEqual((await request(owner, 'GET', '/v1/payroll-variables?period=2026-07')).json());
-    expect(opening.queries).toBeLessThanOrEqual(9);
+    // 9 + 1: colaboradores com salário indexado ao dólar (o câmbio só é pedido quando os há).
+    expect(opening.queries).toBeLessThanOrEqual(10);
     expect((await request(other, 'GET', '/v1/payroll-runs/opening?period=2026-07')).json()).toEqual({ run: null, variables: [] });
     expect((await request(sessions.get('manager')!, 'GET', '/v1/payroll-runs/opening?period=2026-07')).statusCode).toBe(403);
     expect((await request(owner, 'GET', '/v1/payroll-runs/opening?period=errado')).statusCode).toBe(400);

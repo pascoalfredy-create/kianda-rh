@@ -33,6 +33,9 @@ export interface Compensation {
   id: string;
   effectiveDate: string;
   baseMinor: number;
+  /** AOA ou USD (salário base indexado ao dólar; baseMinor = referência em Kz). */
+  salaryCurrency?: 'AOA' | 'USD';
+  baseForeignMinor?: number | null;
   mealMinor: number;
   transportMinor: number;
   reason: string;
@@ -219,6 +222,8 @@ export interface PayrollRunDetail {
   closedAt: string | null;
   warnings: { employeeId?: string; message: string }[];
   subsidyOverrides: Record<string, { holiday?: boolean; christmas?: boolean }>;
+  /** Câmbio USD→Kz do dia do processamento (salários indexados). */
+  fxRate?: string | null; fxDate?: string | null; fxSource?: string | null;
   lines: PayrollLineRow[];
 }
 export interface PayrollVariableRow {

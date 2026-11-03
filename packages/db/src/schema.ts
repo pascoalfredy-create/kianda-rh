@@ -258,6 +258,9 @@ export const contracts = pgTable('contracts', {
   transportMinor: money('transport_minor'),
   otherMinor: money('other_minor'),
   otherLabel: text('other_label'),
+  /** AOA, ou USD = salário base indexado ao dólar (convertido ao câmbio do dia do processamento; base_minor = referência em Kz). */
+  salaryCurrency: text('salary_currency').notNull().default('AOA'),
+  baseForeignMinor: bigint('base_foreign_minor', { mode: 'number' }),
   terminatedAt: date('terminated_at'),
   terminationReason: text('termination_reason'),
   createdAt: createdAt(),
@@ -273,6 +276,8 @@ export const compensationChanges = pgTable('compensation_changes', {
   baseMinor: money('base_minor'),
   mealMinor: money('meal_minor'),
   transportMinor: money('transport_minor'),
+  salaryCurrency: text('salary_currency').notNull().default('AOA'),
+  baseForeignMinor: bigint('base_foreign_minor', { mode: 'number' }),
   reason: text('reason').notNull(),
   createdBy: text('created_by'),
   createdAt: createdAt(),
@@ -590,6 +595,10 @@ export const payrollRuns = pgTable('payroll_runs', {
   subsidyOverrides: jsonb('subsidy_overrides').notNull().default({}),
   /** Avisos do último cálculo (assiduidade por aprovar, subsídios já pagos…). */
   warnings: jsonb('warnings').notNull().default([]),
+  /** Câmbio USD→Kz do dia do processamento (salários indexados): taxa, data e fonte. */
+  fxRate: numeric('fx_rate', { precision: 14, scale: 6 }),
+  fxDate: date('fx_date'),
+  fxSource: text('fx_source'),
   createdAt: createdAt(),
 }, (t) => [uniqueIndex('payroll_runs_company_period').on(t.companyId, t.period)]);
 

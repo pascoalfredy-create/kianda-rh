@@ -330,6 +330,13 @@
       "when": 1793640600000,
       "tag": "0046_shift_planning",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1793640700000,
+      "tag": "0047_indexed_salaries",
+      "breakpoints": true
     }
   ]
 }

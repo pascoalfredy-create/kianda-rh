@@ -1,7 +1,7 @@
 import { groupBy } from '../lib/group-by.js';
 import { createHash } from 'node:crypto';
 import {
-  allowanceAmount, businessDays, calculatePayroll, fullMonthsBetween, monthlyDeductionCap, scheduledDays, scheduledMinutes, type Schedule, compensationAt, DEFAULT_PGC_ACCOUNTS, getPack, labourRules, lastDayOfMonth, NegativeNetError, overtimeHoursFromMinutes,
+  allowanceAmount, convertUsdMinor, indexedBaseLabel, businessDays, calculatePayroll, fullMonthsBetween, monthlyDeductionCap, scheduledDays, scheduledMinutes, type Schedule, compensationAt, DEFAULT_PGC_ACCOUNTS, getPack, labourRules, lastDayOfMonth, NegativeNetError, overtimeHoursFromMinutes,
   payrollJournal, yearServiceFraction, type EarningInput, type PayrollResult, type PayrollTotals, type PgcAccountMap,
 } from '@kianda/core';
 import {
@@ -28,7 +28,10 @@ const amountOf = (l: { breakdown: unknown }, code: string) => linesOf(l).filter(
  * Inclui: remuneração em vigor no fim do mês, horas extra aprovadas, faltas injustificadas, variáveis do mês,
  * subsídios de férias e de Natal (automáticos, proporcionais no ano de admissão, nunca em duplicado).
  */
-export async function draftPayroll(db: Db, companyId: string, period: string, actorId: string) {
+/** Câmbio USD→Kz do dia do processamento (salários indexados ao dólar). */
+export interface PayrollFx { rate: number; date: string; source?: string | null }
+
+export async function draftPayroll(db: Db, companyId: string, period: string, actorId: string, fx?: PayrollFx) {
   if (!periodRe.test(period)) throw new DomainError('periodo_invalido', 'Período inválido (AAAA-MM)', 400);
   const year = Number(period.slice(0, 4));
   const month = Number(period.slice(5, 7));
@@ -37,6 +40,9 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
     let [run] = await tx.select().from(payrollRuns).where(and(eq(payrollRuns.companyId, companyId), eq(payrollRuns.period, period)));
     if (run?.status === 'closed') throw new DomainError('processamento_fechado', 'O processamento deste período já está fechado');
     run ??= (await tx.insert(payrollRuns).values({ companyId, period, packVersion: pack.version, preparedBy: actorId }).returning())[0]!;
+    if (fx) run = (await tx.update(payrollRuns).set({ fxRate: String(fx.rate), fxDate: fx.date, fxSource: fx.source?.trim() || null }).where(eq(payrollRuns.id, run.id)).returning())[0]!;
+    const fxRate = run.fxRate ? Number(run.fxRate) : null;
+    const missingFx: string[] = [];
     const overrides = (run.subsidyOverrides ?? {}) as SubsidyOverrides;
     const [company] = await tx.select().from(companies).where(eq(companies.id, companyId));
 
@@ -108,7 +114,12 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       seen.add(e.id);
       const ended = c.terminatedAt ?? c.endDate;
       if (ended && ended < periodStart) continue;
-      const pay = compensationAt(compByEmployee.get(e.id) ?? [], periodEnd) ?? c;
+      const current = compensationAt(compByEmployee.get(e.id) ?? [], periodEnd) ?? c;
+      // Salário indexado ao dólar: base em USD convertida ao câmbio do dia do processamento.
+      const indexed = current.salaryCurrency === 'USD' && current.baseForeignMinor ? current.baseForeignMinor : null;
+      if (indexed && !fxRate) { missingFx.push(e.name); seen.add(e.id); continue; }
+      const pay = indexed ? { ...current, baseMinor: convertUsdMinor(indexed, fxRate!) } : current;
+      const baseLabel = indexed ? indexedBaseLabel(indexed, fxRate!) : undefined;
       const hire = firstContract.get(e.id) ?? c.startDate;
 
       // Assiduidade e faltas
@@ -241,7 +252,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       let r: PayrollResult;
       try {
         r = calculatePayroll({
-          period, pack, baseMinor: pay.baseMinor, mealMinor: pay.mealMinor, transportMinor: pay.transportMinor,
+          period, pack, baseMinor: pay.baseMinor, baseLabel, mealMinor: pay.mealMinor, transportMinor: pay.transportMinor,
           overtimeHours, absenceDays, absenceHours, otherEarnings, advancesMinor, otherDeductionsMinor, noticeDeductionMinor, holidaySubsidy, christmasSubsidy, workedDays,
           restDayHours, unpaidLeaveHours, unpaidLeaveLabel: unpaidLeaveHours ? `Licença de paternidade não remunerada (${unpaidLeaveHours} h)` : undefined,
           vacationAllowanceCut,
@@ -263,7 +274,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       }
       const hash = createHash('sha256').update(JSON.stringify({
         company: companyId, period, packVersion: r.packVersion, employee: e.id, contract: c.id,
-        pay: { base: pay.baseMinor, meal: pay.mealMinor, transport: pay.transportMinor }, lines: r.lines, net: r.netMinor,
+        pay: { base: pay.baseMinor, meal: pay.mealMinor, transport: pay.transportMinor, ...(indexed ? { usd: indexed, fx: run.fxRate, fxDate: run.fxDate } : {}) }, lines: r.lines, net: r.netMinor,
       })).digest('hex');
       const values = {
         overtimeHours: String(overtimeHours), absenceDays, bonusMinor: variableEarnings.reduce((s, x) => s + x.amountMinor, 0), advancesMinor,
@@ -274,6 +285,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       keep.push(e.id);
       results.push({ employeeId: e.id, r });
     }
+    if (missingFx.length) throw new DomainError('cambio_em_falta', `Indique o câmbio USD→Kz do dia do processamento: ${missingFx.length} colaborador(es) com salário indexado ao dólar (${missingFx.slice(0, 5).join(', ')}${missingFx.length > 5 ? '…' : ''}).`, 422);
     // Até 200 linhas por escrita; preserva os IDs dos recibos no recálculo.
     for (let i = 0; i < pendingLines.length; i += 200) {
       await tx.insert(payrollLines).values(pendingLines.slice(i, i + 200)).onConflictDoUpdate({ target: [payrollLines.runId, payrollLines.employeeId], set: {

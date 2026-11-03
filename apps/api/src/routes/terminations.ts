@@ -1,5 +1,5 @@
 import {
-  businessDays, calculatePayroll, compensationAt, fullMonthsBetween, getPack, labourRules, luandaDate, packOrLatest, SETTLEMENT_LABEL, settlementTotals,
+  businessDays, calculatePayroll, compensationAt, convertUsdMinor, formatFxRate, formatUsd, fullMonthsBetween, getPack, labourRules, luandaDate, packOrLatest, SETTLEMENT_LABEL, settlementTotals,
   TERMINATION_REASONS, terminationProposal, type SettlementItem, type TerminationReason,
 } from '@kianda/core';
 import {
@@ -41,7 +41,7 @@ async function context(db: Db, companyId: string, employeeId: string, effectiveD
   const contract = [...cs].reverse().find((c) => c.startDate <= effectiveDate) ?? cs[cs.length - 1]!;
   if (effectiveDate < hire) throw new DomainError('data_invalida', 'A data de efeito é anterior à admissão', 400);
   const changes = await db.select().from(compensationChanges).where(eq(compensationChanges.employeeId, emp.id));
-  const pay = compensationAt(changes, effectiveDate) ?? contract;
+  let pay = compensationAt(changes, effectiveDate) ?? contract;
   const year = Number(effectiveDate.slice(0, 4));
   const pack = packOrLatest('AO', year);
   const rules = labourRules('AO', year);
@@ -68,6 +68,16 @@ async function context(db: Db, companyId: string, employeeId: string, effectiveD
   const paid = (code: string) => paidLines.some((l) => (l.breakdown as { code: string; amountMinor: number }[]).some((x) => x.code === code && x.amountMinor > 0));
   const period = effectiveDate.slice(0, 7);
   const [run] = await db.select().from(payrollRuns).where(and(eq(payrollRuns.companyId, companyId), eq(payrollRuns.period, period)));
+  // Salário indexado ao dólar: câmbio do processamento do mês da cessação, ou o último usado; sem nenhum, a referência em Kz da ficha.
+  const usd = pay.salaryCurrency === 'USD' ? pay.baseForeignMinor : null;
+  if (usd) {
+    const [fx] = run?.fxRate ? [run] : await db.select({ fxRate: payrollRuns.fxRate, fxDate: payrollRuns.fxDate }).from(payrollRuns)
+      .where(and(eq(payrollRuns.companyId, companyId), sql`${payrollRuns.fxRate} is not null`)).orderBy(desc(payrollRuns.period)).limit(1);
+    if (fx?.fxRate) {
+      pay = { ...pay, baseMinor: convertUsdMinor(usd, Number(fx.fxRate)) };
+      warnings.push(`Salário indexado ao dólar (${formatUsd(usd)}): valores calculados ao câmbio de ${formatFxRate(Number(fx.fxRate))} Kz de ${ptDate(fx.fxDate!)}. Confirme o câmbio do dia do pagamento.`);
+    } else warnings.push(`Salário indexado ao dólar (${formatUsd(usd)}): ainda sem câmbio de processamento — valores calculados com a referência em Kz da ficha. Confirme o câmbio do dia do pagamento.`);
+  }
   if (run?.status === 'closed') warnings.push(`O processamento de ${period.slice(5)}/${period.slice(0, 4)} já está fechado: o fecho de contas não pode entrar nesse mês.`);
   if (emp.status === 'terminated') warnings.push('O colaborador já está cessado.');
   // Adiantamentos com prestações depois do mês da cessação: não são descontadas automaticamente (art. 248.º).

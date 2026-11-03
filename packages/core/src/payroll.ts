@@ -51,6 +51,10 @@ export interface PayrollInput {
   christmasSubsidy?: boolean | number;
   /** Permite injectar um pacote (testes ou regras próprias da empresa). */
   pack?: CountryPack;
+  /** Simulações: alimentação e transporte também na base do INSS (o processamento deixa-os fora). */
+  allowancesInInss?: boolean;
+  /** Descrição da linha do vencimento base (ex.: salário indexado ao USD com o câmbio aplicado). */
+  baseLabel?: string;
 }
 
 export interface PayrollLine {
@@ -159,11 +163,11 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
     if (inIrt) irtBase += amount;
   };
 
-  earn('BASE', partial ? `Vencimento base (${input.workedDays} dia(s))` : 'Vencimento base', base, true, true);
+  earn('BASE', `${input.baseLabel ?? 'Vencimento base'}${partial ? ` (${input.workedDays} dia(s))` : ''}`, base, true, true);
   // Alimentação e transporte: fora do INSS; isentos de IRT até ao limite do pacote, cada um.
   const ex = pack.irt.allowanceExemptionMinor;
-  if (meal) { lines.push({ code: 'ALIM', name: `Subsídio de alimentação${vacationNote}`, kind: 'earning', amountMinor: meal }); irtBase += Math.max(0, meal - ex); }
-  if (transport) { lines.push({ code: 'TRANSP', name: `Subsídio de transporte${vacationNote}`, kind: 'earning', amountMinor: transport }); irtBase += Math.max(0, transport - ex); }
+  if (meal) { lines.push({ code: 'ALIM', name: `Subsídio de alimentação${vacationNote}`, kind: 'earning', amountMinor: meal }); irtBase += Math.max(0, meal - ex); if (input.allowancesInInss) inssBase += meal; }
+  if (transport) { lines.push({ code: 'TRANSP', name: `Subsídio de transporte${vacationNote}`, kind: 'earning', amountMinor: transport }); irtBase += Math.max(0, transport - ex); if (input.allowancesInInss) inssBase += transport; }
   for (const o of input.otherEarnings ?? []) earn(o.code, o.name, assertMinor(o.amountMinor, o.name), o.inInss ?? true, o.inIrt ?? true);
   if (input.overtimeHours) earn('HE', `Horas extraordinárias (${input.overtimeHours} h)`, overtimeMinor(fullBase, input.overtimeHours, pack), true, true);
   const hourly = hourlyRateMinor(fullBase, pack);

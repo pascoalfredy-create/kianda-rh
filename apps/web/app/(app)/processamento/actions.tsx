@@ -3,11 +3,23 @@
 import { useState } from 'react';
 import { formObject, useMutation } from '@/lib/client';
 
-export function PrepareButton({ period, label }: { period: string; label: string }) {
+export function PrepareButton({ period, label, indexed = 0, fx }: { period: string; label: string; indexed?: number; fx?: { rate: string | null; date: string | null; source: string | null } }) {
   const { busy, error, run } = useMutation();
+  const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
+  const [rate, setRate] = useState(fx?.rate ? String(Number(fx.rate)).replace('.', ',') : '');
+  const [date, setDate] = useState(fx?.date ?? today);
+  const [source, setSource] = useState(fx?.source ?? 'BNA — câmbio de referência');
+  const needsFx = indexed > 0;
+  const body = needsFx && rate.trim() ? { period, fx: { rate, date, source } } : { period };
   return (
-    <span className="actions" style={{ justifyContent: 'flex-start' }}>
-      <button className="btn" disabled={busy} onClick={() => run('/v1/payroll-runs', 'POST', { period })}>{busy ? 'A calcular…' : label}</button>
+    <span className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>
+      {needsFx && <span className="fx-fields" role="group" aria-label="Câmbio do dia">
+        <label>Câmbio USD→Kz<input aria-label="Câmbio USD→Kz" inputMode="decimal" value={rate} placeholder="ex.: 912,50" onChange={e => setRate(e.target.value)} style={{ width: 110 }} /></label>
+        <label>Data<input aria-label="Data do câmbio" type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
+        <label>Fonte<input aria-label="Fonte do câmbio" value={source} maxLength={80} onChange={e => setSource(e.target.value)} style={{ width: 200 }} /></label>
+      </span>}
+      <button className="btn" disabled={busy || (needsFx && !rate.trim() && !fx?.rate)} onClick={() => run('/v1/payroll-runs', 'POST', body)}>{busy ? 'A calcular…' : label}</button>
+      {needsFx && <span className="muted" style={{ fontSize: 12.5, flexBasis: '100%' }}>{indexed} colaborador(es) com salário indexado ao dólar: a base é convertida a este câmbio no recibo.</span>}
       {error && <span style={{ color: 'var(--red)' }}>{error}</span>}
     </span>
   );
