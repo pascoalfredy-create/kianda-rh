@@ -77,11 +77,11 @@ A rota administrativa dos direitos aceita `projectLimit` e `extraUsers` na Model
 
 No selector **Modelo**, a opção **Gerir projectos…** abre o modal existente, com listas de activos e arquivados e consulta da quota actual. Não acrescenta botões à barra nem altera o CSS/HTML original do protótipo.
 
-- Arquivar exige confirmação e guarda primeiro as edições dos pressupostos. Balancetes por analisar impedem o arquivo; não são descartados silenciosamente.
+- Arquivar exige confirmação e guarda primeiro as edições dos pressupostos.
 - O projecto só muda de lista após confirmação da API. Uma falha de rede, conflito de revisão ou recusa por quota não cria um estado local fictício.
 - Arquivados podem ser abertos em consulta e exportados em PDF (com licença paga). Campos, conversão de moeda e importações ficam bloqueados. Duplicar continua a criar um novo projecto, sujeito à quota.
 - Restaurar usa a revisão arquivada e os limites/sectores são validados no servidor. A edição só volta a estar disponível após a resposta confirmada.
-- **Actualizar lista** incorpora alterações de outras sessões depois de guardar pressupostos; balancetes locais por analisar impedem essa substituição. Uma falha de leitura nunca apresenta o balancete anterior como se fosse de outro projecto.
+- **Actualizar lista** incorpora alterações de outras sessões depois de guardar pressupostos.
 - Licenças em consulta e participantes `viewer` podem consultar o arquivo, sem comandos de arquivo/restauro.
 
 ### PDF para clientes; Excel exclusivo do proprietário da plataforma
@@ -158,7 +158,7 @@ A migração `0030_integra_approved_versions` cria `financial_model_versions` co
 
 Sete relatórios de projecção foram implementados: sumário executivo, memorando para comité, memorando de crédito, avaliação, demonstrações projectadas, cenários/sensibilidade e serviço da dívida. Os títulos, o papel A4, os destaques azuis, o corpo serifado e as tabelas seguem a estrutura do protótipo. DR, Balanço e Fluxos começam em páginas distintas. Tabelas extensas repartem os anos por bandas com rubricas e cabeçalhos repetidos; não se eliminam anos nem se reduz a fonte para encaixar quarenta períodos numa página.
 
-O oitavo relatório do protótipo, `analise`, é histórico e exige balancetes analisados. O catálogo apresenta-o como indisponível e a rota devolve `historico_em_falta` (422). Não se apresentam projecções como se fossem demonstrações históricas.
+O oitavo relatório, `analise` (análise económico-financeira), é preenchido com as demonstrações projectadas do próprio projecto, ano a ano no horizonte e no cenário escolhido: sínteses da DR, do Balanço e dos fluxos, rácios de liquidez, estrutura, rendibilidade e actividade, e diagnóstico por área (`packages/core/src/modeling/project-analysis.ts`). O Integra não recebe balancetes nem outra informação externa: a análise do dia-a-dia das empresas faz-se no Valora. As rotas `/history` foram retiradas; os dados históricos já guardados permanecem na base de dados e nas versões aprovadas antigas, que continuam inalteradas. Versões aprovadas antes desta alteração não contêm o relatório e o catálogo indica-o.
 
 O PDF contém apenas páginas vectoriais e fontes incorporadas, com suporte a acentos e caracteres cirílicos, sem JavaScript ou anexos Excel. O renderizador funciona em Node/Cloudflare sem navegador, fontes de rede ou serviços externos. As fontes DejaVu e a licença acompanham o código; o script `scripts/build-financial-fonts.py` permite reproduzir os subconjuntos. Os recursos das fontes são reutilizados no processo para evitar descodificações repetidas.
 

@@ -2155,8 +2155,8 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: versões aprovadas e downlo
   });
   it('clientes descarregam PDF e não conseguem obter Excel ou CSV por URL directa', async () => {
     const catalogue = (await req('GET', `/v1/modeling/models/${modelId}/reports`)).json();
-    expect(catalogue.reports.filter((r: { available: boolean }) => r.available)).toHaveLength(7);
-    expect(catalogue.reports.find((r: { key: string }) => r.key === 'analise').available).toBe(false);
+    expect(catalogue.reports.filter((r: { available: boolean }) => r.available)).toHaveLength(8);
+    expect(catalogue.reports.find((r: { key: string }) => r.key === 'analise').available).toBe(true);
     for (const session of [owner, finance, viewer]) {
       const pdf = await report('pdf', versionId, session);
       expect(pdf.statusCode).toBe(200); expect(pdf.headers['content-type']).toBe('application/pdf');
@@ -2165,7 +2165,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: versões aprovadas e downlo
       expect((await report('xlsx', versionId, session)).statusCode).toBe(403);
     }
     expect((await report('csv')).statusCode).toBe(400);
-    expect((await req('GET', `/v1/modeling/models/${modelId}/reports/analise`)).json().error).toBe('historico_em_falta');
+    const analysis = await req('GET', `/v1/modeling/models/${modelId}/reports/analise`); expect(analysis.statusCode).toBe(200); expect(analysis.headers['content-type']).toBe('application/pdf');
     snapshotPdf = (await report()).bytes;
   });
   it('o PDF de consulta respeita o cenário escolhido sem escrever nem modificar versões aprovadas', async () => {

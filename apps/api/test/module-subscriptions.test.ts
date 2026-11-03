@@ -63,7 +63,7 @@ describe.skipIf(!process.env.DATABASE_URL)('conta comum, preços e direitos inde
   });
   it('protege projectos arquivados e relatórios de um sector não contratado, incluindo URL codificada', async () => {
     const row = (await getDb().execute(sql`insert into financial_models(company_id,name,sector,currency,assumptions,created_by,archived_at) values (${modelingId},'Arquivo sintético','petroleo','Kz','{}','test',now()) returning id`)).rows[0] as { id: string };
-    for (const suffix of ['', '/history']) expect((await request(modeling, 'GET', `/v1/modeling/models/${row.id}${suffix}`)).json().error).toBe('sector_nao_contratado');
+    for (const suffix of ['']) expect((await request(modeling, 'GET', `/v1/modeling/models/${row.id}${suffix}`)).json().error).toBe('sector_nao_contratado');
     expect((await request(modeling, 'GET', `/v1/modeling/models/${row.id}/reports/sumario?format=pdf`)).statusCode).toBe(402);
     await getDb().execute(sql`update company_modules set status='active', paid_until='2099-12-31' where company_id=${modelingId} and module='modeling'`);
     try { expect((await request(modeling, 'GET', `/v1/modeling/models/${row.id}/reports/sumario?format=pdf`)).json().error).toBe('sector_nao_contratado'); }
@@ -88,7 +88,7 @@ describe.skipIf(!process.env.DATABASE_URL)('conta comum, preços e direitos inde
     expect(data.bootstrap.templates).toEqual((await request(modeling, 'GET', '/v1/modeling/templates')).json());
     expect(data.usage).toEqual((await request(modeling, 'GET', '/v1/modeling/usage')).json());
     const first = data.bootstrap.models.find((m: { archivedAt: string | null }) => !m.archivedAt);
-    expect(data.bootstrap.firstHistory).toEqual({ modelId: first.id, revision: first.revision, historical: null });
+    expect(first).toBeTruthy();expect(data.bootstrap.firstHistory).toBeUndefined();
     expect(data.bootstrap.models.every((m: { companyId: string; sector: string }) => m.companyId === modelingId && pme.sectors.includes(m.sector))).toBe(true);
   });
   it('ilimitado cria mais de dez projectos sem transformar os cinco utilizadores em ilimitados', async () => {

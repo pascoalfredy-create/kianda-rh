@@ -1,5 +1,5 @@
-import { analyzeFinancialHistory, buildFinancialHistoricalReport, buildFinancialReportBundle, FINANCIAL_REPORT_VERSION, type FinancialReportBundle, type FinancialReportSource, type FinancialReportDocument } from '@kianda/core';
-import { and, companies, desc, eq, financialHistoricalInputs, financialModelVersions, financialPersonnelImports, type Db, type financialModels } from '@kianda/db';
+import { buildFinancialReportBundle, FINANCIAL_REPORT_VERSION, type FinancialReportBundle, type FinancialReportSource, type FinancialReportDocument } from '@kianda/core';
+import { and, companies, desc, eq, financialModelVersions, financialPersonnelImports, type Db, type financialModels } from '@kianda/db';
 import { DomainError } from './payroll.js';
 import { financialCalculationSource, financialFingerprint } from './modeling-calculation.js';
 
@@ -14,22 +14,9 @@ async function reportSource(db: Db, model: typeof financialModels.$inferSelect, 
     promoter: typeof raw.promotor === 'string' && raw.promotor.trim() ? raw.promotor.trim() : undefined, promoterNif: typeof raw.promotorNif === 'string' ? raw.promotorNif : undefined, revision: model.revision, sourceHash: financialCalculationSource(model).sourceAssumptionsHash, asOf: new Date().toISOString(), state: 'draft', ...metadata,
   };
 }
-export async function financialHistoryOf(db: Db, model: typeof financialModels.$inferSelect) {
-  const [record] = await db.select().from(financialHistoricalInputs).where(and(eq(financialHistoricalInputs.companyId, model.companyId), eq(financialHistoricalInputs.modelId, model.id)));
-  if (!record) return null;
-  if (financialFingerprint(record.input) !== record.inputHash) throw new DomainError('integridade_historico', 'Os balancetes não correspondem à origem registada.', 409);
-  return { inputHash: record.inputHash, updatedAt: record.updatedAt, analysis: analyzeFinancialHistory(record.input) };
-}
-export async function financialHistoricalDocument(db: Db, model: typeof financialModels.$inferSelect): Promise<FinancialReportDocument> {
-  const historical = await financialHistoryOf(db, model);
-  if (!historical) throw new DomainError('historico_em_falta', 'Este relatório requer balancetes históricos analisados.', 422);
-  return { source: { ...await reportSource(db, model), historicalHash: historical.inputHash }, reports: { analise: buildFinancialHistoricalReport(historical.analysis) } };
-}
 export async function financialReportBundle(db: Db, model: typeof financialModels.$inferSelect, metadata: Metadata = {}): Promise<FinancialReportBundle> {
   const imported = await db.select().from(financialPersonnelImports).where(and(eq(financialPersonnelImports.companyId, model.companyId), eq(financialPersonnelImports.modelId, model.id))).orderBy(desc(financialPersonnelImports.importedAt));
   const bundle = buildFinancialReportBundle(model.assumptions, await reportSource(db, model, metadata), imported.map((p) => ({ source: p.source, fromPeriod: p.fromPeriod, toPeriod: p.toPeriod, importedAt: p.importedAt.toISOString() })));
-  const historical = await financialHistoryOf(db, model);
-  if (historical) { bundle.historical = historical.analysis; bundle.source.historicalHash = historical.inputHash; bundle.reports.analise = buildFinancialHistoricalReport(historical.analysis); }
   return bundle;
 }
 export async function financialVersionOf(db: Db, companyId: string, modelId: string, versionId: string) {

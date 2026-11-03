@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildFinancialReportBundle, FINANCIAL_REPORT_KEYS, FINANCIAL_SECTORS, financialTemplate, type FinancialReportSource } from '../src/index.js';
+import { analyzeFinancialProjection, buildFinancialProjectionAnalysisReport, buildFinancialReportBundle, FINANCIAL_REPORT_KEYS, runFinancialModel, FINANCIAL_SECTORS, financialTemplate, type FinancialReportSource } from '../src/index.js';
 const source: FinancialReportSource = { modelId: 'm1', projectName: 'Estudo', sector: 'mineracao', currency: 'USD', companyName: 'Empresa', companyNif: '1234567890', revision: 1, sourceHash: 'a'.repeat(64), asOf: '2026-10-28T12:00:00.000Z', state: 'approved', versionNumber: 1, versionLabel: 'V comité' };
 describe('relatórios financeiros congeláveis', () => {
   for (const sector of FINANCIAL_SECTORS) {
-    it(`${sector}: sete relatórios com períodos, colunas e resultados consistentes`, () => {
+    it(`${sector}: oito relatórios com períodos, colunas e resultados consistentes`, () => {
       const m = financialTemplate(sector).assumptions, bundle = buildFinancialReportBundle(m, { ...source, sector });
       expect(Object.keys(bundle.reports)).toEqual([...FINANCIAL_REPORT_KEYS]);
       for (const report of Object.values(bundle.reports)) for (const b of report.blocks) {
@@ -29,7 +29,18 @@ describe('relatórios financeiros congeláveis', () => {
     expect(JSON.stringify(bundle)).toBe(copy);
     expect(bundle.inputAssumptions.customNote).toBe('Texto original');
   });
-  it('não apresenta um relatório histórico como se viesse de projecções', () => {
-    expect(FINANCIAL_REPORT_KEYS).not.toContain('analise');
+  it('a análise económico-financeira usa apenas as demonstrações projectadas do projecto', () => {
+    expect(FINANCIAL_REPORT_KEYS).toContain('analise');
+    const m = financialTemplate('industria').assumptions, r = runFinancialModel(m), a = analyzeFinancialProjection(r);
+    expect(a.years).toEqual(r.years.slice(1));
+    const t = 3, lg = a.rows.find((row) => row.key === 'lg')!.values[t - 1]!, k = r.k;
+    expect(lg).toBeCloseTo((k.inv[t]! + k.ar[t]! + k.cash[t]!) / (k.ap[t]! + k.princ[t + 1]!), 10);
+    expect(a.rows.find((row) => row.key === 'me')!.values[t - 1]).toBeCloseTo(k.ebitda[t]! / k.rev[t]!, 10);
+    expect(a.diagnosis.map((d) => d.area)).toEqual(['Liquidez', 'Estrutura', 'Rendibilidade', 'Actividade']);
+    const report = buildFinancialProjectionAnalysisReport(r, 'Fábrica', 'base');
+    expect(report.key).toBe('analise');
+    expect(JSON.stringify(report)).not.toMatch(/balancete/i);
+    const ratios = report.blocks.find((b) => b.kind === 'table' && b.title === 'Rácios por ano') as { columns: string[] };
+    expect(ratios.columns.slice(1, -1)).toEqual(a.years.map(String));
   });
 });

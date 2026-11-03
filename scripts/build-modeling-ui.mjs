@@ -125,14 +125,48 @@ replace('Fluxos de caixa (PGC Angola)', 'Fluxos de caixa');
 replace('Classificação por natureza — PGC Angola (Decreto n.º 82/2001)', 'Classificação por natureza');
 replace('Histórico: balancetes PGC, ', 'Histórico: balancetes, ');
 replace('Análise económico-financeira · PGC Angola', 'Análise económico-financeira');
+// Integra: a análise de demonstrações usa apenas as demonstrações projectadas do próprio projecto, no horizonte.
+// Sem balancetes nem outra informação externa (a análise do dia-a-dia das empresas é feita no Valora).
+replace("['demonstracoes','Demonstrações projectadas','table'],\n  ['g','Decisão']", "['demonstracoes','Demonstrações projectadas','table'],['analise','Análise de demonstrações','scan'],\n  ['g','Decisão']");
+replace(",\n  ['g','Histórico'],['analise','Análise de demonstrações','scan']];", "];");
+span('const RDEF=HISTORICAL_RATIO_DEFINITIONS;', '/* ================= RELATÓRIOS', `/* ---------------- Análise das demonstrações projectadas ---------------- */
+const SCN_LBL={base:'base',otim:'optimista',pess:'pessimista'};
+const paFmt=(v,f)=>v==null||!isFinite(v)?'—':f.startsWith('%')?pct(v):f.startsWith('d')?nf(v)+' dias':xf(v);
+const PA_TAG={g:'Favorável',a:'Atenção',r:'Desfavorável',n:'Não calculável'};
+const paColor=s=>s==='r'?'color:var(--red)':s==='a'?'color:var(--amber)':'';
+VIEWS.analise=()=>{const m=M();const R=run(m);const A=analyzeFinancialProjection(R);const k=R.k;const yi=A.indices,last=yi[yi.length-1];
+  const head=ph('Análise de demonstrações financeiras',\`\${esc(m.nome)} · \${A.years[0]}–\${A.years[A.years.length-1]} · cenário \${SCN_LBL[R.scenario]||R.scenario} · calculada a partir das demonstrações projectadas do projecto\`);
+  const kpis=[['Volume de negócios '+R.years[last],money(k.rev[last]),'margem EBITDA '+pct(k.rev[last]?k.ebitda[last]/k.rev[last]:null)],['Resultado líquido '+R.years[last],money(k.rl[last]),'margem líquida '+pct(k.rev[last]?k.rl[last]/k.rev[last]:null)],['Capital próprio '+R.years[last],money(k.cap[last]+k.res[last]),'autonomia '+pct(k.assets[last]?(k.cap[last]+k.res[last])/k.assets[last]:null)],['Caixa no fim do horizonte',money(k.cash[last]),'dívida '+money(k.debt[last])]];
+  const th=\`<thead><tr><th>Indicador</th>\${A.years.map(y=>\`<th class="num">\${y}</th>\`).join('')}<th class="num">Anos favoráveis</th></tr></thead>\`;
+  const rows=[...new Set(A.rows.map(r=>r.group))].map(g=>\`<tr class="sec"><td colspan="\${A.years.length+2}">\${g}</td></tr>\`+A.rows.filter(r=>r.group===g).map(r=>\`<tr class="sub"><td>\${r.label}</td>\${r.values.map((v,i)=>\`<td class="num" style="\${paColor(r.statuses[i])}">\${paFmt(v,r.format)}</td>\`).join('')}<td class="num">\${r.measured?r.favourable+' de '+r.measured:'—'}</td></tr>\`).join('')).join('');
+  const syn=(title,specs)=>\`<div class="card"><div class="hd"><h3>\${title}</h3></div><div class="tblwrap"><table class="ft"><thead><tr><th>\${esc(m.moeda)}</th>\${A.years.map(y=>\`<th class="num">\${y}</th>\`).join('')}</tr></thead><tbody>\${specs.map(([l,f,c])=>\`<tr class="\${c?'tot':'sub'}"><td>\${l}</td>\${yi.map(t=>{const v=f(t);return \`<td class="num \${v<0?'neg':''}">\${mv(v)}</td>\`}).join('')}</tr>\`).join('')}</tbody></table></div></div>\`;
+  return head+\`<div class="grid g4" style="margin-bottom:16px">\${kpis.map(([l,v,d])=>\`<div class="card kpi"><div class="l">\${l}</div><div class="v" style="font-size:19px">\${v}</div><div class="d">\${d}</div></div>\`).join('')}</div>
+  <div class="grid" style="gap:16px;margin-bottom:16px"><div class="card"><div class="hd"><h3>Rácios por ano</h3></div><div class="tblwrap"><table class="ft">\${th}<tbody>\${rows}</tbody></table></div></div>
+  <div class="card"><div class="hd"><h3>Diagnóstico</h3></div><div class="bd"><div class="grid g2" style="gap:10px">\${A.diagnosis.map(d=>\`<div class="alert \${d.status==='n'?'b':d.status}">\${ico(d.status==='g'?'check':d.status==='r'?'alert':'info',17)}<div><b>\${d.area} · \${PA_TAG[d.status]}.</b> \${d.text}</div></div>\`).join('')}</div><div class="muted" style="font-size:12px;margin-top:8px">\${A.notes.join(' ')}</div></div></div></div>
+  <div class="grid" style="gap:16px">\${syn('Demonstração de resultados (síntese)',[['Volume de negócios',t=>k.rev[t]],['EBITDA',t=>k.ebitda[t],1],['Amortizações',t=>-k.da[t]],['Resultado operacional',t=>k.ebit[t],1],['Custos financeiros',t=>-k.jur[t]],['Imposto',t=>-k.imp[t]],['Resultado líquido',t=>k.rl[t],1]])}
+  \${syn('Balanço (síntese)',[['Imobilizado líquido',t=>k.imob[t]],['Existências e clientes',t=>k.inv[t]+k.ar[t]],['Meios monetários',t=>k.cash[t]],['Total do activo',t=>k.assets[t],1],['Capital próprio',t=>k.cap[t]+k.res[t],1],['Empréstimos',t=>k.debt[t]],['Fornecedores',t=>k.ap[t]],['Total do passivo',t=>k.debt[t]+k.ap[t],1]])}
+  \${syn('Fluxos de caixa (síntese)',[['Fluxo operacional',t=>k.cfo[t]],['Fluxo de investimento',t=>k.cfi[t]],['Fluxo de financiamento',t=>k.cff[t]],['Caixa no fim do ano',t=>k.cash[t],1]])}</div>\`;};
+
+`);
+span(" analise:{t:'Relatório de análise económico-financeira'", '};\nVIEWS.relatorios', ` analise:{t:'Relatório de análise económico-financeira',d:'Rácios e diagnóstico das demonstrações projectadas do projecto',aud:'Investidores / bancos',f:m=>{const R=run(m);const A=analyzeFinancialProjection(R);const k=R.k;const ys=pickY(R);const at=(r,t)=>r.values[A.indices.indexOf(t)];
+   return \`<div class="page">\${LHM('AEF-'+m.id.slice(0,5).toUpperCase())}<h1>Relatório de análise económico-financeira</h1><div class="subt">\${esc(m.nome)} · cenário \${SCN_LBL[R.scenario]||R.scenario}</div>
+   <p>Análise económico-financeira das demonstrações projectadas do projecto, de \${A.years[0]} a \${A.years[A.years.length-1]}. Toda a informação provém dos pressupostos e resultados do próprio modelo.</p>
+   <h3>Demonstração de resultados (síntese)</h3>\${rtable(R,[['Volume de negócios',t=>mv(k.rev[t])],['EBITDA',t=>mv(k.ebitda[t])],['Resultado operacional',t=>mv(k.ebit[t])],['Resultado líquido',t=>mv(k.rl[t])]],ys)}
+   <h3>Balanço (síntese)</h3>\${rtable(R,[['Total do activo',t=>mv(k.assets[t])],['Capital próprio',t=>mv(k.cap[t]+k.res[t])],['Empréstimos',t=>mv(k.debt[t])],['Fornecedores',t=>mv(k.ap[t])]],ys)}
+   <h3>Fluxos de caixa (síntese)</h3>\${rtable(R,[['Fluxo operacional',t=>mv(k.cfo[t])],['Fluxo de investimento',t=>mv(k.cfi[t])],['Fluxo de financiamento',t=>mv(k.cff[t])],['Caixa no fim do ano',t=>mv(k.cash[t])]],ys)}
+   <h3>Rácios</h3>\${rtable(R,A.rows.map(r=>[r.label,t=>paFmt(at(r,t),r.format)]),ys)}
+   <h3>Diagnóstico</h3><table class="t"><tr><th>Área</th><th>Leitura</th><th>Comentário</th></tr>\${A.diagnosis.map(d=>\`<tr><td>\${d.area}</td><td>\${PA_TAG[d.status]}</td><td>\${d.text}</td></tr>\`).join('')}</table>
+   <p style="font-family:Inter;font-size:11px">\${A.notes.join(' ')}</p>
+   \${SGM(['Elaborado por','Direcção Financeira'],['Revisto por','____________________'])}\${FTM('Análise económico-financeira')}</div>\`;}}
+`);
+replace("const R=cur==='analise'?null:run(m);", 'const R=run(m);');
 span('function fsCSV(){', '/* ---------------- Eventos', '');
 source = source.slice(0, source.indexOf('/* ---------------- Eventos'));
 const adapter = (await readFile(new URL('modeling/adapter.js', web), 'utf8')).replace('__NEW_MODEL_DIALOG__', dialog);
-const imports = `import {runFinancialModel} from '${fileURLToPath(new URL('packages/core/src/modeling/engine.ts', root))}';\nimport {financialBreakEvenPrice} from '${fileURLToPath(new URL('packages/core/src/modeling/analysis.ts', root))}';\nimport {FinancialModelError,FINANCIAL_ENGINE_VERSION} from '${fileURLToPath(new URL('packages/core/src/modeling/types.ts', root))}';\nimport {analyzeFinancialHistory,historicalPeriodLabel,parseHistoricalReference,HISTORICAL_RATIO_DEFINITIONS} from '${fileURLToPath(new URL('packages/core/src/modeling/historical.ts', root))}';\nimport {ModelingStore,modelingRequest,presentModel} from '${fileURLToPath(new URL('modeling/store.ts', web))}';\nimport {extractPdfTrialBalance,PDF_IMPORT_LIMIT} from '${fileURLToPath(new URL('modeling/pdf-import.ts', web))}';\n`;
-const documentImports = `import {extractWordTrialBalance,documentFormat,decodeDocumentText} from '${fileURLToPath(new URL('lib/document-import.ts', web))}';\n`;
+const imports = `import {runFinancialModel} from '${fileURLToPath(new URL('packages/core/src/modeling/engine.ts', root))}';\nimport {financialBreakEvenPrice} from '${fileURLToPath(new URL('packages/core/src/modeling/analysis.ts', root))}';\nimport {FinancialModelError,FINANCIAL_ENGINE_VERSION} from '${fileURLToPath(new URL('packages/core/src/modeling/types.ts', root))}';\nimport {analyzeFinancialProjection} from '${fileURLToPath(new URL('packages/core/src/modeling/project-analysis.ts', root))}';\nimport {ModelingStore,modelingRequest,presentModel} from '${fileURLToPath(new URL('modeling/store.ts', web))}';\n`;
 const mobileImports = `import {setupModelingMobile,prepareFinancialTables} from '${fileURLToPath(new URL('modeling/mobile.ts', web))}';\n`;
 const sessionImports = `import {endSession,reloadPrivatePageOnRestore} from '${fileURLToPath(new URL('lib/session-client.ts', web))}';\n`;
-const result = await build({ stdin: { contents: imports + documentImports + mobileImports + sessionImports + source + adapter, resolveDir: fileURLToPath(web), sourcefile: 'integra-ui.js' }, alias: {'@kianda/core':fileURLToPath(new URL('packages/core/src/index.ts',root))}, bundle: true, format: 'iife', platform: 'browser', target: 'es2022', minify: true, legalComments: 'none', write: false, logLevel: 'silent' });
+const result = await build({ stdin: { contents: imports + mobileImports + sessionImports + source + adapter, resolveDir: fileURLToPath(web), sourcefile: 'integra-ui.js' }, alias: {'@kianda/core':fileURLToPath(new URL('packages/core/src/index.ts',root))}, bundle: true, format: 'iife', platform: 'browser', target: 'es2022', minify: true, legalComments: 'none', write: false, logLevel: 'silent' });
 const js = result.outputFiles[0].text;
 const digest = (s) => createHash('sha256').update(s).digest('hex');
 const spaceCss = await readFile(new URL('modeling/space.css', web), 'utf8');

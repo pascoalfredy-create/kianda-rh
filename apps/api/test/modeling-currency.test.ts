@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { closeDb, companyModules, eq, getDb, modelingMembers } from '@kianda/db';
 import { FINANCIAL_REPORT_KEYS, financialTemplate } from '@kianda/core';
-import { historicalInput } from '../../../packages/core/test/fixtures/financial-history.js';
 import { buildApp } from '../src/app.js';
 import { testClient } from './inject.js';
 const app = testClient(buildApp({ rateLimit: false }));
@@ -29,10 +28,10 @@ describe.skipIf(!process.env.DATABASE_URL)('conversão monetária atómica por e
     expect((await req('PUT', `/v1/modeling/models/${id}`, { name: 'Modelo cambial', sector: 'mineracao', currency: 'EUR', assumptions: original, revision: 1 })).json().error).toBe('conversao_obrigatoria');
     expect((await req('GET', `/v1/modeling/models/${id}`)).json()).toMatchObject({ currency: 'USD', revision: 1 });
   });
-  it('aprova a versão original e guarda o balancete na moeda da sua fonte', async () => {
+  it('aprova a versão original na moeda da sua fonte', async () => {
     const v = await req('POST', `/v1/modeling/models/${id}/versions`, { revision: 1, label: 'Original USD' }); expect(v.statusCode).toBe(201); version = v.json().id;
     pdf = (await req('GET', `/v1/modeling/models/${id}/reports/sumario?version=${version}`)).bytes;
-    expect((await req('PUT', `/v1/modeling/models/${id}/history`, { revision: 1, input: historicalInput })).json().model.revision).toBe(2);
+    expect((await req('PUT', `/v1/modeling/models/${id}`, { name: 'Modelo cambial (revisto)', sector: 'mineracao', currency: 'USD', assumptions: original, revision: 1 })).json().revision).toBe(2);
   });
   it('converte montantes, guarda a origem e mantém as quantidades e percentagens', async () => {
     const result = await convert(2); expect(result.statusCode).toBe(200); const m = result.json();
@@ -46,18 +45,16 @@ describe.skipIf(!process.env.DATABASE_URL)('conversão monetária atómica por e
     expect(attempts.map(r => r.statusCode).sort()).toEqual([200, 409]);
     const current = (await req('GET', `/v1/modeling/models/${id}`)).json(); expect(current).toMatchObject({ revision: 4, currency: 'EUR', assumptions: { pessoal: original.pessoal } });
   });
-  it('a revisão convertida aplica EUR aos sete mapas exportados e identifica a moeda no download',async()=>{
+  it('a revisão convertida aplica EUR aos oito mapas exportados e identifica a moeda no download',async()=>{
     for(const key of FINANCIAL_REPORT_KEYS){
       const file=await req('GET',`/v1/modeling/models/${id}/reports/${key}?revision=4`);
       expect(file.statusCode,key).toBe(200);expect(file.headers['content-type'],key).toBe('application/pdf');expect(file.headers['x-source-currency'],key).toBe('EUR');expect(file.headers['x-source-revision'],key).toBe('4');
     }
     expect((await req('GET',`/v1/modeling/models/${id}/reports/sumario?version=${version}`)).headers['x-source-currency']).toBe('USD');
-    expect((await req('GET',`/v1/modeling/models/${id}/reports/analise`)).headers['x-source-currency']).toBe('Kz');
   });
-  it('PDF aprovado e balancetes conservam o conteúdo e a moeda originais', async () => {
+  it('PDF aprovado conserva o conteúdo e a moeda originais', async () => {
     expect((await req('GET', `/v1/modeling/models/${id}/reports/sumario?version=${version}`)).bytes).toEqual(pdf);
     expect((await req('GET', `/v1/modeling/models/${id}/versions/${version}`)).json().payload.source.currency).toBe('USD');
-    expect((await req('GET', `/v1/modeling/models/${id}/history`)).json().historical.analysis.input).toEqual(historicalInput);
     const m = (await req('GET', `/v1/modeling/models/${id}`)).json();
     expect((await req('PUT', `/v1/modeling/models/${id}`, { ...m, assumptions: { ...m.assumptions, currencyConversion: { rate: 999 } } })).json().assumptions.currencyConversion.rate).toBe(0.001);
   });

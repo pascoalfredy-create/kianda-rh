@@ -1,7 +1,6 @@
 /** Persistência do protótipo: sem localStorage, revisões serializadas e sem perder edições em curso. */
-import type { FinancialCurrency, FinancialHistoricalAnalysis, FinancialHistoricalInput, SubscriptionStatus, financialTemplate } from '@kianda/core';
+import type { FinancialCurrency, SubscriptionStatus, financialTemplate } from '@kianda/core';
 export interface CurrencyConversionInput { from: FinancialCurrency; to: FinancialCurrency; rate: number; rateDate: string; source: string; reference: boolean }
-export interface HistoricalRecord { inputHash: string; updatedAt: string; analysis: FinancialHistoricalAnalysis }
 export interface ModelRecord {
   id: string; name: string; sector: string; currency: string; assumptions: Record<string, unknown>;
   revision: number; createdAt: string; archivedAt: string | null;
@@ -28,7 +27,7 @@ export interface ModelingSession {
   permission: 'editor' | 'viewer'; canWrite: boolean; formats: { pdf: boolean; xlsx: boolean; csv: boolean };
   licence?: { status: SubscriptionStatus; trialEndsAt: string | null; paidUntil: string | null };
   usage: { activeProjects: number; projectLimit: number | null; canCreateProject: boolean; userLimit: number; enabledUsers: number };
-  bootstrap?: { models: ModelRecord[]; templates: ReturnType<typeof financialTemplate>[]; firstHistory: { modelId: string; revision: number; historical: HistoricalRecord | null } | null };
+  bootstrap?: { models: ModelRecord[]; templates: ReturnType<typeof financialTemplate>[] };
 }
 export class ModelingApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -148,31 +147,6 @@ export class ModelingStore {
       return model;
     } finally { state.converting = false; }
   }
-  async history(id: string) {
-    await this.flush(id);
-    const result = await this.request<{ revision: number; historical: HistoricalRecord | null }>(`/models/${encodeURIComponent(id)}/history`);
-    if (result.revision !== this.revision(id)) throw new ModelingApiError(409, 'Projecto alterado. Volte a carregá-lo antes de analisar balancetes.');
-    return result.historical;
-  }
-  async saveHistory(id: string, input: FinancialHistoricalInput) {
-    this.writable(id);
-    await this.flush(id);
-    const result = await this.request<{ model: ModelRecord; historical: HistoricalRecord }>(`/models/${encodeURIComponent(id)}/history`, 'PUT', { revision: this.revision(id), input });
-    this.entries.get(id)!.revision = result.model.revision;
-    return result.historical;
-  }
-  async removeHistory(id: string) {
-    this.writable(id);
-    await this.flush(id);
-    const result = await this.request<{ model: ModelRecord; historical: null }>(`/models/${encodeURIComponent(id)}/history`, 'DELETE', { revision: this.revision(id) });
-    this.entries.get(id)!.revision = result.model.revision;
-  }
-  async createFromHistory(id: string) {
-    this.writable(id);
-    await this.flush();
-    const result = await this.request<{ model: ModelRecord; historical: HistoricalRecord; notes: string[] }>(`/models/${encodeURIComponent(id)}/history/to-model`, 'POST', { revision: this.revision(id) });
-    return { model: this.accept(result.model), historical: result.historical, notes: result.notes };
-  }
   /** Substitui o registo local pelo do servidor (depois de uma operação que altera o projecto no servidor). */
   private replace(id: string, record: ModelRecord) {
     const state = this.entries.get(id)!, model = this.project(id)!;
@@ -201,7 +175,7 @@ export class ModelingStore {
   }
   async versions(id: string) { return this.request<VersionRecord[]>(`/models/${encodeURIComponent(id)}/versions`); }
   async version(id: string, versionId: string) {
-    return this.request<VersionRecord & { payload: { inputAssumptions: Record<string, unknown>; source: Record<string, unknown>; result: { engineVersion: string; npv: number | null; scenario: string }; historical?: { input: FinancialHistoricalInput } } }>(`/models/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}`);
+    return this.request<VersionRecord & { payload: { inputAssumptions: Record<string, unknown>; source: Record<string, unknown>; result: { engineVersion: string; npv: number | null; scenario: string } } }>(`/models/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}`);
   }
   /** Aprova a revisão gravada (o rascunho em edição é gravado primeiro, para aprovar exactamente o que está no ecrã). */
   async approve(id: string, label: string) {
@@ -231,7 +205,7 @@ export class ModelingStore {
   }
   async download(model: UiModel, key: string, version?: string, format: 'pdf' | 'xlsx' = 'pdf') {
     await this.flush(model.id);
-    const query = new URLSearchParams({ format, ...(version ? { version } : { revision: String(this.revision(model.id)), ...(key === 'analise' ? {} : { scenario: model.cen }) }) });
+    const query = new URLSearchParams({ format, ...(version ? { version } : { revision: String(this.revision(model.id)), scenario: model.cen }) });
     const response = await fetch(`/api/v1/modeling/models/${encodeURIComponent(model.id)}/reports/${encodeURIComponent(key)}?${query}`, { credentials: 'same-origin', cache: 'no-store' });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));

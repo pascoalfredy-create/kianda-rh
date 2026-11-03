@@ -1,12 +1,13 @@
 import { financialBreakEvenPrice, financialScenarios, financialSensitivity } from './analysis.js';
 import { runFinancialModel } from './engine.js';
+import { buildFinancialProjectionAnalysisReport } from './project-analysis.js';
 import { validateFinancialAssumptions } from './validation.js';
 import type { FinancialAssumptions, FinancialResult, FinancialScenario, FinancialSeries } from './types.js';
 
 export const FINANCIAL_REPORT_VERSION = 'integra-reports-1';
-export const FINANCIAL_REPORT_KEYS = ['sumario', 'comite', 'credito', 'avaliacao', 'demonstracoes', 'cenarios', 'divida'] as const;
+export const FINANCIAL_REPORT_KEYS = ['sumario', 'comite', 'credito', 'avaliacao', 'demonstracoes', 'cenarios', 'divida', 'analise'] as const;
 export type FinancialReportKey = typeof FINANCIAL_REPORT_KEYS[number];
-export const FINANCIAL_DOCUMENT_KEYS = [...FINANCIAL_REPORT_KEYS, 'analise'] as const;
+export const FINANCIAL_DOCUMENT_KEYS = FINANCIAL_REPORT_KEYS;
 export type FinancialDocumentKey = typeof FINANCIAL_DOCUMENT_KEYS[number];
 export type ReportFormat = 'money' | 'percent' | 'ratio' | 'integer' | 'text';
 export interface ReportCell { value: string | number | null; format: ReportFormat }
@@ -28,11 +29,11 @@ export interface FinancialReportBundle {
   sensitivity: ReturnType<typeof financialSensitivity>; breakEvenPriceMultiplier: number | null;
   personnelSources: { source: string; fromPeriod: string; toPeriod: string; importedAt: string }[];
   historical?: import('./historical.js').FinancialHistoricalAnalysis;
-  reports: Record<FinancialReportKey, FinancialReport> & Partial<Record<'analise', FinancialReport>>;
+  reports: Record<FinancialReportKey, FinancialReport>;
 }
 export const FINANCIAL_REPORT_TITLES: Record<FinancialReportKey, string> = {
   sumario: 'Sumário executivo', comite: 'Memorando para comité de investimento', credito: 'Memorando de crédito', avaliacao: 'Relatório de avaliação',
-  demonstracoes: 'Demonstrações financeiras projectadas', cenarios: 'Análise de cenários e sensibilidade', divida: 'Quadro de serviço da dívida',
+  demonstracoes: 'Demonstrações financeiras projectadas', cenarios: 'Análise de cenários e sensibilidade', divida: 'Quadro de serviço da dívida', analise: 'Relatório de análise económico-financeira',
 };
 const cell = (value: string | number | null, format: ReportFormat = 'text'): ReportCell => ({ value, format });
 const money = (value: number | null) => cell(value, 'money');
@@ -102,6 +103,7 @@ export function buildFinancialReportBundle(input: unknown, source: FinancialRepo
     table('Pontos de equilíbrio', ['Variável', 'Resultado'], [row('Preço que anula o VAL / preço do cenário', [pct(breakEven)]), ...m.receitas.map((v) => row(`${v.nome} - preço de equilíbrio por ${v.unid}`, [money(breakEven === null ? null : v.preco * breakEven * r.sc.preco)]))]), ...notes,
   ], true);
   reports.divida = make('divida', [text('Condições', r.hasDebt ? `Empréstimos novos e de abertura. Juros no ano do desembolso: ${m.divida.jurosDesembolso}% do juro anual da dívida nova.` : 'Sem dívida no modelo.'), debt, ...(r.hasDebt ? [dscrChart] : []), table('Totais do financiamento', ['Componente', 'Valor'], [row('Desembolsos', [money(sum(k.draw))]), row('Juros', [money(sum(k.jur))]), row('Capital reembolsado', [money(sum(k.princ))]), row('Serviço da dívida', [money(sum(k.ds))])]), covenants, ...notes], true);
+  reports.analise = buildFinancialProjectionAnalysisReport(r, source.projectName, SCENARIO_LABELS[r.scenario].toLowerCase());
   const conversion = (input as Record<string, unknown>).currencyConversion as import('./currency.js').FinancialCurrencyConversion | undefined;
   if (conversion && typeof conversion.from === 'string' && typeof conversion.to === 'string' && typeof conversion.rate === 'number' && Number.isFinite(conversion.rate) && typeof conversion.rateDate === 'string' && typeof conversion.source === 'string') {
     for (const report of Object.values(reports)) report.blocks.push(text('Conversão monetária', `1 ${conversion.from} = ${conversion.rate} ${conversion.to}, taxa de ${conversion.rateDate}. Fonte: ${conversion.source}. Conversão fixa dos montantes; inflação, juros e taxa de desconto conservam os pressupostos definidos e exigem revisão para a moeda de análise.`));

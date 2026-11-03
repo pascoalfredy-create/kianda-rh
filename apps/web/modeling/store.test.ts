@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { convertFinancialCurrency, financialTemplate } from '@kianda/core';
 import { ModelingApiError, ModelingStore, type ModelRecord, type ModelingTransport, type UiModel } from './store';
-import { historicalInput } from '../../../packages/core/test/fixtures/financial-history.js';
 const record = (id = 'm1', revision = 1): ModelRecord => ({ id, name: 'Projecto mineiro', sector: 'mineracao', currency: 'USD', assumptions: financialTemplate('mineracao').assumptions as unknown as Record<string, unknown>, revision, createdAt: '2026-10-28T00:00:00Z', archivedAt: null });
 const settle = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
@@ -85,26 +84,11 @@ describe('persistência da interface Integra', () => {
     const store = new ModelingStore(true); store.load([{ ...record(), assumptions: { pessoal: '"><script>alert(1)</script>', capex: [{ nome: 'Obra', valor: '<img onerror=x>' }] } }]);
     const m = store.models[0]!; expect(m.pessoal).toBeUndefined(); expect(m.capex[0].valor).toBeUndefined(); expect(m.receitas).toEqual([]); expect(m.wacc).toEqual({}); expect(m.horizonte).toBeUndefined();
   });
-  it('a importação histórica espera pelas edições e avança a revisão usada na gravação seguinte', async () => {
-    const historical = { inputHash: 'hash', analysis: { input: historicalInput } }, calls: any[] = [];
-    const request: ModelingTransport = async <T>(path: string, method?: string, payload?: any) => {
-      calls.push({ path, method, payload });
-      return (path.endsWith('/history') ? { model: record('m1', 3), historical } : record('m1', payload.revision + 1)) as T;
-    };
-    const store = new ModelingStore(true, request); store.load([record()]); const m = store.models[0]!;
-    m.pessoal = 100; store.change(m); await store.saveHistory(m.id, historicalInput);
-    expect(calls.map(c => c.payload.revision)).toEqual([1, 2]); expect(store.revision(m.id)).toBe(3);
-    m.pessoal = 200; store.change(m); await store.flush(); expect(calls.at(-1).payload.revision).toBe(3); expect(m.pessoal).toBe(200);
-  });
-  it('revisão histórica alterada por outro utilizador exige recarregar e nunca muda a revisão local', async () => {
-    const store = new ModelingStore(true, vi.fn().mockResolvedValue({ revision: 2, historical: null })); store.load([record()]);
-    await expect(store.history('m1')).rejects.toThrow('Projecto alterado'); expect(store.revision('m1')).toBe(1);
-  });
-  it('download histórico omite o cenário de projecção e consulta não pode importar', async () => {
+  it('o relatório de análise segue o cenário do projecto e a consulta não grava', async () => {
     const fetchFile = vi.fn().mockResolvedValue(new Response('%PDF-1.7')); vi.stubGlobal('fetch', fetchFile);
     const request = vi.fn(), store = new ModelingStore(false, request); store.load([record()]);
-    await store.download(store.models[0]!, 'analise'); expect(fetchFile.mock.calls[0]![0]).toBe('/api/v1/modeling/models/m1/reports/analise?format=pdf&revision=1');
-    await expect(store.saveHistory('m1', historicalInput)).rejects.toThrow('consulta'); await expect(store.createFromHistory('m1')).rejects.toThrow('consulta'); expect(request).not.toHaveBeenCalled();
+    await store.download(store.models[0]!, 'analise'); expect(fetchFile.mock.calls[0]![0]).toBe(`/api/v1/modeling/models/m1/reports/analise?format=pdf&revision=1&scenario=${store.models[0]!.cen}`);
+    expect(request).not.toHaveBeenCalled();
   });
   it('grava as edições antes de converter e substitui moeda e montantes pela resposta atómica', async () => {
     const calls:any[]=[],original=record(),input={from:'USD' as const,to:'Kz' as const,rate:900,rateDate:'2026-10-27',source:'Teste',reference:false};
@@ -161,15 +145,12 @@ describe('persistência da interface Integra', () => {
     expect(request).toHaveBeenCalledWith('/models/m1/archive', 'POST', { archived: false, revision: 4 });
     expect(store.models).toEqual([restored]); expect(store.archivedModels).toHaveLength(0); expect(store.revision('m1')).toBe(5); expect(store.canEdit('m1')).toBe(true);
   });
-  it('arquivados permitem histórico e PDF, mas recusam importações e conversão', async () => {
-    const request = vi.fn().mockResolvedValue({ revision: 4, historical: null }), store = new ModelingStore(true, request);
+  it('arquivados permitem PDF, mas recusam conversão', async () => {
+    const request = vi.fn(), store = new ModelingStore(true, request);
     store.load([{ ...record('m1', 4), archivedAt: '2026-10-29T08:00:00Z' }]);
-    expect(await store.history('m1')).toBeNull();
-    await expect(store.saveHistory('m1', historicalInput)).rejects.toThrow('arquivado');
-    await expect(store.createFromHistory('m1')).rejects.toThrow('arquivado');
     await expect(store.convertCurrency('m1', { from: 'USD', to: 'Kz', rate: 900, rateDate: '2026-10-29', source: 'Teste', reference: false })).rejects.toThrow('arquivado');
     const fetchFile = vi.fn().mockResolvedValue(new Response('%PDF-1.7')); vi.stubGlobal('fetch', fetchFile);
-    await store.download(store.archivedModels[0]!, 'sumario'); expect(fetchFile.mock.calls[0]![0]).toContain('format=pdf&revision=4'); expect(request).toHaveBeenCalledTimes(1);
+    await store.download(store.archivedModels[0]!, 'sumario'); expect(fetchFile.mock.calls[0]![0]).toContain('format=pdf&revision=4'); expect(request).not.toHaveBeenCalled();
   });
   it('consulta não arquiva nem restaura', async () => {
     const request = vi.fn(), store = new ModelingStore(false, request); store.load([record(), { ...record('m2'), archivedAt: '2026-10-29T08:00:00Z' }]);
