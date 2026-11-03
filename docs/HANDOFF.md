@@ -1,7 +1,7 @@
 # Kianda RH + Kianda Integra + Kianda Valora — documento de passagem
 
 > Para quem continua o trabalho (agente ou programador). Leia isto primeiro; depois `docs/MODULOS-LICENCAS.md` (comercial), `docs/INTEGRA_MODULE.md` (Modelagem), secção Valora de `docs/MODULOS-LICENCAS.md` e `docs/DEPLOY.md` (produção).
-> **Última actualização: 02/11/2026** — alinhado com o código e com a produção no commit `576c165` (PR #29) e com a limpeza de documentação que se lhe seguiu.
+> **Última actualização: 03/11/2026** — alinhado com o código e com a produção no commit `8401caf` (PR #53).
 > **Fonte de verdade: o código e os testes.** Se um documento divergir do código, corrija o documento, nunca o contrário sem decisão do dono. A tabela comercial existe só em `MODULOS-LICENCAS.md`; um teste (`packages/core/test/docs-coherence.test.ts`) falha se ela divergir do código.
 
 ## 1. O que é
@@ -9,7 +9,7 @@
 Uma conta, um repositório e uma base de dados para três módulos com licenças próprias:
 
 - **Kianda RH** — gestão de pessoas e processamento salarial para Angola (IRT, INSS, LGT), obrigações, finanças de pessoal em **PGC Angola (Decreto n.º 82/2001)**, conciliação, despesas, cessação, documentos, recrutamento, desempenho, portal e app móvel (PWA).
-- **Kianda Integra · Modelagem Financeira** — projectos de investimento e avaliação de empresas nos 8 sectores (mineração, petróleo, agro, comércio, serviços, indústria, imobiliário, tecnologia): demonstrações projectadas, DCF, crédito, cenários, 8 relatórios em PDF, versões aprovadas, análise de balancetes históricos (também de outros ERP) e importação opcional dos custos com pessoal do RH.
+- **Kianda Integra · Modelagem Financeira** — projectos de investimento e avaliação de empresas nos 8 sectores (mineração, petróleo, agro, comércio, serviços, indústria, imobiliário, tecnologia): demonstrações projectadas, DCF, crédito, cenários, 8 relatórios em PDF, versões aprovadas, **análise das demonstrações projectadas do próprio projecto** (rácios e diagnóstico por ano do horizonte) e importação opcional dos custos com pessoal do RH. **O Integra não recebe balancetes nem outra informação externa** (decisão do dono, 03/11/2026): a análise do dia-a-dia das empresas é feita no Valora.
 
 - **Kianda Valora · Análise e Avaliação** — análise financeira de uma entidade (própria empresa, participada ou alvo): demonstrações PGC Angola, orçamento, tesouraria, controlo orçamental mensal, rácios e avaliação (DCF, múltiplos, activos), relatórios PDF/Word/Excel. Interface aprovada em `apps/web/valuation/prototype.html`, montada por `scripts/build-valuation-ui.mjs` (ajustes explícitos que falham se o texto mudar; regenerar com `pnpm --filter @kianda/web valuation:generate`); ligação à API em `apps/web/valuation/adapter.js`; servida em `/valora`.
 
@@ -31,11 +31,24 @@ Uma conta, um repositório e uma base de dados para três módulos com licenças
 - Ritmo: o dono responde «Avançar» a cada entrega. Fluxo: ramo → alterações → testes (unitários, API com Postgres, navegador) → PR → CI verde → merge squash → publicação automática → confirmar CI e smoke → resumo curto.
 - Segredos: não passam pelo chat, salvo pedido expresso do dono; nunca em ficheiros, commits ou logs. Commits terminam com as linhas de atribuição pedidas pela sessão.
 
-## 3. Estado actual (02/11/2026)
+## 3. Estado actual (03/11/2026)
 
-- Produção no commit `576c165` (PR #29), publicada com sucesso: testes, tipos, build, **E2E**, migrações, API, web e smoke público. `/api/health` → `{"status":"ok","packs":["AO-2026"]}`.
-- Testes: **core 300, API 299, web 175** (com Postgres no CI) + **24 E2E** no navegador. A contagem do core inclui o teste de coerência da documentação.
-- Última migração: **0045_push_notifications** (subscrições Web Push por dispositivo e caixa de saída, com RLS).
+- Produção no commit `8401caf` (PR #53), publicada com sucesso: testes, tipos, build, **E2E**, migrações, API, web e smoke público. `/api/health` → `{"status":"ok","packs":["AO-2026"]}`.
+- Testes: **core 315, API ≈298, web 159** (com Postgres no CI) + **27 E2E** no navegador. A contagem do core inclui o teste de coerência da documentação. Localmente a bateria completa da API pode dar falhas intermitentes em `api.test.ts` quando corre em paralelo com outros ficheiros; corrido sozinho passa (151/151) — no CI passa.
+- Última migração: **0047_indexed_salaries** (0046 = turnos). O `when` do `meta/_journal.json` tem de ser crescente (0046 = 1793640600000, 0047 = 1793640700000).
+
+**Entregas de 02–03/11/2026 (PR #44–#53):**
+
+| PR | O quê |
+| --- | --- |
+| #44, #47, #48 | Valora: menu lateral claro, saída para os outros módulos no cabeçalho, grupos recolhíveis como no RH/Integra. |
+| #45 | Fontes normativas (PGC, Decreto, LGT) e códigos técnicos escondidos no ecrã e nos relatórios; o conteúdo continua conforme. |
+| #46 | **Planeamento de turnos** (migração 0046): tipos de turno, pincel e padrões, publicação da escala, colaborador vê a sua; intervalo mínimo entre turnos por omissão 10 h (por validar juridicamente). |
+| #49 | **Simulador** a partir do Excel do dono (do líquido pretendido ao base, e de USD ao líquido) e **salários indexados ao USD** (migração 0047): só o salário base é indexado; o câmbio (taxa, data, fonte) é indicado no processamento; alimentação e transporte fora do INSS, com opção no simulador. |
+| #50 | **Identidade própria** («O 3 com identidade própria», aprovada sobre protótipo): tipo Schibsted Grotesk servido pela aplicação (`/fonts/*.woff2`), símbolo `kianda-mark` (`/icons/kianda-mark.svg`, `components/kianda-mark.tsx`), verde `#0e4a3c`, acento terra, voz humanizada (ecrã «Hoje», grupos do menu Equipa/Tempo/Salários/Finanças/Talento/Relatórios/Definições/Módulos). |
+| #51 | **Montantes sempre por inteiro** com milhares e 2 casas (5 500 000,00), nunca «5,5 M»/«mil»/«milhões», em RH, Integra e Valora (cartões, tabelas, gráficos, relatórios, PDF, Excel). Valora guarda os dados em **milhões de Kz** e apresenta em Kz (`f0` multiplica por 1e6; prazos/dias usam `fd`); as grelhas de introdução continuam em milhões e dizem-no. |
+| #52 | **Integra: análise de demonstrações só do projecto** (`packages/core/src/modeling/project-analysis.ts`: `analyzeFinancialProjection`, `buildFinancialProjectionAnalysisReport`); relatório `analise` passa a ser o 8.º de `FINANCIAL_REPORT_KEYS`, sempre disponível e por cenário. Retiradas as rotas `/v1/modeling/models/:id/history*`, a importação de balancetes (PDF/Word/CSV) e o «criar modelo a partir de balancetes». Dados históricos antigos ficam na tabela `financial_historical_inputs` e nas versões aprovadas antigas (imutáveis). **Fundo branco** em toda a plataforma (sem bege). |
+| #53 | **Uniformização**: um só tipo de letra (também no Valora, sem mono) e o mesmo estilo de tabela nos três módulos; algarismos proporcionais em todo o lado (`* { font-variant-numeric: proportional-nums !important }` — com este tipo os tabulares afastam a vírgula); campos numéricos do Integra/Valora formatados (`apps/web/lib/number-fields.ts`); formatadores comuns no core `formatAmount`, `formatPercent`, `formatDecimal` (`money.ts`) e leitura com `parseAmount` (`bank.ts`). |
 
 **Entregas recentes (ver também `docs/ROADMAP.md`):**
 
@@ -60,7 +73,7 @@ Uma conta, um repositório e uma base de dados para três módulos com licenças
 
 **Feito em 01–02/11/2026 (configuração de produção):** `KIANDA_BACKUP_PASSPHRASE` definido (impressão digital `33ec1a54`; cópia diária às 02:17 de Luanda com teste de restauro); `KIANDA_JWT_SECRET` rodado; `KIANDA_SEED_DEMO=false` (a empresa demo «Kwanza Logística» e as 3 contas continuam na base — eliminar pela consola se deixarem de servir); 2FA da conta de administrador reposta a pedido do dono (execução `41401754941`; não repetir como teste); **regra de limite de tentativas activa na Cloudflare** desde 02/11 (token `kianda-rh-deploy` com «Zone WAF Rules · Edit»; zona `yelaperformance.com`, 5 pedidos/10 s por IP nas rotas de autenticação → Block 10 s; reaplicada de forma idempotente em cada publicação por `scripts/cf-ratelimit.mjs`).
 
-**Próximas entregas acordadas (fechar lacunas face ao Factorial, uma de cada vez):** ~~acolhimento e saída~~ (feito), ~~aceitação electrónica de documentos~~ (feito), ~~notificações no telemóvel~~ (feito), ~~planeamento de turnos~~ (feito em 03/11/2026, migração 0046). Plano face ao Factorial concluído; próximos candidatos: trocas de turno pedidas pelo colaborador e faltas/subsídios por dia a seguir a escala publicada (hoje seguem o regime de horário). Reconhecimento facial e terminais biométricos ficam para depois (equipamento e risco jurídico).
+**Próximas entregas acordadas (fechar lacunas face ao Factorial, uma de cada vez):** ~~acolhimento e saída~~ (feito), ~~aceitação electrónica de documentos~~ (feito), ~~notificações no telemóvel~~ (feito), ~~planeamento de turnos~~ (feito em 03/11/2026, migração 0046). Plano face ao Factorial concluído; próximos candidatos: trocas de turno pedidas pelo colaborador; faltas/subsídios por dia a seguir a escala publicada (hoje seguem o regime de horário); manuais actualizados com os novos nomes do menu; fonte própria também nos PDF descarregados (hoje DejaVu/Helvetica, a formatação dos números já é a mesma); eventualmente levar a importação de balancetes de outros ERP para o Valora (pedido implícito do dono: «análise do dia-a-dia vai para a Valora» — confirmar antes). Reconhecimento facial e terminais biométricos ficam para depois (equipamento e risco jurídico).
 
 **Feito pelo dono (confirmado em 02/11/2026):** IBAN do Banco Atlântico configurado na consola (Plataforma Kianda); os pedidos de pagamento mostram as instruções de transferência. Ficheiros anexados em R2 (`kianda-files`) activo.
 
@@ -71,7 +84,8 @@ Uma conta, um repositório e uma base de dados para três módulos com licenças
 2. Opcional: `KIANDA_MODELING_OWNER_USER_ID` (sem ela ninguém exporta Excel da Modelagem).
 3. Contratar ProxyPay, Resend e Vendus e definir os secrets (DEPLOY.md); Vendus quando a facturação electrónica geral entrar em vigor. Enquadramento de IVA das licenças. Domínio próprio (`KIANDA_HOSTNAME`).
 4. Validação jurídica do intervalo mínimo entre turnos por omissão (10 h, ajustável por empresa em Turnos → Tipos de turno) e de `AO_2026.toValidate` (em especial cessação, Lei n.º 12/23) e textos dos contratos; termos ainda versão de trabalho.
-5. **AO-2027:** registar o pacote quando o OGE 2027 for publicado — sem ele, o processamento de Janeiro de 2027 é recusado.
+5. Reactivar a 2FA da conta de administrador com uma app autenticadora; testar as notificações num telemóvel real.
+6. **AO-2027:** registar o pacote quando o OGE 2027 for publicado — sem ele, o processamento de Janeiro de 2027 é recusado.
 
 **Cópias de segurança — o que está e não está provado:** cada cópia é cifrada, decifrada e lida com `pg_restore --list` antes de ser guardada (30 dias, artefacto privado). Não é um ensaio de restauro completo numa segunda base. O backup PostgreSQL **não inclui** os ficheiros do R2 (`kianda-files`).
 
@@ -86,21 +100,23 @@ Ficheiros: `packages/core/src/licensing.ts`, `packages/core/src/modeling-policy.
 | Área | Onde |
 | --- | --- |
 | Motor RH, licenças, datas, dinheiro | `packages/core/src/` (`payroll.ts`, `licensing.ts`, `modules.ts`, `money.ts`, `packs/ao-2026.ts`) |
-| Motor financeiro (Integra) | `packages/core/src/modeling/` (engine, types, templates, currency, analysis, historical, reports) |
+| Motor financeiro (Integra) | `packages/core/src/modeling/` (engine, types, templates, currency, analysis, reports, `project-analysis.ts`; `historical*.ts` ficou só como biblioteca, sem uso no Integra) |
 | API, sessão, empresa | `apps/api/src/app.ts`, `plugins/tenant.ts`, `routes/auth.ts`, `services/licence.ts`, `services/modules.ts` |
-| API Integra | `routes/modeling.ts`, `modeling-history.ts`, `modeling-currency.ts`; serviços `modeling-{calculation,exchange,policy,versions,access}.ts` |
+| API Integra | `routes/modeling.ts`, `modeling-currency.ts`; serviços `modeling-{calculation,exchange,policy,versions,access}.ts` |
 | Cobrança | `routes/billing.ts`, `services/billing.ts`, `services/payments.ts` |
 | Esquema e migrações | `packages/db/src/schema.ts`, `packages/db/migrations/` (+ `meta/_journal.json`) |
 | Interface RH | `apps/web/app/(app)/`, `components/`, `lib/navigation.ts`, `components/app-shell.tsx` |
 | Interface Integra | `apps/web/modeling/` (`prototype.html`, `adapter.js`, `store.ts`, `mobile.ts`, `space.css`); montagem em `app/modelagem/route.ts` e `lib/modeling/page.ts` |
-| Importação de documentos | `packages/core/src/document-import.ts`, `apps/web/lib/document-import.ts`, `apps/web/modeling/pdf-import.ts` |
+| Importação de documentos | `packages/core/src/document-import.ts`, `apps/web/lib/document-import.ts` (extractos na conciliação). `apps/web/modeling/pdf-import.ts` já não é usado pelo Integra (só pelo `build-modeling-pdf.mjs`) |
+| Interface Valora | `apps/web/valuation/` (`prototype.html` intacto, `adapter.js`, `space.css`); montagem `scripts/build-valuation-ui.mjs` (`replace`/`replaceShell`/`span`, ortografia pré-AO90) |
+| Identidade e formatação | `apps/web/app/globals.css` (camada final «Identidade Kianda»), `modeling/space.css`, `valuation/space.css`, `apps/web/lib/number-fields.ts`, `packages/core/src/money.ts` |
 | Publicação | `.github/workflows/{ci,backup,admin-reset-2fa}.yml`, `scripts/{cf-prepare,cf-ratelimit,verify-public-site,build-modeling-ui}.mjs`, `apps/e2e/` |
 
-Tabelas do Integra: `financial_models` (rascunho/revisão/arquivo), `modeling_members` (permissão geral e âmbito `all`/`selected`), `modeling_project_access`, `financial_personnel_imports` (snapshot agregado), `financial_historical_inputs`, `financial_model_versions` (imutáveis).
+Tabelas do Integra: `financial_models` (rascunho/revisão/arquivo), `modeling_members` (permissão geral e âmbito `all`/`selected`), `modeling_project_access`, `financial_personnel_imports` (snapshot agregado), `financial_historical_inputs` (legado, já sem rotas), `financial_model_versions` (imutáveis).
 
 Ler `apps/web/AGENTS.md` antes de trabalho Next (versão com alterações incompatíveis; documentação em `apps/web/node_modules/next/dist/docs/`).
 
-Documentos de outros ERP: PDF com texto, Word (.docx) e CSV/TXT. `.doc` antigo exige conversão; PDF digitalizado depende de OCR, sem garantia. A moeda muda valores e mapas, não só o símbolo (`docs/MODELAGEM-MOEDA.md`).
+A moeda do Integra muda valores e mapas, não só o símbolo (`docs/MODELAGEM-MOEDA.md`).
 
 ## 6. Contas
 
@@ -112,7 +128,7 @@ Documentos de outros ERP: PDF com texto, Word (.docx) e CSV/TXT. `.doc` antigo e
 | Pasta | O quê |
 | --- | --- |
 | `packages/core` | Motor puro TypeScript (sem I/O): salários, IRT, INSS, férias, assiduidade, PGC, balancete, conciliação, despesas, cessação, documentos, talento, licenças, TOTP, sectores (`sectors.ts`: regimes, subsídios, conformidade). **Valores monetários em cêntimos inteiros** (`kz(1000)` = 100000). Regras legais por ano em `src/packs/ao-2026.ts` (com lista `toValidate`). |
-| `packages/db` | Drizzle 0.45 + pg. `src/schema.ts`, migrações SQL em `migrations/` (0000–0037), `scripts/seed.ts` (empresa demo), `scripts/migrate.ts`, `scripts/platform-admins.ts`. |
+| `packages/db` | Drizzle 0.45 + pg. `src/schema.ts`, migrações SQL em `migrations/` (0000–0047), `scripts/seed.ts` (empresa demo), `scripts/migrate.ts`, `scripts/platform-admins.ts`. |
 | `apps/api` | Hono 4 (corre em Node local e em Cloudflare Workers). Rotas em `src/routes/*.ts`, serviços em `src/services/`. Zod 4 para validação. Testes de API em `test/api.test.ts` (Vitest, base Postgres real). |
 | `apps/e2e` | Testes no navegador (Playwright 1.63): área pública, RH, Integra e telemóvel. Job «Navegador (E2E)» obrigatório para publicar. |
 | `apps/web` | Next 16 + React 19 (App Router) via OpenNext Cloudflare. Páginas autenticadas em `app/(app)/`; públicas: `login`, `registo`, `termos`, `acesso/[token]`, `carreiras/[company]`, `verificar/[code]`. |
@@ -133,6 +149,8 @@ Versões: TypeScript 5.9.3, Vitest 4.0.5, Hono 4.13, Zod 4.6, Next 16.4, React 1
 - **Adiantamentos (`salary_advances`):** `routes/advances.ts` + `core/advances.ts`. Prestações = `payroll_variables` com `advance_id` (não se apagam à mão). Limites do art. 248.º validados no pedido e na aprovação (exposição de outros adiantamentos por mês).
 - **Lançamentos contabilísticos:** nunca se apagam; anula-se com estorno. Referências: `PS-AAAAMM` (processamento), `PG-…` (pagamentos), `ND-AAAA-NNNN` (despesas), `DOC-AAAA-NNNN` (documentos), `PF-AAAA-NNNN` (pedidos de pagamento da licença).
 - **Auditoria:** tabela `audit_logs` em todas as operações sensíveis.
+- **Apresentação de números (pedido do dono, obrigatório):** montantes sempre por inteiro, espaço nos milhares e vírgula com 2 casas (`formatKz`/`formatAmount`); nunca abreviar (M, mil, milhões). Percentagens com `formatPercent` (vírgula, milhares, nunca «-0,0%», sinal nas variações). Nada de `toFixed(...).replace('.', ',')` em código novo. Campos de montantes: texto com `inputMode="decimal"`, valor inicial formatado e leitura com `parseAmount` (core) ou `parseNumberInput` (Integra/Valora). O separador produzido por `Intl` é um espaço inseparável: nos testes normalizar com `.replace(/\s/g, ' ')` ou usar `\s` em expressões regulares.
+- **Aspecto (pedido do dono):** fundo branco, como uma folha de cálculo sem grelha — cartões, menu, cabeçalhos de tabela transparentes, só contornos finos neutros (`--line #e6e6e4`, `--line-soft #f1f1ef`); janelas, menus suspensos e campos opacos. Um só tipo de letra (Schibsted Grotesk) e o mesmo estilo de tabela em RH, Integra e Valora; as mudanças no Integra/Valora fazem-se em `space.css` ou nas substituições dos scripts, nunca no `prototype.html`.
 
 ## 9. Produção e publicação (pormenor)
 
@@ -178,7 +196,12 @@ pnpm -r typecheck && pnpm -r test   # ver contagens actuais na secção 3
 - Drizzle dentro de `sql\`…\`` escreve a coluna sem tabela (`"id"`): numa subconsulta resolve para a tabela interna. Qualificar à mão (`personnel_budgets.id`).
 - `.form .f` usa `display:flex`, que vence o atributo `hidden`: esconder com `style.display`.
 - Cache antiga do Next (`.next`) dá erros falsos de tipos/«invalid digit»: apagar `.next` antes de concluir que é defeito.
-- Integra: não editar `apps/web/public/modeling-runtime.js` nem `lib/modeling/generated.ts`; alterar `modeling/adapter.js`, `space.css`, `store.ts` ou as substituições em `scripts/build-modeling-ui.mjs` e correr `pnpm --filter @kianda/web modeling:generate` (o CI verifica com `--check`).
+- Integra: não editar `apps/web/public/modeling-runtime.js` nem `lib/modeling/generated.ts`; alterar `modeling/adapter.js`, `space.css`, `store.ts` ou as substituições em `scripts/build-modeling-ui.mjs` e correr `pnpm --filter @kianda/web modeling:generate` (o CI verifica com `--check`). O mesmo para o Valora (`valuation:generate`). Qualquer alteração no core exige regenerar os dois.
+- O `MODELING_SHELL` tem de ser igual ao cabeçalho do protótipo (teste `modeling/page.test.ts`): estilos do Integra mudam-se em `space.css` (com `!important` quando o protótipo fixa a regra), não no shell.
+- `replace()` dos scripts substitui todas as ocorrências e falha se o texto não existir; atenção à ortografia: o Valora passa primeiro pela função `spelling` (ex.: «Ativo» já é «Activo»).
+- A API consome o `dist` do core: depois de mexer no core, `pnpm --filter @kianda/core build` antes de testar a API (senão os testes usam código antigo).
+- Expressões regulares com `/i` nos testes apanharam «nan» em «Fi**nan**ceira»: usar sem `/i` ao procurar `NaN`.
+- Postgres local da sessão do agente pode parar entre turnos: se a API devolver `erro_interno` em todos os E2E, reiniciar a base antes de investigar.
 - Secrets colados com espaço/linha a mais: a publicação pára na validação antes de tocar na produção. Voltar a colar só o valor.
 
 ## 12. Regra de cálculo manual (27/10/2026)
@@ -191,7 +214,8 @@ O core mantém `suspendedDays`, `holidayWorkDays` e `familyEveMinutes` (testados
 
 ## 13. Início sugerido para a próxima sessão
 
-1. Ler este documento e a última mensagem do dono.
+1. Ler este documento e a última mensagem do dono. Ponto de situação em 03/11/2026: tudo o que o dono pediu está em produção (PR #53); não há trabalho a meio nem ramos por fundir. Pergunta em aberto ao dono: manter ou retirar do Integra a importação do orçamento de pessoal do RH (conta 72) — hoje mantém-se, por ser informação da própria plataforma.
+   O dono valida pelo aspecto: depois de cada entrega visível, enviar capturas (Playwright: um `tests/zz-*.spec.ts` temporário em `apps/e2e` que regista uma empresa pela API, entra com `signIn` e grava `page.screenshot`; apagar o ficheiro antes do commit).
 2. Actualizar o checkout (`git fetch && git checkout main && git pull`) e ler o histórico recente; preservar alterações de terceiros.
 3. Antes de mexer em cálculos, licenças ou dados: ler core, API, esquema e migrações da área.
 4. Preservar preços, quotas, sectores, avaliação, exportações, isolamento e layouts aprovados.
