@@ -1,6 +1,6 @@
 
 import { ExportLink } from '@/components/document-export';
-import { formatKz } from '@kianda/core';
+import { formatKz, formatPercent } from '@kianda/core';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { api, currentUser } from '@/lib/api';
@@ -20,7 +20,7 @@ interface Report {
 
 const GROUPS: Group[] = ['base', 'allowances', 'annual', 'variable', 'exit'];
 const COLOR: Record<Group | 'inss', string> = { base: '#0f5c4d', allowances: '#4f9a89', annual: '#a9d3c8', variable: '#b7791f', exit: '#c2412d', inss: '#8a92a1' };
-const pctFmt = (v: number) => `${String(v.toFixed(1)).replace('.', ',')}%`;
+const pctFmt = (v: number) => formatPercent(v);
 /** Eixos dos gráficos: o valor por inteiro, com milhares e duas casas decimais (nunca «1,2 M»). */
 const short = (minor: number) => formatKz(minor).replace(/\s?Kz$/, '');
 const mon = (p: string) => monthLabel(p).slice(0, 3) + ' ' + p.slice(2, 4);

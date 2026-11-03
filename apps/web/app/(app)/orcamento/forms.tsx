@@ -2,7 +2,7 @@
 import { ExportLink } from '@/components/document-export';
 
 
-import { formatKz } from '@kianda/core';
+import { formatKz, formatAmount, parseAmount } from '@kianda/core';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { send, useMutation } from '@/lib/client';
@@ -14,8 +14,8 @@ export interface Assumptions { year: number; increaseBps: number; increaseFrom: 
 interface Sim { months: { period: string; costMinor: number; headcount: number }[]; totalMinor: number; packVersion: string; staff: number }
 
 const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-const kzIn = (s: string) => { const t = s.replace(/\s/g, '').replace(/\./g, '').replace(',', '.'); const n = Number(t); return t && Number.isFinite(n) ? Math.round(n * 100) : 0; };
-const kzOut = (m: number) => (m ? String(m / 100).replace('.', ',') : '');
+const kzIn = (s: string) => parseAmount(s) ?? 0;
+const kzOut = (m: number) => (m ? formatAmount(m) : '');
 
 /** Hipóteses → simulação → criar (ou recalcular) o orçamento. */
 export function BudgetPlanner({ init, departments, budgetId }: { init: Assumptions; departments: Dept[]; budgetId?: string }) {

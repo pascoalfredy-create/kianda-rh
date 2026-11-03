@@ -247,4 +247,5 @@ function valoraStart(){
   if(!VS){document.body.classList.add('valora-none');return}
   if(VS.current)loadAnalysis(VS.current);else showEmpty();
 }
+try{setupNumberFields(document);}catch{}
 valoraStart();

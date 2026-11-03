@@ -1,6 +1,6 @@
 'use client';
 
-import { formatKz } from '@kianda/core';
+import { formatKz, formatPercent } from '@kianda/core';
 import { useState } from 'react';
 import { useMutation } from '@/lib/client';
 
@@ -39,7 +39,7 @@ export function AssignAllowance({ employeeId, types }: { employeeId: string; typ
   const [start, setStart] = useState(new Date(Date.now() + 3_600_000).toISOString().slice(0, 8) + '01');
   const [end, setEnd] = useState('');
   const t = types.find((x) => x.id === typeId);
-  const def = t ? (t.calc === 'base_pct' ? `${String((t.bps ?? 0) / 100).replace('.', ',')}%` : formatKz(t.valueMinor ?? 0)) : '';
+  const def = t ? (t.calc === 'base_pct' ? formatPercent((t.bps ?? 0) / 100, 2) : formatKz(t.valueMinor ?? 0)) : '';
   const n = Number(own.replace(/\s/g, '').replace(',', '.'));
   return (
     <div className="form" style={{ borderTop: '1px solid var(--line)' }}>

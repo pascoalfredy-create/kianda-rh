@@ -1,4 +1,4 @@
-import { PIPELINE, SOURCES, STAGE_LABEL, type Stage } from '@kianda/core';
+import { PIPELINE, SOURCES, STAGE_LABEL, type Stage, formatPercent } from '@kianda/core';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { AddCandidate, OpeningForm } from '../forms';
@@ -23,7 +23,7 @@ export default async function Vaga({ params, searchParams }: { params: Promise<{
       <div className="page-head">
         <div>
           <h1>{o.title} <span className={OPENING_STATUS[o.status]?.[1]} style={{ fontSize: 13, verticalAlign: 'middle' }}>{OPENING_STATUS[o.status]?.[0]}</span></h1>
-          <p className="sub">{o.stats.total} candidato(s) · taxa de contratação {String(o.stats.hireRate).replace(".", ",")}%{o.stats.avgDaysToHire !== null ? ` · ${o.stats.avgDaysToHire} dias até contratar` : ''} · origem: {Object.entries(o.stats.bySource).map(([k, n]) => `${SOURCES[k as keyof typeof SOURCES] ?? k} ${n}`).join(', ') || '—'}</p>
+          <p className="sub">{o.stats.total} candidato(s) · taxa de contratação {formatPercent(o.stats.hireRate)}{o.stats.avgDaysToHire !== null ? ` · ${o.stats.avgDaysToHire} dias até contratar` : ''} · origem: {Object.entries(o.stats.bySource).map(([k, n]) => `${SOURCES[k as keyof typeof SOURCES] ?? k} ${n}`).join(', ') || '—'}</p>
         </div>
         <span className="actions">
           {o.canEdit && !sp.editar && <Link className="btn ghost" href="?editar=1">Editar vaga</Link>}

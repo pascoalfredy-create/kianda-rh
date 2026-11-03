@@ -1,4 +1,4 @@
-import { formatKz } from '@kianda/core';
+import { formatKz, formatPercent } from '@kianda/core';
 import { redirect } from 'next/navigation';
 import { api, currentUser } from '@/lib/api';
 import { monthLabel } from '@/lib/format';
@@ -18,7 +18,7 @@ interface Data {
   };
 }
 
-const pctFmt = (v: number | null) => (v === null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(1).replace('.', ',')}%`);
+const pctFmt = (v: number | null) => formatPercent(v, 1, true);
 const tone = (v: number | null) => (v === null || Math.abs(v) < 0.5 ? undefined : v > 0 ? 'var(--red)' : 'var(--brand)');
 
 function scale(v: number) {

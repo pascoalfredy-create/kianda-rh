@@ -95,3 +95,16 @@ header{background:color-mix(in srgb,var(--bg) 80%,transparent);-webkit-backdrop-
 /* Montantes por inteiro: algarismos proporcionais e numa só linha, para caberem no cartão. */
 .kpi .val{font-family:inherit;font-size:clamp(14px,1.1vw,19px);font-weight:700;letter-spacing:-.2px;white-space:nowrap;font-variant-numeric:proportional-nums}
 .kpi .val small{margin-left:4px}
+/* Uniformização (Nov. 2026): o mesmo tipo de letra e as mesmas tabelas em RH, Integra e Valora. */
+:root{--mono:'Schibsted Grotesk Variable',system-ui,sans-serif}
+body,.chart text,.pp-tbl td:first-child,.pp-tbl tr.sec td,input,select,button,textarea{font-family:'Schibsted Grotesk Variable',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+thead th,th{font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;font-weight:600;color:var(--ink-3);border-bottom:1px solid #e6e6e4}
+td{font-size:13.5px;border-bottom:1px solid #f1f1ef;font-variant-numeric:proportional-nums}
+th,td{padding:8px 10px}
+tr.tot td{font-weight:700;background:#fafafa;border-top:1px solid #e6e6e4}
+tr.sec td{font-size:11.5px;letter-spacing:.4px}
+.pp-tbl td{font-size:12px}
+input.cell,input.kianda-number{font-variant-numeric:proportional-nums;text-align:right}
+.kpi .val,.big,.pp-kpis b,#tip b,.heat td,.dev td.c{font-variant-numeric:proportional-nums}
+/* Algarismos proporcionais em todo o lado: com este tipo de letra os tabulares afastam a vírgula («64 ,9%»). */
+*{font-variant-numeric:proportional-nums!important}

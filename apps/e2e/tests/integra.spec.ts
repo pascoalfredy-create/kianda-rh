@@ -53,7 +53,7 @@ test('importar do RH: orçamento aprovado substitui 72 · Custos com o pessoal d
   await expect(page.locator('#hrPreview')).not.toContainText('O orçamento é de');
   await page.click('[data-act="hrImportApply"]');
   await expect(page.locator('#ov')).not.toHaveClass(/on/);
-  await expect(page.locator('#assumption-pessoal')).toHaveValue('583200000');
+  await expect(page.locator('#assumption-pessoal')).toHaveValue(/^583\s200\s000,00$/);
   await expect(page.locator('#hrImportHint')).toContainText('Importado do RH: Orçamento de pessoal 2027');
   const detail = (await apiAs(owner.token, 'GET', `/v1/modeling/models/${modelB}`)).body;
   expect(detail.assumptions.pessoal).toBe(583_200_000);
@@ -87,13 +87,13 @@ test('versões: aprovar, descarregar o PDF aprovado, consultar em só leitura e 
   await expect(banner).toContainText('reproduzem o cálculo aprovado');
   await expect(page.locator('#mSel option:checked')).toHaveText('Versão v1 · Expansão Benguela');
   await openCosts(page);
-  await expect(page.locator('#assumption-pessoal')).toHaveValue('583200000');
+  await expect(page.locator('#assumption-pessoal')).toHaveValue(/^583\s200\s000,00$/);
   await expect(page.locator('#assumption-pessoal')).toBeDisabled();
   await expect(page.locator('[data-act="hrImport"]')).toHaveCount(0);
 
   await page.click('.alert [data-act="leaveVersion"]');
   await openCosts(page);
-  await expect(page.locator('#assumption-pessoal')).toHaveValue('999000000');
+  await expect(page.locator('#assumption-pessoal')).toHaveValue(/^999\s000\s000,00$/);
   await expect(page.locator('#assumption-pessoal')).toBeEnabled();
   expect(errors).toEqual([]);
 });

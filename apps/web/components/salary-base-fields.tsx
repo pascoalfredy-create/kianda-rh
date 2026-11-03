@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { convertUsdMinor, formatKz, parseFxRate } from '@kianda/core';
+import { convertUsdMinor, formatKz, parseFxRate, parseAmount } from '@kianda/core';
 
-const num = (s: string) => { const n = Number(s.replace(/\s/g, '').replace(',', '.')); return Number.isFinite(n) ? n : 0; };
+const num = (s: string) => (parseAmount(s) ?? 0) / 100;
 
 /**
  * Salário base em Kz ou indexado ao dólar. Em USD, o campo «base» enviado é a referência em Kz ao câmbio indicado

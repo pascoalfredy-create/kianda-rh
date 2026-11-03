@@ -2,7 +2,7 @@
 import { DocumentPrintButton } from '@/components/document-export';
 
 
-import { EXPENSE_CATEGORIES, formatKz, PER_DIEM_ZONE } from '@kianda/core';
+import { EXPENSE_CATEGORIES, formatKz, PER_DIEM_ZONE, formatAmount, parseAmount } from '@kianda/core';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { send, useMutation } from '@/lib/client';
@@ -10,10 +10,10 @@ import { send, useMutation } from '@/lib/client';
 interface LineState { kind: 'expense' | 'per_diem'; date: string; description: string; category: string; amount: string; documentRef: string; supplierNif: string; zone: string; days: string; rate: string }
 export interface ClaimInit { id?: string; employeeId?: string; title: string; tripFrom: string | null; tripTo: string | null; lines: Partial<LineState>[] }
 
-const num = (v: string) => { const t = v.trim().replace(/\s/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.'); return t === '' ? null : Number(t); };
+const num = (v: string) => { const m = parseAmount(v); return v.trim() === '' ? null : m === null ? NaN : m / 100; };
 const blank = (kind: LineState['kind'], today: string, rates: { national: number | null; international: number | null }): LineState => ({
   kind, date: today, description: '', category: 'transport', amount: '', documentRef: '', supplierNif: '', zone: 'national', days: '1',
-  rate: rates.national ? String(rates.national / 100).replace('.', ',') : '',
+  rate: rates.national ? formatAmount(rates.national) : '',
 });
 
 export function ClaimForm({ init, today, rates, employees }: { init: ClaimInit; today: string; rates: { national: number | null; international: number | null }; employees?: { id: string; name: string }[] }) {
@@ -28,7 +28,7 @@ export function ClaimForm({ init, today, rates, employees }: { init: ClaimInit; 
   const set = (i: number, k: keyof LineState, v: string) => setLines((ls) => ls.map((l, j) => {
     if (j !== i) return l;
     const n = { ...l, [k]: v };
-    if (k === 'zone') { const r = rates[v as 'national' | 'international']; if (r) n.rate = String(r / 100).replace('.', ','); }
+    if (k === 'zone') { const r = rates[v as 'national' | 'international']; if (r) n.rate = formatAmount(r); }
     return n;
   }));
   const amountOf = (l: LineState) => l.kind === 'expense' ? Math.round((num(l.amount) ?? 0) * 100) : Math.round((num(l.days) ?? 0) * (num(l.rate) ?? 0) * 100);

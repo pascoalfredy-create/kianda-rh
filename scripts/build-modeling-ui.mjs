@@ -111,7 +111,7 @@ replace("t>=1&&k.debt[t-1]>0?brk(t):null", "t>=1&&(k.ds[t]>0||k.debt[t]>0)?brk(t
 // Fontes normativas ficam fora do ecrã e dos relatórios: o conteúdo continua conforme, sem citações.
 replace(' · classificação PGC Angola · ${unitLbl()}', ' · ${unitLbl()}');
 // Valores sempre por inteiro, com milhares e duas casas decimais (nunca «5,5 M»): sem unidades de apresentação.
-replace("const nf=(v,d=0)=>(v??0).toLocaleString('pt-PT',{minimumFractionDigits:d,maximumFractionDigits:d});", "const nf=(v,d=0)=>(v??0).toLocaleString('pt-PT',{minimumFractionDigits:d,maximumFractionDigits:d,useGrouping:'always'});");
+replace("const nf=(v,d=0)=>(v??0).toLocaleString('pt-PT',{minimumFractionDigits:d,maximumFractionDigits:d});", "const nf=(v,d=0)=>((+(+(v??0)).toFixed(d))||0).toLocaleString('pt-PT',{minimumFractionDigits:d,maximumFractionDigits:d,useGrouping:'always'});");
 replace("const s=Math.abs(x).toLocaleString('pt-PT',{minimumFractionDigits:d,maximumFractionDigits:d});", "const s=Math.abs(x).toLocaleString('pt-PT',{minimumFractionDigits:d,maximumFractionDigits:d,useGrouping:'always'});");
 replace("const UNITS={U:[1,''],K:[1e3,'mil'],M:[1e6,'M']};", "const UNITS={U:[1,''],K:[1,''],M:[1,'']};");
 replace("const d=dd??(S.unit==='M'?(m.moeda==='Kz'?1:2):0);", "const d=dd??2;");
@@ -156,14 +156,22 @@ span(" analise:{t:'Relatório de análise económico-financeira'", '};\nVIEWS.re
    <h3>Fluxos de caixa (síntese)</h3>\${rtable(R,[['Fluxo operacional',t=>mv(k.cfo[t])],['Fluxo de investimento',t=>mv(k.cfi[t])],['Fluxo de financiamento',t=>mv(k.cff[t])],['Caixa no fim do ano',t=>mv(k.cash[t])]],ys)}
    <h3>Rácios</h3>\${rtable(R,A.rows.map(r=>[r.label,t=>paFmt(at(r,t),r.format)]),ys)}
    <h3>Diagnóstico</h3><table class="t"><tr><th>Área</th><th>Leitura</th><th>Comentário</th></tr>\${A.diagnosis.map(d=>\`<tr><td>\${d.area}</td><td>\${PA_TAG[d.status]}</td><td>\${d.text}</td></tr>\`).join('')}</table>
-   <p style="font-family:Inter;font-size:11px">\${A.notes.join(' ')}</p>
+   <p style="font-size:11px">\${A.notes.join(' ')}</p>
    \${SGM(['Elaborado por','Direcção Financeira'],['Revisto por','____________________'])}\${FTM('Análise económico-financeira')}</div>\`;}}
 `);
 replace("const R=cur==='analise'?null:run(m);", 'const R=run(m);');
+// Campos numéricos com milhares e vírgula; leitura tolerante ("1 600 000 000,00" ou "1600000000").
+replace("const v=i.dataset.t==='t'?i.value:(i.value===''?0:Number(i.value));", "const v=i.dataset.t==='t'?i.value:(i.value===''?0:parseNumberInput(i.value));");
+replace("const value=Number(i.value);if(!Number.isFinite(value)||value<0||value>10)", "const value=parseNumberInput(i.value);if(!Number.isFinite(value)||value<0||value>10)");
+// Percentagens e múltiplos à portuguesa, com milhares e sem «-0,0%».
+replace("const pct=(v,d=1)=>v==null||!isFinite(v)?'—':(v*100).toFixed(d).replace('.',',')+'%';", "const pct=(v,d=1)=>v==null||!isFinite(v)?'—':nf(+(v*100).toFixed(d)||0,d)+'%';");
+replace("const xf=(v,d=2)=>v==null||!isFinite(v)?'—':v.toFixed(d).replace('.',',')+'×';", "const xf=(v,d=2)=>v==null||!isFinite(v)?'—':nf(+v.toFixed(d)||0,d)+'×';");
+// Um só tipo de letra em toda a plataforma (ecrãs e pré-visualização de documentos).
+source = source.replace(/font-family:Inter;/g, '');
 span('function fsCSV(){', '/* ---------------- Eventos', '');
 source = source.slice(0, source.indexOf('/* ---------------- Eventos'));
 const adapter = (await readFile(new URL('modeling/adapter.js', web), 'utf8')).replace('__NEW_MODEL_DIALOG__', dialog);
-const imports = `import {runFinancialModel} from '${fileURLToPath(new URL('packages/core/src/modeling/engine.ts', root))}';\nimport {financialBreakEvenPrice} from '${fileURLToPath(new URL('packages/core/src/modeling/analysis.ts', root))}';\nimport {FinancialModelError,FINANCIAL_ENGINE_VERSION} from '${fileURLToPath(new URL('packages/core/src/modeling/types.ts', root))}';\nimport {analyzeFinancialProjection} from '${fileURLToPath(new URL('packages/core/src/modeling/project-analysis.ts', root))}';\nimport {ModelingStore,modelingRequest,presentModel} from '${fileURLToPath(new URL('modeling/store.ts', web))}';\n`;
+const imports = `import {runFinancialModel} from '${fileURLToPath(new URL('packages/core/src/modeling/engine.ts', root))}';\nimport {financialBreakEvenPrice} from '${fileURLToPath(new URL('packages/core/src/modeling/analysis.ts', root))}';\nimport {FinancialModelError,FINANCIAL_ENGINE_VERSION} from '${fileURLToPath(new URL('packages/core/src/modeling/types.ts', root))}';\nimport {setupNumberFields,parseNumberInput} from '${fileURLToPath(new URL('lib/number-fields.ts', web))}';\nimport {analyzeFinancialProjection} from '${fileURLToPath(new URL('packages/core/src/modeling/project-analysis.ts', root))}';\nimport {ModelingStore,modelingRequest,presentModel} from '${fileURLToPath(new URL('modeling/store.ts', web))}';\n`;
 const mobileImports = `import {setupModelingMobile,prepareFinancialTables} from '${fileURLToPath(new URL('modeling/mobile.ts', web))}';\n`;
 const sessionImports = `import {endSession,reloadPrivatePageOnRestore} from '${fileURLToPath(new URL('lib/session-client.ts', web))}';\n`;
 const result = await build({ stdin: { contents: imports + mobileImports + sessionImports + source + adapter, resolveDir: fileURLToPath(web), sourcefile: 'integra-ui.js' }, alias: {'@kianda/core':fileURLToPath(new URL('packages/core/src/index.ts',root))}, bundle: true, format: 'iife', platform: 'browser', target: 'es2022', minify: true, legalComments: 'none', write: false, logLevel: 'silent' });

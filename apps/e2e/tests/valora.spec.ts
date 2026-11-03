@@ -46,7 +46,7 @@ test('Valora: cria uma análise, edita o orçamento e os dados ficam no servidor
 
   await page.reload();
   await valoraGo(page, 'orcamento');
-  await expect(page.locator('input[data-orc="vendas"]')).toHaveValue('12345');
+  await expect(page.locator('input[data-orc="vendas"]')).toHaveValue(/^12\s345,00$/);
 
   // Avaliação e relatórios abrem sem erros; no período experimental não exporta.
   for (const view of ['demonstracoes', 'racios', 'dcf', 'sintese']) {

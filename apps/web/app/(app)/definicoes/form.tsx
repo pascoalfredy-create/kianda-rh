@@ -3,9 +3,9 @@
 import { useState } from 'react';
 import { useMutation } from '@/lib/client';
 import { PROVINCES } from '@/lib/types';
-import { AGT_MUNICIPALITIES } from '@kianda/core';
+import { AGT_MUNICIPALITIES, formatAmount, parseAmount } from '@kianda/core';
 
-const kzField = (v: FormDataEntryValue | null) => { const t = String(v ?? '').trim().replace(/\s/g, '').replace(/\./g, '').replace(',', '.'); return t ? Math.round(Number(t) * 100) : null; };
+const kzField = (v: FormDataEntryValue | null) => parseAmount(String(v ?? ''));
 const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
 export function SettingsForm({ s }: { s: { inssNumber: string | null; address: string | null; workdayMinutes: number; christmasSubsidyMonth: number; holidaySubsidyMonth: number | null; perDiemNationalMinor: number | null; perDiemInternationalMinor: number | null; autoIssueDeclarations: boolean; allowancesOnVacation: boolean; province: string | null; municipality: string | null; bankFileProfile: string } }) {
@@ -66,8 +66,8 @@ export function SettingsForm({ s }: { s: { inssNumber: string | null; address: s
       <p className="muted wide">Ambos os subsídios correspondem a 50% do salário base; sem um ano completo de serviço são proporcionais aos meses completos trabalhados. Nenhum subsídio é pago duas vezes no mesmo ano. A gratificação de férias deve ser paga até 15 dias antes do início das férias.</p>
       <label className="wide" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><input type="checkbox" name="allowancesOnVacation" defaultChecked={s.allowancesOnVacation} /> Pagar subsídios de alimentação e de transporte também nos dias de férias (por acordo — a regra da LGT, art. 213.º, n.º 2, é não pagar)</label>
       <h3>Ajudas de custo</h3>
-      <label className="span2">Diária — território nacional (Kz)<input name="perDiemNational" inputMode="decimal" placeholder="Sem limite" defaultValue={s.perDiemNationalMinor ? String(s.perDiemNationalMinor / 100).replace('.', ',') : ''} /></label>
-      <label className="span2">Diária — estrangeiro (Kz)<input name="perDiemInternational" inputMode="decimal" placeholder="Sem limite" defaultValue={s.perDiemInternationalMinor ? String(s.perDiemInternationalMinor / 100).replace('.', ',') : ''} /></label>
+      <label className="span2">Diária — território nacional (Kz)<input name="perDiemNational" inputMode="decimal" placeholder="Sem limite" defaultValue={s.perDiemNationalMinor ? formatAmount(s.perDiemNationalMinor) : ''} /></label>
+      <label className="span2">Diária — estrangeiro (Kz)<input name="perDiemInternational" inputMode="decimal" placeholder="Sem limite" defaultValue={s.perDiemInternationalMinor ? formatAmount(s.perDiemInternationalMinor) : ''} /></label>
       <p className="muted wide">Valor máximo por dia nas notas de despesas. As ajudas de custo dentro da diária ficam fora do IRT e do INSS (limite legal assinalado para validação).</p>
       <h3>Portal do colaborador</h3>
       <label className="wide" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><input type="checkbox" name="autoIssueDeclarations" defaultChecked={s.autoIssueDeclarations} /> Emitir automaticamente as declarações de serviço e de rendimentos pedidas no portal (sem passar pelo RH)</label>

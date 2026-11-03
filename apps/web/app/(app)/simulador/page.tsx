@@ -1,10 +1,10 @@
 'use client';
 
-import { baseForNet, calculatePayroll, convertUsdMinor, formatFxRate, indexedBaseLabel, formatKz, formatUsd, kz, parseFxRate, type PayrollInput, type PayrollResult } from '@kianda/core';
+import { baseForNet, calculatePayroll, convertUsdMinor, formatFxRate, indexedBaseLabel, formatKz, formatUsd, kz, parseFxRate, type PayrollInput, type PayrollResult, parseAmount } from '@kianda/core';
 import { useMemo, useState } from 'react';
 
 type Mode = 'net' | 'gross';
-const num = (s: string) => { const n = Number(s.replace(/\s/g, '').replace(',', '.')); return Number.isFinite(n) && n > 0 ? n : 0; };
+const num = (s: string) => { const n = (parseAmount(s) ?? 0) / 100; return n > 0 ? n : 0; };
 const thisMonth = () => new Date(Date.now() + 3_600_000).toISOString().slice(0, 7);
 
 /**

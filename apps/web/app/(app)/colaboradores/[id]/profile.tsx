@@ -1,5 +1,5 @@
 import { Attachments } from '@/components/attachments';
-import { formatKz, formatUsd } from '@kianda/core';
+import { formatKz, formatUsd, formatPercent } from '@kianda/core';
 import type { Compensation } from '@/lib/types';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -181,7 +181,7 @@ function ContractTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
                   <td>{fmtDate(h.effectiveDate)} {future && <span className="tag future">agendada</span>}{cur?.id === h.id && <span className="tag">em vigor</span>}</td>
                   <td>{h.reason}</td>
                   <td className="num">{baseText(h)}</td>
-                  <td className="num">{h.changeBps == null ? '—' : <span className="delta" style={{ color: h.changeBps < 0 ? 'var(--red)' : undefined }}>{h.changeBps >= 0 ? '+' : ''}{(h.changeBps / 100).toLocaleString('pt-PT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</span>}</td>
+                  <td className="num">{h.changeBps == null ? '—' : <span className="delta" style={{ color: h.changeBps < 0 ? 'var(--red)' : undefined }}>{formatPercent(h.changeBps / 100, 1, true)}</span>}</td>
                   <td className="num">{formatKz(h.mealMinor)}</td>
                   <td className="num">{formatKz(h.transportMinor)}</td>
                 </tr>
@@ -258,7 +258,7 @@ interface Regime {
   allowances: { id: string; startDate: string; endDate: string | null; valueMinor: number | null; bps: number | null; type: { code: string; label: string; calc: string; valueMinor: number | null; bps: number | null } | null }[];
 }
 const allowanceValue = (calc: string | undefined, v: number | null, b: number | null) =>
-  calc === 'base_pct' ? `${String((b ?? 0) / 100).replace('.', ',')}% do base` : `${formatKz(v ?? 0)}${calc === 'per_day' ? ' por dia de escala' : ' por mês'}`;
+  calc === 'base_pct' ? `${formatPercent((b ?? 0) / 100, 2)} do base` : `${formatKz(v ?? 0)}${calc === 'per_day' ? ' por dia de escala' : ' por mês'}`;
 
 async function RegimeTab({ id, canEdit }: { id: string; canEdit: boolean }) {
   const r = await api<Regime>(`/v1/work-regime/${id}`);

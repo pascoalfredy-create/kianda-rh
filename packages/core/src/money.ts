@@ -45,3 +45,26 @@ const fmt = new Intl.NumberFormat('pt-PT', { minimumFractionDigits: 2, maximumFr
 export function formatKz(minor: Minor): string {
   return `${fmt.format(toKz(minor))} Kz`;
 }
+
+/** Montante em cêntimos sem a unidade: "1 234 567,89". */
+export function formatAmount(minor: Minor): string {
+  return fmt.format(toKz(minor));
+}
+const percentFormats = new Map<number, Intl.NumberFormat>();
+/**
+ * Percentagem já em pontos percentuais (45.2 → "45,2%"), com separador de milhares e vírgula decimal.
+ * Nunca mostra "-0,0%"; `signed` acrescenta "+" aos valores positivos (variações).
+ */
+export function formatPercent(points: number | null | undefined, digits = 1, signed = false): string {
+  if (points === null || points === undefined || !Number.isFinite(points)) return '—';
+  let f = percentFormats.get(digits);
+  if (!f) { f = new Intl.NumberFormat('pt-PT', { minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: 'always' } as Intl.NumberFormatOptions); percentFormats.set(digits, f); }
+  const rounded = Number(points.toFixed(digits)), value = Object.is(rounded, -0) || rounded === 0 ? 0 : rounded;
+  return `${signed && value > 0 ? '+' : ''}${f.format(value)}%`;
+}
+/** Número com separador de milhares e vírgula decimal ("12 345,6"). */
+export function formatDecimal(value: number | null | undefined, digits = 2): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+  const rounded = Number(value.toFixed(digits));
+  return new Intl.NumberFormat('pt-PT', { minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: 'always' } as Intl.NumberFormatOptions).format(Object.is(rounded, -0) ? 0 : rounded);
+}

@@ -1,4 +1,5 @@
 'use client';
+import { formatAmount } from '@kianda/core';
 
 import { useState } from 'react';
 import { IbanField } from '@/components/iban-field';
@@ -63,7 +64,7 @@ export function NewEmployeeForm({ departments, people, nextNumber, prefill }: { 
           </label>
           <label>Data de início<input type="date" name="startDate" required /></label>
           <label>Data de fim{type === 'fixed_term' ? ' *' : ''}<input type="date" name="endDate" required={type === 'fixed_term'} /></label>
-          <SalaryBaseFields baseKz={prefill?.expectedSalary ? String(prefill.expectedSalary / 100).replace('.', ',') : ''} />
+          <SalaryBaseFields baseKz={prefill?.expectedSalary ? formatAmount(prefill.expectedSalary) : ''} />
           <label>Subsídio de alimentação (Kz)<input name="meal" inputMode="decimal" placeholder="0" /></label>
           <label>Subsídio de transporte (Kz)<input name="transport" inputMode="decimal" placeholder="0" /></label>
           {type === 'fixed_term' && <label className="wide">Fundamento do termo *<textarea name="termJustification" required /></label>}
