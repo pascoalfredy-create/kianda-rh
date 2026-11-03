@@ -78,8 +78,7 @@ test('Turnos: o RH cria os turnos, planeia com o pincel e um padrão, publica, e
   await expect(phone.getByRole('heading', { name: 'Os meus turnos', level: 1 })).toBeVisible();
   await expect(phone.locator('.kpi', { hasText: 'Próximo turno' })).toContainText('06:00–14:00');
   await expect(phone.getByRole('row', { name: /seg/ }).first()).toContainText('Manhã');
-  const fits = await phone.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
-  expect(fits).toBe(true);
+  expect(await phone.evaluate<number>('document.documentElement.scrollWidth - window.innerWidth')).toBeLessThanOrEqual(1);
   await phone.screenshot({ path: '/tmp/e2e/turnos-04-os-meus.png', fullPage: false });
   await mine.close();
   // A dona vê a escala no telemóvel: a grelha desliza dentro do cartão, sem alargar a página.
@@ -88,7 +87,7 @@ test('Turnos: o RH cria os turnos, planeia com o pincel e um padrão, publica, e
   const ownPhone = await own.newPage();
   await ownPhone.goto(`/turnos?de=${monday}`);
   await expect(ownPhone.locator('table.roster')).toBeVisible();
-  expect(await ownPhone.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  expect(await ownPhone.evaluate<number>('document.documentElement.scrollWidth - window.innerWidth')).toBeLessThanOrEqual(1);
   await ownPhone.screenshot({ path: '/tmp/e2e/turnos-05-escala-telemovel.png', fullPage: false });
   await own.close();
 });
