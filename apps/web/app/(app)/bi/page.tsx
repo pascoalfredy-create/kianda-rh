@@ -17,7 +17,7 @@ export default async function Bi() {
   const f = overview.financial;
   const source = f?.source === 'estimate' ? 'Estimativa do quadro actual' : f?.source === 'draft' ? 'Processamento em rascunho' : 'Processamento fechado';
   return <>
-    <div className="page-head"><div><h1>Painel BI</h1><p className="sub">Gestão de pessoas · {me.company?.name}</p></div></div>
+    <div className="page-head"><div><h1>Indicadores</h1><p className="sub">A equipa da {me.company?.name} em números.</p></div></div>
     <div className="rh-kpis">
       <div className="card kpi"><div className="l">Colaboradores activos</div><div className="v">{overview.active}</div><div className="d">{overview.fixedTerm} a termo · {overview.interns} estagiário(s)</div></div>
       <div className="card kpi"><div className="l">Massa salarial bruta</div><div className="v">{f ? formatKz(f.grossMinor) : '—'}</div><div className="d">{f ? `${monthLabel(f.period)} · ${source}` : 'Sem dados salariais disponíveis'}</div></div>

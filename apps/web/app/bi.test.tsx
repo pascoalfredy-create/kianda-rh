@@ -23,7 +23,7 @@ describe('Painel BI de RH', () => {
     state.me.mockResolvedValue({ modules: { hr: { canAccess: true } }, user: { role: 'finance' }, company: { name: 'Empresa sintética' } });
     state.api.mockResolvedValue({ active: 0, fixedTerm: 0, interns: 0, financial: null, demographics: null, departments: [], locations: [] });
     const html = renderToStaticMarkup(await Bi());
-    expect(state.api).toHaveBeenCalledWith('/v1/reports/overview'); expect(html).toContain('Painel BI');
+    expect(state.api).toHaveBeenCalledWith('/v1/reports/overview'); expect(html).toContain('Indicadores');
     expect(html).toContain('Sem dados salariais disponíveis'); expect(html).not.toContain('NaN'); expect(html).not.toContain('undefined');
   });
 });

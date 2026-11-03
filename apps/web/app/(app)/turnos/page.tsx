@@ -44,7 +44,7 @@ export default async function Turnos({ searchParams }: { searchParams: Promise<{
   const head = <div className="page-head">
     <div>
       <h1>{staff ? 'Planeamento de turnos' : 'Os meus turnos'}</h1>
-      <p className="sub">{staff ? 'Escala por colaborador e dia: planear, verificar descansos e cobertura, publicar para a equipa' : 'A sua escala publicada: turnos, horas e folgas'}</p>
+      <p className="sub">{staff ? 'Quem trabalha em cada turno. Planeie, veja os avisos e publique para a equipa.' : 'Os seus turnos e folgas das próximas semanas.'}</p>
     </div>
   </div>;
 

@@ -32,8 +32,8 @@ export default async function Processamento({ searchParams }: { searchParams: Pr
     <>
       <div className="page-head">
         <div>
-          <h1>Processamento salarial</h1>
-          <p className="sub">IRT Grupo A, INSS, horas extra aprovadas, faltas, subsídios e variáveis do mês</p>
+          <h1>Processamento do mês</h1>
+          <p className="sub">Os salários do mês, com horas extra, faltas, subsídios e descontos.</p>
         </div>
         <div className="month-nav">
           <Link className="btn ghost sm" href={`?mes=${shiftMonth(period, -1)}&s=${tab}`}>←</Link>

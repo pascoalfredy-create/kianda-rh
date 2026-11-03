@@ -12,5 +12,5 @@ export default async function Tesouraria({ searchParams }: { searchParams: Promi
   const sp = await searchParams;
   const period = /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.mes ?? '') ? sp.mes! : currentPeriod();
   const data = await api<PersonnelCash>(`/v1/personnel-cash?period=${period}`);
-  return <><div className="page-head"><div><h1>Tesouraria de pessoal</h1><p className="sub">Previsão de saídas com salários, IRT, INSS e despesas aprovadas · seis meses</p></div><div className="month-nav"><Link className="btn ghost sm" href={`?mes=${shiftMonth(period, -1)}`}>‹</Link><b>{monthLabel(period)}</b><Link className="btn ghost sm" href={`?mes=${shiftMonth(period, 1)}`}>›</Link></div></div><CashPlan key={period} data={data} editable={['owner', 'finance'].includes(me.user.role) && me.modules.hr.canWrite} /></>;
+  return <><div className="page-head"><div><h1>Tesouraria de pessoal</h1><p className="sub">O dinheiro que vai sair com a equipa nos próximos seis meses.</p></div><div className="month-nav"><Link className="btn ghost sm" href={`?mes=${shiftMonth(period, -1)}`}>‹</Link><b>{monthLabel(period)}</b><Link className="btn ghost sm" href={`?mes=${shiftMonth(period, 1)}`}>›</Link></div></div><CashPlan key={period} data={data} editable={['owner', 'finance'].includes(me.user.role) && me.modules.hr.canWrite} /></>;
 }

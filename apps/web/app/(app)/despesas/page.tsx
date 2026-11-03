@@ -28,7 +28,7 @@ export default async function Despesas({ searchParams }: { searchParams: Promise
       <div className="page-head">
         <div>
           <h1>Despesas e ajudas de custo</h1>
-          <p className="sub">Notas de despesas com recibos e diárias, aprovação pela chefia e reembolso pelas Finanças</p>
+          <p className="sub">Despesas de trabalho e ajudas de custo: a chefia aprova e as Finanças reembolsam.</p>
         </div>
         <span className="actions">
           {view === 'pay' && claims.length > 0 && <ExportLink className="btn ghost" href="/api/v1/expenses-bank-file">Ficheiro de transferências (CSV)</ExportLink>}

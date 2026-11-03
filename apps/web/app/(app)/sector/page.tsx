@@ -28,8 +28,8 @@ export default async function Sector() {
     <>
       <div className="page-head">
         <div>
-          <h1>Sector e regimes</h1>
-          <p className="sub">Regimes de horário, subsídios recorrentes e pré-configurações de <b>{s.sectorLabel ?? 'sector por definir'}</b></p>
+          <h1>Horários e subsídios do sector</h1>
+          <p className="sub">Horários, subsídios e regras do sector <b>{s.sectorLabel ?? 'por definir'}</b>.</p>
         </div>
         <Link className="btn ghost" href="/conformidade">Ver conformidade</Link>
       </div>

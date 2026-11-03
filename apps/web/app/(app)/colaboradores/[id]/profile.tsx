@@ -240,7 +240,7 @@ function DocumentsTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
             ))}
           </tbody>
         </table>
-        {!p.documents.length && <div className="empty">Nenhum documento registado</div>}
+        {!p.documents.length && <div className="empty">Ainda não há documentos nesta ficha.</div>}
       </div>
       <div className="card" style={{ marginTop: 14, padding: 16 }}>
         <h2 style={{ fontSize: 14, marginTop: 0 }}>Outros ficheiros do processo individual</h2>
@@ -331,7 +331,7 @@ async function AbsencesTab({ p }: { p: Profile }) {
             ))}
           </tbody>
         </table>
-        {!list.length && <div className="empty">Sem ausências registadas</div>}
+        {!list.length && <div className="empty">Ninguém faltou nem tirou férias.</div>}
       </div>
       <p className="muted" style={{ marginTop: 10 }}><Link href="/ausencias" style={{ color: 'var(--brand)' }}>Registar ou pedir ausência →</Link></p>
     </>
@@ -349,11 +349,11 @@ function TeamTab({ p }: { p: Profile }) {
     <div className="two">
       <div className="card section">
         <h2>Chefia directa</h2>
-        <div style={{ paddingTop: 8 }}>{p.manager ? <Person x={p.manager} /> : <div className="empty">Sem chefia atribuída</div>}</div>
+        <div style={{ paddingTop: 8 }}>{p.manager ? <Person x={p.manager} /> : <div className="empty">Ainda sem chefia directa.</div>}</div>
       </div>
       <div className="card section">
         <h2>Equipa directa ({p.reports.length})</h2>
-        <div style={{ paddingTop: 8 }}>{p.reports.length ? p.reports.map((r) => <Person key={r.id} x={r} />) : <div className="empty">Sem subordinados directos</div>}</div>
+        <div style={{ paddingTop: 8 }}>{p.reports.length ? p.reports.map((r) => <Person key={r.id} x={r} />) : <div className="empty">Ninguém responde a esta pessoa.</div>}</div>
       </div>
       {p.account && (
         <div className="card section">

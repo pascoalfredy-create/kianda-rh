@@ -26,8 +26,8 @@ export default async function Ausencias({ searchParams }: { searchParams: Promis
     <>
       <div className="page-head">
         <div>
-          <h1>Férias &amp; Ausências</h1>
-          <p className="sub">Pedidos, aprovações pela chefia, mapa de férias e saldos — dias úteis com feriados nacionais</p>
+          <h1>Férias e ausências</h1>
+          <p className="sub">Pedidos, quem está fora e quantos dias cada um ainda tem.</p>
         </div>
       </div>
       <div style={{ marginBottom: 16 }}>
@@ -76,7 +76,7 @@ async function Requests({ estado }: { estado?: string }) {
           </div>
         </div>
         <AbsenceTable rows={shown} />
-        {!shown.length && <div className="empty">Sem pedidos</div>}
+        {!shown.length && <div className="empty">Ainda não há pedidos.</div>}
       </div>
     </>
   );
@@ -227,7 +227,7 @@ function Balances({ rows, year }: { rows: BalanceRow[]; year: number }) {
             })}
           </tbody>
         </table>
-        {!rows.length && <div className="empty">Sem colaboradores</div>}
+        {!rows.length && <div className="empty">Ainda não há ninguém na equipa.</div>}
       </div>
       <p className="muted" style={{ marginTop: 10 }}>Direito anual de 22 dias úteis; no ano de admissão, 2 dias por mês completo de serviço; gozo a partir dos 6 meses de serviço. Os dias transitados editam-se na ficha do colaborador.</p>
     </>

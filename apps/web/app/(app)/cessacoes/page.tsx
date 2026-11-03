@@ -16,8 +16,8 @@ export default async function Cessacoes() {
     <>
       <div className="page-head">
         <div>
-          <h1>Cessação de contratos</h1>
-          <p className="sub">Fecho de contas por motivo, integração no processamento e documentos de cessação</p>
+          <h1>Saídas da empresa</h1>
+          <p className="sub">Saídas da empresa: o fecho de contas entra no processamento do mês e os documentos saem prontos.</p>
         </div>
         {canEdit && <Link className="btn" href="/cessacoes/nova">Nova cessação</Link>}
       </div>

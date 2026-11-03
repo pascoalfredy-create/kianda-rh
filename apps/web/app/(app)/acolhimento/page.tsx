@@ -28,7 +28,7 @@ export default async function Acolhimento({ searchParams }: { searchParams: Prom
       <div className="page-head">
         <div>
           <h1>{staff ? 'Acolhimento e saída' : 'As minhas tarefas'}</h1>
-          <p className="sub">{staff ? 'Listas de tarefas na admissão e na saída de cada colaborador, com responsáveis e prazos' : 'Tarefas do seu acolhimento ou da sua saída que lhe cabem a si'}</p>
+          <p className="sub">{staff ? 'O que há a fazer quando alguém entra ou sai, e quem faz o quê.' : 'As suas tarefas de entrada ou de saída.'}</p>
         </div>
       </div>
 

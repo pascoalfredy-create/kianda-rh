@@ -1,6 +1,7 @@
 'use client';
 
 import { use, useEffect, useState } from 'react';
+import { KiandaMark } from '@/components/kianda-mark';
 
 interface Info { kind: 'invite' | 'reset' | 'self_reset'; company: string; companyCode: string; role: string; roleLabel: string; name: string | null; number: string | null; email: string | null; phone: string | null; hasPin: boolean; pinAllowed: boolean; expiresAt: string }
 
@@ -62,7 +63,7 @@ export default function Acesso({ params }: { params: Promise<{ token: string }> 
         window.location.assign('/');
       }}>
         <div className="logo" style={{ padding: 0, marginBottom: 14 }}>
-          <div className="mark">K</div>
+          <KiandaMark size={34} />
           <div><b style={{ color: 'var(--ink)' }}>Kianda RH</b><small style={{ color: 'var(--ink3)' }}>{info.company}</small></div>
         </div>
         <h1 style={{ fontSize: 19, marginBottom: 4 }}>{info.kind === 'invite' ? `Bem-vindo(a)${info.name ? `, ${info.name.split(' ')[0]}` : ''}` : info.kind === 'self_reset' ? 'Nova palavra-passe' : 'Recuperar acesso'}</h1>

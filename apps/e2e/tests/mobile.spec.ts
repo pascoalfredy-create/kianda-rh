@@ -4,7 +4,7 @@ import { apiAs, closePool, registerCompany, signIn, sql, watchErrors, valoraGo }
 /** Telemóvel (Pixel 7): navegação do RH e Integra com menu, versões em cartões e acções visíveis. */
 test.afterAll(closePool);
 
-test('RH no telemóvel: menu ☰ com grupos recolhíveis leva a Férias & Ausências', async ({ page, context }) => {
+test('RH no telemóvel: menu ☰ com grupos recolhíveis leva a Férias e ausências', async ({ page, context }) => {
   const company = await registerCompany({ name: 'Telemóvel RH E2E' });
   await signIn(context, company.token);
   const errors = watchErrors(page);
@@ -13,7 +13,7 @@ test('RH no telemóvel: menu ☰ com grupos recolhíveis leva a Férias & Ausên
   await expect(page.locator('body')).toContainText(company.name);
   await page.getByRole('button', { name: 'Abrir menu' }).click();
   await page.locator('.nav-group-toggle', { hasText: 'Tempo' }).click();
-  await page.getByRole('link', { name: /Férias & Ausências/ }).click();
+  await page.getByRole('link', { name: /Férias e ausências/ }).click();
   await expect(page).toHaveURL(/\/ausencias/);
   await expect(page.locator('body')).not.toContainText(/Application error|Erro interno/);
   expect(errors).toEqual([]);

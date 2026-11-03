@@ -21,7 +21,7 @@ export default async function Documentos({ searchParams }: { searchParams: Promi
   return (
     <>
       <h1>Documentos</h1>
-      <p className="sub">{hr ? 'Contratos, declarações, certificados e comunicações a partir de modelos versionados — com número e código de verificação' : 'Declarações, contratos e comunicações emitidos em seu nome'}</p>
+      <p className="sub">{hr ? 'Contratos, declarações e comunicações, cada um com número e código para confirmar que é verdadeiro.' : 'Declarações, contratos e comunicações emitidos em seu nome.'}</p>
       {staff && (
         <nav className="tabs">
           {[['gerar', 'Gerar documento'], ['emitidos', 'Arquivo'], ...(hr ? [['modelos', 'Modelos']] : [])].map(([k, l]) => <Link key={k} href={`?v=${k}`} className={view === k || view === 'emitir' && k === 'gerar' ? 'on' : ''}>{l}</Link>)}

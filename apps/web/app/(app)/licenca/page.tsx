@@ -45,7 +45,7 @@ export default async function Licenca() {
     <>
       <h1>Módulos e licenças</h1>
       {(b.supportEmail || b.supportPhone) && <p className="muted" style={{ float: 'right', marginTop: 4 }}>Suporte: {b.supportEmail && <a href={`mailto:${b.supportEmail}`}>{b.supportEmail}</a>}{b.supportEmail && b.supportPhone ? ' · ' : ''}{b.supportPhone && <a href={`tel:${b.supportPhone.replace(/\s/g, '')}`}>{b.supportPhone}</a>}</p>}
-      <p className="sub">Uma conta, planos e pagamentos por módulo · código da empresa <b>{me.company?.code ?? '—'}</b></p>
+      <p className="sub">Planos e pagamentos de cada módulo. Código da empresa: <b>{me.company?.code ?? '—'}</b></p>
       <ModuleCards modules={b.modules} />
       <h2 id="hr">Recursos Humanos · Kianda RH</h2>
       {!b.modules.hr.subscribed && <div className="warn">RH não subscrito. Pode escolher um plano abaixo; o acesso é activado após confirmação do pagamento.</div>}

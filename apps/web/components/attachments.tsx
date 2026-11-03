@@ -74,7 +74,7 @@ export function Attachments({ entity, entityId, compact = false, hint }: { entit
       <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
         {data.files.map((f) => (
           <span key={f.id} style={{ whiteSpace: 'nowrap' }}>
-            <a href={f.url} target="_blank" rel="noopener">📎 {f.name}</a>
+            <a href={f.url} target="_blank" rel="noopener">{f.name}</a>
             {data.canUpload && <button type="button" className="btn ghost sm" title="Remover" aria-label={`Remover ${f.name}`} disabled={busy} onClick={() => remove(f)}>×</button>}
           </span>
         ))}
@@ -96,7 +96,7 @@ export function Attachments({ entity, entityId, compact = false, hint }: { entit
           <tbody>
             {data.files.map((f) => (
               <tr key={f.id}>
-                <td><a href={f.url} target="_blank" rel="noopener">📎 {f.name}</a></td>
+                <td><a href={f.url} target="_blank" rel="noopener">{f.name}</a></td>
                 <td className="muted">{size(f.sizeBytes)}</td>
                 <td className="muted">{new Date(f.createdAt).toLocaleDateString('pt-PT')}</td>
                 <td className="num">

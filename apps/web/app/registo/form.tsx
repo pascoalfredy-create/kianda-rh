@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { ModelingSectors } from '../../components/modeling-sectors';
 import type { RegistrationSelection } from '../../lib/registration-selection';
+import { KiandaMark } from '../../components/kianda-mark';
 
 /** Uma conta de empresa, com escolha explícita dos módulos e respectivos planos. */
 export function RegistoForm({ initial }: { initial: RegistrationSelection }) {
@@ -52,7 +53,7 @@ export function RegistoForm({ initial }: { initial: RegistrationSelection }) {
         setError(j.issues?.map((i: { message: string }) => i.message).join(' · ') || (j.error === 'duplicado' ? 'Já existe uma conta com este NIF ou email.' : j.message) || 'Não foi possível criar a conta');
       }}>
         <div className="logo" style={{ padding: 0, marginBottom: 18 }}>
-          <div className="mark">K</div>
+          <KiandaMark size={34} />
           <div><b style={{ color: 'var(--ink)' }}>Kianda RH</b><small style={{ color: 'var(--ink3)' }}>Gestão de Pessoas · Angola</small></div>
         </div>
         <h1 style={{ fontSize: 19, marginBottom: 4 }}>Criar a conta da empresa</h1>

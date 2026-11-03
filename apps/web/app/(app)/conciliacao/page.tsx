@@ -31,7 +31,7 @@ export default async function Conciliacao({ searchParams }: { searchParams: Prom
     return (
       <>
         <h1>Conciliação bancária</h1>
-        <p className="sub">Comece por indicar a conta bancária de onde saem os salários e as obrigações.</p>
+        <p className="sub">Diga-nos primeiro de que conta saem os salários e os pagamentos ao Estado.</p>
         {canEdit ? <NewAccount first /> : <div className="card empty">Ainda não há contas bancárias. Peça às Finanças para criar.</div>}
       </>
     );
@@ -52,7 +52,7 @@ export default async function Conciliacao({ searchParams }: { searchParams: Prom
       <div className="page-head">
         <div>
           <h1>Conciliação bancária</h1>
-          <p className="sub">Confronta o extracto do banco com os pagamentos de salários, INSS e IRT — e mostra o que foi pago sem comprovativo</p>
+          <p className="sub">Compara o extracto do banco com os salários, o INSS e o IRT pagos, e mostra o que ainda não tem comprovativo.</p>
         </div>
         {canEdit && <NewAccount first={false} />}
       </div>
@@ -147,7 +147,7 @@ export default async function Conciliacao({ searchParams }: { searchParams: Prom
             </tbody>
           </table>
         )}
-        {status !== 'pending' && !rec.lines.length && <div className="empty">Sem movimentos.</div>}
+        {status !== 'pending' && !rec.lines.length && <div className="empty">Nada a mostrar.</div>}
       </div>
 
       <div className="card section">

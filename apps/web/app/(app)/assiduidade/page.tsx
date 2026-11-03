@@ -23,7 +23,7 @@ export default async function Assiduidade({ searchParams }: { searchParams: Prom
   return (
     <>
       <h1>Assiduidade</h1>
-      <p className="sub">Registo de entradas e saídas, horas extra e aprovação mensal para o processamento salarial</p>
+      <p className="sub">Entradas, saídas e horas extra. No fim do mês, aprove para seguirem para os salários.</p>
       {hasFile && <ClockCard />}
       <div className="page-head" style={{ marginBottom: 0 }}>
         <nav className="tabs" style={{ marginBottom: 0, borderBottom: 0 }}>
@@ -55,7 +55,7 @@ function Overview({ period, rows }: { period: string; rows: OverviewRow[] }) {
           <tbody>
             {rows.map((r) => (
               <tr key={r.employee.id}>
-                <td><Link href={`/assiduidade/${r.employee.id}?mes=${period}`}><b>{r.employee.name}</b></Link>{r.locationIssues ? <span className="flag" title="Marcações fora do local ou sem localização (ver lista abaixo)">📍 {r.locationIssues}</span> : null}<div className="muted">{r.employee.department ?? '—'}</div></td>
+                <td><Link href={`/assiduidade/${r.employee.id}?mes=${period}`}><b>{r.employee.name}</b></Link>{r.locationIssues ? <span className="flag" title="Marcações fora do local ou sem localização (ver lista abaixo)">fora do local: {r.locationIssues}</span> : null}<div className="muted">{r.employee.department ?? '—'}</div></td>
                 <td className="num">{formatMinutes(r.workedMinutes)}</td>
                 <td className="num">{formatMinutes(r.expectedMinutes)}</td>
                 <td className="num">{r.overtimeMinutes ? <b style={{ color: 'var(--brand)' }}>{formatMinutes(r.overtimeMinutes)}</b> : '—'}</td>
@@ -71,7 +71,7 @@ function Overview({ period, rows }: { period: string; rows: OverviewRow[] }) {
             ))}
           </tbody>
         </table>
-        {!rows.length && <div className="empty">Sem colaboradores</div>}
+        {!rows.length && <div className="empty">Ainda não há ninguém na equipa.</div>}
       </div>
       <p className="muted" style={{ marginTop: 10 }}>"Sem registo" são dias úteis passados sem entradas nem ausência aprovada: corrija o ponto ou registe a ausência (as faltas injustificadas descontam no salário).</p>
     </>

@@ -62,7 +62,7 @@ export default function Simulador() {
   return (
     <>
       <h1>Simulador salarial</h1>
-      <p className="sub">Do líquido pretendido ao salário base, ou do salário base ao líquido — com as regras do processamento salarial</p>
+      <p className="sub">Quanto é preciso pagar para dar um certo líquido, ou quanto fica de um salário. As contas são as do processamento.</p>
       <nav className="tabs" role="tablist">
         {([['net', 'Líquido pretendido → salário base'], ['gross', 'Salário base → líquido']] as const).map(([m, label]) =>
           <a key={m} href="#" role="tab" aria-selected={mode === m} className={mode === m ? 'on' : ''} onClick={e => { e.preventDefault(); setMode(m); }}>{label}</a>)}

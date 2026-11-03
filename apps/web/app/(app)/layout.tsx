@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { longDate } from '@/lib/humane';
 import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/api';
 import { Suspense } from 'react';
@@ -12,12 +13,12 @@ function LicenceBanner({ me }: { me: NonNullable<Awaited<ReturnType<typeof curre
   const l = me.licence;
   if (!l || !me.modules.hr.subscribed) return null;
   const manage = ['owner', 'finance'].includes(me.user.role);
-  const link = manage ? <> · <Link href="/licenca">Ver licença</Link></> : null;
-  if (!l.canWrite) return <div className="alert no-print">Módulo RH em <b>modo de consulta</b> ({l.label.toLowerCase()}). Documentos apenas em pré-visualização. {manage ? 'Regularize a licença do RH para gravar, exportar e imprimir.' : 'Fale com a administração da empresa.'}{link}</div>;
-  if (l.status === 'past_due') return <div className="warn no-print">Pagamento da licença em atraso: a conta passa a modo de consulta em poucos dias.{link}</div>;
+  const link = manage ? <> <Link href="/licenca"><b>Ver planos</b></Link></> : null;
+  if (!l.canWrite) return <div className="alert no-print">O RH está só para consulta ({l.label.toLowerCase()}). Pode ver tudo, mas não gravar, exportar nem imprimir. {manage ? 'Regularize a licença para voltar ao normal.' : 'Fale com quem gere a conta da empresa.'}{link}</div>;
+  if (l.status === 'past_due') return <div className="warn no-print">O pagamento da licença está em atraso. Daqui a poucos dias a conta fica só para consulta.{link}</div>;
   if (l.status === 'trial' && l.trialEndsAt) {
     const days = trialDaysRemaining(l.trialEndsAt, luandaDate(new Date()));
-    return <div className="warn no-print">Período experimental: {days === 1 ? 'último dia' : `${days} dias de calendário, incluindo hoje`}, até {l.trialEndsAt.split('-').reverse().join('/')} inclusive, pela hora de Angola. Pode trabalhar e pré-visualizar os documentos; exportar e imprimir exige uma subscrição paga.{link}</div>;
+    return <div className="trial-note no-print">{days === 1 ? 'Hoje é o último dia de experiência.' : `Está a experimentar o Kianda até ${longDate(l.trialEndsAt)}.`} Pode usar tudo; para exportar e imprimir, escolha um plano.{link}</div>;
   }
   return null;
 }

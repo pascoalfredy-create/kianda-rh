@@ -23,7 +23,7 @@ export default async function Recrutamento({ searchParams }: { searchParams: Pro
       <div className="page-head">
         <div>
           <h1>Recrutamento</h1>
-          <p className="sub">Vagas, pipeline de candidatos e página de carreiras{auth ? <> — <a href={`/carreiras/${auth.company.id}`} target="_blank" rel="noreferrer">ver a página pública</a></> : null}</p>
+          <p className="sub">Vagas abertas e candidatos em cada etapa.{auth ? <> <a href={`/carreiras/${auth.company.id}`} target="_blank" rel="noreferrer">Ver a página de carreiras</a></> : null}</p>
         </div>
       </div>
       <div className="actions" style={{ justifyContent: 'flex-start', marginBottom: 16 }}>{hr && <OpeningForm departments={departments} people={people.filter((p) => p.status === 'active')} />}{vaga && openings.some(o => o.id === vaga && o.status !== 'closed') && <AddCandidate openingId={vaga} />}<form><select name="vaga" aria-label="Filtrar vaga" defaultValue={vaga ?? ''}><option value="">Todas as vagas</option>{openings.map(o => <option key={o.id} value={o.id}>{o.title}</option>)}</select> <button className="btn ghost sm">Filtrar</button></form></div>

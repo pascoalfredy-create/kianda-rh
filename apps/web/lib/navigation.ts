@@ -14,12 +14,12 @@ export function navigation(me: Me, counts: { absences: number; expenses: number;
     if (shown.length) groups.push({ label, items: shown });
   };
   if (me.modules.hr.canAccess && staff.includes(role)) {
-    add('Geral', [item('/', 'Início', 'home'), item('/colaboradores', 'Colaboradores', 'users'), item('/organograma', 'Organograma', 'brief'), has('hr_admin') && item('/pedidos', 'Pedidos do portal', 'doc')]);
-    add('Tempo', [item('/assiduidade', 'Assiduidade & Ponto', 'clock'), item('/turnos', 'Planeamento de turnos', 'cal'), item('/ausencias', 'Férias & Ausências', 'cal', counts.absences)]);
-    add('Remunerações', [
-      has('payroll', 'finance', 'hr_admin') && item('/processamento', 'Processamento salarial', 'money'),
-      has('payroll', 'finance', 'hr_admin') && item('/obrigacoes', 'AGT & INSS', 'receipt'),
-      item('/despesas', 'Despesas & Ajudas de custo', 'receipt', counts.expenses),
+    add('Equipa', [item('/', 'Hoje', 'home'), item('/colaboradores', 'Colaboradores', 'users'), item('/organograma', 'Organograma', 'brief'), has('hr_admin') && item('/pedidos', 'Pedidos da equipa', 'doc')]);
+    add('Tempo', [item('/assiduidade', 'Ponto e assiduidade', 'clock'), item('/turnos', 'Turnos', 'cal'), item('/ausencias', 'Férias e ausências', 'cal', counts.absences)]);
+    add('Salários', [
+      has('payroll', 'finance', 'hr_admin') && item('/processamento', 'Processamento do mês', 'money'),
+      has('payroll', 'finance', 'hr_admin') && item('/obrigacoes', 'IRT e INSS', 'receipt'),
+      item('/despesas', 'Despesas e ajudas de custo', 'receipt', counts.expenses),
       has('payroll', 'finance', 'hr_admin') && item('/adiantamentos', 'Adiantamentos', 'money'),
       has('payroll', 'finance', 'hr_admin') && item('/cessacoes', 'Cessações', 'doc'),
       item('/simulador', 'Simulador salarial', 'money'),
@@ -34,14 +34,14 @@ export function navigation(me: Me, counts: { absences: number; expenses: number;
       has('payroll', 'finance') && item('/financas?s=plano', 'Plano de contas', 'gear'),
     ]);
     add('Talento', [item('/acolhimento', 'Acolhimento e saída', 'check', counts.tasks), (has('hr_admin') || !!me.user.employeeId) && item('/aceitacao', has('hr_admin') ? 'Aceitação de documentos' : 'Para ler e aceitar', 'doc', counts.acks), has('hr_admin', 'manager') && item('/recrutamento', 'Recrutamento', 'brief'), item('/desempenho', 'Desempenho', 'star'), item('/documentos', 'Documentos', 'doc')]);
-    add('Análise', [
+    add('Relatórios', [
       has('payroll', 'finance', 'hr_admin') && item('/relatorios', 'Relatórios', 'chart'),
       has('payroll', 'finance', 'hr_admin') && item('/bi', 'BI', 'chart'),
     ]);
   } else if (me.modules.hr.canAccess) {
     add('O meu espaço', [
-      item('/', 'Painel pessoal', 'home'), item('/recibos', 'Os meus recibos', 'money'), item('/ausencias', 'As minhas férias', 'cal'),
-      item('/despesas', 'As minhas despesas', 'receipt'), item('/documentos', 'Documentos', 'doc'), item('/assiduidade', 'Assiduidade & Ponto', 'clock'), !!me.user.employeeId && item('/turnos', 'Os meus turnos', 'cal'),
+      item('/', 'Hoje', 'home'), item('/recibos', 'Os meus recibos', 'money'), item('/ausencias', 'As minhas férias', 'cal'),
+      item('/despesas', 'As minhas despesas', 'receipt'), item('/documentos', 'Documentos', 'doc'), item('/assiduidade', 'O meu ponto', 'clock'), !!me.user.employeeId && item('/turnos', 'Os meus turnos', 'cal'),
       !!me.user.employeeId && item('/adiantamentos', 'Adiantamentos', 'money'),
       !!me.user.employeeId && item(`/colaboradores/${me.user.employeeId}`, 'A minha ficha', 'users'),
       !!me.user.employeeId && item('/acolhimento', 'As minhas tarefas', 'check', counts.tasks),
@@ -49,14 +49,14 @@ export function navigation(me: Me, counts: { absences: number; expenses: number;
       !!me.user.employeeId && item('/portal/dados', 'Os meus dados', 'doc'), item('/desempenho', 'Desempenho', 'star'), item('/simulador', 'Simulador salarial', 'money'),
     ]);
   }
-  add('Configuração', [
-    has('hr_admin') && item('/definicoes', 'Definições gerais', 'gear'),
+  add('Definições', [
+    has('hr_admin') && item('/definicoes', 'Regras da empresa', 'gear'),
     me.modules.hr.canAccess && has('payroll', 'finance', 'hr_admin') && item('/sector', 'Sector e regimes', 'brief'),
     me.modules.hr.canAccess && has('hr_admin') && item('/locais', 'Locais de trabalho', 'clock'),
     me.modules.hr.canAccess && has('payroll', 'finance', 'hr_admin') && item('/conformidade', 'Conformidade', 'check'),
     has('hr_admin') && item('/acessos', 'Utilizadores e acessos', 'users'),
   ]);
-  add('Plataforma', [
+  add('Módulos', [
     item('/modulos', 'Módulos', 'modules'),
     !me.modules.hr.canAccess && { ...item('/modulos#hr', 'Recursos Humanos', 'users'), locked: true },
     { ...item(me.modules.modeling.canAccess ? '/modelagem' : '/modulos#modeling', 'Modelagem Financeira', 'chart'), locked: !me.modules.modeling.canAccess },

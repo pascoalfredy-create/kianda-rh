@@ -18,8 +18,8 @@ export default async function Pedidos() {
   const inbox = await api<Inbox>('/v1/portal/inbox');
   return (
     <>
-      <h1>Pedidos do portal</h1>
-      <p className="sub">Declarações e alterações de dados pedidas pelos colaboradores. A emissão automática de declarações liga-se nas <Link href="/definicoes">Definições</Link>.</p>
+      <h1>Pedidos da equipa</h1>
+      <p className="sub">Declarações e mudanças de dados que a equipa pediu. Pode emitir declarações sozinhas nas <Link href="/definicoes">regras da empresa</Link>.</p>
       <div className="card section">
         <h2>Declarações ({inbox.documents.length})</h2>
         <table className="dense">

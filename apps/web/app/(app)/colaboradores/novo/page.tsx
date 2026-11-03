@@ -18,9 +18,9 @@ export default async function NovoColaborador({ searchParams }: { searchParams: 
   return (
     <>
       <Link href="/colaboradores" className="crumb">← Colaboradores</Link>
-      <h1>Novo colaborador</h1>
+      <h1>Admitir alguém</h1>
       {prefill && <div className="warn">Admissão do candidato <b>{prefill.name}</b> (recrutamento). Ao gravar, o candidato passa a contratado.</div>}
-      <p className="sub">Admissão: ficha, contrato e remuneração inicial ficam registados numa única operação, com auditoria.</p>
+      <p className="sub">A ficha, o contrato e o salário ficam registados de uma só vez.</p>
       <NewEmployeeForm
         departments={departments}
         people={people.filter((p) => p.status !== 'terminated').map((p) => ({ id: p.id, name: p.name, jobTitle: p.jobTitle }))}

@@ -35,7 +35,7 @@ export default async function Desempenho() {
   return (
     <>
       <h1>Desempenho</h1>
-      <p className="sub">Ciclos de avaliação por competências e objectivos, com auto-avaliação, avaliação da chefia e conhecimento do colaborador</p>
+      <p className="sub">Avaliações por competências e objectivos: cada pessoa avalia-se, a chefia avalia e a pessoa toma conhecimento.</p>
       {hr && <div className="rh-kpis"><div className="card kpi"><div className="l">Avaliações concluídas</div><div className="v">{completed.length}/{summary?.reviews.length ?? 0}</div><div className="d">{focus?.name ?? 'Sem ciclo lançado'}</div></div><div className="card kpi"><div className="l">Nota média</div><div className="v">{average === null ? '—' : average.toFixed(2).replace('.', ',')}</div><div className="d">Escala 1–5</div></div><div className="card kpi" style={{ gridColumn: 'span 2' }}><div className="l">Distribuição</div><div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 10 }}>{summary ? Object.entries(summary.distribution).map(([label, n]) => <div key={label} style={{ flex: 1, textAlign: 'center' }}><b style={{ fontSize: 20 }}>{n}</b><small className="muted" style={{ display: 'block', fontSize: 11 }}>{label}</small></div>) : <span className="muted">Sem avaliações concluídas</span>}</div></div></div>}
       {team.length > 0 && <div className="card section"><h2>Para avaliar (a minha equipa)</h2><List items={team} who /></div>}
       <div className="card section"><h2>As minhas avaliações</h2>{mine.length ? <List items={mine} who={false} /> : <div className="empty">Sem avaliações em curso.</div>}</div>

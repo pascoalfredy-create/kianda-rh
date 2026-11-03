@@ -70,3 +70,22 @@
  .versions-table select{max-width:100%!important;flex:1 1 180px}
  .versions-only-mobile{display:inline}
 }
+/* Identidade Kianda (Nov. 2026): papel quente, verde da marca, acento terra, Schibsted Grotesk e o símbolo sona. */
+@font-face{font-family:'Schibsted Grotesk Variable';font-style:normal;font-display:swap;font-weight:400 900;src:url(/fonts/schibsted-grotesk-latin-ext-wght-normal.woff2) format('woff2-variations');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:'Schibsted Grotesk Variable';font-style:normal;font-display:swap;font-weight:400 900;src:url(/fonts/schibsted-grotesk-latin-wght-normal.woff2) format('woff2-variations');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+:root{--bg:#f4f1ea;--panel:#fffdf9;--ink:#1c1f1b;--ink2:#4b4f48;--ink3:#6b675e;--line:#e4ded3;--line2:#ece6db;--brand:#0e4a3c;--brand2:#16614f;--brandSoft:#e3ece6;--acc:#a4471f;--accSoft:#f6e4d8}
+body{font-family:'Schibsted Grotesk Variable',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+.side{background:#ede7dc;border-right:0;color:#3d4039}
+.side .logo .mk{font-size:0;background:url(/icons/kianda-mark.svg) center/100% no-repeat;border-radius:10px}
+.side .logo b{color:#1c1f1b;font-weight:800}
+.side .logo small,.side .sidefoot{color:#5f5a50}
+.side .crumb{background:#f9f7f2;color:#5f5a50;border-color:#ddd5c7}
+.side .sidefoot{border-color:#d8cfbf}
+.side .nav a{color:#3d4039;border-radius:10px}
+.side .nav a:hover{background:#e4dccd;color:#1c1f1b}
+.side .nav a.on{background:#f9f7f2;color:#1c1f1b;font-weight:700;box-shadow:0 1px 0 #d8cfbf}
+.nav-group-toggle{color:#6b6457}
+.nav-group-toggle:hover{background:#e4dccd;color:#1c1f1b}
+.card,.kpi,.panel{border-color:var(--line)}
+.btn.pri,.btn.primary{background:var(--brand);border-color:var(--brand)}
+.side .nav a{text-decoration:none}.top{background:var(--bg)}

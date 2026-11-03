@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { KiandaMark } from '@/components/kianda-mark';
 
 /** Esqueci a palavra-passe: envia por email uma ligação de uso único (1 hora). Colaboradores com PIN pedem ao RH. */
 export default function RecoverPage() {
@@ -24,7 +25,7 @@ export default function RecoverPage() {
     <div className="auth-wrap">
       <form onSubmit={submit} className="card auth">
         <div className="logo" style={{ padding: 0, marginBottom: 18 }}>
-          <div className="mark">K</div>
+          <KiandaMark size={34} />
           <div><b style={{ color: 'var(--ink)' }}>Kianda RH</b><small style={{ color: 'var(--ink3)' }}>Gestão de Pessoas · Angola</small></div>
         </div>
         <h1 style={{ fontSize: 19, marginBottom: 6 }}>Recuperar a palavra-passe</h1>

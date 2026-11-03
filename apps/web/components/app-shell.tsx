@@ -9,6 +9,7 @@ import { ROLE_LABEL, type EmployeeRow } from '@/lib/types';
 import { LogoutButton } from '@/app/(app)/logout-button';
 import { ClockCard } from './clock-card';
 import { RhIcon } from './rh-icon';
+import { KiandaMark } from '@/components/kianda-mark';
 
 export function AppShell({ me, counts, children }: { me: Me; counts: { absences: number; expenses: number; tasks?: number; acks?: number }; children: React.ReactNode }) {
   const path = usePathname();
@@ -42,8 +43,7 @@ export function AppShell({ me, counts, children }: { me: Me; counts: { absences:
   return <div className="app rh-app">
     {open && <button className="side-shade" aria-label="Fechar menu" onClick={() => { setOpen(false); toggle.current?.focus(); }} />}
     <aside ref={side} id="rh-side" className={`side ${open ? 'side-open' : ''}`} aria-label="Navegação principal">
-      <div className="logo"><div className="mark">K</div><div><b>Kianda RH</b><small>Gestão de Pessoas · Angola</small></div></div>
-      <div className="company-card"><small>Empresa</small><b>{me.company?.name ?? '—'}</b><small>NIF {me.company?.nif ?? '—'}</small></div>
+      <div className="logo"><KiandaMark size={34} /><div><b>Kianda</b><small>{me.company?.name ?? 'Gestão de pessoas'}</small></div></div>
       <nav>{groups.map((g, index) => <div key={g.label} className="nav-group">
         <button className="nav-group-toggle" aria-expanded={!!expanded[g.label]} aria-controls={`rh-nav-${index}`} onClick={() => setExpanded(previous => ({ [g.label]: !previous[g.label] }))}>
           <span>{g.label}</span><span className="nav-chevron" aria-hidden="true">⌄</span>
@@ -51,7 +51,6 @@ export function AppShell({ me, counts, children }: { me: Me; counts: { absences:
         <div id={`rh-nav-${index}`} hidden={!expanded[g.label]}>{g.items.map(item => <NavigationItem key={item.href} item={item} active={navActive(item.href, path, new URLSearchParams(search.toString()))} onNavigate={() => setOpen(false)} />)}</div>
       </div>)}</nav>
       <div className="who"><b>{me.user.name}</b><small>{ROLE_LABEL[me.user.role] ?? me.user.role}</small><Link href="/conta">A minha conta</Link><LogoutButton /></div>
-      <div className="side-foot">Kianda RH</div>
     </aside>
     <div className="rh-main">
       <header className="rh-top no-print">
