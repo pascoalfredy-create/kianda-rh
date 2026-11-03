@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { apiAs, closePool, registerCompany, signIn, sql, watchErrors } from './support.js';
+import { apiAs, closePool, registerCompany, signIn, sql, watchErrors, valoraGo } from './support.js';
 
 /** Telemóvel (Pixel 7): navegação do RH e Integra com menu, versões em cartões e acções visíveis. */
 test.afterAll(closePool);
@@ -64,7 +64,7 @@ test('Telemóvel: página pública com três módulos sem transbordar e Valora c
   await page.locator('#vCreate').click();
   await expect(page.locator('#hdrEnt')).toHaveText('Empresa Móvel, Lda.');
   await page.locator('#valoraMenu').click();
-  await page.locator('#nav a[data-v="orcamento"]').click();
+  await valoraGo(page, 'orcamento');
   await expect(page.locator('input[data-orc="vendas"]')).toBeVisible();
   // O fundo da barra lateral do computador não fica pintado por trás do conteúdo no telefone.
   expect(await page.evaluate<string>("getComputedStyle(document.querySelector('.app')).backgroundImage")).toBe('none');

@@ -76,3 +76,10 @@ export function watchErrors(page: Page) {
 }
 
 export async function closePool() { await pool?.end(); pool = null; }
+
+/** Valora: abre um ecrã pelo menu lateral, abrindo antes o grupo recolhido que o contém. */
+export async function valoraGo(page: Page, view: string) {
+  const link = page.locator(`#nav a[data-v="${view}"]`);
+  if (!(await link.isVisible())) await page.locator('#nav .nav-group', { has: page.locator(`a[data-v="${view}"]`) }).locator('.nav-group-toggle').click();
+  await link.click();
+}
