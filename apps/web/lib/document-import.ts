@@ -44,6 +44,26 @@ export async function extractWordRows(buffer: ArrayBuffer, signal?: AbortSignal)
   return wordDocumentRows(xml);
 }
 
+/** Texto de um modelo de RH. Não executa macros, HTML ou instruções do ficheiro. */
+export async function readTemplateDocument(file: File, options: PdfReadOptions = {}): Promise<string> {
+  if (!file.size || file.size > DOCUMENT_LIMIT) return problem('O modelo admite até 10 MB e não pode estar vazio.');
+  if (/\.doc$/i.test(file.name)) return problem('Guarde o Word antigo (.doc) como DOCX ou PDF antes de importar o modelo.');
+  if (!/\.(pdf|docx|txt)$/i.test(file.name)) return problem('Seleccione um modelo Word DOCX, PDF ou texto TXT.');
+  const buffer = await file.arrayBuffer(); options.signal?.throwIfAborted();
+  const format = documentFormat(file);
+  let text: string;
+  if (format === 'word') text = (await extractWordRows(buffer, options.signal)).map(row => row.join(' | ')).join('\n\n');
+  else if (format === 'pdf') text = await extractPdfContent(buffer, pages => pages.map((page, i) => {
+    const rows = pdfPageRows(page);
+    if (!rows.length) return problem(`A página ${i + 1} do modelo não contém texto extraível. Use Word ou um PDF com texto seleccionável.`);
+    return rows.map(row => row.map(cell => cell.text).join(' ')).join('\n\n');
+  }).join('\n\n'), options);
+  else text = decodeDocumentText(buffer);
+  text = text.replace(/\r\n?/g, '\n').trim();
+  if (text.length < 20 || text.length > 30_000 || text.includes('\u0000')) return problem('O modelo deve conter entre 20 e 30.000 caracteres de texto.');
+  return text;
+}
+
 export async function extractWordTrialBalance(buffer: ArrayBuffer, options: PdfReadOptions = {}) {
   const rows = await extractWordRows(buffer, options.signal);
   // A tabela deve começar pelo cabeçalho PGC; títulos de identificação antes dela não são contas.

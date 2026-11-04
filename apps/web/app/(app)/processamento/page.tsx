@@ -1,3 +1,5 @@
+
+import { MapDisclosure } from '@/components/map-disclosure';
 import { formatFxRate, formatKz } from '@kianda/core';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
@@ -84,7 +86,7 @@ function Sheet({ run, editable }: { run: PayrollRunDetail; editable: boolean }) 
         <div className="card kpi"><div className="l">Custo total empresa</div><div className="v">{formatKz(t.gross + t.employer)}</div></div>
       </div>
       <div className="card" style={{ overflowX: 'auto' }}>
-        <table className="dense">
+        <MapDisclosure title="Mapa de processamento salarial"><table className="dense">
           <thead><tr>
             <th>Colaborador</th><th className="num">Base</th><th className="num">Subs. alim./transp.</th><th className="num">H. extra</th><th>Subsídios</th><th className="num">Prémios/abonos</th>
             <th className="num">Faltas</th><th className="num">Ilíquido</th><th className="num">INSS</th><th className="num">IRT</th><th className="num">Outros desc.</th><th className="num">Líquido</th><th />
@@ -122,7 +124,7 @@ function Sheet({ run, editable }: { run: PayrollRunDetail; editable: boolean }) 
           <tfoot><tr>
             <td><b>Total ({run.lines.length})</b></td><td colSpan={6} /><td className="num"><b>{k(t.gross)}</b></td><td className="num"><b>{k(t.inss)}</b></td><td className="num"><b>{k(t.irt)}</b></td><td /><td className="num"><b>{k(t.net)}</b></td><td />
           </tr></tfoot>
-        </table>
+        </table></MapDisclosure>
       </div>
       {editable && <p className="muted" style={{ marginTop: 10 }}>SF / SN: subsídio de férias / Natal. Verde = incluído. Clique para incluir ou excluir manualmente (contorno azul = decisão manual; clique de novo para voltar à regra automática). Valores em kwanzas.</p>}
     </>
@@ -135,7 +137,7 @@ async function Variables({ period, rows, editable }: { period: string; rows: Pay
     <>
       {editable && <div style={{ marginBottom: 14 }}><AddVariable period={period} people={people} /></div>}
       <div className="card">
-        <table>
+        <MapDisclosure title="Mapa de variáveis"><table>
           <thead><tr><th>Colaborador</th><th>Tipo</th><th>Descrição</th><th className="num">Valor</th><th>Incidência</th><th /></tr></thead>
           <tbody>
             {rows.map((v) => {
@@ -152,7 +154,7 @@ async function Variables({ period, rows, editable }: { period: string; rows: Pay
               );
             })}
           </tbody>
-        </table>
+        </table></MapDisclosure>
         {!rows.length && <div className="empty">Sem variáveis lançadas para {monthLabel(period)}</div>}
       </div>
     </>
@@ -168,7 +170,7 @@ async function Journal({ period }: { period: string }) {
   return (
     <div className="card section">
       <h2>{je.reference} · {je.description} · diário {`"Pessoal"`}</h2>
-      <table>
+      <MapDisclosure title="Mapa contabilístico"><table>
         <thead><tr><th>Conta PGC</th><th>Descrição</th><th>Centro de custo</th><th className="num">Débito</th><th className="num">Crédito</th></tr></thead>
         <tbody>
           {je.lines.map((l, i) => (
@@ -176,7 +178,7 @@ async function Journal({ period }: { period: string }) {
           ))}
         </tbody>
         <tfoot><tr><td colSpan={3}><b>Totais</b> {d === c ? <span className="st approved">equilibrado</span> : <span className="st rejected">desequilibrado</span>}</td><td className="num"><b>{formatKz(d)}</b></td><td className="num"><b>{formatKz(c)}</b></td></tr></tfoot>
-      </table>
+      </table></MapDisclosure>
       <p className="muted" style={{ padding: '10px 16px' }}>Classe 7 (custos com o pessoal) a débito, por centro de custo; 34 (Estado: IRT e INSS) e 36 (Pessoal: remunerações a pagar, adiantamentos, outros) a crédito. Contas parametrizáveis por empresa.</p>
     </div>
   );

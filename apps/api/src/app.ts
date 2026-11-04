@@ -31,6 +31,7 @@ import { modelingRoutes, moduleRoutes } from './routes/modeling.js';
 import { valuationRoutes } from './routes/valuation.js';
 import { budgetRoutes } from './routes/budget.js';
 import { authRoutes } from './routes/auth.js';
+import { emailVerificationRoutes } from './routes/email-verification.js';
 import { employeeRoutes } from './routes/employees.js';
 import { payrollRoutes } from './routes/payroll.js';
 import { publicRoutes } from './routes/public.js';
@@ -111,6 +112,7 @@ export function buildApp(opts: { logger?: boolean; rateLimit?: boolean } = {}) {
   app.route('/', billingRoutes());
   app.route('/', platformRoutes());
   app.route('/', gatewayWebhookRoutes());
+  app.route('/', emailVerificationRoutes());
   app.route('/', accessRoutes());
   app.route('/', sectorRoutes());
   app.route('/', privacyRoutes());

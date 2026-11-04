@@ -1,0 +1,11 @@
+.map-disclosure{min-width:0;width:100%;margin:8px 0;background:var(--panel,#fff);border:1px solid var(--line,#e6e8ec);border-radius:8px;overflow:clip}
+.map-disclosure>summary{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:44px;padding:10px 14px;list-style:none;cursor:pointer;color:var(--ink,#18251e);font-size:13px;font-weight:600}
+.map-disclosure>summary::-webkit-details-marker{display:none}
+.map-disclosure>summary:focus-visible{outline:2px solid var(--brand,#0f5c4d);outline-offset:-3px}
+.map-disclosure>summary .map-show,.map-disclosure>summary .map-hide{flex-shrink:0;padding:4px 10px;border:1px solid var(--line,#e6e8ec);border-radius:6px;font-size:12px;font-weight:600}
+.map-disclosure>summary .map-hide,.map-disclosure[open]>summary .map-show{display:none}
+.map-disclosure[open]>summary .map-hide{display:inline}
+.map-disclosure[open]>summary{border-bottom:1px solid var(--line,#e6e8ec)}
+.map-content{max-width:100%;overflow-x:auto}
+.map-content>table{margin-top:0}
+@media print{.map-disclosure{border:0;overflow:visible}.map-disclosure>summary{display:none}.map-disclosure::details-content{content-visibility:visible!important;display:block!important}.map-content{overflow:visible}}

@@ -1,7 +1,8 @@
 # Kianda RH + Kianda Integra + Kianda Valora — documento de passagem
 
 > Para quem continua o trabalho (agente ou programador). Leia isto primeiro; depois `docs/MODULOS-LICENCAS.md` (comercial), `docs/INTEGRA_MODULE.md` (Modelagem), secção Valora de `docs/MODULOS-LICENCAS.md` e `docs/DEPLOY.md` (produção).
-> **Última actualização: 03/11/2026** — alinhado com o código e com a produção no commit `8401caf` (PR #53).
+> **Última actualização: 04/11/2026** — auditoria e correcções nas PR #55/#56; o cadastro, o mês experimental, a confirmação do email, mapas recolhidos e modelos RH estão descritos em `docs/ONBOARDING-E-MODELOS.md`. Consulte o CI para a publicação da versão corrente.
+> **Operação:** a confirmação de novos proprietários exige Resend e remetente validado em produção. Sem fornecedor disponível, a conta fica pendente; o ecrã informa a indisponibilidade e permite reenviar quando o serviço estiver configurado.
 > **Fonte de verdade: o código e os testes.** Se um documento divergir do código, corrija o documento, nunca o contrário sem decisão do dono. A tabela comercial existe só em `MODULOS-LICENCAS.md`; um teste (`packages/core/test/docs-coherence.test.ts`) falha se ela divergir do código.
 
 ## 1. O que é
@@ -91,7 +92,7 @@ Uma conta, um repositório e uma base de dados para três módulos com licenças
 
 ## 4. Comercial, avaliação e exportações
 
-A tabela de preços e as regras de planos, sectores, utilizadores, período experimental e exportações estão em **`docs/MODULOS-LICENCAS.md`** (única cópia, verificada por teste). Resumo: RH por faixas fixas de colaboradores activos (sem extras); Integra por projectos activos, com sectores e 5 utilizadores por plano (extras a 35.000 Kz/mês); semestral −10%, anual −15%; 7 dias de avaliação com documentos só em pré-visualização (402 `exportacao_requer_subscricao`); pagar um módulo não activa o outro.
+A tabela de preços e as regras de planos, sectores, utilizadores, período experimental e exportações estão em **`docs/MODULOS-LICENCAS.md`** (única cópia, verificada por teste). Resumo: RH por faixas fixas de colaboradores activos (sem extras); Integra por projectos activos, com sectores e 5 utilizadores por plano (extras a 35.000 Kz/mês); semestral −10%, anual −15%; 30 dias de avaliação após confirmação do email, com documentos só em pré-visualização (402 `exportacao_requer_subscricao`); pagar um módulo não activa o outro.
 
 Ficheiros: `packages/core/src/licensing.ts`, `packages/core/src/modeling-policy.ts`, `apps/api/src/services/{licence,modules,billing,document-access}.ts`, `apps/api/src/plugins/tenant.ts`, `apps/web/components/document-export.tsx`, `apps/web/modeling/adapter.js`.
 

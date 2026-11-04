@@ -6,6 +6,7 @@ import { KiandaMark } from '@/components/kianda-mark';
 import { AuthNavigation } from '../../components/auth-navigation';
 import { jsonRequest } from '../../lib/json-request';
 import { returnPath } from '../../lib/return-path';
+import { PasswordInput } from '../../components/password-input';
 
 function LoginForm() {
   const next = useSearchParams().get('voltar') ?? '/';
@@ -23,7 +24,7 @@ function LoginForm() {
   const [busy, setBusy] = useState(false);
   // Código da empresa lembrado neste telemóvel (só depois de carregar, para não divergir do servidor).
   useEffect(() => { try { const c = localStorage.getItem('kianda_company_code'); if (c) { setCode(c); setMode('pin'); } } catch { /* sem armazenamento */ } }, []);
-  const go = () => window.location.assign(returnPath(next));
+  const go = (verify = false) => window.location.assign(verify ? '/confirmar-email' : returnPath(next));
 
   async function call(url: string, payload: object) {
     setBusy(true);
@@ -37,7 +38,7 @@ function LoginForm() {
     e.preventDefault();
     if (ticket) {
       const { res, body } = await call('/api/v1/auth/login/2fa', { ticket, code: otp });
-      if (res.ok) return go();
+      if (res.ok) return go(body.requiresEmailVerification);
       if (body.error === 'bilhete_expirado') setTicket('');
       return setError(body.message ?? 'Código incorrecto');
     }
@@ -48,7 +49,7 @@ function LoginForm() {
     // Navegação completa: o layout raiz tem de ser re-renderizado com a sessão.
     if (res.ok) {
       try { if (mode === 'pin') localStorage.setItem('kianda_company_code', code.trim().toUpperCase()); } catch { /* sem armazenamento */ }
-      return go();
+      return go(body.requiresEmailVerification);
     }
     if (body.error === 'varias_empresas') setAskNif(true);
     setError(body.message ?? 'Não foi possível iniciar sessão.');
@@ -77,7 +78,7 @@ function LoginForm() {
           {mode === 'email' ? (
             <>
               <label>Email<input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
-              <label>Palavra-passe<input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+              <label>Palavra-passe<PasswordInput aria-label="Palavra-passe" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
               {askNif && <label>NIF da empresa<input inputMode="numeric" value={companyNif} onChange={(e) => setCompanyNif(e.target.value)} /></label>}
             </>
           ) : (
@@ -93,7 +94,7 @@ function LoginForm() {
       <button className="btn" disabled={busy} style={{ width: '100%' }}>{busy ? 'A entrar…' : ticket ? 'Confirmar' : 'Entrar'}</button>
       {ticket && <button type="button" className="btn ghost" style={{ width: '100%', marginTop: 10 }} onClick={() => { setTicket(''); setOtp(''); setError(''); }}>Voltar ao início de sessão</button>}
       {!ticket && <p className="muted" style={{ textAlign: 'center', marginTop: 12, fontSize: 12.5 }}>{mode === 'email' ? <><a href="/recuperar">Esqueceu-se da palavra-passe?</a></> : 'Esqueceu-se do PIN? Peça aos Recursos Humanos uma ligação de recuperação.'}</p>}
-      {!ticket && <p className="muted" style={{ textAlign: 'center', marginTop: 4 }}>Empresa nova? <a href="/registo">Criar conta — 7 dias grátis</a></p>}
+      {!ticket && <p className="muted" style={{ textAlign: 'center', marginTop: 4 }}>Empresa nova? <a href="/registo">Criar conta — um mês grátis</a></p>}
     </form>
   );
 }

@@ -25,9 +25,9 @@ export const CYCLES: Record<BillingCycle, { label: string; months: number; disco
   annual: { label: 'Anual (−15%)', months: 12, discountBps: 1500 },
 };
 
-export const TRIAL_DAYS = 7;
+export const TRIAL_DAYS = 30;
 /** Identifica o texto apresentado e aceite em novos registos. */
-export const REGISTRATION_TERMS_VERSION = '2026-11-04';
+export const REGISTRATION_TERMS_VERSION = '2026-11-04.2';
 
 const DAY_MS = 86_400_000;
 function calendarDay(value: string): number {
@@ -36,9 +36,9 @@ function calendarDay(value: string): number {
   return time;
 }
 
-/** Avaliação por dias de calendário de Angola: o registo é o dia 1 e o último dia está incluído. */
-export function trialEndDate(registeredOn: string): string {
-  return new Date(calendarDay(registeredOn) + (TRIAL_DAYS - 1) * DAY_MS).toISOString().slice(0, 10);
+/** Avaliação por dias de calendário de Angola: a activação é o dia 1 e o último dia está incluído. */
+export function trialEndDate(startedOn: string): string {
+  return new Date(calendarDay(startedOn) + (TRIAL_DAYS - 1) * DAY_MS).toISOString().slice(0, 10);
 }
 
 /** Dias de calendário disponíveis, incluindo hoje; no último dia devolve 1, depois devolve 0. */

@@ -30,6 +30,8 @@ export async function registerCompany(opts: { name?: string; modules?: Modules; 
   expect(res.status(), await res.text()).toBe(201);
   const token = /kianda_session=([^;]+)/.exec(res.headers()['set-cookie'] ?? '')![1]!;
   const body = await res.json();
+  // Preparação de uma empresa sintética já confirmada; o circuito do token tem testes próprios.
+  await sql('update users set email_verified_at=now() where id=$1 and company_id=$2', [body.user.id, body.company.id]);
   await api.dispose();
   return { id: body.company.id, email, token, name };
 }
@@ -82,4 +84,13 @@ export async function valoraGo(page: Page, view: string) {
   const link = page.locator(`#nav a[data-v="${view}"]`);
   if (!(await link.isVisible())) await page.locator('#nav .nav-group', { has: page.locator(`a[data-v="${view}"]`) }).locator('.nav-group-toggle').click();
   await link.click();
+  await openMaps(page);
+}
+
+/** Abrir explicitamente os mapas que um cenário de negócio pretende consultar/editar. */
+export async function openMaps(page: Page) {
+  for (const map of await page.locator('details.map-disclosure:not([open])').all()) {
+    const summary = map.locator('summary').first();
+    if (await summary.isVisible()) await summary.click();
+  }
 }

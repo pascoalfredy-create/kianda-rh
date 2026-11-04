@@ -3,12 +3,27 @@ import { parseHistoricalTrialBalance, parseStatement, WORD_MIME } from '@kianda/
 import { fixtureWord, fixtureZip, wordTableXml } from '../../../packages/core/test/fixtures/document-import';
 import { fixturePdf } from '../test-fixtures/pdf';
 import type { PdfTextItem } from '../modeling/pdf-import';
-import { bankStatementFromPdfPages, extractWordRows, extractWordTrialBalance, readStatementDocument } from './document-import';
+import { bankStatementFromPdfPages, extractWordRows, extractWordTrialBalance, readStatementDocument, readTemplateDocument } from './document-import';
 
 const arrayBuffer = (data: Uint8Array) => new Uint8Array(data).buffer;
 describe('leitura real de documentos PDF e Word', () => {
   const balance = [['Conta', 'Designação', 'Saldo Devedor', 'Saldo Credor'], ['43', 'Banco & depósitos', '1.000,25', ''], ['51', 'Capital', '', '1.000,25']];
   const bank = [['Data', 'Descritivo', 'Débito', 'Crédito', 'Saldo'], ['01/10/2026', 'Salários', '100,25', '', '899,75'], ['02/10/2026', 'Entrada', '', '50,10', '949,85']];
+  it('importa um modelo Word da empresa sem alterar cláusulas nem campos variáveis', async () => {
+    const clauses = [['CONTRATO DA EMPRESA'], ['Entre {{empresa.nome}} e {{colaborador.nome}}.'], ['Cláusula própria: transporte nas regras acordadas pela empresa.']];
+    const text = await readTemplateDocument(new File([arrayBuffer(fixtureWord(clauses))], 'contrato.docx', { type: WORD_MIME }));
+    expect(text).toContain('{{empresa.nome}}'); expect(text).toContain('{{colaborador.nome}}');
+    expect(text).toContain('Cláusula própria: transporte nas regras acordadas pela empresa.');
+  });
+  it('preserva texto do modelo, recusa macros/formato antigo e respeita cancelamento e limites', async () => {
+    const text = 'Cláusula da empresa\r\nEntre {{empresa.nome}} e {{colaborador.nome}}.';
+    expect(await readTemplateDocument(new File([text], 'modelo.txt'))).toBe(text.replaceAll('\r\n', '\n'));
+    await expect(readTemplateDocument(new File([text], 'modelo.docm'))).rejects.toThrow('DOCX');
+    await expect(readTemplateDocument(new File([text], 'modelo.doc'))).rejects.toThrow('antigo');
+    await expect(readTemplateDocument(new File(['x'.repeat(30001)], 'modelo.txt'))).rejects.toThrow('30.000');
+    const controller = new AbortController(); controller.abort();
+    await expect(readTemplateDocument(new File([text], 'modelo.txt'), { signal: controller.signal })).rejects.toThrow();
+  });
   for (const compressed of [true, false]) it(`extrai um DOCX ${compressed ? 'comprimido' : 'sem compressão'} e confere os valores no core`, async () => {
     const buffer = arrayBuffer(fixtureWord(balance, compressed));
     expect(await extractWordRows(buffer)).toEqual(balance);

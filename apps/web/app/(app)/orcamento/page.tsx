@@ -1,3 +1,5 @@
+
+import { MapDisclosure } from '@/components/map-disclosure';
 import { formatKz, formatPercent } from '@kianda/core';
 import { redirect } from 'next/navigation';
 import { api, currentUser } from '@/lib/api';
@@ -105,7 +107,7 @@ export default async function Orcamento({ searchParams }: { searchParams: Promis
           <div className="card" style={{ padding: 16, marginTop: 14 }}><h2 style={{ fontSize: 14, marginTop: 0 }}>Orçado vs real</h2><Chart months={c.months} /></div>
 
           <div className="card section" style={{ marginTop: 14 }}>
-            <table className="dense">
+            <MapDisclosure title="Mapa orçamental"><table className="dense">
               <thead><tr><th>Mês</th><th className="num">Orçado</th><th className="num">Real</th><th className="num">Desvio</th><th className="num">%</th><th className="num">Efectivo orç. / real</th></tr></thead>
               <tbody>
                 {c.months.map((m) => (
@@ -118,12 +120,12 @@ export default async function Orcamento({ searchParams }: { searchParams: Promis
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></MapDisclosure>
           </div>
 
           <div className="card section" style={{ marginTop: 14 }}>
             <h2 style={{ fontSize: 14, padding: '12px 16px 0' }}>Por departamento (meses fechados)</h2>
-            <table className="dense">
+            <MapDisclosure title="Mapa de execução"><table className="dense">
               <thead><tr><th>Departamento</th><th className="num">Orçado no ano</th><th className="num">Orçado (fechados)</th><th className="num">Real</th><th className="num">Desvio</th><th className="num">%</th></tr></thead>
               <tbody>
                 {c.departments.map((x) => (
@@ -133,7 +135,7 @@ export default async function Orcamento({ searchParams }: { searchParams: Promis
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></MapDisclosure>
             <p className="muted" style={{ padding: '0 16px 12px', margin: 0 }}>O real usa o departamento actual de cada ficha.</p>
           </div>
 
