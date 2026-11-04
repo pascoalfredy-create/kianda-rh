@@ -231,4 +231,17 @@ describe.skipIf(!process.env.DATABASE_URL)('leituras RH em conjunto: resultados,
     expect((await request(sessions.get('manager')!, 'GET', '/v1/payroll-runs/opening?period=2026-07')).statusCode).toBe(403);
     expect((await request(owner, 'GET', '/v1/payroll-runs/opening?period=errado')).statusCode).toBe(400);
   });
+
+  it('fornece só nomes e identificadores da própria empresa para quem prepara o mês, na mesma abertura', async () => {
+    const opening = await measureQueries(() => request(owner, 'GET', '/v1/payroll-runs/opening?period=2026-07&people=1'));
+    expect(opening.value.statusCode).toBe(200);
+    expect(opening.value.json().people).toEqual(ids.map((id, i) => ({ id, name: ['Chefia', 'Equipa', 'RH', 'Sem contrato'][i] })));
+    expect(opening.queries).toBeLessThanOrEqual(12);
+    const external = (await request(other, 'GET', '/v1/payroll-runs/opening?period=2026-07&people=1')).json();
+    expect(external.people).toHaveLength(1);
+    expect(external.people[0].name).toBe('Outra empresa');
+    expect((await request(owner, 'GET', '/v1/payroll-runs/opening?period=2026-01&people=1')).json()).not.toHaveProperty('people');
+    expect((await request(sessions.get('hr')!, 'GET', '/v1/payroll-runs/opening?period=2026-07&people=1')).json()).not.toHaveProperty('people');
+    expect((await request(sessions.get('employee')!, 'GET', '/v1/payroll-runs/opening?period=2026-07&people=1')).statusCode).toBe(403);
+  });
 });

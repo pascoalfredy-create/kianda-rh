@@ -19,6 +19,24 @@ test('RH no telemóvel: menu ☰ com grupos recolhíveis leva a Férias e ausên
   expect(errors).toEqual([]);
 });
 
+test('RH no telemóvel: preparar mostra os campos e calcula sem alargar o ecrã', async ({ page, context }) => {
+  const company = await registerCompany({ name: 'Preparação no telemóvel' });
+  const employee = await apiAs(company.token, 'POST', '/v1/employees', { number: '1', name: 'Pessoa Mobile', jobTitle: 'Técnico', contract: { type: 'indefinite', startDate: '2026-01-01', base: 200000 } });
+  expect(employee.status, JSON.stringify(employee.body)).toBe(201);
+  await signIn(context, company.token);
+  const errors = watchErrors(page);
+  await page.goto('/processamento?mes=2026-10');
+  await page.getByRole('button', { name: 'Preparar processamento' }).click();
+  const preparation = page.getByRole('region', { name: 'Preparação do processamento' });
+  await expect(preparation.getByLabel('Colaborador')).toBeVisible();
+  await expect(preparation.getByLabel('Valor (Kz)')).toBeVisible();
+  expect(await page.evaluate<number>('document.documentElement.scrollWidth - window.innerWidth')).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: '/tmp/e2e/rh-preparar-telemovel.png', fullPage: true });
+  await preparation.getByRole('button', { name: 'Calcular folha', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Recalcular', exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test('Integra no telemóvel: menu, pressupostos e versões em cartões dentro do ecrã', async ({ page, context }) => {
   const company = await registerCompany({ name: 'Telemóvel Integra E2E', modules: ['hr', 'modeling'] });
   await sql(`update company_modules set status='active', paid_until='2099-12-31' where company_id=$1 and module='modeling'`, [company.id]);
