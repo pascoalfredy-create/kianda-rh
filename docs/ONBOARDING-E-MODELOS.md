@@ -54,6 +54,19 @@ As remunerações continuam nas fichas/contratos, e a assiduidade aprovada conti
 
 A lista de colaboradores usa a mesma abertura da folha (`people=1`), só com identificadores e nomes da própria empresa, para quem pode preparar. Evita outra chamada HTTP e a transmissão das fichas completas.
 
+## Correcção de erros na remuneração
+
+Em **Colaboradores → Contrato e remuneração**, existem duas operações:
+
+- **Registar alteração salarial** cria uma remuneração com data de efeito, para aumentos, ajustes e promoções. Uma data futura mantém o salário actual e apresenta a mensagem «Alteração agendada para…». Para vigorar hoje, seleccionar a data de hoje. A ficha actualiza automaticamente depois de guardar.
+- **Corrigir erro de registo** permite escolher a linha original, corrigir os valores e justificar o erro. Conserva a data e o motivo original, sem acrescentar uma redução/aumento fictício. A auditoria regista quem corrigiu, quando, os valores anteriores e novos, e a justificação. A remuneração inicial do contrato acompanha a correcção da admissão; correcções de alterações posteriores não mudam os valores iniciais desse contrato.
+
+Exemplo: USD 300.000 digitados em vez de USD 3.000 na admissão devem ser corrigidos na linha da admissão, mantendo a data original. Uma alteração para USD 3.000 em 01/12 só passa a vigorar em Dezembro. Agendamentos existentes conservam as suas datas e valores; a correcção de outra linha não os elimina.
+
+A percentagem compara a moeda contratada: em USD, compara dólares e não a referência em Kz. Uma alteração do câmbio com o mesmo valor em USD produz 0%; ao mudar de moeda não se inventa uma percentagem de variação.
+
+O endpoint PATCH `/v1/employees/:id/compensation/:changeId` exige perfil RH/proprietário, empresa e colaborador correspondentes, justificação e o retrato dos valores esperados. Recusa sobreposição de gravações. A actualização e a auditoria são transaccionais. Meses já fechados bloqueiam a correcção; documentos e recibos emitidos conservam os valores. Rascunhos precisam de **Recalcular**, com ligação para os períodos afectados na confirmação. Nenhum registo real de remuneração é corrigido automaticamente por uma publicação.
+
 ## Mapas recolhidos
 
 As tabelas detalhadas do RH e dos ecrãs financeiros começam recolhidas, com **Ver** e **Recolher**. Os indicadores e gráficos continuam visíveis. O controlo é nativo e funciona com teclado. Nos ecrãs imperativos, o estado aberto mantém-se durante os recálculos da mesma vista; o conteúdo e os exportadores não são reescritos.

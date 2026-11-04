@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildOrgTree, compensationAt, compensationHistory, createsCycle, documentAlerts, kz } from '../src/index.js';
+import { buildOrgTree, compensationAt, compensationHistory, compensationChangeBps, createsCycle, documentAlerts, kz } from '../src/index.js';
 
 const changes = [
   { effectiveDate: '2023-01-16', baseMinor: kz(300_000), mealMinor: kz(30_000), transportMinor: kz(25_000), reason: 'admissão' },
@@ -19,6 +19,16 @@ describe('remuneração em vigor', () => {
   it('histórico calcula a variação face à anterior', () => {
     const h = compensationHistory([...changes].reverse());
     expect(h.map((x) => x.changeBps)).toEqual([null, 2000, 1111]);
+  });
+  it('salário em USD compara dólares, sem tratar o câmbio de referência como aumento', () => {
+    const usd = { ...changes[0]!, salaryCurrency: 'USD', baseForeignMinor: kz(3000) };
+    expect(compensationChangeBps(usd, { ...usd, baseMinor: usd.baseMinor * 2 })).toBe(0);
+    expect(compensationChangeBps(usd, { ...usd, baseMinor: usd.baseMinor * 2, baseForeignMinor: kz(3300) })).toBe(1000);
+    expect(compensationHistory([usd, { ...usd, effectiveDate: '2026-12-01', baseMinor: usd.baseMinor * 2 }])[1]!.changeBps).toBe(0);
+  });
+  it('não apresenta uma percentagem enganadora ao mudar de moeda ou sem base comparável', () => {
+    expect(compensationChangeBps(changes[0]!, { ...changes[1]!, salaryCurrency: 'USD', baseForeignMinor: kz(3000) })).toBeNull();
+    expect(compensationChangeBps({ baseMinor: 0 }, { baseMinor: 20000000 })).toBeNull();
   });
 });
 
