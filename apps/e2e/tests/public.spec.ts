@@ -3,17 +3,17 @@ import { closePool, PASSWORD, registerCompany, watchErrors } from './support.js'
 
 test.afterAll(closePool);
 
-test('o login permite regressar ao início antes de carregar o JavaScript', async ({ browser }) => {
-  const context = await browser.newContext({ baseURL: 'http://localhost:3000', javaScriptEnabled: false });
-  try {
-    const page = await context.newPage();
-    await page.goto('/login');
-    await page.getByRole('link', { name: '← Página inicial', exact: true }).click();
-    await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole('heading', { name: /Cuide da sua equipa/ })).toBeVisible();
-  } finally {
-    await context.close();
-  }
+test('o login permite regressar ao início antes de carregar o JavaScript', async ({ page }) => {
+  // Interromper os scripts do login conserva o HTML inicial, sem hidratação.
+  await page.route('**/_next/static/**/*.js', route => route.abort());
+  await page.goto('/login');
+  await expect(page.getByRole('status')).toContainText('A carregar o início de sessão');
+  await expect(page.getByRole('link', { name: '← Página inicial', exact: true })).toBeVisible();
+  // A página de destino pode carregar normalmente depois de abandonar o login.
+  await page.unroute('**/_next/static/**/*.js');
+  await page.getByRole('link', { name: '← Página inicial', exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('heading', { name: /Cuide da sua equipa/ })).toBeVisible();
 });
 
 test('o registo incompleto permite regressar ao início sem criar uma conta', async ({ page }) => {
