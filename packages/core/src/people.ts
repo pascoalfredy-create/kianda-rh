@@ -13,6 +13,17 @@ export interface CompensationChange {
   mealMinor: Minor;
   transportMinor: Minor;
   reason?: string;
+  salaryCurrency?: string;
+  baseForeignMinor?: Minor | null;
+}
+
+/** Compara a remuneração na moeda contratada; um câmbio de referência diferente não é um aumento. */
+export function compensationChangeBps(before: Pick<CompensationChange, 'baseMinor' | 'salaryCurrency' | 'baseForeignMinor'>, after: Pick<CompensationChange, 'baseMinor' | 'salaryCurrency' | 'baseForeignMinor'>): number | null {
+  const currency = before.salaryCurrency ?? 'AOA';
+  if (currency !== (after.salaryCurrency ?? 'AOA')) return null;
+  const prev = currency === 'USD' ? before.baseForeignMinor : before.baseMinor;
+  const next = currency === 'USD' ? after.baseForeignMinor : after.baseMinor;
+  return prev && next != null ? Math.round(((next - prev) / prev) * 10_000) : null;
 }
 
 /** Remuneração em vigor numa data: a última alteração com efeito igual ou anterior a essa data. */
@@ -29,7 +40,7 @@ export function compensationHistory<T extends CompensationChange>(changes: reado
   const sorted = [...changes].sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
   return sorted.map((c, i) => {
     const prev = i > 0 ? sorted[i - 1]!.baseMinor : null;
-    return { ...c, previousBaseMinor: prev, changeBps: prev ? Math.round(((c.baseMinor - prev) / prev) * 10_000) : null };
+    return { ...c, previousBaseMinor: prev, changeBps: i > 0 ? compensationChangeBps(sorted[i - 1]!, c) : null };
   });
 }
 

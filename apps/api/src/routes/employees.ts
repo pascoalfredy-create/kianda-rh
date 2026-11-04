@@ -1,6 +1,6 @@
 import {
   buildOrgTree, compensationAt, compensationHistory, complianceAlerts, contractAlerts, createsCycle, documentAlerts, getPack,
-  angolanIbanProblem, isValidAngolanBI, kz, normalizeIban, packOrLatest, PackNotFoundError, type CompensationChange, type CountryPack, type DocumentType,
+  angolanIbanProblem, isValidAngolanBI, kz, luandaDate, normalizeIban, packOrLatest, PackNotFoundError, type CompensationChange, type CountryPack, type DocumentType,
 } from '@kianda/core';
 import {
   candidates, candidateEvents, auditLogs, compensationChanges, contracts, departments, employeeDocuments, employees, files, getDb, payrollRuns, users, type Db,
@@ -16,7 +16,7 @@ import { startChecklist } from '../services/checklists.js';
 import { requestsForNewEmployee } from '../services/acknowledgements.js';
 
 const STAFF = ['hr_admin', 'payroll', 'finance', 'manager'] as const;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => luandaDate(new Date());
 const packFor = (date: string) => getPack('AO', Number(date.slice(0, 4)));
 /** Para alertas informativos com a data de hoje: nunca falha num ano sem pacote publicado (usa o mais recente). */
 const alertPack = (date: string) => packOrLatest('AO', Number(date.slice(0, 4)));
@@ -75,6 +75,15 @@ const createBody = z.object({ number: z.string().trim().min(1), ...personal, con
 const patchBody = z.object({ ...personal, status: z.enum(['active', 'suspended']), vacationCarryOver: z.coerce.number().int().min(0, 'Dias transitados não podem ser negativos').max(44, 'Máximo de 44 dias transitados') }).partial();
 
 const compensationBody = moneyFields.extend({ effectiveDate: z.iso.date(), reason: z.string().trim().min(3, 'Indique o motivo da alteração') }).refine(usdCheck, usdMessage);
+const compensationSnapshot = z.object({
+  effectiveDate: z.iso.date(), reason: z.string(),
+  baseMinor: z.number().int().nonnegative(), mealMinor: z.number().int().nonnegative(), transportMinor: z.number().int().nonnegative(),
+  salaryCurrency: z.enum(['AOA', 'USD']), baseForeignMinor: z.number().int().positive().nullable(),
+});
+const correctionBody = moneyFields.extend({
+  reason: z.string().trim().min(3, 'Justifique a correcção').max(300),
+  expected: compensationSnapshot,
+}).strict().refine(usdCheck, usdMessage);
 
 const documentBody = z.object({
   type: z.enum(['bi', 'passport', 'residence_card', 'work_visa', 'driving_licence', 'professional_card', 'other']),
@@ -321,7 +330,7 @@ export function employeeRoutes() {
     return ctx.json(result, 201);
   });
 
-  /** Alteração salarial com data de efeito (actualização anual, promoção, correcção). */
+  /** Nova remuneração com data de efeito (actualização anual, promoção, ajuste). */
   app.post('/v1/employees/:id/compensation', requireRole('hr_admin'), async (ctx) => {
     const req = ctx.get('actor');
     const { id } = z.object({ id: z.string() }).parse(ctx.req.param());
@@ -343,6 +352,39 @@ export function employeeRoutes() {
     }).returning();
     await audit(db, req, 'create', 'compensation', row!.id, compensationAt(history, b.effectiveDate), row);
     return ctx.json(row, 201);
+  });
+
+  /** Corrige um erro de registo sem criar um aumento/redução nem deslocar a data de efeito. */
+  app.patch('/v1/employees/:id/compensation/:changeId', requireRole('hr_admin'), async (ctx) => {
+    const req = ctx.get('actor');
+    const { id, changeId } = ctx.req.param();
+    const b = correctionBody.parse(await body(ctx));
+    const result = await getDb().transaction(async (tx) => {
+      const e = await loadEmployee(tx, req, id);
+      if (e.status === 'terminated') throw new DomainError('colaborador_cessado', 'Colaborador cessado');
+      const [before] = await tx.select().from(compensationChanges)
+        .where(and(eq(compensationChanges.id, changeId), eq(compensationChanges.employeeId, id), eq(compensationChanges.companyId, req.companyId))).for('update');
+      if (!before) throw new DomainError('nao_encontrado', 'Registo de remuneração inexistente', 404);
+      if ((Object.keys(b.expected) as (keyof typeof b.expected)[]).some((key) => b.expected[key] !== before[key]))
+        throw new DomainError('registo_alterado', 'Este registo foi alterado por outra operação. Actualize a ficha antes de corrigir.');
+      const [contract] = before.contractId ? await tx.select().from(contracts)
+        .where(and(eq(contracts.id, before.contractId), eq(contracts.employeeId, id))) : [];
+      if (!contract) throw new DomainError('sem_contrato', 'O registo não tem um contrato associado');
+      assertMinimumWage(kz(b.base), contract.type, before.effectiveDate);
+      await assertPeriodOpen(tx, req.companyId, before.effectiveDate);
+      const values = { baseMinor: kz(b.base), mealMinor: kz(b.meal), transportMinor: kz(b.transport), ...salaryCols(b) };
+      if ((Object.keys(values) as (keyof typeof values)[]).every((key) => values[key] === before[key]))
+        throw new DomainError('sem_alteracao', 'Os valores indicados são iguais aos já registados', 400);
+      const [after] = await tx.update(compensationChanges).set(values).where(eq(compensationChanges.id, before.id)).returning();
+      // O contrato mantém coerência com a sua remuneração inicial, sem transformar ajustes posteriores no valor da admissão.
+      if (contract.startDate === before.effectiveDate) await tx.update(contracts).set(values).where(eq(contracts.id, contract.id));
+      await audit(tx, req, 'correct', 'compensation', before.id, before, { ...after, correctionReason: b.reason });
+      const drafts = await tx.select({ period: payrollRuns.period }).from(payrollRuns)
+        .where(and(eq(payrollRuns.companyId, req.companyId), eq(payrollRuns.status, 'draft'), gte(payrollRuns.period, before.effectiveDate.slice(0, 7))))
+        .orderBy(asc(payrollRuns.period));
+      return { ...after!, draftPeriods: drafts.map((r) => r.period) };
+    });
+    return ctx.json(result);
   });
 
   app.post('/v1/employees/:id/documents', requireRole('hr_admin'), async (ctx) => {

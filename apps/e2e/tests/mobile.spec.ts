@@ -37,6 +37,22 @@ test('RH no telemóvel: preparar mostra os campos e calcula sem alargar o ecrã'
   expect(errors).toEqual([]);
 });
 
+test('RH no telemóvel: corrigir a remuneração mostra os campos e actualiza a ficha', async ({ page, context }) => {
+  const company = await registerCompany();
+  const employee = await apiAs(company.token, 'POST', '/v1/employees', { number: '1', name: 'Correcção no telefone', jobTitle: 'Técnico', contract: { type: 'indefinite', startDate: '2026-11-01', base: 285600000, currency: 'USD', baseUsd: 300000 } });
+  expect(employee.status).toBe(201);
+  await signIn(context, company.token);
+  await page.goto(`/colaboradores/${employee.body.id}?s=contrato`);
+  await page.getByRole('button', { name: 'Corrigir erro de registo', exact: true }).click();
+  const form = page.getByRole('form', { name: 'Correcção de remuneração', exact: true });
+  await expect(form.getByLabel('Registo a corrigir')).toBeVisible();
+  await form.getByLabel('Salário base (USD)', { exact: true }).fill('3000');
+  await form.getByLabel('Justificação da correcção', { exact: true }).fill('Zeros a mais no registo');
+  expect(await page.evaluate<number>('document.documentElement.scrollWidth - window.innerWidth')).toBeLessThanOrEqual(1);
+  await form.getByRole('button', { name: 'Guardar correcção', exact: true }).click();
+  await expect(page.locator('.hero .facts')).toContainText(/USD 3[\s.]000,00/);
+});
+
 test('Integra no telemóvel: menu, pressupostos e versões em cartões dentro do ecrã', async ({ page, context }) => {
   const company = await registerCompany({ name: 'Telemóvel Integra E2E', modules: ['hr', 'modeling'] });
   await sql(`update company_modules set status='active', paid_until='2099-12-31' where company_id=$1 and module='modeling'`, [company.id]);

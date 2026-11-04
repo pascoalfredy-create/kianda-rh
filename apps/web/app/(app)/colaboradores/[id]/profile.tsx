@@ -1,5 +1,5 @@
 import { Attachments } from '@/components/attachments';
-import { formatKz, formatUsd, formatPercent } from '@kianda/core';
+import { formatKz, formatUsd, formatPercent, luandaDate } from '@kianda/core';
 import type { Compensation } from '@/lib/types';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -175,7 +175,7 @@ function ContractTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
           <thead><tr><th>Efeito</th><th>Motivo</th><th className="num">Base</th><th className="num">Variação</th><th className="num">Alimentação</th><th className="num">Transporte</th></tr></thead>
           <tbody>
             {p.compensation.history.map((h) => {
-              const future = h.effectiveDate > new Date().toISOString().slice(0, 10);
+              const future = h.effectiveDate > luandaDate(new Date());
               return (
                 <tr key={h.id}>
                   <td>{fmtDate(h.effectiveDate)} {future && <span className="tag future">agendada</span>}{cur?.id === h.id && <span className="tag">em vigor</span>}</td>
@@ -368,6 +368,7 @@ function TeamTab({ p }: { p: Profile }) {
 const TITLE: Record<string, string> = {
   'create:employee': 'Ficha criada', 'update:employee': 'Ficha alterada', 'create:contract': 'Novo contrato',
   'create:compensation': 'Alteração salarial', 'create:employee_document': 'Documento adicionado', 'delete:employee_document': 'Documento removido',
+  'correct:compensation': 'Correcção de remuneração',
 };
 const FIELD: Record<string, string> = {
   name: 'nome', jobTitle: 'função', departmentId: 'departamento', managerId: 'chefia', status: 'situação', province: 'província', gender: 'sexo',
@@ -402,9 +403,10 @@ async function HistoryTab({ id }: { id: string }) {
     if (h.entity === 'employee' && h.action === 'update') return `Campos alterados: ${Object.keys(a).map((k) => FIELD[k] ?? k).join(', ')}`;
     if (h.entity === 'employee' && h.action === 'create') return 'Registo inicial com contrato e remuneração';
     if (h.entity === 'compensation') {
-      const before = (b as { baseMinor?: number }).baseMinor;
-      const after = (a as { baseMinor?: number; effectiveDate?: string; reason?: string });
-      return `${after.reason ?? ''}: ${before != null ? `${formatKz(before)} → ` : ''}${formatKz(after.baseMinor ?? 0)} com efeito em ${fmtDate(after.effectiveDate)}`;
+      const before = b as Partial<Compensation>;
+      const after = a as Partial<Compensation> & { correctionReason?: string };
+      const payText = (c: Partial<Compensation>) => c.salaryCurrency === 'USD' && c.baseForeignMinor != null ? formatUsd(c.baseForeignMinor) : formatKz(c.baseMinor ?? 0);
+      return `${after.correctionReason ?? after.reason ?? ''}: ${before.baseMinor != null ? `${payText(before)} → ` : ''}${payText(after)} com efeito em ${fmtDate(after.effectiveDate)}`;
     }
     if (h.entity === 'contract') {
       const c = a as { type?: string; startDate?: string };
