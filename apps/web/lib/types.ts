@@ -226,6 +226,11 @@ export interface PayrollRunDetail {
   fxRate?: string | null; fxDate?: string | null; fxSource?: string | null;
   lines: PayrollLineRow[];
 }
+export interface PayrollBatchPerson {
+  id: string; name: string; number: string; department: string | null; jobTitle: string;
+  baseMinor: number; mealMinor: number; transportMinor: number; salaryCurrency: string;
+  baseForeignMinor: number | null; startDate: string; endDate: string | null;
+}
 export interface PayrollVariableRow {
   id: string;
   employeeId: string;

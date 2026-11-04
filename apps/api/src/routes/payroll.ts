@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { body, requireCompany, requireRole, type AppEnv } from '../plugins/tenant.js';
 import { closePayroll, DomainError, draftPayroll, type SubsidyOverrides } from '../services/payroll.js';
+import { payrollRoster } from '../services/payroll-roster.js';
 
 const periodSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Período inválido (AAAA-MM)');
 const READERS = ['payroll', 'finance', 'hr_admin'] as const;
@@ -85,9 +86,17 @@ export function payrollRoutes() {
     return c.json(await draftPayroll(getDb(), companyId, period, actorId, fx), 201);
   });
 
+  /** Calcula salários da selecção; os lotes acumulam-se na mesma folha mensal. */
+  app.post('/v1/payroll-runs/batch', requireRole('payroll'), async c => {
+    const b = z.object({ period: periodSchema, employeeIds: z.array(z.string().min(1).max(128)).min(1).max(1000), fx: fxSchema.optional() })
+      .refine(b => new Set(b.employeeIds).size === b.employeeIds.length, 'O lote contém colaboradores repetidos').parse(await body(c));
+    const actor = c.get('actor');
+    return c.json(await draftPayroll(getDb(), actor.companyId, b.period, actor.actorId, b.fx, b.employeeIds), 201);
+  });
+
   /** Folha e variáveis com uma só validação de sessão e licença. */
   app.get('/v1/payroll-runs/opening', requireRole(...READERS), async (c) => {
-    const { period, people: includePeople } = z.object({ period: periodSchema, people: z.literal('1').optional() }).parse(c.req.query());
+    const { period, people: includePeople, batch } = z.object({ period: periodSchema, people: z.literal('1').optional(), batch: z.literal('1').optional() }).parse(c.req.query());
     const { companyId, role } = c.get('actor');
     const db = getDb();
     const [runs, variables] = await Promise.all([
@@ -96,14 +105,15 @@ export function payrollRoutes() {
     ]);
     // Salários indexados: só interessa enquanto o mês pode ser (re)calculado; omitido quando não há nenhum.
     const editable = runs[0]?.status !== 'closed';
-    const [indexed, people] = await Promise.all([
+    const [indexed, people, payrollPeople] = await Promise.all([
       editable ? indexedCount(db, companyId, period) : 0,
       includePeople && editable && (role === 'owner' || role === 'payroll')
         ? db.select({ id: employees.id, name: employees.name }).from(employees)
           .where(and(eq(employees.companyId, companyId), eq(employees.status, 'active'))).orderBy(asc(employees.number))
         : undefined,
+      batch && editable && (role === 'owner' || role === 'payroll') ? payrollRoster(db, companyId, period) : undefined,
     ]);
-    return c.json({ run: runs[0] ? await runDetail(db, runs[0]) : null, variables, ...(indexed ? { indexedEmployees: indexed } : {}), ...(people ? { people } : {}) });
+    return c.json({ run: runs[0] ? await runDetail(db, runs[0]) : null, variables, ...(indexed ? { indexedEmployees: indexed } : {}), ...(people ? { people } : {}), ...(payrollPeople ? { payrollPeople } : {}) });
   });
 
   app.get('/v1/payroll-runs/:id', requireRole(...READERS), async (c) => {
