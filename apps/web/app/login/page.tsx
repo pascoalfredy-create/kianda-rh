@@ -101,7 +101,7 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <div className="auth-wrap">
-      <Suspense>
+      <Suspense fallback={<div className="card auth"><AuthNavigation /><p role="status">A carregar o início de sessão…</p></div>}>
         <LoginForm />
       </Suspense>
     </div>

@@ -3,6 +3,19 @@ import { closePool, PASSWORD, registerCompany, watchErrors } from './support.js'
 
 test.afterAll(closePool);
 
+test('o login permite regressar ao início antes de carregar o JavaScript', async ({ browser }) => {
+  const context = await browser.newContext({ baseURL: 'http://localhost:3000', javaScriptEnabled: false });
+  try {
+    const page = await context.newPage();
+    await page.goto('/login');
+    await page.getByRole('link', { name: '← Página inicial', exact: true }).click();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole('heading', { name: /Cuide da sua equipa/ })).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
 test('o registo incompleto permite regressar ao início sem criar uma conta', async ({ page }) => {
   let registrations = 0;
   page.on('request', r => { if (r.method() === 'POST' && r.url().endsWith('/v1/auth/register')) registrations++; });
