@@ -42,7 +42,7 @@ test('publicar uma vaga gera a ligação; candidatura anónima com CV entra no q
   await expect(page.getByRole('status')).toContainText(/K-[A-F0-9]{8}/);
   const reference = /K-[A-F0-9]{8}/.exec(await page.getByRole('status').innerText())![0];
   await signIn(context, owner.token); await page.goto(`/recrutamento/${openingId}`);
-  await page.getByRole('link', { name: 'Amélia Portal', exact: true }).click();
+  await page.getByRole('link', { name: /Amélia Portal/ }).click();
   await expect(page.getByRole('heading', { name: 'Amélia Portal', exact: true })).toBeVisible();
   await expect(page.locator('body')).toContainText(reference);
   await expect(page.locator('body')).toContainText('4 ano(s)');
