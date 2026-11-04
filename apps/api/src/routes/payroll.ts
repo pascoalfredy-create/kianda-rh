@@ -1,6 +1,7 @@
 import { kz, lastDayOfMonth, parseFxRate } from '@kianda/core';
+import { createHash, randomUUID } from 'node:crypto';
 import {
-  and, asc, auditLogs, companies, departments, desc, employees, eq, getDb, journalEntries, payrollLines, payrollRuns, payrollVariables, sql, users, type Db,
+  and, asc, auditLogs, companies, contracts, departments, desc, employees, eq, getDb, inArray, journalEntries, lte, payrollLines, payrollRuns, payrollVariables, sql, users, type Db,
 } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -9,6 +10,26 @@ import { closePayroll, DomainError, draftPayroll, type SubsidyOverrides } from '
 
 const periodSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Período inválido (AAAA-MM)');
 const READERS = ['payroll', 'finance', 'hr_admin'] as const;
+const variableInput = z.object({
+  employeeId: z.string().min(1), period: periodSchema,
+  kind: z.enum(['bonus', 'other_earning', 'advance', 'other_deduction', 'salary_cut']),
+  label: z.string().trim().min(2, 'Indique a descrição'),
+  amount: z.number().positive('O valor tem de ser positivo').refine((v) => Number.isSafeInteger(Math.round(v * 100)) && Math.round(v * 100) > 0, 'Indique um valor de pelo menos 0,01 Kz e dentro do limite de cálculo'),
+  inInss: z.boolean().default(true), inIrt: z.boolean().default(true),
+  note: z.string().trim().max(300).optional().nullable(),
+});
+const variableBatch = variableInput.omit({ employeeId: true, amount: true }).extend({
+  requestId: z.uuid(),
+  label: variableInput.shape.label.max(160, 'Máximo de 160 caracteres na descrição do lote'),
+  rows: z.array(variableInput.pick({ employeeId: true, amount: true }).extend({ employeeId: z.string().min(1).max(128) })).min(1, 'Seleccione pelo menos um colaborador').max(1000, 'Máximo de 1.000 colaboradores por lote'),
+}).refine((b) => new Set(b.rows.map((r) => r.employeeId)).size === b.rows.length, { path: ['rows'], message: 'Um colaborador só pode aparecer uma vez no mesmo lote' });
+
+function variableValues(actor: { companyId: string; actorId: string }, b: z.infer<typeof variableInput>): typeof payrollVariables.$inferInsert {
+  const cut = b.kind === 'salary_cut', earning = b.kind === 'bonus' || b.kind === 'other_earning';
+  return { companyId: actor.companyId, employeeId: b.employeeId, period: b.period, kind: b.kind === 'salary_cut' ? 'other_earning' : b.kind,
+    label: b.label, amountMinor: cut ? -kz(b.amount) : kz(b.amount), code: cut ? 'CORTE' : null,
+    inInss: earning ? b.inInss : true, inIrt: earning ? b.inIrt : true, note: b.note ?? null, createdBy: actor.actorId };
+}
 
 async function runDetail(db: Db, run: typeof payrollRuns.$inferSelect) {
   const lines = await db.select({ l: payrollLines, name: employees.name, number: employees.number, department: departments.name, iban: employees.iban })
@@ -131,29 +152,58 @@ export function payrollRoutes() {
 
   app.post('/v1/payroll-variables', requireRole('payroll'), async (c) => {
     const actor = c.get('actor');
-    const b = z.object({
-      employeeId: z.string(), period: periodSchema,
-      kind: z.enum(['bonus', 'other_earning', 'advance', 'other_deduction', 'salary_cut']),
-      label: z.string().trim().min(2, 'Indique a descrição'),
-      amount: z.number().positive('O valor tem de ser positivo'),
-      inInss: z.boolean().default(true), inIrt: z.boolean().default(true),
-      note: z.string().trim().max(300).optional().nullable(),
-    }).parse(await body(c));
+    const b = variableInput.parse(await body(c));
     const db = getDb();
     const [emp] = await db.select({ id: employees.id }).from(employees).where(and(eq(employees.id, b.employeeId), eq(employees.companyId, actor.companyId)));
     if (!emp) return c.json({ error: 'colaborador_inexistente', message: 'Colaborador inexistente' }, 404);
     const [run] = await db.select({ status: payrollRuns.status }).from(payrollRuns).where(and(eq(payrollRuns.companyId, actor.companyId), eq(payrollRuns.period, b.period)));
     if (run?.status === 'closed') throw new DomainError('processamento_fechado', `O processamento de ${b.period} já está fechado: lance no mês seguinte.`);
     // Desconto na remuneração (cálculo manual: maternidade, suspensões…): abono negativo que reduz as bases de INSS e IRT.
-    const cutKind = b.kind === 'salary_cut';
-    const isEarning = b.kind === 'bonus' || b.kind === 'other_earning';
-    const [v] = await db.insert(payrollVariables).values({
-      companyId: actor.companyId, employeeId: b.employeeId, period: b.period, kind: b.kind === 'salary_cut' ? 'other_earning' : b.kind, label: b.label,
-      amountMinor: cutKind ? -kz(b.amount) : kz(b.amount), code: cutKind ? 'CORTE' : null,
-      inInss: isEarning ? b.inInss : true, inIrt: isEarning ? b.inIrt : true, note: b.note ?? null, createdBy: actor.actorId,
-    }).returning();
+    const [v] = await db.insert(payrollVariables).values(variableValues(actor, b)).returning();
     await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'create', entity: 'payroll_variable', entityId: v!.id, after: { ...v } });
     return c.json(v, 201);
+  });
+
+  /** Variáveis de vários colaboradores do mesmo mês: grava tudo ou nada e uma repetição não duplica os valores. */
+  app.post('/v1/payroll-variables/batch', requireRole('payroll'), async (c) => {
+    const actor = c.get('actor');
+    const b = variableBatch.parse(await body(c));
+    const rows = b.rows.map((r) => ({ ...variableValues(actor, { ...b, ...r }), id: randomUUID() }));
+    const totalMinor = rows.reduce((s, r) => s + r.amountMinor!, 0);
+    if (!Number.isSafeInteger(totalMinor)) throw new DomainError('lote_valores_invalidos', 'O total do lote excede o limite de cálculo', 400);
+    const normalised = rows.map(({ id: _id, createdBy: _createdBy, ...v }) => v).sort((a, d) => a.employeeId.localeCompare(d.employeeId));
+    const payloadHash = createHash('sha256').update(JSON.stringify(normalised)).digest('hex');
+    const result = await getDb().transaction(async (tx) => {
+      // A PK reserva este pedido na mesma transacção: pedidos concorrentes esperam pela gravação/rollback.
+      // O registo de auditoria só fica visível quando todas as variáveis tiverem sido gravadas.
+      const summary = { period: b.period, count: rows.length, totalMinor, variableIds: rows.map((r) => r.id), payloadHash };
+      const reserved = await tx.insert(auditLogs).values({ id: b.requestId, companyId: actor.companyId, actorId: actor.actorId,
+        action: 'create_batch', entity: 'payroll_variables_batch', entityId: b.requestId, after: summary }).onConflictDoNothing().returning({ id: auditLogs.id });
+      if (!reserved.length) {
+        const [existing] = await tx.select({ after: auditLogs.after }).from(auditLogs)
+          .where(and(eq(auditLogs.id, b.requestId), eq(auditLogs.companyId, actor.companyId), eq(auditLogs.entity, 'payroll_variables_batch')));
+        const saved = existing?.after as typeof summary | undefined;
+        if (!saved || saved.payloadHash !== payloadHash) throw new DomainError('lote_reutilizado', 'O identificador deste lote já foi usado. Inicie um novo lote para valores diferentes.');
+        return { batchId: b.requestId, count: saved.count, totalMinor: saved.totalMinor, variableIds: saved.variableIds, replayed: true };
+      }
+      const [run] = await tx.select({ status: payrollRuns.status }).from(payrollRuns)
+        .where(and(eq(payrollRuns.companyId, actor.companyId), eq(payrollRuns.period, b.period))).for('update');
+      if (run?.status === 'closed') throw new DomainError('processamento_fechado', `O processamento de ${b.period} já está fechado. O lote não foi gravado.`);
+      const staff = await tx.selectDistinctOn([employees.id], { id: employees.id, name: employees.name, status: employees.status, start: contracts.startDate, end: contracts.endDate, terminated: contracts.terminatedAt })
+        .from(employees).leftJoin(contracts, and(eq(contracts.employeeId, employees.id), lte(contracts.startDate, lastDayOfMonth(b.period))))
+        .where(and(eq(employees.companyId, actor.companyId), inArray(employees.id, b.rows.map((r) => r.employeeId))))
+        .orderBy(employees.id, desc(contracts.startDate));
+      const eligible = new Set(staff.filter((e) => (e.status === 'active' || e.status === 'terminated') && e.start && (!(e.terminated ?? e.end) || (e.terminated ?? e.end)! >= `${b.period}-01`)).map((e) => e.id));
+      const invalid = b.rows.filter((r) => !eligible.has(r.employeeId));
+      if (invalid.length) {
+        const names = invalid.slice(0, 8).map((r) => staff.find((e) => e.id === r.employeeId)?.name ?? 'colaborador indisponível');
+        throw new DomainError('lote_colaboradores_invalidos', `Lote não gravado. Reveja os contratos e a situação de: ${names.join(', ')}${invalid.length > 8 ? ` e mais ${invalid.length - 8}` : ''}.`, 400);
+      }
+      const inserted = await tx.insert(payrollVariables).values(rows).returning();
+      await tx.insert(auditLogs).values(inserted.map((v) => ({ companyId: actor.companyId, actorId: actor.actorId, action: 'create', entity: 'payroll_variable', entityId: v.id, after: { ...v, batchId: b.requestId } })));
+      return { batchId: b.requestId, count: summary.count, totalMinor: summary.totalMinor, variableIds: summary.variableIds, replayed: false };
+    });
+    return c.json(result, result.replayed ? 200 : 201);
   });
 
   app.delete('/v1/payroll-variables/:id', requireRole('payroll'), async (c) => {

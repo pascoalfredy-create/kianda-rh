@@ -58,7 +58,7 @@ export default async function Recibo({ params }: { params: Promise<{ id: string 
           <tbody>{earnings.map((l, i) => <tr key={i}><td>{l.name}</td><td className="num" style={{ color: l.amountMinor < 0 ? 'var(--red)' : undefined }}>{formatKz(l.amountMinor)}</td></tr>)}</tbody>
           <tfoot><tr><td><b>Total ilíquido</b></td><td className="num"><b>{formatKz(p.grossMinor)}</b></td></tr></tfoot>
         </table>
-        <table style={{ marginTop: 10 }}>
+        <table aria-label="Descontos do trabalhador" style={{ marginTop: 10 }}>
           <thead><tr><th>Descontos</th><th className="num">Valor</th></tr></thead>
           <tbody>{deductions.map((l, i) => <tr key={i}><td>{l.name}</td><td className="num">{formatKz(l.amountMinor)}</td></tr>)}</tbody>
           <tfoot><tr><td><b>Total descontos</b></td><td className="num"><b>{formatKz(deductions.reduce((s, l) => s + l.amountMinor, 0))}</b></td></tr></tfoot>

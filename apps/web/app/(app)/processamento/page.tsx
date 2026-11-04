@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation';
 import { actorFromApi, api, apiWithActor, ApiError } from '@/lib/api';
 import { currentPeriod, monthLabel, shiftMonth } from '@/lib/format';
 import { PAYROLL_ROLES, VARIABLE_LABEL, type JournalRow, type PayrollLineRow, type PayrollRunDetail, type PayrollVariableRow } from '@/lib/types';
-import { AddVariable, CloseButton, DeleteVariable, PrepareButton, SubsidyToggle } from './actions';
+import { VariableEntry, CloseButton, DeleteVariable, PrepareButton, SubsidyToggle } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -82,7 +82,8 @@ function Sheet({ run, editable }: { run: PayrollRunDetail; editable: boolean }) 
       <div className="grid">
         <div className="card kpi"><div className="l">Ilíquido</div><div className="v">{formatKz(t.gross)}</div></div>
         <div className="card kpi"><div className="l">IRT retido</div><div className="v">{formatKz(t.irt)}</div></div>
-        <div className="card kpi"><div className="l">INSS (3% + 8%)</div><div className="v">{formatKz(t.inss + t.employer)}</div></div>
+        <div className="card kpi"><div className="l">INSS do trabalhador</div><div className="v">{formatKz(t.inss)}</div><small className="muted">Descontado na remuneração</small></div>
+        <div className="card kpi"><div className="l">INSS da empresa</div><div className="v">{formatKz(t.employer)}</div><small className="muted">Encargo da empresa; fora do líquido</small></div>
         <div className="card kpi"><div className="l">Líquido a pagar</div><div className="v" style={{ color: 'var(--brand)' }}>{formatKz(t.net)}</div>{noIban > 0 && <div className="muted" style={{ fontSize: 12, color: 'var(--red)' }}>{noIban} sem IBAN</div>}</div>
         <div className="card kpi"><div className="l">Custo total empresa</div><div className="v">{formatKz(t.gross + t.employer)}</div></div>
       </div>
@@ -90,7 +91,7 @@ function Sheet({ run, editable }: { run: PayrollRunDetail; editable: boolean }) 
         <MapDisclosure title="Mapa de processamento salarial"><table className="dense">
           <thead><tr>
             <th>Colaborador</th><th className="num">Base</th><th className="num">Subs. alim./transp.</th><th className="num">H. extra</th><th>Subsídios</th><th className="num">Prémios/abonos</th>
-            <th className="num">Faltas</th><th className="num">Ilíquido</th><th className="num">INSS</th><th className="num">IRT</th><th className="num">Outros desc.</th><th className="num">Líquido</th><th />
+            <th className="num">Faltas</th><th className="num">Ilíquido</th><th className="num">INSS trabalhador</th><th className="num">IRT</th><th className="num">Outros desc.</th><th className="num">Líquido</th><th className="num">INSS empresa</th><th className="num">Custo empresa</th><th />
           </tr></thead>
           <tbody>
             {run.lines.map((l) => {
@@ -117,16 +118,19 @@ function Sheet({ run, editable }: { run: PayrollRunDetail; editable: boolean }) 
                   <td className="num">{k(l.irtMinor)}</td>
                   <td className="num">{k(sumCode(l, 'ADIANT', 'OUTDESC'))}</td>
                   <td className="num"><b style={{ color: 'var(--brand)' }}>{k(l.netMinor)}</b></td>
+                  <td className="num">{k(l.inssEmployerMinor)}</td>
+                  <td className="num">{k(l.grossMinor + l.inssEmployerMinor)}</td>
                   <td className="num"><Link href={`/recibos/${l.id}`} className="tag">Recibo</Link></td>
                 </tr>
               );
             })}
           </tbody>
           <tfoot><tr>
-            <td><b>Total ({run.lines.length})</b></td><td colSpan={6} /><td className="num"><b>{k(t.gross)}</b></td><td className="num"><b>{k(t.inss)}</b></td><td className="num"><b>{k(t.irt)}</b></td><td /><td className="num"><b>{k(t.net)}</b></td><td />
+            <td><b>Total ({run.lines.length})</b></td><td colSpan={6} /><td className="num"><b>{k(t.gross)}</b></td><td className="num"><b>{k(t.inss)}</b></td><td className="num"><b>{k(t.irt)}</b></td><td /><td className="num"><b>{k(t.net)}</b></td><td className="num"><b>{k(t.employer)}</b></td><td className="num"><b>{k(t.gross + t.employer)}</b></td><td />
           </tr></tfoot>
         </table></MapDisclosure>
       </div>
+      <p className="muted" style={{ marginTop: 10 }}>O INSS da empresa acresce ao custo com o pessoal. Os descontos do trabalhador são o seu INSS, o IRT e os outros descontos aplicáveis.</p>
       {editable && <p className="muted" style={{ marginTop: 10 }}>SF / SN: subsídio de férias / Natal. Verde = incluído. Clique para incluir ou excluir manualmente (contorno azul = decisão manual; clique de novo para voltar à regra automática). Valores em kwanzas.</p>}
     </>
   );
@@ -135,7 +139,7 @@ function Sheet({ run, editable }: { run: PayrollRunDetail; editable: boolean }) 
 function Variables({ period, rows, editable, people }: { period: string; rows: PayrollVariableRow[]; editable: boolean; people: { id: string; name: string }[] }) {
   return (
     <>
-      {editable && <div style={{ marginBottom: 14 }}><AddVariable period={period} people={people} /></div>}
+      {editable && <div style={{ marginBottom: 14 }}><VariableEntry key={period} period={period} people={people} /></div>}
       <div className="card">
         <MapDisclosure title="Mapa de variáveis"><table>
           <thead><tr><th>Colaborador</th><th>Tipo</th><th>Descrição</th><th className="num">Valor</th><th>Incidência</th><th /></tr></thead>

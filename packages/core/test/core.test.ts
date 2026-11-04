@@ -21,6 +21,22 @@ describe('IRT Grupo A 2026 (Lei 14/25)', () => {
 });
 
 describe('processamento salarial', () => {
+  it('INSS: 3% são retidos no trabalhador e 8% acrescem apenas ao custo da empresa', () => {
+    const r = calculatePayroll({ period: '2026-10', baseMinor: kz(100000) });
+    expect(r).toMatchObject({ grossMinor: kz(100000), inssEmployeeMinor: kz(3000), inssEmployerMinor: kz(8000), irtMinor: 0, netMinor: kz(97000), totalCostMinor: kz(108000) });
+    expect(r.lines.filter((l) => l.kind === 'deduction').map((l) => l.code)).not.toContain('INSS_EMP');
+    expect(r.lines.find((l) => l.code === 'INSS_EMP')).toMatchObject({ kind: 'employer', amountMinor: kz(8000) });
+  });
+  it('alterar apenas a contribuição patronal não altera o líquido nem o IRT do trabalhador', () => {
+    const input = { period: '2026-10', baseMinor: kz(420000), advancesMinor: kz(10000), otherDeductionsMinor: kz(5000) };
+    const normal = calculatePayroll(input);
+    const changed = calculatePayroll({ ...input, pack: { ...PACK, inss: { ...PACK.inss, employerBps: 1600 } } });
+    expect(changed.netMinor).toBe(normal.netMinor);
+    expect(changed.irtMinor).toBe(normal.irtMinor);
+    expect(changed.inssEmployeeMinor).toBe(normal.inssEmployeeMinor);
+    expect(changed.inssEmployerMinor).toBe(normal.inssEmployerMinor * 2);
+    expect(changed.totalCostMinor - normal.totalCostMinor).toBe(normal.inssEmployerMinor);
+  });
   it('trabalhadora com 420 000 Kz de base e subsídios isentos', () => {
     const r = calculatePayroll({ period: '2026-10', baseMinor: kz(420_000), mealMinor: kz(30_000), transportMinor: kz(25_000) });
     expect(r.grossMinor).toBe(kz(475_000));
