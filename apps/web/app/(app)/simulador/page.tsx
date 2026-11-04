@@ -32,6 +32,7 @@ export default function Simulador() {
   const out = useMemo<{ r?: PayrollResult; baseMinor?: number; error?: string }>(() => {
     try {
       if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return { error: 'Indique o mês (AAAA-MM).' };
+      if (usd && !fx) return { error: 'Indique o câmbio USD→Kz do dia.' };
       const common: Omit<PayrollInput, 'baseMinor'> = {
         period, mealMinor: kz(num(meal)), transportMinor: kz(num(transport)), otherDeductionsMinor: kz(num(deductions)), allowancesInInss,
         otherEarnings: num(other) ? [{ code: 'OUTABN', name: 'Outros abonos', amountMinor: kz(num(other)), inInss: otherInInss, inIrt: otherInIrt }] : [],
@@ -41,7 +42,6 @@ export default function Simulador() {
         const found = baseForNet(common, kz(num(target)));
         return found ? { r: found.result, baseMinor: found.baseMinor } : { error: 'Não foi possível chegar a esse líquido.' };
       }
-      if (usd && !fx) return { error: 'Indique o câmbio USD→Kz do dia.' };
       const usdMinor = Math.round(num(baseUsd) * 100);
       const baseMinor = usd ? convertUsdMinor(usdMinor, fx!) : kz(num(base));
       return { r: calculatePayroll({ ...common, baseMinor, baseLabel: usd ? indexedBaseLabel(usdMinor, fx!) : undefined }), baseMinor };

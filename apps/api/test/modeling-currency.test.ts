@@ -13,7 +13,7 @@ describe.skipIf(!process.env.DATABASE_URL)('conversão monetária atómica por e
   const convert = (revision: number, from = 'USD', to = 'Kz', rate = 1000, session = owner) => req('POST', `/v1/modeling/models/${id}/convert-currency`, { revision, from, to, rate, rateDate: '2026-10-27', source: 'Taxa sintética do teste' }, session);
   beforeAll(async () => {
     for (const i of [0, 1]) {
-      const result = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Conversão ' + i, nif: String(Date.now() + 54000 + i).slice(-10) }, name: 'Gestor', email: `${stamp}${i}@currency.ao`, password } });
+      const result = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Conversão ' + i, nif: String(Date.now() + 54000 + i).slice(-10) }, name: 'Gestor', email: `${stamp}${i}@currency.ao`, password } });
       expect(result.statusCode).toBe(201); const cookie = 'kianda_session=' + result.cookies.find(c => c.name === 'kianda_session')!.value;
       const me = (await req('GET', '/v1/auth/me', undefined, cookie)).json();
       await getDb().insert(companyModules).values({ companyId: me.company.id, module: 'modeling', enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 });

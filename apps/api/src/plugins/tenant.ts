@@ -1,7 +1,7 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { verify } from 'hono/jwt';
-import { getDb, withTenant } from '@kianda/db';
+import { and, eq, getDb, users, withTenant } from '@kianda/db';
 import { canExportDocuments, moduleForPath, type ModuleAccess } from '@kianda/core';
 import { isDocumentExport } from '../services/document-access.js';
 import { moduleLicence } from '../services/modules.js';
@@ -52,9 +52,15 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
   try {
     if (!token) throw new Error('sem token');
     claims = (await verify(token, jwtSecret(), 'HS256')) as unknown as SessionClaims;
+    if (typeof claims.sub !== 'string' || !claims.sub || typeof claims.companyId !== 'string' || !claims.companyId) throw new Error('sessao incompleta');
   } catch {
     return c.json({ error: 'sessao_invalida', message: 'Inicie sessão para continuar.' }, 401);
   }
+  // Um JWT ainda válido não conserva acessos retirados depois de ter sido emitido.
+  const [user] = await getDb().select({ role: users.role, employeeId: users.employeeId, name: users.name, disabledAt: users.disabledAt })
+    .from(users).where(and(eq(users.id, claims.sub), eq(users.companyId, claims.companyId)));
+  if (!user || user.disabledAt) return c.json({ error: 'sessao_invalida', message: 'O acesso foi desactivado. Contacte o responsável da empresa.' }, 401);
+  claims = { ...claims, role: user.role, employeeId: user.employeeId, name: user.name };
   c.set('actor', { companyId: claims.companyId, actorId: claims.sub, role: claims.role, employeeId: claims.employeeId, session: claims });
   // Licença inactiva: só consulta (excepto tratar da licença).
   const module = moduleForPath(c.req.path);

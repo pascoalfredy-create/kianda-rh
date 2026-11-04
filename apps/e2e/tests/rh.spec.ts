@@ -8,6 +8,19 @@ const ROUTES = [
   '/cessacoes', '/simulador', '/acessos', '/pedidos', '/sector', '/conformidade', '/definicoes', '/licenca', '/modulos', '/conta',
 ];
 
+test('o simulador abre em Salários e Voltar regressa à página anterior sem terminar sessão', async ({ page, context }) => {
+  const owner = await registerCompany();
+  await signIn(context, owner.token);
+  await page.goto('/colaboradores');
+  await page.getByRole('button', { name: 'Salários', exact: true }).click();
+  await page.getByRole('link', { name: 'Simulador salarial', exact: true }).click();
+  await expect(page).toHaveURL(/\/simulador$/);
+  await expect(page.getByRole('heading', { name: 'Simulador salarial' })).toBeVisible();
+  await page.getByRole('button', { name: 'Voltar à página anterior', exact: true }).click();
+  await expect(page).toHaveURL(/\/colaboradores$/);
+  await expect(page.getByRole('heading', { name: 'Colaboradores', exact: true })).toBeVisible();
+});
+
 test.describe.configure({ mode: 'serial' });
 let company: Company;
 const people = [

@@ -19,7 +19,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: participantes por projecto,
 
   beforeAll(async () => {
     for (const i of [0, 1]) {
-      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: `Controlos ${i}`, sector: 'services', nif: String(Number(stamp.slice(-9)) * 10 + i).padStart(10, '0').slice(-10) }, name: 'Proprietária', email: `${stamp}.${i}@controls.test`, password, modules: ['hr', 'modeling'], modelingPlan: plan } });
+      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: `Controlos ${i}`, sector: 'services', nif: String(Number(stamp.slice(-9)) * 10 + i).padStart(10, '0').slice(-10) }, name: 'Proprietária', email: `${stamp}.${i}@controls.test`, password, modules: ['hr', 'modeling'], modelingPlan: plan } });
       expect(r.statusCode).toBe(201);
       if (!i) { owner = cookieOf(r); companyId = r.json().company.id; } else { other = cookieOf(r); otherCompany = r.json().company.id; }
     }

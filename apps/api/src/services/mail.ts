@@ -28,13 +28,13 @@ export function renderMail(m: MailMessage) {
   const button = m.button ? `<p style="margin:22px 0"><a href="${esc(m.button.url)}" style="background:#0f5c4d;color:#fff;padding:11px 20px;border-radius:9px;text-decoration:none;font-weight:600">${esc(m.button.label)}</a></p><p style="color:#8a93a0;font-size:12px">Se o botão não funcionar, copie esta ligação: ${esc(m.button.url)}</p>` : '';
   const html = `<!doctype html><html><body style="margin:0;background:#f4f6f8;font-family:Segoe UI,Roboto,Arial,sans-serif;color:#1b2430">
 <div style="max-width:560px;margin:24px auto;background:#fff;border-radius:12px;border:1px solid #e6e9ee;overflow:hidden">
-<div style="background:#0d1f1b;color:#fff;padding:16px 22px;font-weight:700">Kianda RH</div>
+<div style="background:#0d1f1b;color:#fff;padding:16px 22px;font-weight:700">Kianda</div>
 <div style="padding:22px">
 <h1 style="font-size:19px;margin:0 0 12px">${esc(m.title)}</h1>
 ${m.paragraphs.map((p) => `<p style="line-height:1.5;margin:0 0 10px">${esc(p)}</p>`).join('')}
 ${facts}${button}
 </div>
-<div style="padding:12px 22px;background:#fafbfc;color:#8a93a0;font-size:12px">Mensagem automática do Kianda RH. Não responda a este email${m.replyTo ? ` — escreva para ${esc(m.replyTo)}` : ''}.</div>
+<div style="padding:12px 22px;background:#fafbfc;color:#8a93a0;font-size:12px">Mensagem automática do Kianda. Não responda a este email${m.replyTo ? ` — escreva para ${esc(m.replyTo)}` : ''}.</div>
 </div></body></html>`;
   const text = [m.title, '', ...m.paragraphs, ...(m.facts ?? []).map(([k, v]) => `${k}: ${v}`), ...(m.button ? ['', `${m.button.label}: ${m.button.url}`] : [])].join('\n');
   return { html, text };

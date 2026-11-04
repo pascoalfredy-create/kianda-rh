@@ -3,6 +3,9 @@
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { KiandaMark } from '@/components/kianda-mark';
+import { AuthNavigation } from '../../components/auth-navigation';
+import { jsonRequest } from '../../lib/json-request';
+import { returnPath } from '../../lib/return-path';
 
 function LoginForm() {
   const next = useSearchParams().get('voltar') ?? '/';
@@ -20,13 +23,12 @@ function LoginForm() {
   const [busy, setBusy] = useState(false);
   // Código da empresa lembrado neste telemóvel (só depois de carregar, para não divergir do servidor).
   useEffect(() => { try { const c = localStorage.getItem('kianda_company_code'); if (c) { setCode(c); setMode('pin'); } } catch { /* sem armazenamento */ } }, []);
-  const go = () => window.location.assign(next.startsWith('/') && !next.startsWith('//') ? next : '/');
+  const go = () => window.location.assign(returnPath(next));
 
   async function call(url: string, payload: object) {
     setBusy(true);
     setError('');
-    const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
-    const body = await res.json().catch(() => ({}));
+    const { res, body } = await jsonRequest(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
     setBusy(false);
     return { res, body };
   }
@@ -58,9 +60,10 @@ function LoginForm() {
 
   return (
     <form onSubmit={submit} className="card auth">
+      <AuthNavigation />
       <div className="logo" style={{ padding: 0, marginBottom: 18 }}>
         <KiandaMark size={34} />
-        <div><b style={{ color: 'var(--ink)' }}>Kianda RH</b><small style={{ color: 'var(--ink3)' }}>Gestão de Pessoas · Angola</small></div>
+        <div><b style={{ color: 'var(--ink)' }}>Kianda</b><small style={{ color: 'var(--ink3)' }}>RH · Integra · Valora</small></div>
       </div>
       <h1 style={{ fontSize: 19, marginBottom: 14 }}>{ticket ? 'Verificação em dois passos' : 'Iniciar sessão'}</h1>
       {ticket ? (
@@ -88,6 +91,7 @@ function LoginForm() {
       )}
       {error && <div className="alert" role="alert">{error}</div>}
       <button className="btn" disabled={busy} style={{ width: '100%' }}>{busy ? 'A entrar…' : ticket ? 'Confirmar' : 'Entrar'}</button>
+      {ticket && <button type="button" className="btn ghost" style={{ width: '100%', marginTop: 10 }} onClick={() => { setTicket(''); setOtp(''); setError(''); }}>Voltar ao início de sessão</button>}
       {!ticket && <p className="muted" style={{ textAlign: 'center', marginTop: 12, fontSize: 12.5 }}>{mode === 'email' ? <><a href="/recuperar">Esqueceu-se da palavra-passe?</a></> : 'Esqueceu-se do PIN? Peça aos Recursos Humanos uma ligação de recuperação.'}</p>}
       {!ticket && <p className="muted" style={{ textAlign: 'center', marginTop: 4 }}>Empresa nova? <a href="/registo">Criar conta — 7 dias grátis</a></p>}
     </form>

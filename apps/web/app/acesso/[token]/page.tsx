@@ -2,6 +2,8 @@
 
 import { use, useEffect, useState } from 'react';
 import { KiandaMark } from '@/components/kianda-mark';
+import { AuthNavigation } from '../../../components/auth-navigation';
+import { jsonRequest } from '../../../lib/json-request';
 
 interface Info { kind: 'invite' | 'reset' | 'self_reset'; company: string; companyCode: string; role: string; roleLabel: string; name: string | null; number: string | null; email: string | null; phone: string | null; hasPin: boolean; pinAllowed: boolean; expiresAt: string }
 
@@ -16,28 +18,30 @@ export default function Acesso({ params }: { params: Promise<{ token: string }> 
   const [ticket, setTicket] = useState('');
   const [otp, setOtp] = useState('');
   useEffect(() => {
-    fetch(`/api/v1/public/access/${token}`).then(async (r) => {
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) return setFailure(j.message ?? 'Ligação inválida');
-      setInfo(j);
+    let current = true;
+    jsonRequest(`/api/v1/public/access/${encodeURIComponent(token)}`).then(({ res, body: j }) => {
+      if (!current) return;
+      if (!res.ok) return setFailure(j.message ?? 'Ligação inválida');
+      setInfo(j as Info);
       setMethod(j.pinAllowed && (!j.email || j.hasPin) ? 'pin' : 'password');
     });
+    return () => { current = false; };
   }, [token]);
-  if (failure) return <div className="auth-wrap"><div className="card auth"><h1 style={{ fontSize: 19 }}>Ligação indisponível</h1><p>{failure}</p><a href="/login">Ir para o início de sessão</a></div></div>;
-  if (!info) return <div className="auth-wrap"><div className="card auth">A carregar…</div></div>;
+  if (failure) return <div className="auth-wrap"><div className="card auth"><AuthNavigation login /><h1 style={{ fontSize: 19 }}>Ligação indisponível</h1><p>{failure}</p><a href="/login">Ir para o início de sessão</a></div></div>;
+  if (!info) return <div className="auth-wrap"><div className="card auth"><AuthNavigation login />A carregar…</div></div>;
   // Recuperação por email com verificação em dois passos activa: a palavra-passe já foi trocada, falta o código.
   if (ticket) return (
     <div className="auth-wrap">
       <form className="card auth" onSubmit={async (e) => {
         e.preventDefault();
         setBusy(true); setError('');
-        const res = await fetch('/api/v1/auth/login/2fa', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ticket, code: otp }) });
-        const j = await res.json().catch(() => ({}));
+        const { res, body: j } = await jsonRequest('/api/v1/auth/login/2fa', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ticket, code: otp }) });
         setBusy(false);
         if (res.ok) return window.location.assign('/');
         if (j.error === 'bilhete_expirado') return window.location.assign('/login');
         setError(j.message ?? 'Código incorrecto');
       }}>
+        <AuthNavigation login />
         <h1 style={{ fontSize: 19, marginBottom: 4 }}>Palavra-passe alterada</h1>
         <p className="muted" style={{ marginTop: 0 }}>A verificação em dois passos continua activa. Escreva o código de 6 dígitos da aplicação autenticadora.</p>
         <label>Código<input inputMode="numeric" autoComplete="one-time-code" autoFocus maxLength={7} required value={otp} onChange={(e) => setOtp(e.target.value)} /></label>
@@ -54,14 +58,14 @@ export default function Acesso({ params }: { params: Promise<{ token: string }> 
         if (method === 'password' && f.get('password') !== f.get('password2')) return setError('As palavras-passe não coincidem');
         if (method === 'pin' && f.get('pin') !== f.get('pin2')) return setError('Os PINs não coincidem');
         setBusy(true); setError('');
-        const res = await fetch(`/api/v1/public/access/${token}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(method === 'password' ? { method, email: f.get('email'), password: f.get('password') } : { method, pin: f.get('pin'), phone: f.get('phone') || null }) });
-        const j = await res.json().catch(() => ({}));
+        const { res, body: j } = await jsonRequest(`/api/v1/public/access/${encodeURIComponent(token)}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(method === 'password' ? { method, email: f.get('email'), password: f.get('password') } : { method, pin: f.get('pin'), phone: f.get('phone') || null }) });
         setBusy(false);
         if (!res.ok) return setError(j.issues?.map((i: { message: string }) => i.message).join(' · ') || j.message || 'Não foi possível concluir');
         if (j.twoFactor) return setTicket(j.ticket);
         try { localStorage.setItem('kianda_company_code', info.companyCode); } catch { /* sem armazenamento */ }
         window.location.assign('/');
       }}>
+        <AuthNavigation login />
         <div className="logo" style={{ padding: 0, marginBottom: 14 }}>
           <KiandaMark size={34} />
           <div><b style={{ color: 'var(--ink)' }}>Kianda RH</b><small style={{ color: 'var(--ink3)' }}>{info.company}</small></div>

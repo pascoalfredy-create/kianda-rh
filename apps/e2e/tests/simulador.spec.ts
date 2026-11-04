@@ -22,6 +22,10 @@ test('Simulador: do líquido pretendido ao salário base e de USD ao líquido', 
   await expect(page.getByRole('row', { name: /Base de incidência do INSS/ })).toBeVisible();
   await page.screenshot({ path: '/tmp/e2e/simulador-01-inverso.png', fullPage: true });
 
+  await page.getByLabel('Contrato em USD, pago em Kz ao câmbio do dia').check();
+  await expect(page.locator('.alert')).toContainText('Indique o câmbio');
+  await page.getByLabel('Contrato em USD, pago em Kz ao câmbio do dia').uncheck();
+
   await page.getByRole('tab', { name: 'Salário base → líquido' }).click();
   await page.getByLabel('Contrato em USD, pago em Kz ao câmbio do dia').check();
   await page.getByLabel('Salário base (USD)').fill('1500');

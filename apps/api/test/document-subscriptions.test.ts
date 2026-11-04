@@ -34,7 +34,7 @@ describe.skipIf(!process.env.DATABASE_URL)('avaliação, pagamento e exportaçã
   const req = (method: string, url: string, payload?: unknown) => app.inject({ method, url, headers: { cookie }, ...(payload === undefined ? {} : { payload }) });
   const output = () => req('GET', `/v1/modeling/models/${modelId}/reports/sumario?version=${versionId}`);
   beforeAll(async () => {
-    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Avaliação sintética', nif: stamp.slice(-10), sector: 'services' }, name: 'Gestor sintético', email, password: 'Previsualizacao2026abc', modules: ['hr', 'modeling'], modelingPlan: { key: 'pme', cycle: 'monthly', primarySector: 'servicos', sectors: ['servicos', 'comercio'] } } });
+    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Avaliação sintética', nif: stamp.slice(-10), sector: 'services' }, name: 'Gestor sintético', email, password: 'Previsualizacao2026abc', modules: ['hr', 'modeling'], modelingPlan: { key: 'pme', cycle: 'monthly', primarySector: 'servicos', sectors: ['servicos', 'comercio'] } } });
     expect(r.statusCode).toBe(201); companyId = r.json().company.id; ownerId = r.json().user.id;
     cookie = `kianda_session=${r.cookies.find(c => c.name === 'kianda_session')!.value}`;
     await getDb().insert(platformAdmins).values({ email });

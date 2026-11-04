@@ -3,6 +3,34 @@ import { closePool, PASSWORD, registerCompany, watchErrors } from './support.js'
 
 test.afterAll(closePool);
 
+test('o registo incompleto permite regressar ao início sem criar uma conta', async ({ page }) => {
+  let registrations = 0;
+  page.on('request', r => { if (r.method() === 'POST' && r.url().endsWith('/v1/auth/register')) registrations++; });
+  await page.goto('/registo?modulo=valuation&plano=corporate&ciclo=annual');
+  await page.getByLabel('Denominação social').fill('Empresa em preparação');
+  await page.getByRole('link', { name: '← Página inicial', exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('heading', { name: /Cuide da sua equipa/ })).toBeVisible();
+  expect(registrations).toBe(0);
+  for (const path of ['/login', '/recuperar', '/termos']) {
+    await page.goto(path);
+    await page.getByRole('link', { name: '← Página inicial', exact: true }).click();
+    await expect(page).toHaveURL(/\/$/);
+  }
+});
+
+test('uma falha de rede no login apresenta um erro e permite tentar novamente', async ({ page }) => {
+  await page.goto('/login');
+  await page.route('**/api/v1/auth/login', route => route.abort());
+  await page.getByLabel('Email', { exact: true }).fill('rede@e2e.kianda.test');
+  await page.getByLabel('Palavra-passe', { exact: true }).fill('RedeDeTeste2026');
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+  await expect(page.locator('form [role="alert"]')).toContainText('Verifique a ligação');
+  await expect(page.getByRole('button', { name: 'Entrar', exact: true })).toBeEnabled();
+  await page.getByRole('link', { name: '← Página inicial', exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+});
+
 test('a página pública abre e leva ao início de sessão', async ({ page }) => {
   const errors = watchErrors(page);
   const res = await page.goto('/');
@@ -42,7 +70,7 @@ test('login: palavra-passe errada é recusada e a certa entra na conta', async (
   await page.fill('input[type=email]', company.email);
   await page.fill('input[type=password]', 'PalavraErrada2026xyz');
   await page.getByRole('button', { name: 'Entrar' }).click();
-  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.locator('form [role="alert"]')).toBeVisible();
   await expect(page).toHaveURL(/\/login/);
   await page.fill('input[type=password]', PASSWORD);
   await page.getByRole('button', { name: 'Entrar' }).click();

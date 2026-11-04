@@ -61,7 +61,7 @@ describe.skipIf(!process.env.DATABASE_URL)('notificações no telemóvel', () =>
 
   beforeAll(async () => {
     setPushFetch(async (input, init) => { sent.push({ url: String(input), headers: init!.headers as Record<string, string>, body: init!.body as Uint8Array }); return new Response(null, { status: reply }); });
-    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Push 0', sector: 'services', nif: String(Number(stamp.slice(-9)) * 10).padStart(10, '0').slice(-10) }, name: 'Dona', email: `${stamp}.0@push.test`, password, modules: ['hr'] } });
+    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Push 0', sector: 'services', nif: String(Number(stamp.slice(-9)) * 10).padStart(10, '0').slice(-10) }, name: 'Dona', email: `${stamp}.0@push.test`, password, modules: ['hr'] } });
     owner = cookieOf(r);
     const chiefId = (await req(owner, 'POST', '/v1/employees', employee('51', 'Chefe Ngunza'))).json().id;
     workerId = (await req(owner, 'POST', '/v1/employees', employee('52', 'Luís Tchivinda'))).json().id;

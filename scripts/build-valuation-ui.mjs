@@ -88,7 +88,7 @@ replace("const LIBS={xlsx:'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xl
 replace("await loadLib('xlsx');", '');
 replace("const {jsPDF}=window.jspdf,doc=new jsPDF(", "valoraApplyAutoTable();const {jsPDF}=window.jspdf,doc=new jsPDF(");
 span('async function saveFile(name,data){', 'const fname=', 'async function saveFile(name,data){valoraDownload(name,data)}\n');
-replace("async function runExport(kind){const msg=$('#rep-msg'),btns=document.querySelectorAll('[data-exp]');", "async function runExport(kind){if(!valoraCanExport(kind))return;const msg=$('#rep-msg'),btns=document.querySelectorAll('[data-exp]');");
+replace("async function runExport(kind){const msg=$('#rep-msg'),btns=document.querySelectorAll('[data-exp]');", "async function runExport(kind){if(!await valoraCanExport(kind))return;const msg=$('#rep-msg'),btns=document.querySelectorAll('[data-exp]');");
 replace("${rep.title.replace(/[^\\wÀ-ú]+/g,'_')}_${meta().ent.split(/[ ,]/)[0]}_", "${rep.title.replace(/[^\\wÀ-ú]+/g,'_')}_${(meta().ent.split(/[ ,]/)[0]||'analise').replace(/[^\\wÀ-ú-]+/g,'')}_");
 
 /* ---------- Montantes sempre por inteiro: os dados ficam em milhões de Kz, a apresentação é em Kz com 2 casas ---------- */

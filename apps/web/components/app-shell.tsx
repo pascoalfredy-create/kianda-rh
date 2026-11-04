@@ -10,6 +10,7 @@ import { LogoutButton } from '@/app/(app)/logout-button';
 import { ClockCard } from './clock-card';
 import { RhIcon } from './rh-icon';
 import { KiandaMark } from '@/components/kianda-mark';
+import { BackButton } from './back-button';
 
 export function AppShell({ me, counts, children }: { me: Me; counts: { absences: number; expenses: number; tasks?: number; acks?: number }; children: React.ReactNode }) {
   const path = usePathname();
@@ -55,6 +56,7 @@ export function AppShell({ me, counts, children }: { me: Me; counts: { absences:
     <div className="rh-main">
       <header className="rh-top no-print">
         <button ref={toggle} className="mobile-menu" aria-label={open ? 'Fechar menu' : 'Abrir menu'} aria-expanded={open} aria-controls="rh-side" onClick={() => setOpen(!open)}>☰</button>
+        <BackButton />
         {me.modules.hr.canAccess && me.user.role !== 'employee' ? <EmployeeSearch pathname={path} /> : <span className="top-company">{me.company?.name}</span>}
         <div className="top-clock">{me.modules.hr.canAccess && me.user.employeeId ? <ClockCard inline /> : <LuandaClock />}</div>
         <span className="top-role">{ROLE_LABEL[me.user.role]}</span>

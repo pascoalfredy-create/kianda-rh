@@ -23,7 +23,7 @@ export async function registerCompany(opts: { name?: string; modules?: Modules; 
   const api = await request.newContext({ baseURL: API });
   const id = unique(), name = opts.name ?? `Empresa E2E ${id.slice(-6)}`, email = `dona.${id}@e2e.kianda.test`;
   const modules = opts.modules ?? ['hr'];
-  const res = await api.post('/v1/auth/register', { data: {
+  const res = await api.post('/v1/auth/register', { data: { acceptTerms: true,
     company: { name, sector: 'services', nif: id.slice(-10).padStart(10, '0') }, name: 'Dona E2E', email, password: PASSWORD, modules,
     ...(modules.includes('modeling') ? { modelingPlan: { key: 'pme', cycle: 'monthly', primarySector: 'servicos', sectors: opts.sectors ?? ['servicos', 'comercio'] } } : {}),
   } });

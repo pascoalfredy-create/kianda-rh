@@ -3,6 +3,7 @@ import { parseAmount } from '@kianda/core';
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { jsonRequest } from './json-request';
 
 const FIELD_LABELS: Record<string, string> = {
   name: 'Nome', jobTitle: 'Função', number: 'Número', biNumber: 'BI', iban: 'IBAN', email: 'Email', birthDate: 'Data de nascimento',
@@ -14,13 +15,12 @@ export interface SendResult<T = unknown> { ok: boolean; data?: T; message?: stri
 
 /** Pedido à API através do proxy /api do Next (cookie de sessão no mesmo domínio). */
 export async function send<T = unknown>(path: string, method: string, body?: unknown): Promise<SendResult<T>> {
-  const res = await fetch(`/api${path}`, {
+  const { res, body: json } = await jsonRequest(`/api${path}`, {
     method,
     headers: body === undefined ? {} : { 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (res.status === 204) return { ok: true };
-  const json = await res.json().catch(() => ({}));
   if (res.ok) return { ok: true, data: json as T };
   if (res.status === 401) window.location.assign('/login');
   const issues = (json.issues as { path: string; message: string }[] | undefined)

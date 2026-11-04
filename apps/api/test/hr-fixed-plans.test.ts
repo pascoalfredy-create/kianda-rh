@@ -13,7 +13,7 @@ describe.skipIf(!process.env.DATABASE_URL)('RH: apenas faixas fixas, sem cobran�
   const request = (method: string, url: string, payload?: unknown) => app.inject({ method, url, headers: { cookie }, ...(payload === undefined ? {} : { payload }) });
   beforeAll(async () => {
     const email = `${stamp}@hr-fixed-plans.test`;
-    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Faixas RH sintéticas', nif: stamp.slice(-10) }, name: 'Responsável', email, password: 'FaixasFixas2026abc', modules: ['hr'] } });
+    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Faixas RH sintéticas', nif: stamp.slice(-10) }, name: 'Responsável', email, password: 'FaixasFixas2026abc', modules: ['hr'] } });
     expect(r.statusCode).toBe(201); companyId = r.json().company.id; actorId = r.json().user.id;
     cookie = `kianda_session=${r.cookies.find(c => c.name === 'kianda_session')!.value}`;
     await getDb().insert(platformAdmins).values({ email });
