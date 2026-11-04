@@ -34,10 +34,10 @@ describe.skipIf(!process.env.DATABASE_URL)('INSS e variáveis salariais em lote'
     a = await person(owner, '1', 'Amélia Lote'); b = await person(owner, '2', 'Bento Lote'); foreign = await person(other, '1', 'Nome reservado de outra empresa');
     await withTenant(companyId, async () => {
       const [e] = await getDb().insert(employees).values({ companyId, number: '3', name: 'Sem contrato', jobTitle: 'Técnico' }).returning(); noContract = e!.id;
-      // A exportação oficial é verificada numa empresa sintética paga, sem efectuar pagamentos reais.
-      await getDb().update(subscriptions).set({ status: 'active', paidUntil: '2099-12-31' }).where(eq(subscriptions.companyId, companyId));
-      await getDb().update(companyModules).set({ status: 'active', paidUntil: '2099-12-31' }).where(eq(companyModules.companyId, companyId));
     });
+    // Preparação administrativa da empresa sintética paga. O perfil da empresa não pode activar os seus próprios módulos.
+    await getDb().update(subscriptions).set({ status: 'active', paidUntil: '2099-12-31' }).where(eq(subscriptions.companyId, companyId));
+    await getDb().update(companyModules).set({ status: 'active', paidUntil: '2099-12-31' }).where(eq(companyModules.companyId, companyId));
   });
 
   it('grava um lote, calcula a equipa e mantém os 8% fora do líquido, do recibo e da conta de salários', async () => {
@@ -111,6 +111,7 @@ describe.skipIf(!process.env.DATABASE_URL)('INSS e variáveis salariais em lote'
       expect((await req(owner, 'POST', '/v1/payroll-variables/batch', { ...body, rows })).statusCode).toBe(400);
     }
     expect((await req(owner, 'POST', '/v1/payroll-variables/batch', { ...body, requestId: 'sem-identificador' })).statusCode).toBe(400);
+    expect((await req(owner, 'POST', '/v1/payroll-variables/batch', { ...body, label: 'x'.repeat(161) })).statusCode).toBe(400);
     expect(await variables()).toEqual(before);
   });
 

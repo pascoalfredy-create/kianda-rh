@@ -20,7 +20,8 @@ const variableInput = z.object({
 });
 const variableBatch = variableInput.omit({ employeeId: true, amount: true }).extend({
   requestId: z.uuid(),
-  rows: z.array(variableInput.pick({ employeeId: true, amount: true })).min(1, 'Seleccione pelo menos um colaborador').max(1000, 'Máximo de 1.000 colaboradores por lote'),
+  label: variableInput.shape.label.max(160, 'Máximo de 160 caracteres na descrição do lote'),
+  rows: z.array(variableInput.pick({ employeeId: true, amount: true }).extend({ employeeId: z.string().min(1).max(128) })).min(1, 'Seleccione pelo menos um colaborador').max(1000, 'Máximo de 1.000 colaboradores por lote'),
 }).refine((b) => new Set(b.rows.map((r) => r.employeeId)).size === b.rows.length, { path: ['rows'], message: 'Um colaborador só pode aparecer uma vez no mesmo lote' });
 
 function variableValues(actor: { companyId: string; actorId: string }, b: z.infer<typeof variableInput>): typeof payrollVariables.$inferInsert {
