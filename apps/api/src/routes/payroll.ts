@@ -66,16 +66,23 @@ export function payrollRoutes() {
 
   /** Folha e variáveis com uma só validação de sessão e licença. */
   app.get('/v1/payroll-runs/opening', requireRole(...READERS), async (c) => {
-    const { period } = z.object({ period: periodSchema }).parse(c.req.query());
-    const { companyId } = c.get('actor');
+    const { period, people: includePeople } = z.object({ period: periodSchema, people: z.literal('1').optional() }).parse(c.req.query());
+    const { companyId, role } = c.get('actor');
     const db = getDb();
     const [runs, variables] = await Promise.all([
       db.select().from(payrollRuns).where(and(eq(payrollRuns.companyId, companyId), eq(payrollRuns.period, period))).limit(1),
       variablesFor(db, companyId, period),
     ]);
     // Salários indexados: só interessa enquanto o mês pode ser (re)calculado; omitido quando não há nenhum.
-    const indexed = runs[0]?.status === 'closed' ? 0 : await indexedCount(db, companyId, period);
-    return c.json({ run: runs[0] ? await runDetail(db, runs[0]) : null, variables, ...(indexed ? { indexedEmployees: indexed } : {}) });
+    const editable = runs[0]?.status !== 'closed';
+    const [indexed, people] = await Promise.all([
+      editable ? indexedCount(db, companyId, period) : 0,
+      includePeople && editable && (role === 'owner' || role === 'payroll')
+        ? db.select({ id: employees.id, name: employees.name }).from(employees)
+          .where(and(eq(employees.companyId, companyId), eq(employees.status, 'active'))).orderBy(asc(employees.number))
+        : undefined,
+    ]);
+    return c.json({ run: runs[0] ? await runDetail(db, runs[0]) : null, variables, ...(indexed ? { indexedEmployees: indexed } : {}), ...(people ? { people } : {}) });
   });
 
   app.get('/v1/payroll-runs/:id', requireRole(...READERS), async (c) => {

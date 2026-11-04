@@ -1,27 +1,56 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { formObject, useMutation } from '@/lib/client';
+import { monthLabel } from '@/lib/format';
 
-export function PrepareButton({ period, label, indexed = 0, fx }: { period: string; label: string; indexed?: number; fx?: { rate: string | null; date: string | null; source: string | null } }) {
+export function PrepareButton({ period, prepared, people, variableCount, indexed = 0, fx }: { period: string; prepared: boolean; people: { id: string; name: string }[]; variableCount: number; indexed?: number; fx?: { rate: string | null; date: string | null; source: string | null } }) {
   const { busy, error, run } = useMutation();
+  const [open, setOpen] = useState(false);
+  const [pendingVariable, setPendingVariable] = useState(false);
   const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
   const [rate, setRate] = useState(fx?.rate ? String(Number(fx.rate)).replace('.', ',') : '');
   const [date, setDate] = useState(fx?.date ?? today);
   const [source, setSource] = useState(fx?.source ?? 'BNA — câmbio de referência');
   const needsFx = indexed > 0;
   const body = needsFx && rate.trim() ? { period, fx: { rate, date, source } } : { period };
+  const calculateDisabled = busy || pendingVariable || (needsFx && !rate.trim() && !fx?.rate);
+  async function calculate() {
+    if (calculateDisabled) return;
+    if (await run('/v1/payroll-runs', 'POST', body)) setOpen(false);
+  }
+  const fxFields = needsFx && <div className="fx-fields" role="group" aria-label="Câmbio do dia">
+    <label>Câmbio USD→Kz<input aria-label="Câmbio USD→Kz" inputMode="decimal" value={rate} placeholder="ex.: 912,50" onChange={e => setRate(e.target.value)} style={{ width: 110 }} /></label>
+    <label>Data<input aria-label="Data do câmbio" type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
+    <label>Fonte<input aria-label="Fonte do câmbio" value={source} maxLength={80} onChange={e => setSource(e.target.value)} style={{ width: 200 }} /></label>
+  </div>;
   return (
-    <span className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>
-      {needsFx && <span className="fx-fields" role="group" aria-label="Câmbio do dia">
-        <label>Câmbio USD→Kz<input aria-label="Câmbio USD→Kz" inputMode="decimal" value={rate} placeholder="ex.: 912,50" onChange={e => setRate(e.target.value)} style={{ width: 110 }} /></label>
-        <label>Data<input aria-label="Data do câmbio" type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
-        <label>Fonte<input aria-label="Fonte do câmbio" value={source} maxLength={80} onChange={e => setSource(e.target.value)} style={{ width: 200 }} /></label>
-      </span>}
-      <button className="btn" disabled={busy || (needsFx && !rate.trim() && !fx?.rate)} onClick={() => run('/v1/payroll-runs', 'POST', body)}>{busy ? 'A calcular…' : label}</button>
+    <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', ...(open ? { flexBasis: '100%', minWidth: 0 } : {}) }}>
+      {!open && <>
+        {prepared && fxFields}
+        <button type="button" className="btn" disabled={busy || (prepared && calculateDisabled)} onClick={() => prepared ? calculate() : setOpen(true)}>{busy ? 'A calcular…' : prepared ? 'Recalcular' : 'Preparar processamento'}</button>
+        {prepared && <button type="button" className="btn ghost" disabled={busy} onClick={() => setOpen(true)}>Rever preparação</button>}
+      </>}
+      {open && <section aria-label="Preparação do processamento" style={{ width: '100%', minWidth: 0 }}>
+        <h2>Preparar {monthLabel(period)}</h2>
+        <p className="muted">A base e os subsídios vêm dos contratos. As faltas e horas extra vêm da assiduidade aprovada. Reveja esses dados e, se necessário, lance as variáveis deste mês antes de calcular.</p>
+        <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', margin: '12px 0' }}>
+          <Link className="btn ghost sm" href="/colaboradores">Rever salários e contratos</Link>
+          <Link className="btn ghost sm" href={`/assiduidade?mes=${period}`}>Rever assiduidade</Link>
+        </div>
+        {fxFields}
+        <p className="muted">{variableCount} {variableCount === 1 ? 'variável guardada' : 'variáveis guardadas'} para este mês. O preenchimento abaixo é opcional; guarde cada variável que quiser incluir na folha.</p>
+        {people.length ? <AddVariable period={period} people={people} initialOpen onPendingChange={setPendingVariable} /> : <p className="muted">Sem colaboradores activos para lançar variáveis. Reveja as fichas e os contratos da equipa.</p>}
+        <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', marginTop: 14 }}>
+          <button type="button" className="btn" disabled={calculateDisabled} onClick={calculate}>{busy ? 'A calcular…' : 'Calcular folha'}</button>
+          <button type="button" className="btn ghost" disabled={busy || pendingVariable} onClick={() => setOpen(false)}>Cancelar preparação</button>
+          {pendingVariable && <span className="muted" role="status">Guarde ou cancele a variável antes de calcular ou sair da preparação.</span>}
+        </div>
+      </section>}
       {needsFx && <span className="muted" style={{ fontSize: 12.5, flexBasis: '100%' }}>{indexed} colaborador(es) com salário indexado ao dólar: a base é convertida a este câmbio no recibo.</span>}
-      {error && <span style={{ color: 'var(--red)' }}>{error}</span>}
-    </span>
+      {error && <span role="alert" style={{ color: 'var(--red)' }}>{error}</span>}
+    </div>
   );
 }
 
@@ -58,20 +87,23 @@ export function SubsidyToggle({ runId, employeeId, kind, paid, override }: { run
   );
 }
 
-export function AddVariable({ period, people }: { period: string; people: { id: string; name: string }[] }) {
+export function AddVariable({ period, people, initialOpen = false, onPendingChange }: { period: string; people: { id: string; name: string }[]; initialOpen?: boolean; onPendingChange?: (pending: boolean) => void }) {
   const { busy, error, run } = useMutation();
   const [kind, setKind] = useState('bonus');
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
   const earning = kind === 'bonus' || kind === 'other_earning';
   if (!open) return <button className="btn" onClick={() => setOpen(true)}>Lançar variável</button>;
   return (
     <form
       className="form card cols4"
+      aria-label="Variável do processamento"
+      onChange={() => onPendingChange?.(true)}
       onSubmit={async (e) => {
         e.preventDefault();
+        onPendingChange?.(true);
         const f = formObject(e.currentTarget, ['amount']);
         const ok = await run('/v1/payroll-variables', 'POST', { ...f, period, inInss: f.inInss === 'on', inIrt: f.inIrt === 'on' });
-        if (ok) setOpen(false);
+        if (ok) { setOpen(false); onPendingChange?.(false); }
       }}
     >
       <h3>Nova variável de {period}</h3>
@@ -97,10 +129,10 @@ export function AddVariable({ period, people }: { period: string; people: { id: 
       )}
       <div className="form-actions">
         {error && <span className="err">{error}</span>}
-        <button type="button" className="btn ghost" onClick={() => setOpen(false)}>Cancelar</button>
+        <button type="button" className="btn ghost" disabled={busy} onClick={() => { setOpen(false); onPendingChange?.(false); }}>Cancelar</button>
         <button className="btn" disabled={busy}>Lançar</button>
       </div>
-      <p className="muted wide">Depois de lançar, carregue em “Recalcular” para actualizar o processamento.</p>
+      <p className="muted wide">Depois de lançar, carregue em “{onPendingChange ? 'Calcular folha' : 'Recalcular'}” para actualizar o processamento.</p>
     </form>
   );
 }

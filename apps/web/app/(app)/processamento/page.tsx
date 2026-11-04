@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { actorFromApi, api, apiWithActor, ApiError } from '@/lib/api';
 import { currentPeriod, monthLabel, shiftMonth } from '@/lib/format';
-import { PAYROLL_ROLES, VARIABLE_LABEL, type EmployeeRow, type JournalRow, type PayrollLineRow, type PayrollRunDetail, type PayrollVariableRow } from '@/lib/types';
+import { PAYROLL_ROLES, VARIABLE_LABEL, type JournalRow, type PayrollLineRow, type PayrollRunDetail, type PayrollVariableRow } from '@/lib/types';
 import { AddVariable, CloseButton, DeleteVariable, PrepareButton, SubsidyToggle } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -16,7 +16,7 @@ const k = (v: number) => (v ? formatKz(v).replace(' Kz', '') : '—');
 export default async function Processamento({ searchParams }: { searchParams: Promise<{ mes?: string; s?: string }> }) {
   const sp = await searchParams;
   const period = sp.mes ?? currentPeriod();
-  const opening = await apiWithActor<{ run: PayrollRunDetail | null; variables: PayrollVariableRow[]; indexedEmployees?: number }>(`/v1/payroll-runs/opening?period=${period}`).catch((error) => {
+  const opening = await apiWithActor<{ run: PayrollRunDetail | null; variables: PayrollVariableRow[]; indexedEmployees?: number; people?: { id: string; name: string }[] }>(`/v1/payroll-runs/opening?period=${period}&people=1`).catch((error) => {
     if (error instanceof ApiError && error.actor && !PAYROLL_ROLES.includes(error.actor.role)) redirect('/');
     throw error;
   });
@@ -27,8 +27,9 @@ export default async function Processamento({ searchParams }: { searchParams: Pr
   const tab = sp.s ?? 'resumo';
   const canPrepare = role === 'owner' || role === 'payroll';
   const canClose = role === 'owner' || role === 'finance';
-  const { run, variables, indexedEmployees = 0 } = opening.data;
+  const { run, variables, indexedEmployees = 0, people = [] } = opening.data;
   const draft = run?.status === 'draft';
+  const editable = canPrepare && run?.status !== 'closed';
 
   return (
     <>
@@ -49,7 +50,7 @@ export default async function Processamento({ searchParams }: { searchParams: Pr
         <span className="muted" style={{ flex: 1 }}>
           {run ? <>Preparado por {run.preparedByName ?? '—'}{run.closedAt ? ` · fechado por ${run.closedByName ?? '—'} em ${new Date(run.closedAt).toLocaleDateString('pt-PT')}` : ''}{run.fxRate ? ` · câmbio ${formatFxRate(Number(run.fxRate))} Kz/USD de ${run.fxDate!.split('-').reverse().join('/')}${run.fxSource ? ` (${run.fxSource})` : ''}` : ''}</> : 'Ainda não há processamento para este mês.'}
         </span>
-        {canPrepare && (!run || draft) && <PrepareButton period={period} label={run ? 'Recalcular' : 'Preparar processamento'} indexed={indexedEmployees} fx={run ? { rate: run.fxRate ?? null, date: run.fxDate ?? null, source: run.fxSource ?? null } : undefined} />}
+        {editable && <PrepareButton key={period} period={period} prepared={!!run} people={people} variableCount={variables.length} indexed={indexedEmployees} fx={run ? { rate: run.fxRate ?? null, date: run.fxDate ?? null, source: run.fxSource ?? null } : undefined} />}
         {run?.status === 'closed' && <Link href="/obrigacoes" className="btn ghost">Pagamentos e mapas →</Link>}
         {canClose && draft && <CloseButton runId={run!.id} period={period} selfPrepared={run!.preparedBy === actor.sub} />}
       </div>
@@ -65,7 +66,7 @@ export default async function Processamento({ searchParams }: { searchParams: Pr
       </nav>
 
       {tab === 'resumo' && (run ? <Sheet run={run} editable={draft && canPrepare} /> : <div className="card empty">Prepare o processamento para ver a folha de {monthLabel(period)}.</div>)}
-      {tab === 'variaveis' && <Variables period={period} rows={variables} editable={canPrepare && run?.status !== 'closed'} />}
+      {tab === 'variaveis' && <Variables period={period} rows={variables} editable={editable} people={people} />}
       {tab === 'lancamento' && run?.status === 'closed' && <Journal period={period} />}
     </>
   );
@@ -131,8 +132,7 @@ function Sheet({ run, editable }: { run: PayrollRunDetail; editable: boolean }) 
   );
 }
 
-async function Variables({ period, rows, editable }: { period: string; rows: PayrollVariableRow[]; editable: boolean }) {
-  const people = editable ? (await api<EmployeeRow[]>('/v1/employees')).filter((e) => e.status === 'active').map((e) => ({ id: e.id, name: e.name })) : [];
+function Variables({ period, rows, editable, people }: { period: string; rows: PayrollVariableRow[]; editable: boolean; people: { id: string; name: string }[] }) {
   return (
     <>
       {editable && <div style={{ marginBottom: 14 }}><AddVariable period={period} people={people} /></div>}

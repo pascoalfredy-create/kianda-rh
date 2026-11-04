@@ -35,6 +35,25 @@ O envio real depende de Resend e de um remetente validado:
 
 Estas definições já são encaminhadas pelo workflow para o Worker. Não colocar chaves nos ficheiros, na interface, nos logs ou no repositório. Sem configuração ou se o fornecedor falhar, o sistema informa a indisponibilidade; não simula um email entregue nem confirma automaticamente. A conta fica pendente e pode pedir nova confirmação quando o envio estiver disponível. A entrega real deve ser confirmada pelo responsável antes de anunciar registos autónomos.
 
+Passos para o proprietário:
+
+1. Entrar no Resend e adicionar em **Domains** um subdomínio próprio para envio, por exemplo `notificacoes.yelaperformance.com`. É uma sugestão; só usar depois de o verificar.
+2. Copiar exactamente os registos DNS apresentados pelo Resend para o fornecedor DNS do domínio. Activar apenas envio; conservar os registos do site e do correio existente. Aguardar o estado **Verified**.
+3. Em **API Keys**, criar `Kianda produção`, com **Sending access** limitado ao domínio validado. A chave só é mostrada uma vez.
+4. No repositório `pascoalfredy-create/kianda-rh`, abrir **Settings → Secrets and variables → Actions**. No separador **Secrets**, criar o repository secret `KIANDA_RESEND_API_KEY` com a chave. No separador **Variables**, criar `KIANDA_MAIL_FROM` com, por exemplo, `Kianda <nao-responder@notificacoes.yelaperformance.com>`; usar o domínio realmente validado.
+5. Em **Actions → CI e publicação**, executar **Run workflow** na branch `main`. Guardar as definições não altera o Worker já publicado; a publicação é necessária.
+6. Pedir o reenvio na conta pendente ou efectuar um cadastro controlado. Confirmar recepção (incluindo spam), clicar no botão de confirmação e verificar o acesso a Módulos. Conferir o estado de entrega no Resend. Não considerar operacional só por a publicação terminar.
+
+Referências: [domínio e DNS](https://resend.com/docs/add-a-domain), [chave de envio](https://resend.com/docs/create-an-api-key), [secrets do GitHub](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets).
+
+## Preparação do processamento salarial
+
+**Preparar processamento** abre os campos antes de criar a folha: colaborador, tipo de variável, valor, descrição e incidências; para salários indexados, câmbio, data e fonte. É opcional acrescentar variáveis. O botão **Calcular folha** só prossegue depois de guardar ou cancelar uma variável começada. Cancelar uma preparação sem guardar não cria a folha nem variáveis.
+
+As remunerações continuam nas fichas/contratos, e a assiduidade aprovada continua a fornecer faltas e horas extra. Existem ligações para rever essas origens. Depois do cálculo, **Recalcular** mantém a acção directa e **Rever preparação** reabre os campos. Os mapas continuam recolhidos com **Ver**. Um mês fechado não apresenta controlos de preparação.
+
+A lista de colaboradores usa a mesma abertura da folha (`people=1`), só com identificadores e nomes da própria empresa, para quem pode preparar. Evita outra chamada HTTP e a transmissão das fichas completas.
+
 ## Mapas recolhidos
 
 As tabelas detalhadas do RH e dos ecrãs financeiros começam recolhidas, com **Ver** e **Recolher**. Os indicadores e gráficos continuam visíveis. O controlo é nativo e funciona com teclado. Nos ecrãs imperativos, o estado aberto mantém-se durante os recálculos da mesma vista; o conteúdo e os exportadores não são reescritos.

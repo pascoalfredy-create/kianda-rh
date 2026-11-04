@@ -89,6 +89,7 @@ test('mapas começam recolhidos e Ver abre a tabela no RH, Integra e Valora', as
   expect(person.status, JSON.stringify(person.body)).toBe(201);
   await page.goto('/processamento?mes=2026-10');
   await page.getByRole('button', { name: 'Preparar processamento' }).click();
+  await page.getByRole('button', { name: 'Calcular folha', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Recalcular' })).toBeVisible();
   let map = page.locator('details.map-disclosure').first();
   await expect(map).toBeVisible(); await expect(map).not.toHaveAttribute('open', '');
