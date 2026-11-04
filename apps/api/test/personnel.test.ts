@@ -17,7 +17,7 @@ describe.skipIf(!process.env.DATABASE_URL)('mapas do protótipo com dados, isola
   const base = { period: '2026-10', openingMinor: 100000000, receipts: { '2026-10': 20000000 }, revision: 0 };
   beforeAll(async () => {
     for (const [suffix, modules] of [[1, ['hr']], [2, ['hr']], [3, ['modeling']]] as const) {
-      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: `Pessoal ${suffix}`, sector: 'mining', nif: String(Number(stamp.slice(-10)) + suffix).padStart(10, '0') }, name: 'Responsável', email: `${stamp}.${suffix}@personnel.test`, password, modules, ...(suffix === 3 ? { modelingPlan: { key: 'pme', cycle: 'monthly', primarySector: 'mineracao', sectors: ['mineracao', 'servicos'] } } : {}) } });
+      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: `Pessoal ${suffix}`, sector: 'mining', nif: String(Number(stamp.slice(-10)) + suffix).padStart(10, '0') }, name: 'Responsável', email: `${stamp}.${suffix}@personnel.test`, password, modules, ...(suffix === 3 ? { modelingPlan: { key: 'pme', cycle: 'monthly', primarySector: 'mineracao', sectors: ['mineracao', 'servicos'] } } : {}) } });
       expect(r.statusCode).toBe(201);
       if (suffix === 1) { owner = cookie(r); companyId = r.json().company.id; } else if (suffix === 2) other = cookie(r); else modeling = cookie(r);
     }

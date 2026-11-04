@@ -22,7 +22,7 @@ describe.skipIf(!process.env.DATABASE_URL)('volume de RH: 1 e 200 colaboradores'
     });
   }
   beforeAll(async () => {
-    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'RH desempenho sintético', nif: stamp.slice(-10) }, name: 'Responsável', email: `${stamp}@rh-performance.test`, password: 'Desempenho2026abc', modules: ['hr'], hrPlan: { tierKey: 't2', cycle: 'monthly' } } });
+    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'RH desempenho sintético', nif: stamp.slice(-10) }, name: 'Responsável', email: `${stamp}@rh-performance.test`, password: 'Desempenho2026abc', modules: ['hr'], hrPlan: { tierKey: 't2', cycle: 'monthly' } } });
     expect(r.statusCode).toBe(201); companyId = r.json().company.id; cookie = `kianda_session=${r.cookies.find(c => c.name === 'kianda_session')!.value}`;
     await seed(1, 1);
   });

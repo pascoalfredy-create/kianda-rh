@@ -41,19 +41,24 @@ async function flushSave(){
   if(!pendingSave||!CUR||!valoraCanWrite())return;
   pendingSave=false;
   const id=CUR.id,snapshot=JSON.parse(JSON.stringify(D)),issue=valuationDataIssue(snapshot);
-  if(issue){setSave(issue,true);return}
+  if(issue){pendingSave=true;setSave(issue,true);return}
   setSave('A gravar…');
   saving=api('/analyses/'+encodeURIComponent(id),{method:'PUT',body:{revision:CUR.revision,data:snapshot}}).then(r=>{
     if(CUR&&CUR.id===id){CUR.revision=r.revision;CUR.updatedAt=r.updatedAt}
     const item=LIST.find(x=>x.id===id);if(item){item.revision=r.revision;item.updatedAt=r.updatedAt}
     offline=false;setSave(pendingSave?'Alterações por gravar…':'Gravado');
   }).catch(e=>{
-    if(e.status===409&&e.code==='revisao_invalida'){conflict=true;lockInputs();setSave('Não gravado',true);banner('err','Esta análise foi alterada noutra sessão. As alterações feitas aqui depois disso não foram gravadas.',['Recarregar a versão gravada',()=>openAnalysis(id)])}
+    pendingSave=true;
+    if(e.status===409&&e.code==='revisao_invalida'){conflict=true;lockInputs();setSave('Não gravado',true);banner('err','Esta análise foi alterada noutra sessão. As alterações feitas aqui depois disso não foram gravadas.',['Recarregar a versão gravada',()=>{if(confirm('Recarregar a versão gravada e descartar as alterações locais?'))openAnalysis(id,true)}])}
     else if(e.offline){pendingSave=true;offline=true;setSave('Sem ligação — a tentar de novo',true);setTimeout(()=>{offline=false;flushSave()},5000)}
     else if(e.status===402){VS.canWrite=false;lockInputs();setSave('Não gravado',true);banner('warn',ESC(e.message)+' <a href="/modulos">Ver licença</a>')}
     else{pendingSave=true;setSave(e.message,true)}
   }).finally(()=>{saving=null;if(pendingSave&&!conflict&&!offline&&valoraCanWrite())saveTimer=setTimeout(flushSave,900)});
   return saving;
+}
+async function ensureSaved(){
+  await flushSave();
+  if(pendingSave||saving||conflict||offline)throw new Error('Existem alterações por gravar. Mantenha esta análise aberta e volte a tentar antes de continuar.');
 }
 addEventListener('beforeunload',e=>{if(pendingSave||saving){e.preventDefault();e.returnValue=''}});
 
@@ -88,8 +93,8 @@ function loadAnalysis(row){
   else banner(null);
   lockInputs();
 }
-async function openAnalysis(id){
-  try{await flushSave()}catch(e){}
+async function openAnalysis(id,discard=false){
+  if(!discard){try{await ensureSaved()}catch(e){setSave(e.message,true);banner('err',ESC(e.message));return}}
   setSave('A abrir…');
   try{loadAnalysis(await api('/analyses/'+encodeURIComponent(id)));closeDialog()}catch(e){setSave(e.message,true)}
 }
@@ -148,6 +153,7 @@ function openDialog(msg){
   ($('#vName')||$('#valoraClose')).focus();
 }
 async function createAnalysis(name,data,ownCompany,source){
+  await ensureSaved();
   const row=await api('/analyses',{method:'POST',body:{name,data,ownCompany,source}});
   LIST.unshift({id:row.id,name:row.name,ownCompany:row.ownCompany,revision:row.revision,archivedAt:null,updatedAt:row.updatedAt,createdAt:row.createdAt});
   USAGE.activeAnalyses++;USAGE.canCreateAnalysis=USAGE.analysisLimit===null||USAGE.activeAnalyses<USAGE.analysisLimit;
@@ -164,20 +170,20 @@ dlg.addEventListener('click',e=>{
     const data=start==='example'?exampleData(ent):blankValuationData({entity:ent,lastClosedYear:year,historyYears:Number($('#vYears').value)});
     await createAnalysis(name,data,$('#vNewOwn').checked,start);
   });
-  if(t.id==='vDup')return dialogAction(async()=>{await flushSave();await createAnalysis(`${CUR.name} (cópia)`.slice(0,200),JSON.parse(JSON.stringify(D)),CUR.ownCompany,'duplicate')});
+  if(t.id==='vDup')return dialogAction(async()=>{await ensureSaved();await createAnalysis(`${CUR.name} (cópia)`.slice(0,200),JSON.parse(JSON.stringify(D)),CUR.ownCompany,'duplicate')});
   if(t.id==='vSaveMeta')return dialogAction(async()=>{
-    await flushSave();const name=$('#vRename').value.trim(),own=$('#vOwn').checked;
+    await ensureSaved();const name=$('#vRename').value.trim(),own=$('#vOwn').checked;
     const r=await api('/analyses/'+encodeURIComponent(CUR.id),{method:'PUT',body:{revision:CUR.revision,name,ownCompany:own}});
     Object.assign(CUR,{name:r.name,ownCompany:r.ownCompany,revision:r.revision});Object.assign(LIST.find(x=>x.id===CUR.id),{name:r.name,ownCompany:r.ownCompany,revision:r.revision,updatedAt:r.updatedAt});
     $('#valoraFoot').textContent=r.ownCompany?'Própria empresa · ':'';openDialog('Alterações guardadas.');
   });
   if(t.id==='vArchive')return dialogAction(async()=>{
-    if(!confirmArchive())return;await flushSave();
+    if(!confirmArchive())return;await ensureSaved();
     const r=await api(`/analyses/${encodeURIComponent(CUR.id)}/archive`,{method:'POST'});Object.assign(LIST.find(x=>x.id===r.id),r);if(r.usage)USAGE=r.usage;
     const next=LIST.find(x=>!x.archivedAt);if(next)await openAnalysis(next.id);else{showEmpty();openDialog()}
   });
   if(t.id==='vHr')return dialogAction(async()=>{
-    await flushSave();const r=await api(`/analyses/${encodeURIComponent(CUR.id)}/import-personnel`,{method:'POST',body:{revision:CUR.revision}});
+    await ensureSaved();const r=await api(`/analyses/${encodeURIComponent(CUR.id)}/import-personnel`,{method:'POST',body:{revision:CUR.revision}});
     loadAnalysis(r.analysis);const after=r.months.filter(m=>m.month>=D.fecho);
     openDialog(`Custos com o pessoal de ${r.year} trazidos do processamento salarial: ${r.months.map(m=>`${MES[m.month]} ${f0(m.mkz)} Kz`).join(' · ')}.${after.length?` ${after.length===1?'Um mês fica':after.length+' meses ficam'} depois do mês de fecho e só entra${after.length===1?'':'m'} no cenário «Real» quando avançar o fecho.`:''}`);
   });
@@ -199,9 +205,15 @@ $('#btnAnalyses').onclick=()=>openDialog();
 $('#btnEntity').onclick=()=>openDialog();
 
 /* ---------- Exportação: licença, bibliotecas locais e descarga ---------- */
-function valoraCanExport(kind){
-  if(VS&&VS.formats&&VS.formats[kind])return true;
-  const msg=$('#rep-msg');if(msg)msg.textContent='Pré-visualização: active uma subscrição paga do Valora para exportar documentos.';
+async function valoraCanExport(kind){
+  const msg=$('#rep-msg');
+  try{
+    await ensureSaved();
+    const current=await api('/session');
+    VS.formats=current.formats;VS.canWrite=current.canWrite;lockInputs();
+    if(current.formats&&current.formats[kind])return true;
+    if(msg)msg.textContent='Pré-visualização: active uma subscrição paga do Valora para exportar documentos.';
+  }catch(e){if(msg)msg.textContent=e.message;return false}
   return false;
 }
 function valoraApplyAutoTable(){const J=window.jspdf&&window.jspdf.jsPDF;if(J&&!J.API.autoTable&&typeof window.applyPlugin==='function')window.applyPlugin(J)}
@@ -240,7 +252,7 @@ $('#valoraMenu').onclick=()=>{const a=document.querySelector('aside'),open=!a.cl
   window.addEventListener('hashchange',()=>setTimeout(sync,0));
 })();
 $('#nav').addEventListener('click',e=>{if(e.target.closest('a')){document.querySelector('aside').classList.remove('open');$('#valoraMenu').setAttribute('aria-expanded','false')}});
-for(const id of ['#valoraLogout','#valoraLogoutTop'])$(id).onclick=async()=>{const b=$(id);b.disabled=true;b.textContent='A terminar…';try{await flushSave()}catch(e){}try{await endSession()}catch(e){b.disabled=false;b.textContent='Terminar sessão';banner('err',ESC(e.message))}};
+for(const id of ['#valoraLogout','#valoraLogoutTop'])$(id).onclick=async()=>{const b=$(id);b.disabled=true;b.textContent='A terminar…';try{await ensureSaved()}catch(e){if(!confirm('Existem alterações não gravadas. Terminar sessão e descartá-las?')){b.disabled=false;b.textContent='Terminar sessão';banner('err',ESC(e.message));return}clearTimeout(saveTimer);pendingSave=false}try{await endSession()}catch(e){b.disabled=false;b.textContent='Terminar sessão';banner('err',ESC(e.message))}};
 reloadPrivatePageOnRestore();
 
 function valoraStart(){

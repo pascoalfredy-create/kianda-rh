@@ -5,6 +5,12 @@ import type { Me } from './api';
 const me = (role: string, hr = true, modeling = false, valuation = false): Me => ({ user: { sub: 'u', role, employeeId: 'e', name: 'Pessoa de teste', companyId: 'co' }, company: { id: 'co', name: 'Empresa de teste', nif: '0000000000' }, modules: { hr: { subscribed: hr, canAccess: hr, canRead: hr, canWrite: hr, status: hr ? 'active' : 'cancelled', paidUntil: null, trialEndsAt: null }, modeling: { subscribed: modeling, canAccess: modeling, canRead: modeling, canWrite: modeling, status: modeling ? 'active' : 'cancelled', paidUntil: null, trialEndsAt: null, planKey: null, cycle: null, projectLimit: 2, extraUsers: 0, userLimit: 5, primarySector: null, sectors: [] }, valuation: { subscribed: valuation, canAccess: valuation, canRead: valuation, canWrite: valuation, status: valuation ? 'trial' : 'cancelled', paidUntil: null, trialEndsAt: null, analysisLimit: 10, extraUsers: 0, userLimit: 5, planKey: null, cycle: null } } });
 const links = (user: Me) => navigation(user, { absences: 2, expenses: 3 }).flatMap(g => g.items);
 describe('menu comum e permissões do protótipo RH', () => {
+  it('o simulador é uma ferramenta de Salários e não pertence ao espaço do colaborador', () => {
+    const groups = navigation(me('owner'), { absences: 0, expenses: 0 });
+    expect(groups.find(g => g.label === 'Salários')!.items.filter(i => i.href === '/simulador')).toHaveLength(1);
+    expect(groups.find(g => g.label === 'Equipa')!.items.map(i => i.href)).not.toContain('/simulador');
+    expect(links(me('employee')).map(i => i.href)).not.toContain('/simulador');
+  });
   it('separa relatórios, definições e módulos, conservando os pedidos operacionais em Equipa', () => {
     const groups = navigation(me('owner'), { absences: 2, expenses: 3 });
     expect(groups.map(g => g.label)).toEqual(['Equipa', 'Tempo', 'Salários', 'Finanças', 'Talento', 'Relatórios', 'Definições', 'Módulos']);

@@ -22,7 +22,7 @@ export function navigation(me: Me, counts: { absences: number; expenses: number;
       item('/despesas', 'Despesas e ajudas de custo', 'receipt', counts.expenses),
       has('payroll', 'finance', 'hr_admin') && item('/adiantamentos', 'Adiantamentos', 'money'),
       has('payroll', 'finance', 'hr_admin') && item('/cessacoes', 'Cessações', 'doc'),
-      item('/simulador', 'Simulador salarial', 'money'),
+      has('payroll', 'finance', 'hr_admin') && item('/simulador', 'Simulador salarial', 'money'),
       !!me.user.employeeId && item('/recibos', 'Os meus recibos', 'receipt'),
     ]);
     add('Finanças', [
@@ -46,7 +46,7 @@ export function navigation(me: Me, counts: { absences: number; expenses: number;
       !!me.user.employeeId && item(`/colaboradores/${me.user.employeeId}`, 'A minha ficha', 'users'),
       !!me.user.employeeId && item('/acolhimento', 'As minhas tarefas', 'check', counts.tasks),
       !!me.user.employeeId && item('/aceitacao', 'Para ler e aceitar', 'doc', counts.acks),
-      !!me.user.employeeId && item('/portal/dados', 'Os meus dados', 'doc'), item('/desempenho', 'Desempenho', 'star'), item('/simulador', 'Simulador salarial', 'money'),
+      !!me.user.employeeId && item('/portal/dados', 'Os meus dados', 'doc'), item('/desempenho', 'Desempenho', 'star'),
     ]);
   }
   add('Definições', [

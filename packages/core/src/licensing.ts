@@ -26,6 +26,8 @@ export const CYCLES: Record<BillingCycle, { label: string; months: number; disco
 };
 
 export const TRIAL_DAYS = 7;
+/** Identifica o texto apresentado e aceite em novos registos. */
+export const REGISTRATION_TERMS_VERSION = '2026-11-04';
 
 const DAY_MS = 86_400_000;
 function calendarDay(value: string): number {

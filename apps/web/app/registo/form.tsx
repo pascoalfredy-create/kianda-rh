@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { ModelingSectors } from '../../components/modeling-sectors';
 import type { RegistrationSelection } from '../../lib/registration-selection';
 import { KiandaMark } from '../../components/kianda-mark';
+import { AuthNavigation } from '../../components/auth-navigation';
+import { jsonRequest } from '../../lib/json-request';
 
 /** Uma conta de empresa, com escolha explícita dos módulos e respectivos planos. */
 export function RegistoForm({ initial }: { initial: RegistrationSelection }) {
@@ -36,7 +38,7 @@ export function RegistoForm({ initial }: { initial: RegistrationSelection }) {
         if (!hr && !modeling && !valuation) return setError('Escolha pelo menos um módulo.');
         if (f.get('password') !== f.get('password2')) return setError('As palavras-passe não coincidem');
         setBusy(true); setError('');
-        const res = await fetch('/api/v1/auth/register', {
+        const { res, body: j } = await jsonRequest('/api/v1/auth/register', {
           method: 'POST', headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             company: { name: f.get('companyName'), nif: String(f.get('nif')).replace(/\D/g, ''), sector: f.get('sector'), address: f.get('address') || null, ...(hr ? { employeesEstimate: estimate } : {}) },
@@ -47,17 +49,17 @@ export function RegistoForm({ initial }: { initial: RegistrationSelection }) {
             ...(modeling ? { modelingPlan: { key: modelingKey, cycle: modelingCycle, primarySector, sectors: modelingSectors } } : {}),
           }),
         });
-        const j = await res.json().catch(() => ({}));
         setBusy(false);
         if (res.ok) return window.location.assign('/licenca');
         setError(j.issues?.map((i: { message: string }) => i.message).join(' · ') || (j.error === 'duplicado' ? 'Já existe uma conta com este NIF ou email.' : j.message) || 'Não foi possível criar a conta');
       }}>
+        <AuthNavigation login />
         <div className="logo" style={{ padding: 0, marginBottom: 18 }}>
           <KiandaMark size={34} />
-          <div><b style={{ color: 'var(--ink)' }}>Kianda RH</b><small style={{ color: 'var(--ink3)' }}>Gestão de Pessoas · Angola</small></div>
+          <div><b style={{ color: 'var(--ink)' }}>Kianda</b><small style={{ color: 'var(--ink3)' }}>RH · Integra · Valora</small></div>
         </div>
         <h1 style={{ fontSize: 19, marginBottom: 4 }}>Criar a conta da empresa</h1>
-        <p className="muted" style={{ marginTop: 0 }}>{TRIAL_DAYS} dias de calendário grátis nos módulos escolhidos, incluindo o dia do registo, pela hora de Angola. Uma conta para RH e Modelagem Financeira. Sem cartão nem cobrança automática. Durante o teste, os documentos ficam apenas em pré-visualização; exportar e imprimir exige subscrição paga.</p>
+        <p className="muted" style={{ marginTop: 0 }}>{TRIAL_DAYS} dias de calendário grátis nos módulos escolhidos, incluindo o dia do registo, pela hora de Angola. Uma conta para RH, Modelagem Financeira e Análise e Avaliação. Sem cartão nem cobrança automática. Durante o teste, os documentos ficam apenas em pré-visualização; exportar e imprimir exige subscrição paga.</p>
         <p className="muted" style={{ marginTop: 8, fontSize: 12.5 }}>O teste usa os limites do plano seleccionado. A data final fica visível na conta. Sem pagamento, o módulo passa a consulta e os dados guardados são conservados.</p>
         <h3 style={{ fontSize: 12, textTransform: 'uppercase', color: 'var(--ink3)', margin: '16px 0 8px' }}>Empresa</h3>
         <label>Denominação social<input name="companyName" required placeholder="Ex.: Kwanza Logística, Lda." /></label>

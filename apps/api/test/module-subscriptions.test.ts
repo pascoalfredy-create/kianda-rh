@@ -10,7 +10,7 @@ const password = 'Subscricoes2026Seguras';
 const stamp = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
 const cookieOf = (r: InjectResponse) => `kianda_session=${r.cookies.find(c => c.name === 'kianda_session')!.value}`;
 const request = (cookie: string, method: string, url: string, payload?: unknown) => app.inject({ method, url, headers: { cookie }, ...(payload === undefined ? {} : { payload }) });
-const registration = (suffix: number, extra: object) => ({ company: { name: `Módulos ${suffix}`, nif: String(Number(stamp.slice(-10)) + suffix).padStart(10, '0'), sector: 'mining' }, name: 'Gestor de Teste', email: `${stamp}.${suffix}@modules.test`, password, ...extra });
+const registration = (suffix: number, extra: object) => ({ acceptTerms: true, company: { name: `Módulos ${suffix}`, nif: String(Number(stamp.slice(-10)) + suffix).padStart(10, '0'), sector: 'mining' }, name: 'Gestor de Teste', email: `${stamp}.${suffix}@modules.test`, password, ...extra });
 const pme = { key: 'pme', cycle: 'monthly', primarySector: 'mineracao', sectors: ['mineracao', 'servicos'] };
 const corporate = { key: 'corporate', cycle: 'monthly', primarySector: 'mineracao', sectors: ['mineracao', 'servicos', 'comercio', 'agro'] };
 

@@ -51,17 +51,17 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
   const login = async (email: string) => cookieOf(await app.inject({ method: 'POST', url: '/v1/auth/login', payload: { email, password: pw, companyNif: nifA } }));
 
   beforeAll(async () => {
-    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Empresa A', nif: nifA }, name: 'Dona A', email: `dona+${stamp}@a.ao`, password: pw } });
+    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Empresa A', nif: nifA }, name: 'Dona A', email: `dona+${stamp}@a.ao`, password: pw } });
     expect(r.statusCode).toBe(201);
     owner = cookieOf(r);
-    const rb = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Empresa B', nif: nifB }, name: 'Dono B', email: `dono+${stamp}@b.ao`, password: pw } });
+    const rb = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Empresa B', nif: nifB }, name: 'Dono B', email: `dono+${stamp}@b.ao`, password: pw } });
     ownerB = cookieOf(rb);
     // Os fluxos de negócio e de ficheiros abaixo exercitam uma licença paga.
     for (const company of [r.json().company.id, rb.json().company.id]) await getDb().execute(sql`update subscriptions set status='active', paid_until='2099-12-31' where company_id=${company}`);
   });
 
   it('recusa palavra-passe fraca no registo', async () => {
-    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'X', nif: '9999999999' }, name: 'X', email: 'x@x.ao', password: 'curta' } });
+    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'X', nif: '9999999999' }, name: 'X', email: 'x@x.ao', password: 'curta' } });
     expect(r.statusCode).toBe(400);
   });
 
@@ -1330,7 +1330,7 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     const type = (sector: { allowanceTypes: { id: string; code: string }[] }, code: string) => sector.allowanceTypes.find((t) => t.code === code)!.id;
 
     beforeAll(async () => {
-      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Mineira do Cuango', nif: nifM, sector: 'mining' }, name: 'Dono M', email: `dono+${stamp}@m.ao`, password: pw } });
+      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Mineira do Cuango', nif: nifM, sector: 'mining' }, name: 'Dono M', email: `dono+${stamp}@m.ao`, password: pw } });
       expect(r.statusCode).toBe(201);
       mine = cookieOf(r);
       minerId = (await send('POST', mine, '/v1/employees', { number: '1', name: 'Mineiro Rotação', jobTitle: 'Operador de máquinas', contract: { type: 'indefinite', startDate: '2026-01-05', base: 300000 } })).json().id;
@@ -1634,7 +1634,7 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
 
     it('eliminar uma empresa: só cancelada e com o NIF confirmado; não fica nenhuma linha', async () => {
       const nifP = String(Number(nifA) + 9).padStart(10, '0').slice(-10);
-      const reg = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Empresa a eliminar', nif: nifP, sector: 'security' }, name: 'Dono P', email: `dono+${stamp}@p.ao`, password: pw } });
+      const reg = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Empresa a eliminar', nif: nifP, sector: 'security' }, name: 'Dono P', email: `dono+${stamp}@p.ao`, password: pw } });
       const ownerP = cookieOf(reg);
       const idP = reg.json().company.id;
       await post(ownerP, '/v1/employees', { number: '1', name: 'Vigia', jobTitle: 'Vigilante', contract: { type: 'indefinite', startDate: '2026-01-05', base: 120000 } });
@@ -1662,7 +1662,7 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
 
     beforeAll(async () => {
       const nifQ = String(Number(nifA) + 11).padStart(10, '0').slice(-10);
-      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Empresa Adiantamentos', nif: nifQ }, name: 'Dono Q', email: `dono+${stamp}@q.ao`, password: pw } });
+      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Empresa Adiantamentos', nif: nifQ }, name: 'Dono Q', email: `dono+${stamp}@q.ao`, password: pw } });
       ownerQ = cookieOf(r);
       empQ = (await post(ownerQ, '/v1/employees', { number: '1', name: 'Pedro Adiantamento', jobTitle: 'Técnico', contract: { type: 'indefinite', startDate: '2025-01-06', base: 300000 } })).json().id;
     });
@@ -1893,7 +1893,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: módulos e importação opc
   beforeAll(async () => {
     for (const [i, name] of ['Integra A', 'Integra B'].entries()) {
       const nif = String(Date.now() + i + 200).slice(-10);
-      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name, nif }, name, email: `${stamp}${i}@integra.ao`, password } });
+      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name, nif }, name, email: `${stamp}${i}@integra.ao`, password } });
       expect(r.statusCode).toBe(201);
       if (i === 0) cookie = cookieOf(r); else other = cookieOf(r);
     }
@@ -1970,7 +1970,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: projectos, cinco acessos e 
   const grant = (extraUsers = 0, projectLimit = 2) => req('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit, extraUsers });
   const model = { name: 'Projecto', sector: 'servicos', currency: 'Kz', assumptions: { pessoal: 100 } };
   beforeAll(async () => {
-    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Projectos Integra', nif: String(Date.now() + 700).slice(-10) }, name: 'Gestor', email: `${stamp}@plans.ao`, password: 'Projectos2026Seguros' } });
+    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Projectos Integra', nif: String(Date.now() + 700).slice(-10) }, name: 'Gestor', email: `${stamp}@plans.ao`, password: 'Projectos2026Seguros' } });
     expect(r.statusCode).toBe(201); cookie = cookieOf(r);
     const me = (await req('GET', '/v1/auth/me')).json();
     companyId = me.company.id; ownerId = me.user.sub;
@@ -2037,7 +2037,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: motor financeiro e modelos 
   const req = (method: string, url: string, payload?: unknown, session = cookie) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
   beforeAll(async () => {
     for (const i of [0, 1]) {
-      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Motor Integra', nif: String(Date.now() + 1400 + i).slice(-10) }, name: 'Gestor', email: `${stamp}${i}@engine.ao`, password: 'MotorSeguro2026abc' } });
+      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Motor Integra', nif: String(Date.now() + 1400 + i).slice(-10) }, name: 'Gestor', email: `${stamp}${i}@engine.ao`, password: 'MotorSeguro2026abc' } });
       expect(r.statusCode).toBe(201);
       if (i === 0) cookie = cookieOf(r); else other = cookieOf(r);
     }
@@ -2107,7 +2107,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: versões aprovadas e downlo
   const report = (format = 'pdf', version = versionId, session = owner) => req('GET', `/v1/modeling/models/${modelId}/reports/sumario?format=${format}${version ? '&version=' + version : ''}`, undefined, session);
   beforeAll(async () => {
     for (const i of [0, 1]) {
-      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Empresa de versões', nif: String(Date.now() + 2400 + i).slice(-10) }, name: 'Proprietário', email: `${stamp}${i}@versions.ao`, password: 'VersoesSeguras2026abc' } });
+      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Empresa de versões', nif: String(Date.now() + 2400 + i).slice(-10) }, name: 'Proprietário', email: `${stamp}${i}@versions.ao`, password: 'VersoesSeguras2026abc' } });
       expect(r.statusCode).toBe(201); if (!i) owner = cookieOf(r); else other = cookieOf(r);
     }
     const me = (await req('GET', '/v1/auth/me')).json(); companyId = me.company.id; ownerId = me.user.sub;

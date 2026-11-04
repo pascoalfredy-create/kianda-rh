@@ -11,7 +11,7 @@ describe.skipIf(!process.env.DATABASE_URL)('acompanhamento de produção sem act
   let owner: Owner, client: Owner, fixtureHash = '';
   async function register(email = `${stamp}${counter}@review.ao`): Promise<Owner> {
     counter++;
-    const result = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Acompanhamento ' + counter, nif: String(Date.now() + 14000 + counter).slice(-10) }, email, name: 'Administrador ' + counter, password: 'AcompanhamentoSeguro2026abc' } });
+    const result = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Acompanhamento ' + counter, nif: String(Date.now() + 14000 + counter).slice(-10) }, email, name: 'Administrador ' + counter, password: 'AcompanhamentoSeguro2026abc' } });
     expect(result.statusCode).toBe(201);
     const token = result.cookies.find(c => c.name === 'kianda_session')!;
     const me = (await app.inject({ method: 'GET', url: '/v1/auth/me', headers: { cookie: `kianda_session=${token.value}` } })).json();

@@ -18,7 +18,7 @@ describe.skipIf(!process.env.DATABASE_URL)('salários indexados ao dólar', () =
   const employee = (number: string, name: string, contract: Record<string, unknown>) => ({ number, name, gender: 'M', jobTitle: 'Engenheiro', province: 'Luanda', nif: `20000${number.padStart(5, '0')}`, contract: { type: 'indefinite', startDate: '2026-01-05', meal: 30000, transport: 25000, ...contract } });
 
   beforeAll(async () => {
-    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Indexados', sector: 'services', nif: String(Number(stamp.slice(-9)) * 10 + 7).padStart(10, '0').slice(-10) }, name: 'Dona', email: `${stamp}@indexado.test`, password, modules: ['hr'] } });
+    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Indexados', sector: 'services', nif: String(Number(stamp.slice(-9)) * 10 + 7).padStart(10, '0').slice(-10) }, name: 'Dona', email: `${stamp}@indexado.test`, password, modules: ['hr'] } });
     expect(r.statusCode).toBe(201); owner = cookieOf(r);
   });
 

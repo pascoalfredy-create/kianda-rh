@@ -33,7 +33,7 @@ describe.skipIf(!process.env.DATABASE_URL)('ponto com localização', () => {
 
   beforeAll(async () => {
     for (const i of [0, 1]) {
-      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: `Ponto ${i}`, sector: 'construction', nif: String(Number(stamp.slice(-9)) * 10 + i).padStart(10, '0').slice(-10) }, name: 'Dona', email: `${stamp}.${i}@ponto.test`, password, modules: ['hr'] } });
+      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: `Ponto ${i}`, sector: 'construction', nif: String(Number(stamp.slice(-9)) * 10 + i).padStart(10, '0').slice(-10) }, name: 'Dona', email: `${stamp}.${i}@ponto.test`, password, modules: ['hr'] } });
       expect(r.statusCode).toBe(201);
       if (!i) { owner = cookieOf(r); companyId = r.json().company.id; } else { other = cookieOf(r); otherCompany = r.json().company.id; }
     }

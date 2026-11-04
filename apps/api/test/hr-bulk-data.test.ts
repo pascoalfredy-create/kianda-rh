@@ -15,7 +15,7 @@ describe.skipIf(!process.env.DATABASE_URL)('leituras RH em conjunto: resultados,
   const sessions = new Map<string, string>();
   beforeAll(async () => {
     for (const suffix of [1, 2]) {
-      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: `Empresa sintética ${suffix}`, nif: String(Number(stamp.slice(-10)) + suffix).padStart(10, '0') }, name: 'Responsável', email: `${stamp}.${suffix}@hr-bulk.test`, password, modules: ['hr'] } });
+      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: `Empresa sintética ${suffix}`, nif: String(Number(stamp.slice(-10)) + suffix).padStart(10, '0') }, name: 'Responsável', email: `${stamp}.${suffix}@hr-bulk.test`, password, modules: ['hr'] } });
       expect(r.statusCode).toBe(201);
       if (suffix === 1) { owner = cookieOf(r); companyId = r.json().company.id; actorId = r.json().user.id; }
       else {
