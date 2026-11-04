@@ -5,13 +5,13 @@
  */
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { absences, ackDocuments, ackRequests, and, auditLogs, desc, employeeDocuments, employees, eq, expenseClaims, files, getDb, type Db } from '@kianda/db';
+import { absences, ackDocuments, ackRequests, and, auditLogs, candidates, desc, employeeDocuments, employees, eq, expenseClaims, files, getDb, jobOpenings, type Db } from '@kianda/db';
 import { requireCompany, type Actor, type AppEnv } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
 import { canSee } from '../services/scope.js';
 import { MAX_FILE_BYTES, readFileData, removeFiles, storeFile } from '../services/storage.js';
 
-export const FILE_ENTITIES = ['employee', 'employee_document', 'absence', 'expense_claim', 'ack_document'] as const;
+export const FILE_ENTITIES = ['employee', 'employee_document', 'absence', 'expense_claim', 'ack_document', 'candidate'] as const;
 type Entity = (typeof FILE_ENTITIES)[number];
 
 const HR = (a: Actor) => a.role === 'owner' || a.role === 'hr_admin';
@@ -19,6 +19,14 @@ const notFound = () => new DomainError('nao_encontrado', 'Registo inexistente', 
 
 /** Quem pode ver e anexar em cada registo. Registos de outra empresa não existem (RLS + filtro). */
 export async function fileAccess(db: Db, actor: Actor, entity: Entity, entityId: string): Promise<{ employeeId: string | null; read: boolean; write: boolean }> {
+  if (entity === 'candidate') {
+    const [row] = await db.select({ employeeId: candidates.employeeId, managerId: jobOpenings.hiringManagerId }).from(candidates)
+      .innerJoin(jobOpenings, and(eq(jobOpenings.id, candidates.openingId), eq(jobOpenings.companyId, actor.companyId)))
+      .where(and(eq(candidates.id, entityId), eq(candidates.companyId, actor.companyId)));
+    if (!row) throw notFound();
+    const allowed = HR(actor) || (actor.role === 'manager' && !!actor.employeeId && row.managerId === actor.employeeId);
+    return { employeeId: null, read: allowed, write: allowed && !row.employeeId };
+  }
   if (entity === 'employee' || entity === 'employee_document') {
     let employeeId = entityId;
     if (entity === 'employee_document') {

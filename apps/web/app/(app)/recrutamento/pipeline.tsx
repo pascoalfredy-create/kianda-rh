@@ -17,7 +17,7 @@ export function CandidatePipeline({ candidates, canHire }: { candidates: Pipelin
     if (!c?.movable || c.stage === stage || moving.current || stage === 'hired' || c.stage === 'hired') return;
     moving.current = true; setBusy(id); setError('');
     try {
-      const r = await send(`/v1/candidates/${encodeURIComponent(id)}/stage`, 'POST', { stage });
+      const r = await send(`/v1/candidates/${encodeURIComponent(id)}/stage`, 'POST', { stage, expectedStage: c.stage });
       if (!r.ok) setError(r.message ?? 'Não foi possível mudar de fase.');
       else { setRows(rs => rs.map(c => c.id === id ? { ...c, stage } : c)); router.refresh(); }
     } catch { setError('Sem ligação. A candidatura mantém a fase anterior. Tente novamente.'); }

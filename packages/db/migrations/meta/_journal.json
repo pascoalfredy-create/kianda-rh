@@ -351,6 +351,13 @@
       "when": 1793796136487,
       "tag": "0049_trial_payment_alignment",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1793829904741,
+      "tag": "0050_recruitment_public_portal",
+      "breakpoints": true
     }
   ]
 }

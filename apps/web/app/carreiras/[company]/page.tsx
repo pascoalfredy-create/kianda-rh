@@ -1,12 +1,12 @@
 import { upstream } from '@/lib/upstream';
-import { ApplyForm } from './apply';
+import Link from 'next/link';
 import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
 // As vagas foram publicadas para consulta externa; mantêm a sua indexação própria.
 export const metadata: Metadata = { robots: { index: true, follow: true } };
 
-interface Opening { id: string; title: string; location: string | null; contractType: string; description: string | null; requirements: string | null; closesOn: string | null; department: string | null }
+interface Opening { id: string; title: string; publicPath: string; location: string | null; contractType: string; description: string | null; requirements: string | null; closesOn: string | null; department: string | null }
 const CONTRACT: Record<string, string> = { indefinite: 'Tempo indeterminado', fixed_term: 'Tempo determinado', internship: 'Estágio' };
 
 /** Página pública de carreiras da empresa. */
@@ -17,6 +17,7 @@ export default async function Carreiras({ params }: { params: Promise<{ company:
   const d = (await res.json()) as { company: string; openings: Opening[] };
   return (
     <main style={{ maxWidth: 820, margin: '40px auto', padding: 20 }}>
+      <Link href="/">← Página inicial</Link>
       <div className="muted">Carreiras</div>
       <h1 style={{ marginBottom: 6 }}>Trabalhe na {d.company}</h1>
       <p className="sub">{d.openings.length ? `${d.openings.length} vaga(s) em aberto` : 'De momento não há vagas abertas.'}</p>
@@ -28,7 +29,7 @@ export default async function Carreiras({ params }: { params: Promise<{ company:
           </summary>
           {o.description && <p style={{ whiteSpace: 'pre-wrap' }}>{o.description}</p>}
           {o.requirements && <><b>Requisitos</b><p style={{ whiteSpace: 'pre-wrap' }}>{o.requirements}</p></>}
-          <ApplyForm company={company} openingId={o.id} />
+          <Link className="btn" href={o.publicPath}>Candidatar-me</Link>
         </details>
       ))}
       <p className="muted" style={{ marginTop: 30, fontSize: 12 }}>Os dados enviados são usados apenas neste processo de recrutamento. Plataforma Kianda RH.</p>

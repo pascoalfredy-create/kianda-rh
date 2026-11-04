@@ -3,7 +3,7 @@ import {
   angolanIbanProblem, isValidAngolanBI, kz, luandaDate, normalizeIban, packOrLatest, PackNotFoundError, type CompensationChange, type CountryPack, type DocumentType,
 } from '@kianda/core';
 import {
-  candidates, candidateEvents, auditLogs, compensationChanges, contracts, departments, employeeDocuments, employees, files, getDb, payrollRuns, users, type Db,
+  candidates, candidateEvents, auditLogs, compensationChanges, contracts, departments, employeeDocuments, employees, files, getDb, jobOpenings, payrollRuns, users, type Db,
 } from '@kianda/db';
 import { and, asc, desc, eq, gte, inArray, or, sql } from '@kianda/db';
 import { removeFiles } from '../services/storage.js';
@@ -216,6 +216,12 @@ export function employeeRoutes() {
     if (candidateId && !cand) throw new DomainError('nao_encontrado', 'Candidato inexistente', 404);
     if (cand && cand.stage !== 'offer') throw new DomainError('etapa_invalida', 'Só se admite um candidato na etapa de proposta', 409);
     const result = await db.transaction(async (tx) => {
+      if (cand) {
+        const [o] = await tx.select({ status: jobOpenings.status }).from(jobOpenings).where(and(eq(jobOpenings.id, cand.openingId), eq(jobOpenings.companyId, req.companyId))).for('update');
+        if (!o || o.status === 'closed') throw new DomainError('vaga_fechada', 'Reabra a vaga antes de admitir o candidato', 409);
+        const [current] = await tx.select({ stage: candidates.stage, employeeId: candidates.employeeId }).from(candidates).where(and(eq(candidates.id, cand.id), eq(candidates.companyId, req.companyId))).for('update');
+        if (!current || current.stage !== 'offer' || current.employeeId) throw new DomainError('candidatura_alterada', 'A candidatura mudou entretanto. Actualize o ecrã antes de admitir.', 409);
+      }
       const [e] = await tx.insert(employees).values({ companyId: req.companyId, ...data, biNumber: data.biNumber ?? null }).returning();
       const [c] = await tx.insert(contracts).values({
         employeeId: e!.id, type: contract.type, startDate: contract.startDate, endDate: contract.endDate, termJustification: contract.termJustification,
