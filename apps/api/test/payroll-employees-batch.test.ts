@@ -23,7 +23,7 @@ describe.skipIf(!process.env.DATABASE_URL)('processamento salarial por selecçã
       expect(r.statusCode, r.body).toBe(201); return r.json().id as string;
     };
     a = await person(owner, '1', 'Amélia Salário'); b = await person(owner, '2', 'Bento Salário'); c = await person(owner, '3', 'Carlos Salário');
-    foreign = await person(other, '1', 'Nome reservado de outra empresa'); future = await person(owner, '4', 'Contrato futuro', '2027-01-01');
+    foreign = await person(other, '1', 'Nome reservado de outra empresa'); future = await person(owner, '4', 'Contrato futuro', '2026-12-01');
     noContract = await person(owner, '5', 'Sem contrato elegível');
     await getDb().delete(compensationChanges).where(eq(compensationChanges.employeeId, noContract));
     await getDb().delete(contracts).where(eq(contracts.employeeId, noContract));
@@ -38,7 +38,7 @@ describe.skipIf(!process.env.DATABASE_URL)('processamento salarial por selecçã
   it('a preparação mostra salários dos elegíveis e o primeiro lote calcula apenas os seleccionados', async () => {
     const roster = await sheet('2026-10');
     expect(roster.payrollPeople.map((p: any) => p.id)).toEqual([a, b, c]);
-    expect(roster.payrollPeople[0]).toMatchObject({ baseMinor: 10000000, salaryCurrency: 'Kz' });
+    expect(roster.payrollPeople[0]).toMatchObject({ baseMinor: 10000000, salaryCurrency: 'AOA' });
     const first = await batch('2026-10', [a, b]);
     expect(first.statusCode, first.body).toBe(201); expect(first.json()).toMatchObject({ lines: 2, totalLines: 2 });
     const before = (await sheet('2026-10')).run;
