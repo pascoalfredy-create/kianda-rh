@@ -84,15 +84,16 @@ export function TemplateEditor({ tpl, fields }: { tpl: Tpl; fields: { key: strin
   const [ok, setOk] = useState('');
   const [source, setSource] = useState<{ name: string; previousBody: string } | null>(null);
   const [importBusy, setImportBusy] = useState(false), [importError, setImportError] = useState('');
+  const [ready, setReady] = useState(false);
   const [replaceText, setReplaceText] = useState(''), [field, setField] = useState(fields[0]?.key ?? '');
   const input = useRef<HTMLInputElement>(null), reading = useRef<AbortController | null>(null);
-  useEffect(() => () => reading.current?.abort(), []);
+  useEffect(() => { setReady(true); return () => reading.current?.abort(); }, []);
   const example = renderTemplate(bodyText, Object.fromEntries([...fields.map(f => [f.key, `[${f.label}]`]), ...tpl.inputs.map(i => [i.key, `[${i.label}]`])]));
   return (
     <div className="two" style={{ alignItems: 'start' }}>
       <div className="card form" style={{ gridTemplateColumns: '1fr' }}>
         <div>
-          <label>Importar modelo da empresa<input ref={input} type="file" accept=".docx,.doc,.pdf,.txt" disabled={busy || importBusy} onChange={async e => {
+          <label>Importar modelo da empresa<input ref={input} type="file" accept=".docx,.doc,.pdf,.txt" disabled={!ready || busy || importBusy} onChange={async e => {
             const file = e.target.files?.[0]; if (!file) return;
             reading.current?.abort(); const controller = new AbortController(); reading.current = controller;
             setImportBusy(true); setImportError(''); setOk('');
@@ -103,7 +104,7 @@ export function TemplateEditor({ tpl, fields }: { tpl: Tpl; fields: { key: strin
             } catch (err) { if (!controller.signal.aborted) setImportError((err as Error).message); }
             finally { if (!controller.signal.aborted) setImportBusy(false); if (input.current) input.current.value = ''; }
           }} /></label>
-          <p className="muted">Word DOCX, PDF com texto seleccionável ou TXT, até 10 MB. Importa as cláusulas e os parágrafos; reveja o texto e associe os dados variáveis aos campos do Kianda. O documento final usa o papel timbrado configurado pela empresa.</p>
+          <p className="muted">Word DOCX, PDF com texto seleccionável ou TXT, até 10 MB. Importa o texto e as cláusulas, sem a paginação nem as imagens originais. Reveja o texto e associe os dados variáveis aos campos do Kianda. O documento final usa o papel timbrado configurado pela empresa.</p>
           {importBusy && <p role="status">A ler o modelo… <button type="button" className="btn ghost sm" onClick={() => { reading.current?.abort(); setImportBusy(false); if (input.current) input.current.value = ''; }}>Cancelar leitura</button></p>}
           {source && <p role="status">Ficheiro: {source.name} <button type="button" className="btn ghost sm" disabled={busy} onClick={() => { reading.current?.abort(); setImportBusy(false); setBody(source.previousBody); setSource(null); setImportError(''); setOk(''); }}>Remover importação</button></p>}
           {importError && <p className="alert" role="alert">{importError}</p>}

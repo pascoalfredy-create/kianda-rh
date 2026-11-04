@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { fixtureWord } from '../../../packages/core/test/fixtures/document-import.js';
 import { fixturePdf } from '../../web/test-fixtures/pdf.js';
-import { apiAs, closePool, registerCompany, signIn, sql } from './support.js';
+import { apiAs, closePool, registerCompany, signIn, sql, watchErrors } from './support.js';
 
 test.afterAll(closePool);
 
@@ -49,12 +49,14 @@ test('cadastro sem planos: NIF obrigatório, palavra-passe visível e confirmaç
 });
 
 test('modelos RH: importa Word e PDF, remove um ficheiro errado e emite segundo as cláusulas da empresa', async ({ page, context }) => {
+  const errors = watchErrors(page);
   const owner = await registerCompany(); await signIn(context, owner.token);
   const employee = await apiAs(owner.token, 'POST', '/v1/employees', { number: '201', name: 'Amélia Modelo', jobTitle: 'Técnica', contract: { type: 'indefinite', startDate: '2026-01-01', base: 200000 } });
   expect(employee.status).toBe(201);
   await page.goto('/documentos/modelos/contrato_indeterminado');
   const editor = page.getByLabel('Texto do modelo', { exact: true }), original = await editor.inputValue();
   const input = page.getByLabel('Importar modelo da empresa', { exact: true });
+  await expect(input).toBeEnabled();
   const clauses = [['# CONTRATO DA EMPRESA'], ['Entre {{empresa.nome}} e {{colaborador.nome}}.'], ['Clausula singular da empresa: transporte conforme acordo interno.']];
   const word = Buffer.from(fixtureWord(clauses));
   await input.setInputFiles({ name: 'modelo-empresa.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: word });
@@ -78,11 +80,13 @@ test('modelos RH: importa Word e PDF, remove um ficheiro errado e emite segundo 
   const other = await registerCompany();
   const templates = await apiAs(other.token, 'GET', '/v1/document-templates');
   expect(templates.body.templates.find((t: { key: string }) => t.key === 'contrato_indeterminado').source).toBe('kianda');
+  expect(errors).toEqual([]);
 });
 
 test('mapas começam recolhidos e Ver abre a tabela no RH, Integra e Valora', async ({ page, context }) => {
   const owner = await registerCompany({ modules: ['hr', 'modeling', 'valuation'] }); await signIn(context, owner.token);
-  expect((await apiAs(owner.token, 'POST', '/v1/employees', { number: '301', name: 'Pessoa do mapa', contract: { type: 'indefinite', startDate: '2026-01-01', base: 200000 } })).status).toBe(201);
+  const person = await apiAs(owner.token, 'POST', '/v1/employees', { number: '301', name: 'Pessoa do mapa', jobTitle: 'Técnica', contract: { type: 'indefinite', startDate: '2026-01-01', base: 200000 } });
+  expect(person.status, JSON.stringify(person.body)).toBe(201);
   await page.goto('/processamento?mes=2026-10');
   await page.getByRole('button', { name: 'Preparar processamento' }).click();
   await expect(page.getByRole('button', { name: 'Recalcular' })).toBeVisible();
