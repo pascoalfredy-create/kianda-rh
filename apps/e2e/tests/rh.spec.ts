@@ -87,8 +87,8 @@ test('processamento salarial: preparar abre os campos, guarda um prémio e só d
   await expect(page.locator('details.map-disclosure').filter({ hasText: 'Mapa de processamento salarial' })).toBeVisible();
   await openMaps(page);
   for (const p of people) await expect(page.getByText(p.name).first()).toBeVisible();
-  await expect(page.getByRole('row', { name: new RegExp(people[0]!.name) })).toContainText('12.000,00');
-  await expect(page.getByRole('row', { name: new RegExp(people[1]!.name) })).not.toContainText('12.000,00');
+  await expect(page.getByRole('row', { name: new RegExp(people[0]!.name) })).toContainText(/12[\s.]000,00/);
+  await expect(page.getByRole('row', { name: new RegExp(people[1]!.name) })).not.toContainText(/12[\s.]000,00/);
   await expect(page.getByRole('button', { name: 'Recalcular' })).toBeVisible();
   await page.getByRole('button', { name: 'Rever preparação', exact: true }).click();
   await expect(preparation.getByRole('form', { name: 'Variável do processamento' })).toBeVisible();
