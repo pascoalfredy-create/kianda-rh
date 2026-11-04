@@ -3,6 +3,7 @@
  * Regras: montantes em cêntimos de kwanza (bigint); todas as tabelas de negócio têm company_id (multi-empresa).
  */
 import { relations, sql } from 'drizzle-orm';
+import type { CandidateProfile } from '@kianda/core';
 import {
   bigint, boolean, customType, date, doublePrecision, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex,
 } from 'drizzle-orm/pg-core';
@@ -870,6 +871,7 @@ export const candidates = pgTable('candidates', {
   rating: integer('rating'),
   cvUrl: text('cv_url'),
   coverLetter: text('cover_letter'),
+  profile: jsonb('profile').$type<CandidateProfile>().notNull().default({}),
   expectedSalaryMinor: bigint('expected_salary_minor', { mode: 'number' }),
   availableFrom: date('available_from'),
   rejectionReason: text('rejection_reason'),
@@ -1162,7 +1164,7 @@ export const auditLogs = pgTable('audit_logs', {
   before: jsonb('before'),
   after: jsonb('after'),
   at: createdAt(),
-}, (t) => [index('audit_logs_entity').on(t.companyId, t.entity, t.entityId)]);
+}, (t) => [index('audit_logs_entity').on(t.companyId, t.entity, t.entityId), index('audit_logs_company_action_at').on(t.companyId, t.action, t.at)]);
 
 export const employeesRelations = relations(employees, ({ one, many }) => ({
   company: one(companies, { fields: [employees.companyId], references: [companies.id] }),

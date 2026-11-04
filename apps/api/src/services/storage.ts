@@ -94,7 +94,11 @@ export async function storeFile(db: Db, v: StoreInput) {
     mime: kind.mime, sizeBytes: v.data.length, sha256: await sha256(v.data), storage: mode, uploadedBy: v.uploadedBy,
   }).returning();
   if (mode === 'db') await db.insert(fileBlobs).values({ fileId: f!.id, companyId: v.companyId, data: v.data });
-  else await objectStore!.put(keyOf(v.companyId, f!.id), v.data, kind.mime);
+  else {
+    const key = keyOf(v.companyId, f!.id);
+    try { await objectStore!.put(key, v.data, kind.mime); }
+    catch (error) { await objectStore!.delete([key]).catch(() => undefined); throw error; }
+  }
   return f!;
 }
 

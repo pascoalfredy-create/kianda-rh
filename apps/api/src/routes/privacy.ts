@@ -68,6 +68,8 @@ export function privacyRoutes() {
     const [cand] = await db.select().from(candidates).where(and(eq(candidates.id, c.req.param('id')), eq(candidates.companyId, actor.companyId)));
     if (!cand) throw new DomainError('nao_encontrado', 'Candidato inexistente', 404);
     if (cand.employeeId) throw new DomainError('contratado', 'O candidato foi contratado: os dados estão na ficha do colaborador');
+    const attachments = await db.select().from(files).where(and(eq(files.companyId, actor.companyId), eq(files.entity, 'candidate'), eq(files.entityId, cand.id)));
+    await removeFiles(db, attachments);
     await db.delete(candidateEvents).where(eq(candidateEvents.candidateId, cand.id));
     await db.delete(candidates).where(eq(candidates.id, cand.id));
     await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'delete_candidate', entity: 'candidate', entityId: cand.id });

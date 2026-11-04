@@ -1,6 +1,6 @@
-import { pipelineStats, SOURCES, STAGES, stageTransitionProblem, type Stage } from '@kianda/core';
+import { luandaDate, openingAcceptsApplications, pipelineStats, publicOpeningPath, SOURCES, STAGES, stageTransitionProblem, type Stage } from '@kianda/core';
 import {
-  and, asc, auditLogs, candidateEvents, candidates, companies, departments, desc, employees, eq, getDb, inArray, jobOpenings, type Db,
+  and, asc, auditLogs, candidateEvents, candidates, departments, desc, employees, eq, getDb, inArray, jobOpenings, type Db,
 } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -11,21 +11,33 @@ const isHr = (a: Actor) => a.role === 'owner' || a.role === 'hr_admin';
 const kz = z.number().nonnegative().max(1e11);
 const toMinor = (v: number | null | undefined) => (v === null || v === undefined ? null : Math.round(v * 100));
 
-const openingBody = z.object({
+const openingFields = z.object({
   title: z.string().trim().min(3, 'Indique o título da vaga').max(120),
   departmentId: z.string().optional().nullable(),
   hiringManagerId: z.string().optional().nullable(),
   location: z.string().trim().max(120).optional().nullable(),
-  contractType: z.enum(['indefinite', 'fixed_term', 'internship']).default('indefinite'),
-  positions: z.number().int().min(1).max(500).default(1),
+  contractType: z.enum(['indefinite', 'fixed_term', 'internship']),
+  positions: z.number().int().min(1).max(500),
   salaryMin: kz.optional().nullable(),
   salaryMax: kz.optional().nullable(),
   description: z.string().trim().max(5000).optional().nullable(),
   requirements: z.string().trim().max(5000).optional().nullable(),
-  status: z.enum(['draft', 'open', 'on_hold', 'closed']).default('draft'),
-  isPublic: z.boolean().default(false),
+  status: z.enum(['draft', 'open', 'on_hold', 'closed']),
+  isPublic: z.boolean(),
   closesOn: z.iso.date().optional().nullable(),
+});
+const openingBody = openingFields.extend({
+  contractType: openingFields.shape.contractType.default('indefinite'), positions: openingFields.shape.positions.default(1),
+  status: openingFields.shape.status.default('draft'), isPublic: openingFields.shape.isPublic.default(false),
 }).refine((b) => b.salaryMin == null || b.salaryMax == null || b.salaryMin <= b.salaryMax, { message: 'Mínimo acima do máximo', path: ['salaryMax'] });
+
+const openingView = (o: typeof jobOpenings.$inferSelect) => ({ ...o, publicPath: publicOpeningPath(o.companyId, o.id), acceptingApplications: openingAcceptsApplications(o, luandaDate(new Date())) });
+
+async function checkOpening(db: Db, companyId: string, b: z.infer<typeof openingBody>) {
+  if (b.departmentId && !(await db.select({ id: departments.id }).from(departments).where(and(eq(departments.id, b.departmentId), eq(departments.companyId, companyId)))).length) throw new DomainError('departamento_invalido', 'Escolha um departamento desta empresa', 400);
+  if (b.hiringManagerId && !(await db.select({ id: employees.id }).from(employees).where(and(eq(employees.id, b.hiringManagerId), eq(employees.companyId, companyId)))).length) throw new DomainError('chefia_invalida', 'Escolha uma chefia desta empresa', 400);
+  if (b.isPublic && b.status === 'open' && b.closesOn && b.closesOn < luandaDate(new Date())) throw new DomainError('prazo_vencido', 'Actualize o prazo de candidatura antes de publicar', 400);
+}
 
 const candidateBody = z.object({
   name: z.string().trim().min(3, 'Indique o nome').max(120),
@@ -39,16 +51,17 @@ const candidateBody = z.object({
   note: z.string().trim().max(2000).optional().nullable(),
 });
 
-async function opening(db: Db, actor: Actor, id: string) {
-  const [o] = await db.select().from(jobOpenings).where(and(eq(jobOpenings.id, id), eq(jobOpenings.companyId, actor.companyId)));
+async function opening(db: Db, actor: Actor, id: string, lock = false) {
+  const query = db.select().from(jobOpenings).where(and(eq(jobOpenings.id, id), eq(jobOpenings.companyId, actor.companyId)));
+  const [o] = lock ? await query.for('update') : await query;
   if (!o || (!isHr(actor) && (!actor.employeeId || o.hiringManagerId !== actor.employeeId))) throw new DomainError('nao_encontrado', 'Vaga inexistente', 404);
   return o;
 }
 
-async function candidate(db: Db, actor: Actor, id: string) {
+async function candidate(db: Db, actor: Actor, id: string, lockOpening = false) {
   const [c] = await db.select().from(candidates).where(and(eq(candidates.id, id), eq(candidates.companyId, actor.companyId)));
   if (!c) throw new DomainError('nao_encontrado', 'Candidato inexistente', 404);
-  const o = await opening(db, actor, c.openingId);
+  const o = await opening(db, actor, c.openingId, lockOpening);
   return { c, o };
 }
 
@@ -72,7 +85,7 @@ export function recruitmentRoutes() {
     const cs = rows.length ? await db.select({ id: candidates.id, name: candidates.name, rating: candidates.rating, openingId: candidates.openingId, stage: candidates.stage, source: candidates.source, createdAt: candidates.createdAt, hiredAt: candidates.hiredAt })
       .from(candidates).where(inArray(candidates.openingId, rows.map((r) => r.o.id))) : [];
     return c.json(rows.map(({ o, dept, manager }) => ({
-      ...o, departmentName: dept, hiringManagerName: manager,
+      ...openingView(o), departmentName: dept, hiringManagerName: manager,
       ...(c.req.query('includeCandidates') === '1' ? { candidates: cs.filter(x => x.openingId === o.id).map(x => ({ id: x.id, name: x.name, rating: x.rating, stage: x.stage, source: x.source })) } : {}),
       stats: pipelineStats(cs.filter((x) => x.openingId === o.id).map((x) => ({ stage: x.stage as Stage, source: x.source, createdAt: x.createdAt.toISOString(), hiredAt: x.hiredAt?.toISOString() ?? null }))),
     })));
@@ -82,26 +95,31 @@ export function recruitmentRoutes() {
     const actor = c.get('actor');
     if (!isHr(actor)) throw new DomainError('sem_permissao', 'Só o RH cria vagas', 403);
     const b = openingBody.parse(await body(c));
+    await checkOpening(getDb(), actor.companyId, b);
     const { salaryMin, salaryMax, ...rest } = b;
-    const [o] = await getDb().insert(jobOpenings).values({ companyId: actor.companyId, ...rest, salaryMinMinor: toMinor(salaryMin), salaryMaxMinor: toMinor(salaryMax), createdBy: actor.actorId }).returning();
+    const [o] = await getDb().insert(jobOpenings).values({ companyId: actor.companyId, ...rest, isPublic: b.status === 'open' && b.isPublic, salaryMinMinor: toMinor(salaryMin), salaryMaxMinor: toMinor(salaryMax), createdBy: actor.actorId, closedAt: b.status === 'closed' ? new Date() : null }).returning();
     await getDb().insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'create', entity: 'job_opening', entityId: o!.id, after: o });
-    return c.json(o, 201);
+    return c.json(openingView(o!), 201);
   });
 
   app.patch('/v1/openings/:id', async (c) => {
     const actor = c.get('actor');
     if (!isHr(actor)) throw new DomainError('sem_permissao', 'Só o RH altera vagas', 403);
     const db = getDb();
-    const before = await opening(db, actor, c.req.param('id'));
-    const b = openingBody.partial().parse(await body(c));
+    const before = await opening(db, actor, c.req.param('id'), true);
+    const patch = openingFields.partial().parse(await body(c));
+    const b = openingBody.parse({ ...before, salaryMin: before.salaryMinMinor == null ? null : before.salaryMinMinor / 100, salaryMax: before.salaryMaxMinor == null ? null : before.salaryMaxMinor / 100, ...patch });
+    await checkOpening(db, actor.companyId, b);
     const { salaryMin, salaryMax, ...rest } = b;
     const [o] = await db.update(jobOpenings).set({
       ...rest,
-      ...(salaryMin !== undefined ? { salaryMinMinor: toMinor(salaryMin) } : {}), ...(salaryMax !== undefined ? { salaryMaxMinor: toMinor(salaryMax) } : {}),
-      ...(b.status === 'closed' && before.status !== 'closed' ? { closedAt: new Date(), isPublic: false } : {}),
-    }).where(eq(jobOpenings.id, before.id)).returning();
+      salaryMinMinor: toMinor(salaryMin), salaryMaxMinor: toMinor(salaryMax),
+      isPublic: b.status === 'open' && b.isPublic,
+      closedAt: b.status === 'closed' ? before.closedAt ?? new Date() : null,
+    }).where(and(eq(jobOpenings.id, before.id), eq(jobOpenings.companyId, actor.companyId), eq(jobOpenings.status, before.status))).returning();
+    if (!o) throw new DomainError('vaga_alterada', 'A vaga foi alterada entretanto. Actualize o ecrã e tente novamente.', 409);
     await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'update', entity: 'job_opening', entityId: before.id, before, after: o });
-    return c.json(o);
+    return c.json(openingView(o));
   });
 
   app.get('/v1/openings/:id', async (c) => {
@@ -110,7 +128,7 @@ export function recruitmentRoutes() {
     const o = await opening(db, actor, c.req.param('id'));
     const cs = await db.select().from(candidates).where(eq(candidates.openingId, o.id)).orderBy(asc(candidates.createdAt));
     return c.json({
-      ...o, canEdit: isHr(actor),
+      ...openingView(o), canEdit: isHr(actor),
       candidates: cs.map((x) => ({ ...x, cvUrl: x.cvUrl })),
       stats: pipelineStats(cs.map((x) => ({ stage: x.stage as Stage, source: x.source, createdAt: x.createdAt.toISOString(), hiredAt: x.hiredAt?.toISOString() ?? null }))),
     });
@@ -135,7 +153,7 @@ export function recruitmentRoutes() {
     const db = getDb();
     const { c: x, o } = await candidate(db, actor, c.req.param('id'));
     const events = await db.select().from(candidateEvents).where(eq(candidateEvents.candidateId, x.id)).orderBy(desc(candidateEvents.createdAt));
-    return c.json({ ...x, opening: { id: o.id, title: o.title, status: o.status, contractType: o.contractType, departmentId: o.departmentId, hiringManagerId: o.hiringManagerId }, events, canHire: isHr(actor) && x.stage === 'offer' });
+    return c.json({ ...x, opening: { id: o.id, title: o.title, status: o.status, contractType: o.contractType, departmentId: o.departmentId, hiringManagerId: o.hiringManagerId }, events, canHire: isHr(actor) && x.stage === 'offer' && o.status !== 'closed' });
   });
 
   app.patch('/v1/candidates/:id', async (c) => {
@@ -154,14 +172,17 @@ export function recruitmentRoutes() {
   /** Mudar de etapa. A contratação faz-se pela admissão (cria a ficha e fecha o candidato). */
   app.post('/v1/candidates/:id/stage', async (c) => {
     const actor = c.get('actor');
-    const b = z.object({ stage: z.enum(STAGES), reason: z.string().trim().max(500).optional().nullable() }).parse(await body(c));
+    const b = z.object({ stage: z.enum(STAGES), expectedStage: z.enum(STAGES).optional(), reason: z.string().trim().max(500).optional().nullable() }).parse(await body(c));
     const db = getDb();
-    const { c: x } = await candidate(db, actor, c.req.param('id'));
+    const { c: x, o } = await candidate(db, actor, c.req.param('id'), true);
+    if (o.status === 'closed') throw new DomainError('vaga_fechada', 'Reabra a vaga antes de avançar candidaturas', 409);
+    if (b.expectedStage && b.expectedStage !== x.stage) throw new DomainError('candidatura_alterada', 'A etapa mudou entretanto. Actualize a candidatura.', 409);
     const problem = stageTransitionProblem(x.stage as Stage, b.stage);
     if (problem) throw new DomainError('etapa_invalida', problem, 409);
     if (b.stage === 'hired') throw new DomainError('usar_admissao', 'Para contratar, use "Admitir" — cria a ficha do colaborador', 409);
     if (b.stage === 'rejected' && !b.reason) throw new DomainError('motivo_obrigatorio', 'Indique o motivo da recusa', 400);
-    const [u] = await db.update(candidates).set({ stage: b.stage, rejectionReason: b.stage === 'rejected' ? b.reason! : null, updatedAt: new Date() }).where(eq(candidates.id, x.id)).returning();
+    const [u] = await db.update(candidates).set({ stage: b.stage, rejectionReason: b.stage === 'rejected' ? b.reason! : null, updatedAt: new Date() }).where(and(eq(candidates.id, x.id), eq(candidates.stage, x.stage))).returning();
+    if (!u) throw new DomainError('candidatura_alterada', 'A etapa mudou entretanto. Actualize a candidatura.', 409);
     await event(db, actor, { candidateId: x.id, kind: 'stage', fromStage: x.stage, toStage: b.stage, text: b.reason ?? null });
     return c.json(u);
   });
@@ -178,48 +199,3 @@ export function recruitmentRoutes() {
 
   return app;
 }
-
-/** Página de carreiras (pública): vagas abertas e candidatura. */
-export function careersRoutes() {
-  const app = new Hono<AppEnv>();
-  const company = async (db: Db, id: string) => {
-    const [co] = await db.select({ id: companies.id, name: companies.name }).from(companies).where(eq(companies.id, id));
-    if (!co) throw new DomainError('nao_encontrado', 'Empresa inexistente', 404);
-    return co;
-  };
-  const publicOpenings = (db: Db, companyId: string) => db.select({
-    id: jobOpenings.id, title: jobOpenings.title, location: jobOpenings.location, contractType: jobOpenings.contractType, description: jobOpenings.description,
-    requirements: jobOpenings.requirements, closesOn: jobOpenings.closesOn, department: departments.name,
-  }).from(jobOpenings).leftJoin(departments, eq(departments.id, jobOpenings.departmentId))
-    .where(and(eq(jobOpenings.companyId, companyId), eq(jobOpenings.status, 'open'), eq(jobOpenings.isPublic, true))).orderBy(desc(jobOpenings.createdAt));
-
-  app.get('/v1/public/careers/:companyId', async (c) => {
-    const db = getDb();
-    const co = await company(db, c.req.param('companyId'));
-    const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
-    return c.json({ company: co.name, openings: (await publicOpenings(db, co.id)).filter((o) => !o.closesOn || o.closesOn >= today) });
-  });
-
-  app.post('/v1/public/careers/:companyId/openings/:openingId/apply', async (c) => {
-    const db = getDb();
-    const co = await company(db, c.req.param('companyId'));
-    const b = z.object({
-      name: z.string().trim().min(3, 'Indique o nome completo').max(120), email: z.email('Email inválido'), phone: z.string().trim().min(9, 'Indique o telefone').max(30),
-      cvUrl: z.url('Ligação inválida').optional().nullable().or(z.literal('')), coverLetter: z.string().trim().max(3000).optional().nullable(),
-      consent: z.literal(true, { message: 'É necessário autorizar o tratamento dos dados' }),
-      website: z.string().max(0).optional(), // armadilha para robôs: tem de vir vazio
-    }).parse(await body(c));
-    const o = (await publicOpenings(db, co.id)).find((x) => x.id === c.req.param('openingId'));
-    if (!o) throw new DomainError('vaga_indisponivel', 'Esta vaga já não está a receber candidaturas', 404);
-    const [dup] = await db.select({ id: candidates.id }).from(candidates).where(and(eq(candidates.openingId, o.id), eq(candidates.email, b.email.toLowerCase())));
-    if (dup) throw new DomainError('candidatura_repetida', 'Já recebemos uma candidatura sua para esta vaga', 409);
-    const [x] = await db.insert(candidates).values({
-      companyId: co.id, openingId: o.id, name: b.name, email: b.email.toLowerCase(), phone: b.phone, source: 'site', cvUrl: b.cvUrl || null,
-      coverLetter: b.coverLetter ?? null, consentAt: new Date(),
-    }).returning();
-    await db.insert(candidateEvents).values({ candidateId: x!.id, kind: 'stage', toStage: 'applied', text: 'Candidatura pela página de carreiras', actorName: b.name });
-    return c.json({ ok: true, message: `Candidatura recebida. Obrigado, ${b.name.split(' ')[0]}!` }, 201);
-  });
-  return app;
-}
-

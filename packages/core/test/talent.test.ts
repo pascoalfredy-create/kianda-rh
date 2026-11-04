@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { cycleProblems, DEFAULT_COMPETENCIES, pipelineStats, ratingDistribution, ratingLabel, reviewScore, stageTransitionProblem } from '../src/index.js';
+import { cycleProblems, DEFAULT_COMPETENCIES, openingAcceptsApplications, pipelineStats, ratingDistribution, ratingLabel, reviewScore, stageTransitionProblem } from '../src/index.js';
 
 describe('recrutamento', () => {
+  it('só recebe candidaturas em vagas públicas abertas, incluindo o último dia do prazo', () => {
+    const o = { status: 'open', isPublic: true, closesOn: '2026-11-04' };
+    expect(openingAcceptsApplications(o, '2026-11-04')).toBe(true);
+    expect(openingAcceptsApplications(o, '2026-11-05')).toBe(false);
+    expect(openingAcceptsApplications({ ...o, closesOn: null }, '2027-01-01')).toBe(true);
+    for (const status of ['draft', 'on_hold', 'closed']) expect(openingAcceptsApplications({ ...o, status }, '2026-11-04')).toBe(false);
+    expect(openingAcceptsApplications({ ...o, isPublic: false }, '2026-11-04')).toBe(false);
+  });
   it('indicadores do pipeline', () => {
     const s = pipelineStats([
       { stage: 'applied', source: 'site', createdAt: '2026-10-01' }, { stage: 'interview', source: 'referral', createdAt: '2026-10-02' },

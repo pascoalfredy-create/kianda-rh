@@ -1,8 +1,27 @@
 import { expect, test } from '@playwright/test';
 import { apiAs, closePool, registerCompany, signIn, sql, watchErrors, valoraGo } from './support.js';
+import { fixtureWord } from '../../../packages/core/test/fixtures/document-import.js';
 
 /** Telemóvel (Pixel 7): navegação do RH e Integra com menu, versões em cartões e acções visíveis. */
 test.afterAll(closePool);
+
+test('portal de candidatura no telefone: abre o link sem conta e recebe CV Word sem alargar o ecrã', async ({ page }) => {
+  const owner = await registerCompany();
+  const o = await apiAs(owner.token, 'POST', '/v1/openings', { title: 'Técnico de recrutamento móvel', status: 'open', isPublic: true });
+  expect(o.status).toBe(201); await page.goto(o.body.publicPath);
+  await expect(page.getByRole('heading', { name: 'Técnico de recrutamento móvel', exact: true })).toBeVisible();
+  await page.getByLabel('Nome completo', { exact: true }).fill('Candidata Telemóvel');
+  await page.getByLabel('Email', { exact: true }).fill(`mobile.${Date.now()}@e2e.kianda.test`);
+  await page.getByLabel('Telefone', { exact: true }).fill('923000444');
+  await page.getByLabel('Currículo (CV)', { exact: true }).setInputFiles({ name: 'curriculo-telemovel.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: Buffer.from(fixtureWord([['CV sintético no telefone']])) });
+  await page.getByText('Dados profissionais (opcional)', { exact: true }).click();
+  await page.getByLabel('Função actual', { exact: true }).fill('Técnica');
+  expect(await page.evaluate<number>('document.documentElement.scrollWidth - window.innerWidth')).toBeLessThanOrEqual(1);
+  await page.getByLabel('Autorizo o tratamento dos meus dados para este processo de recrutamento.', { exact: true }).check();
+  await page.getByRole('button', { name: 'Enviar candidatura', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Candidatura recebida');
+  expect((await apiAs(owner.token, 'GET', `/v1/openings/${o.body.id}`)).body.candidates).toHaveLength(1);
+});
 
 test('RH no telemóvel: menu ☰ com grupos recolhíveis leva a Férias e ausências', async ({ page, context }) => {
   const company = await registerCompany({ name: 'Telemóvel RH E2E' });

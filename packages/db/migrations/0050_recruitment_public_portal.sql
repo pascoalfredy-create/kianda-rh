@@ -1,0 +1,2 @@
+ALTER TABLE "candidates" ADD COLUMN "profile" jsonb DEFAULT '{}'::jsonb NOT NULL;--> statement-breakpoint
+CREATE INDEX "audit_logs_company_action_at" ON "audit_logs" USING btree ("company_id","action","created_at");

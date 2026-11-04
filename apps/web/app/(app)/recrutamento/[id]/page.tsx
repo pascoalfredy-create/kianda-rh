@@ -3,11 +3,12 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import { AddCandidate, OpeningForm } from '../forms';
 import { OPENING_STATUS } from '../status';
+import { Publication } from '../publication';
 
 export const dynamic = 'force-dynamic';
 
 interface Cand { id: string; name: string; stage: Stage; source: keyof typeof SOURCES; rating: number | null; createdAt: string; updatedAt: string; rejectionReason: string | null }
-interface Detail { id: string; title: string; status: string; isPublic: boolean; canEdit: boolean; description: string | null; requirements: string | null; candidates: Cand[]; stats: { total: number; hireRate: number; avgDaysToHire: number | null; bySource: Record<string, number> } }
+interface Detail { id: string; title: string; status: string; isPublic: boolean; publicPath: string; acceptingApplications: boolean; canEdit: boolean; description: string | null; requirements: string | null; candidates: Cand[]; stats: { total: number; hireRate: number; avgDaysToHire: number | null; bySource: Record<string, number> } }
 
 const days = (d: string) => Math.max(0, Math.round((Date.now() - Date.parse(d)) / 86_400_000));
 
@@ -31,6 +32,7 @@ export default async function Vaga({ params, searchParams }: { params: Promise<{
         </span>
       </div>
       {sp.editar && o.canEdit && <OpeningForm departments={departments} people={people.filter((p) => p.status === 'active')} init={o as never} />}
+      {!sp.editar && <Publication id={o.id} publicPath={o.publicPath} status={o.status} isPublic={o.isPublic} acceptingApplications={o.acceptingApplications} canEdit={o.canEdit} />}
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${PIPELINE.length}, minmax(180px, 1fr))`, gap: 10, overflowX: 'auto', marginBottom: 16 }}>
         {PIPELINE.map((s) => {
           const cs = o.candidates.filter((c) => c.stage === s);

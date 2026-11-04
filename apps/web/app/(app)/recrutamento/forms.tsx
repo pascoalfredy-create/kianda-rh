@@ -2,6 +2,7 @@
 
 import { SOURCES, STAGE_LABEL, type Stage, parseAmount } from '@kianda/core';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useMutation } from '@/lib/client';
 
 const num = (v: FormDataEntryValue | null) => { const t = String(v ?? '').trim(); const m = parseAmount(t); return t === '' ? null : m === null ? NaN : m / 100; };
@@ -9,18 +10,21 @@ const num = (v: FormDataEntryValue | null) => { const t = String(v ?? '').trim()
 export function OpeningForm({ departments, people, init }: { departments: { id: string; name: string }[]; people: { id: string; name: string }[]; init?: Record<string, unknown> & { id: string } }) {
   const { busy, error, run } = useMutation();
   const [open, setOpen] = useState(Boolean(init));
+  const router = useRouter();
   if (!open) return <button className="btn" onClick={() => setOpen(true)}>Nova vaga</button>;
   const v = (k: string) => (init?.[k] as string | undefined) ?? '';
   return (
     <form className="card form" style={{ marginBottom: 16 }} onSubmit={async (e) => {
       e.preventDefault();
       const f = new FormData(e.currentTarget);
+      const publish = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('value') === 'publish';
+      const status = String(f.get('status'));
       const payload = {
         title: f.get('title'), departmentId: f.get('departmentId') || null, hiringManagerId: f.get('hiringManagerId') || null, location: f.get('location') || null,
         contractType: f.get('contractType'), positions: Number(f.get('positions') || 1), salaryMin: num(f.get('salaryMin')), salaryMax: num(f.get('salaryMax')),
-        description: f.get('description') || null, requirements: f.get('requirements') || null, status: f.get('status'), isPublic: f.get('isPublic') === 'on', closesOn: f.get('closesOn') || null,
+        description: f.get('description') || null, requirements: f.get('requirements') || null, status: publish || (status === 'draft' && f.get('isPublic') === 'on') ? 'open' : status, isPublic: publish || f.get('isPublic') === 'on', closesOn: f.get('closesOn') || null,
       };
-      if (await run(init ? `/v1/openings/${init.id}` : '/v1/openings', init ? 'PATCH' : 'POST', payload) && !init) setOpen(false);
+      if (await run<{ id: string }>(init ? `/v1/openings/${init.id}` : '/v1/openings', init ? 'PATCH' : 'POST', payload, o => { if (o) router.push(`/recrutamento/${o.id}`); }) && !init) setOpen(false);
     }}>
       <h3>{init ? 'Editar vaga' : 'Nova vaga'}</h3>
       <label className="span2">Título<input name="title" required defaultValue={v('title')} placeholder="Ex.: Contabilista sénior" /></label>
@@ -41,6 +45,7 @@ export function OpeningForm({ departments, people, init }: { departments: { id: 
         {error && <span className="err">{error}</span>}
         {!init && <button type="button" className="btn ghost" onClick={() => setOpen(false)}>Cancelar</button>}
         <button className="btn" disabled={busy}>{init ? 'Gravar' : 'Criar vaga'}</button>
+        {!init && <button className="btn" name="action" value="publish" disabled={busy}>Criar e publicar</button>}
       </div>
     </form>
   );
@@ -75,7 +80,7 @@ export function StageActions({ id, stage, canHire }: { id: string; stage: Stage;
   const [reject, setReject] = useState(false);
   const [reason, setReason] = useState('');
   const i = ORDER.indexOf(stage);
-  const go = (s: Stage, r?: string) => run(`/v1/candidates/${id}/stage`, 'POST', { stage: s, reason: r ?? null });
+  const go = (s: Stage, r?: string) => run(`/v1/candidates/${id}/stage`, 'POST', { stage: s, expectedStage: stage, reason: r ?? null });
   return (
     <div className="card" style={{ padding: 14, marginBottom: 14, display: 'grid', gap: 10 }}>
       <div className="actions" style={{ justifyContent: 'flex-start' }}>

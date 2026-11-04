@@ -8,7 +8,7 @@ import { OpeningForm } from './forms';
 
 export const dynamic = 'force-dynamic';
 
-interface Opening { id: string; title: string; status: string; isPublic: boolean; departmentName: string | null; hiringManagerName: string | null; positions: number; location: string | null; salaryMinMinor: number | null; salaryMaxMinor: number | null; closesOn: string | null; candidates: Omit<PipelineCandidate, 'openingId' | 'openingTitle' | 'movable'>[]; stats: { total: number; active: number; byStage: Record<string, number>; hireRate: number; avgDaysToHire: number | null } }
+interface Opening { id: string; title: string; status: string; isPublic: boolean; acceptingApplications: boolean; departmentName: string | null; hiringManagerName: string | null; positions: number; location: string | null; salaryMinMinor: number | null; salaryMaxMinor: number | null; closesOn: string | null; candidates: Omit<PipelineCandidate, 'openingId' | 'openingTitle' | 'movable'>[]; stats: { total: number; active: number; byStage: Record<string, number>; hireRate: number; avgDaysToHire: number | null } }
 const OPENING_STATUS: Record<string, [string, string]> = { draft: ['Rascunho', 'tag'], open: ['Aberta', 'st approved'], on_hold: ['Suspensa', 'st pending'], closed: ['Fechada', 'tag'] };
 
 export default async function Recrutamento({ searchParams }: { searchParams: Promise<{ vaga?: string }> }) {
@@ -34,7 +34,7 @@ export default async function Recrutamento({ searchParams }: { searchParams: Pro
             <div className="muted">{[o.departmentName, o.location, o.hiringManagerName && `resp. ${o.hiringManagerName}`].filter(Boolean).join(' · ') || '—'}</div>
             <div><b>{o.stats.active}</b> em processo · {o.stats.total} candidato(s){o.stats.byStage.hired ? ` · ${o.stats.byStage.hired} contratado(s)` : ''}</div>
             {hr && (o.salaryMinMinor || o.salaryMaxMinor) ? <div className="muted">{o.salaryMinMinor ? formatKz(o.salaryMinMinor) : '…'} – {o.salaryMaxMinor ? formatKz(o.salaryMaxMinor) : '…'}</div> : null}
-            {o.isPublic && <span className="tag future" style={{ justifySelf: 'start' }}>publicada</span>}
+            {o.isPublic && <span className="tag future" style={{ justifySelf: 'start' }}>{o.acceptingApplications ? 'publicada' : 'prazo encerrado'}</span>}
           </Link>
         ))}
       </div>

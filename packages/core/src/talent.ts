@@ -7,7 +7,7 @@
 export const STAGES = ['applied', 'screening', 'interview', 'assessment', 'offer', 'hired', 'rejected', 'withdrawn'] as const;
 export type Stage = (typeof STAGES)[number];
 export const STAGE_LABEL: Record<Stage, string> = {
-  applied: 'Candidatura', screening: 'Triagem', interview: 'Entrevista', assessment: 'Prova técnica', offer: 'Proposta',
+  applied: 'Recebida', screening: 'Triagem', interview: 'Entrevista', assessment: 'Prova técnica', offer: 'Proposta',
   hired: 'Contratado', rejected: 'Recusado', withdrawn: 'Desistiu',
 };
 /** Etapas activas do pipeline (colunas do quadro). */
@@ -16,6 +16,22 @@ export const CLOSED_STAGES: Stage[] = ['hired', 'rejected', 'withdrawn'];
 
 export const SOURCES = { site: 'Página de carreiras', referral: 'Indicação interna', linkedin: 'LinkedIn', agency: 'Agência', spontaneous: 'Candidatura espontânea', other: 'Outra' } as const;
 export type CandidateSource = keyof typeof SOURCES;
+
+export interface CandidateProfile {
+  currentRole?: string | null;
+  yearsExperience?: number | null;
+  highestEducation?: string | null;
+  fieldOfStudy?: string | null;
+  linkedinUrl?: string | null;
+}
+
+/** Ligação estável da vaga, utilizável sem conta Kianda. */
+export const publicOpeningPath = (companyId: string, openingId: string) => `/carreiras/${encodeURIComponent(companyId)}/vagas/${encodeURIComponent(openingId)}`;
+
+/** A mesma regra vale na lista, no detalhe e na submissão; o último dia ainda é válido. */
+export function openingAcceptsApplications(opening: { status: string; isPublic: boolean; closesOn: string | null }, today: string) {
+  return opening.status === 'open' && opening.isPublic && (!opening.closesOn || opening.closesOn >= today);
+}
 
 export interface CandidateLite { stage: Stage; source: string; createdAt: string; hiredAt?: string | null }
 
