@@ -36,6 +36,9 @@ test('cadastro sem planos: NIF obrigatório, palavra-passe visível e confirmaç
   await expect(page).toHaveURL(/\/confirmar-email$/);
   await expect(page.getByRole('heading', { name: 'Confirme o seu email' })).toBeVisible();
   await expect(page.locator('body')).toContainText('30 dias');
+  await page.getByRole('link', { name: '← Página inicial', exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('heading', { name: /Cuide da sua equipa/ })).toBeVisible();
   await page.goto('/modelagem');
   await expect(page).toHaveURL(/\/confirmar-email$/);
   // Confirmação sintética para exercitar a passagem à escolha dos módulos; o token real tem testes API.
@@ -79,7 +82,10 @@ test('modelos RH: importa Word e PDF, remove um ficheiro errado e emite segundo 
 
 test('mapas começam recolhidos e Ver abre a tabela no RH, Integra e Valora', async ({ page, context }) => {
   const owner = await registerCompany({ modules: ['hr', 'modeling', 'valuation'] }); await signIn(context, owner.token);
-  await page.goto('/relatorios');
+  expect((await apiAs(owner.token, 'POST', '/v1/employees', { number: '301', name: 'Pessoa do mapa', contract: { type: 'indefinite', startDate: '2026-01-01', base: 200000 } })).status).toBe(201);
+  await page.goto('/processamento?mes=2026-10');
+  await page.getByRole('button', { name: 'Preparar processamento' }).click();
+  await expect(page.getByRole('button', { name: 'Recalcular' })).toBeVisible();
   let map = page.locator('details.map-disclosure').first();
   await expect(map).toBeVisible(); await expect(map).not.toHaveAttribute('open', '');
   await expect(map.locator('table')).toBeHidden();

@@ -110,7 +110,7 @@ export function TemplateEditor({ tpl, fields }: { tpl: Tpl; fields: { key: strin
         </div>
         <label>Título<input value={title} onChange={(e) => setTitle(e.target.value)} /></label>
         <label>Texto do modelo
-          <textarea value={bodyText} disabled={importBusy || busy} onChange={(e) => setBody(e.target.value)} rows={26} style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12.5, lineHeight: 1.5 }} />
+          <textarea aria-label="Texto do modelo" value={bodyText} disabled={importBusy || busy} onChange={(e) => setBody(e.target.value)} rows={26} style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12.5, lineHeight: 1.5 }} />
         </label>
         <p className="muted">Campos entre chavetas duplas; <code>{'{{#se campo}}…{{/se}}'}</code> só mostra o texto se o campo tiver valor; <code># </code> no início = título; <code>**negrito**</code>; <code>--- assinaturas: A | B</code>. Campos <code>pedido.*</code> são pedidos na emissão.</p>
         <label>Texto a transformar num campo<input value={replaceText} onChange={e => setReplaceText(e.target.value)} placeholder="Ex.: o nome escrito no contrato importado" /></label>

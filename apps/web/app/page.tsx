@@ -10,11 +10,11 @@ export const dynamic = 'force-dynamic';
 
 export async function generateMetadata(): Promise<Metadata> {
   const signedIn = (await cookies()).has(SESSION_COOKIE) && await currentUser();
-  return signedIn ? { title: 'Kianda RH', robots: { index: false, follow: false } } : PUBLIC_METADATA;
+  return signedIn && !signedIn.user.requiresEmailVerification ? { title: 'Kianda RH', robots: { index: false, follow: false } } : PUBLIC_METADATA;
 }
 
 /** Visitantes conhecem os módulos; as sessões mantêm o mesmo painel e permissões. */
 export default async function EntryPage() {
   const me = (await cookies()).has(SESSION_COOKIE) ? await currentUser() : null;
-  return me ? <AppLayout><Home /></AppLayout> : <PublicHome />;
+  return me && !me.user.requiresEmailVerification ? <AppLayout><Home /></AppLayout> : <PublicHome />;
 }

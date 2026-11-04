@@ -70,6 +70,8 @@ test('processamento salarial: preparar o mês no ecrã calcula a folha dos dois 
   await page.goto('/processamento?mes=2026-10');
   await expect(page.locator('body')).toContainText(/Outubro/i);
   await page.getByRole('button', { name: 'Preparar processamento' }).click();
+  await expect(page.getByRole('button', { name: 'Recalcular' })).toBeVisible();
+  await expect(page.locator('details.map-disclosure').filter({ hasText: 'Mapa de processamento salarial' })).toBeVisible();
   await openMaps(page);
   for (const p of people) await expect(page.getByText(p.name).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Recalcular' })).toBeVisible();

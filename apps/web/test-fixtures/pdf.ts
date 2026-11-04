@@ -1,4 +1,5 @@
-import type { PdfTextItem } from '../modeling/pdf-import';
+/** Estrutura independente do leitor do navegador: esta fixture também corre em testes Node. */
+interface PdfTextItem { str: string; transform: number[]; width: number; height: number }
 /** PDF real de teste: texto WinAnsi, objectos, streams e xref, sem dependência de um gerador externo. */
 export function fixturePdf(pages: PdfTextItem[][]): Uint8Array {
   const objects: string[] = ['', '<< /Type /Catalog /Pages 2 0 R >>', '', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'];
