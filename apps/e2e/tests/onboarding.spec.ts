@@ -39,8 +39,13 @@ test('cadastro sem planos: NIF obrigatório, palavra-passe visível e confirmaç
   await page.getByRole('link', { name: '← Página inicial', exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('heading', { name: /Cuide da sua equipa/ })).toBeVisible();
+  const confirmationStatus = page.waitForResponse((res) => res.url().endsWith('/api/v1/auth/email-verification') && res.request().method() === 'GET');
   await page.goto('/modelagem');
   await expect(page).toHaveURL(/\/confirmar-email$/);
+  // A consulta inicial tem de terminar antes da confirmação sintética, como ao confirmar noutra janela.
+  // Caso contrário, o efeito de montagem pode já mostrar «Email confirmado» e substituir o botão abaixo.
+  expect(await (await confirmationStatus).json()).toMatchObject({ required: true, verified: false });
+  await expect(page.getByRole('button', { name: 'Já confirmei o email', exact: true })).toBeVisible();
   // Confirmação sintética para exercitar a passagem à escolha dos módulos; o token real tem testes API.
   await sql('update users set email_verified_at=now() where email=$1', [email]);
   await page.getByRole('button', { name: 'Já confirmei o email' }).click();
