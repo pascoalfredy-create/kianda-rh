@@ -192,7 +192,7 @@ function render() {
   if(notice)$('#view').insertAdjacentHTML('afterbegin',`<div id="integra-notice">${alertMessage(notice)}</div>`);
   if(versionView)$('#view').insertAdjacentHTML('afterbegin',versionBanner());
   else if(previewModel)$('#view').insertAdjacentHTML('afterbegin',`<div class="alert b" role="status">${ico('info',17)}<div>Projecto arquivado · consulta. Para voltar a gravar alterações, escolha Gerir projectos… no selector de modelos e restaure o projecto.</div></div>`);
-  projectPicker();protect();prepareFinancialTables($('#view'));
+  projectPicker();protect();prepareFinancialTables($('#view'));prepareMapDisclosures($('#view'),VIEW);
 }
 async function downloadReport(key) {
   if(!session?.formats?.pdf)throw Error('Pode pré-visualizar os documentos. Active uma subscrição paga do Integra para exportar.');

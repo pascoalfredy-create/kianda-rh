@@ -15,6 +15,7 @@ export interface SessionClaims {
   role: Role;
   employeeId: string | null;
   name: string;
+  requiresEmailVerification?: boolean;
 }
 
 /** Contexto de quem faz o pedido — sempre derivado do token assinado. */
@@ -57,10 +58,12 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
     return c.json({ error: 'sessao_invalida', message: 'Inicie sessão para continuar.' }, 401);
   }
   // Um JWT ainda válido não conserva acessos retirados depois de ter sido emitido.
-  const [user] = await getDb().select({ role: users.role, employeeId: users.employeeId, name: users.name, disabledAt: users.disabledAt })
+  const [user] = await getDb().select({ role: users.role, employeeId: users.employeeId, name: users.name, disabledAt: users.disabledAt, emailVerificationRequired: users.emailVerificationRequired, emailVerifiedAt: users.emailVerifiedAt })
     .from(users).where(and(eq(users.id, claims.sub), eq(users.companyId, claims.companyId)));
   if (!user || user.disabledAt) return c.json({ error: 'sessao_invalida', message: 'O acesso foi desactivado. Contacte o responsável da empresa.' }, 401);
-  claims = { ...claims, role: user.role, employeeId: user.employeeId, name: user.name };
+  const requiresEmailVerification = user.emailVerificationRequired && !user.emailVerifiedAt;
+  if (requiresEmailVerification && !['/v1/auth/me', '/v1/auth/email-verification', '/v1/auth/email-verification/resend', '/v1/auth/password'].includes(c.req.path)) return c.json({ error: 'email_por_confirmar', message: 'Confirme o seu email para começar a utilizar os módulos.' }, 403);
+  claims = { ...claims, role: user.role, employeeId: user.employeeId, name: user.name, requiresEmailVerification };
   c.set('actor', { companyId: claims.companyId, actorId: claims.sub, role: claims.role, employeeId: claims.employeeId, session: claims });
   // Licença inactiva: só consulta (excepto tratar da licença).
   const module = moduleForPath(c.req.path);

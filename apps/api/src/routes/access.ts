@@ -191,7 +191,8 @@ export function accessRoutes() {
         await tx.update(users).set({ passwordHash: (creds as { passwordHash: string }).passwordHash, failedAttempts: 0, lockedUntil: null }).where(eq(users.id, l.userId!));
       } else {
         // Recuperação: redefine a credencial escolhida, desbloqueia e retira a verificação em dois passos (telemóvel perdido).
-        await tx.update(users).set({ ...creds, failedAttempts: 0, lockedUntil: null, totpSecret: null, totpEnabledAt: null }).where(eq(users.id, l.userId!));
+        const [previous] = await tx.select({ email: users.email }).from(users).where(eq(users.id, l.userId!));
+        await tx.update(users).set({ ...creds, ...('email' in creds && creds.email !== previous?.email ? { emailVerifiedAt: null } : {}), failedAttempts: 0, lockedUntil: null, totpSecret: null, totpEnabledAt: null }).where(eq(users.id, l.userId!));
       }
       await tx.update(accessLinks).set({ usedAt: new Date() }).where(eq(accessLinks.id, l.id));
       await tx.insert(auditLogs).values({ companyId: l.companyId, actorId: id!, action: l.kind === 'invite' ? 'accept_invite' : l.kind === 'self_reset' ? 'password_reset' : 'access_recovered', entity: 'user', entityId: id!, after: { method: b.method } });

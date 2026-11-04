@@ -1,6 +1,6 @@
 # Conta comum, módulos e tabela comercial
 
-Uma conta e empresa partilhadas, no mesmo repositório e base de dados. `/registo` permite escolher RH, Modelagem ou ambos e o plano/ciclo de cada um. Os módulos escolhidos têm o período experimental existente de 7 dias. Os não escolhidos continuam visíveis, sem acesso. `/modulos`, `/licenca` e Definições apresentam o catálogo comum. O layout, CSS global e protótipo financeiro originais são preservados; os controlos acrescentados respondem à contratação e aos acessos.
+Uma conta e empresa partilhadas, no mesmo repositório e base de dados. O cadastro exige NIF e confirmação do email, sem planos, ciclos ou preços. A experiência inicial permite conhecer RH, Integra e Valora durante 30 dias; a escolha comercial e o pagamento ficam dentro da conta, em `/modulos` e `/licenca`. Os módulos têm licenças próprias. Detalhes do circuito e da configuração de email: `docs/ONBOARDING-E-MODELOS.md`.
 
 ## Recursos Humanos
 
@@ -53,15 +53,15 @@ Licenciado por **análises activas** (uma análise = uma entidade analisada: a p
 Segmentos: Essencial = a própria empresa e até duas participadas; PME / Grupo = grupos pequenos; Corporate = grupos e consultoras pequenas; Profissional = consultoras e contabilistas; Ilimitado = bancos, auditoras e fundos. As chaves são estáveis (gravadas em licenças e pedidos); só os nomes e limites mudaram em 02/11/2026.
 
 - Todos os planos incluem **5 utilizadores**, contando o proprietário. Extras do Valora: **10.000 Kz por mês e utilizador**, em todos os meses do ciclo, sem desconto.
-- Avaliação de 7 dias com as quotas do plano escolhido no registo (por omissão, Essencial mensal, 3 análises). Licenças activadas antes de 02/11/2026 conservam o limite gravado até ao próximo pagamento. Uma empresa já registada subscreve em **Módulos e licenças → Valora** (pedido de pagamento); a licença só é activada pela confirmação do pagamento — a empresa não concede licenças a si própria (a base de dados recusa escrita em `company_modules` ao papel da aplicação). A plataforma pode ainda ajustar limites em **Plataforma Kianda → Valora**, nunca abaixo do uso.
+- Avaliação de 30 dias, por omissão no perfil Essencial (3 análises), sem escolha comercial no cadastro. Licenças activadas antes de 02/11/2026 conservam o limite gravado até ao próximo pagamento. Uma empresa já registada subscreve em **Módulos e licenças → Valora** (pedido de pagamento); a licença só é activada pela confirmação do pagamento — a empresa não concede licenças a si própria (a base de dados recusa escrita em `company_modules` ao papel da aplicação). A plataforma pode ainda ajustar limites em **Plataforma Kianda → Valora**, nunca abaixo do uso.
 - Arquivar uma análise liberta a vaga e conserva os dados; restaurar exige vaga. **Sem rotação:** uma análise restaurada e arquivada de novo no mesmo mês (hora de Luanda) continua a ocupar a vaga até ao fim do mês (`valuation_analyses.restored_at`, migração 0041); voltar a activá-la nesse mês não consome outra vaga. Um plano nunca é aceite abaixo do uso actual (análises activas e utilizadores com acesso).
 - Os dados de cada análise ficam no servidor, por empresa (RLS), com controlo de revisão; nada da análise fica no armazenamento do navegador. Bibliotecas de PDF e Word servidas pela própria origem, sem CDN.
 - Com o RH na mesma conta, uma análise marcada como «própria empresa» traz os custos com o pessoal (conta 72) dos processamentos fechados.
 
 ## Período experimental e exportações
 
-- **7 dias de calendário**, incluindo o dia do registo, pela hora de Luanda, para cada módulo escolhido no registo.
-- Durante a avaliação trabalha-se dentro das quotas do plano escolhido (criar, editar, calcular, importar, simular), mas os documentos gerados ficam **só em pré-visualização**: `canExportDocuments` só permite exportar em `active` e `past_due`; a API responde **402 `exportacao_requer_subscricao`** (não depende de esconder botões).
+- **30 dias de calendário** (um mês), incluindo o dia da confirmação do email, pela hora de Luanda, nos módulos da experiência. A data final está visível na conta. Testes antigos não pagos são ampliados para 30 dias desde o registo, conservando concessões maiores.
+- Durante a avaliação trabalha-se dentro das quotas indicadas na conta (por omissão, perfis de entrada, sem contratação) (criar, editar, calcular, importar, simular), mas os documentos gerados ficam **só em pré-visualização**: `canExportDocuments` só permite exportar em `active` e `past_due`; a API responde **402 `exportacao_requer_subscricao`** (não depende de esconder botões).
 - Depois de um período pago há 7 dias de tolerância (`past_due`), com escrita e exportação; depois, modo de consulta (ver dados e pré-visualizações, sem alterar nem exportar).
 - O pagamento antecipado activa logo as exportações e conserva os dias experimentais restantes no início do período pago. Sem cartão e sem cobrança automática.
 - Pagar o RH não desbloqueia exportações da Modelagem ou do Valora, e vice-versa: cada módulo tem a sua licença. Anexos carregados pelo cliente, facturas/recibos da licença e a portabilidade JSON não estão sujeitos a este bloqueio.

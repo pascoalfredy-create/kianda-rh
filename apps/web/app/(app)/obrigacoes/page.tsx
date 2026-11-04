@@ -1,4 +1,6 @@
 
+import { MapDisclosure } from '@/components/map-disclosure';
+
 import { ExportLink } from '@/components/document-export';
 import { formatKz } from '@kianda/core';
 import Link from 'next/link';
@@ -54,7 +56,7 @@ export default async function Obrigacoes() {
                 {canBankFile && <ExportLink className="btn ghost sm" href={`/api/v1/payroll-runs/${r.runId}/bank-file`}>{bankLabel}</ExportLink>}
               </div>
             </div>
-            <table>
+            <MapDisclosure title="Mapa de obrigações"><table>
               <thead><tr><th>Obrigação</th><th className="num">Valor</th><th>Prazo</th><th>Estado</th><th /></tr></thead>
               <tbody>
                 {r.obligations.map((o) => (
@@ -67,7 +69,7 @@ export default async function Obrigacoes() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></MapDisclosure>
             {agt && agt.issues.length > 0 && (
               <div className="warn" style={{ margin: '0 16px 14px' }}>
                 <b>Mapa da AGT — corrija antes de submeter:</b>

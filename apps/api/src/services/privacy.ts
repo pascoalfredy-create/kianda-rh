@@ -30,7 +30,7 @@ export const COMPANY_TABLES_PURGE_ORDER: Scope[] = [
   { table: 'personnel_cash_plans' }, { table: 'personnel_budget_lines' }, { table: 'personnel_budgets' },
   { table: 'file_blobs' }, { table: 'files' },
   { table: 'employee_documents' }, { table: 'documents' }, { table: 'absences' }, { table: 'attendance_entries' }, { table: 'attendance_months' },
-  { table: 'salary_advances' }, { table: 'access_links' }, { table: 'users' }, { table: 'employees' }, { table: 'workplaces' }, { table: 'departments' },
+  { table: 'salary_advances' }, { table: 'access_links' }, { table: 'email_verifications' }, { table: 'users' }, { table: 'employees' }, { table: 'workplaces' }, { table: 'departments' },
   { table: 'bank_accounts' }, { table: 'account_mappings' },
   { table: 'gateway_events', via: { column: 'payment_request_id', parent: 'payment_requests' } },
   { table: 'payment_requests' }, { table: 'subscriptions' }, { table: 'outbound_emails' }, { table: 'audit_logs' },
@@ -41,6 +41,7 @@ const SECRET_COLUMNS: Record<string, string[]> = {
   users: ['password_hash', 'pin_hash', 'totp_secret'],
   workplaces: ['kiosk_secret', 'kiosk_token'],
   access_links: ['token_hash'],
+  email_verifications: ['token_hash'],
 };
 /** Fora da exportação: registos técnicos da plataforma. */
 /** O conteúdo dos ficheiros não segue na exportação (só os metadados em files). */

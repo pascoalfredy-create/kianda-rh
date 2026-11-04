@@ -1,4 +1,6 @@
 
+import { MapDisclosure } from '@/components/map-disclosure';
+
 import { ExportLink } from '@/components/document-export';
 import { formatKz, formatPercent } from '@kianda/core';
 import Link from 'next/link';
@@ -134,7 +136,7 @@ export default async function Relatorios({ searchParams }: { searchParams: Promi
 
       <div className="card section" style={{ marginTop: 14 }}>
         <h2 style={{ fontSize: 14, padding: '12px 16px 0' }}>Por departamento</h2>
-        <table>
+        <MapDisclosure title="Mapa por departamento"><table>
           <thead><tr><th>Departamento</th><th>Centro de custo</th><th className="num">Efectivo</th><th className="num">Custo</th><th>Peso</th><th className="num">Custo médio mensal</th><th className="num">Horas extra</th><th className="num">Dias de ausência</th></tr></thead>
           <tbody>
             {r.departments.map((d) => (
@@ -145,13 +147,13 @@ export default async function Relatorios({ searchParams }: { searchParams: Promi
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></MapDisclosure>
         <p className="muted" style={{ padding: '0 16px 12px', margin: 0 }}>Pelo departamento actual de cada ficha.</p>
       </div>
 
       <div className="card section" style={{ marginTop: 14 }}>
         <h2 style={{ fontSize: 14, padding: '12px 16px 0' }}>Mês a mês</h2>
-        <table className="dense">
+        <MapDisclosure title="Mapa mês a mês"><table className="dense">
           <thead><tr><th>Mês</th><th className="num">Efectivo</th><th className="num">Entradas / saídas</th><th className="num">Ilíquido</th><th className="num">INSS 8%</th><th className="num">Custo</th><th className="num">Horas extra</th><th className="num">Absentismo</th></tr></thead>
           <tbody>
             {r.months.map((m) => (
@@ -162,7 +164,7 @@ export default async function Relatorios({ searchParams }: { searchParams: Promi
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></MapDisclosure>
       </div>
       <p className="muted">Não inclui despesas e ajudas de custo (ver Despesas). O absentismo conta faltas injustificadas, doença, faltas justificadas, casamento, luto e formação, sobre os dias úteis do mês sem feriados.</p>
     </>

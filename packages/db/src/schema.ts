@@ -69,6 +69,9 @@ export const users = pgTable('users', {
   companyId: text('company_id').notNull().references(() => companies.id),
   /** Opcional: colaboradores sem email entram com código da empresa + n.º/telefone + PIN. */
   email: text('email'),
+  /** Novos proprietários confirmam o email antes de entrar nos módulos; acessos anteriores mantêm-se. */
+  emailVerificationRequired: boolean('email_verification_required').notNull().default(false),
+  emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
   name: text('name').notNull(),
   passwordHash: text('password_hash').notNull(),
   role: roleEnum('role').notNull().default('employee'),
@@ -85,6 +88,19 @@ export const users = pgTable('users', {
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
   createdAt: createdAt(),
 }, (t) => [uniqueIndex('users_company_email').on(t.companyId, t.email)]);
+
+/** Confirmações de email: só se guarda o hash do token; cada ligação é de uso único. */
+export const emailVerifications = pgTable('email_verifications', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  userId: text('user_id').notNull().references(() => users.id),
+  email: text('email').notNull(),
+  tokenHash: text('token_hash').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  usedAt: timestamp('used_at', { withTimezone: true }),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex('email_verifications_token_hash').on(t.tokenHash), index('email_verifications_user_created').on(t.userId, t.createdAt)]);
 
 /** Regimes de horário da empresa: semanal (7 dias) ou ciclo de turnos/rotação (minutos previstos por dia). */
 export const workSchedules = pgTable('work_schedules', {

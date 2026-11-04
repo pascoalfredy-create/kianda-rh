@@ -1,4 +1,4 @@
-import { REGISTRATION_TERMS_VERSION, DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, isValidCompanyNif, luandaDate, SECTORS, tierFor, trialEndDate, TRIAL_DAYS, VALUATION_PLANS, VALUATION_PLAN_KEYS, verifyTotp } from '@kianda/core';
+import { REGISTRATION_TERMS_VERSION, DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, defaultModelingSector, isValidCompanyNif, luandaDate, SECTORS, tierFor, trialEndDate, TRIAL_DAYS, VALUATION_PLANS, VALUATION_PLAN_KEYS, verifyTotp } from '@kianda/core';
 import { auditLogs, companies, companyModules, employees, getDb, modelingMembers, valuationMembers, platformAdmins, hashPassword, passwordProblems, subscriptions, users, verifyPassword, type Db } from '@kianda/db';
 import { and, eq } from '@kianda/db';
 import { Hono } from 'hono';
@@ -11,6 +11,7 @@ import { appBaseUrl } from '../services/integrations.js';
 import { sendMail } from '../services/mail.js';
 import { validateModelingSectors } from '../services/modeling-policy.js';
 import { accountOverview } from '../services/account-overview.js';
+import { issueEmailVerification } from '../services/email-verification.js';
 
 const SESSION_HOURS = 12;
 const password = z.string().superRefine((v, ctx) => { const p = passwordProblems(v); if (p) ctx.addIssue({ code: 'custom', message: p }); });
@@ -36,7 +37,7 @@ export async function completeLogin(c: Ctx, db: Db, u: typeof users.$inferSelect
   const token = await startSession(c, { sub: u.id, companyId: co.id, role: u.role, employeeId: u.employeeId, name: u.name });
   await db.update(users).set({ failedAttempts: 0, lockedUntil: null, lastLoginAt: new Date() }).where(eq(users.id, u.id));
   await db.insert(auditLogs).values({ companyId: co.id, actorId: u.id, action: 'login', entity: 'user', entityId: u.id, after: { method } });
-  return c.json({ user: { id: u.id, name: u.name, email: u.email, role: u.role }, company: { id: co.id, name: co.name }, token });
+  return c.json({ user: { id: u.id, name: u.name, email: u.email, role: u.role }, company: { id: co.id, name: co.name }, token, requiresEmailVerification: u.emailVerificationRequired && !u.emailVerifiedAt });
 }
 
 export async function startSession(c: Ctx, claims: SessionClaims) {
@@ -81,8 +82,9 @@ export function authRoutes() {
     // Valora: a avaliação trabalha dentro das quotas do plano escolhido (por omissão, o Essencial mensal).
     const valuationPlan = VALUATION_PLANS.find(p => p.key === b.valuationPlan?.key) ?? VALUATION_PLANS[0], valuationCycle = b.valuationPlan?.cycle ?? 'monthly';
     const modelingCycle = b.modelingPlan?.cycle ?? 'monthly';
-    if (hasModeling && !b.modelingPlan) return c.json({ error: 'plano_obrigatorio', message: 'Escolha o plano, o sector principal e os sectores adicionais da Modelagem.' }, 400);
-    const modelingSectors = hasModeling ? validateModelingSectors(modelingPlan.key, b.modelingPlan!.primarySector, b.modelingPlan!.sectors) : [];
+    const primarySector = b.modelingPlan?.primarySector ?? defaultModelingSector(b.company.sector);
+    const selectedSectors = b.modelingPlan?.sectors ?? [primarySector, ...[...new Set(['servicos', 'comercio', ...FINANCIAL_SECTORS])].filter(s => s !== primarySector).slice(0, modelingPlan.sectorLimit - 1)];
+    const modelingSectors = hasModeling ? validateModelingSectors(modelingPlan.key, primarySector, selectedSectors) : [];
     if (hasModeling && modelingPlan.prices[modelingCycle] === null) return c.json({ error: 'ciclo_indisponivel', message: 'O plano não está disponível no ciclo escolhido.' }, 400);
     const db = getDb();
     const passwordHash = await hashPassword(b.password);
@@ -91,11 +93,11 @@ export function authRoutes() {
       // Período experimental com o escalão adequado à dimensão declarada.
       const trialEnd = trialEndDate(luandaDate(co!.createdAt));
       await tx.insert(subscriptions).values({ companyId: co!.id, status: hasHr ? 'trial' : 'cancelled', tierKey: hrTier.key, cycle: b.hrPlan?.cycle ?? 'monthly', trialEndsAt: hasHr ? trialEnd : null });
-      const [u] = await tx.insert(users).values({ companyId: co!.id, email: b.email.toLowerCase(), name: b.name, passwordHash, role: 'owner' }).returning();
+      const [u] = await tx.insert(users).values({ companyId: co!.id, email: b.email.toLowerCase(), name: b.name, passwordHash, role: 'owner', emailVerificationRequired: true }).returning();
       await tx.insert(companyModules).values([
         { companyId: co!.id, module: 'hr', enabled: hasHr, status: hasHr ? 'trial' : 'cancelled' },
         ...(hasValuation ? [{ companyId: co!.id, module: 'valuation', enabled: true, status: 'trial', trialEndsAt: trialEnd, projectLimit: valuationPlan.analysisLimit, planKey: valuationPlan.key, cycle: valuationCycle }] : []),
-        ...(hasModeling ? [{ companyId: co!.id, module: 'modeling', enabled: true, status: 'trial', trialEndsAt: trialEnd, planKey: modelingPlan.key, cycle: modelingCycle, projectLimit: modelingPlan.projectLimit, primarySector: b.modelingPlan!.primarySector, modelingSectors }] : []),
+        ...(hasModeling ? [{ companyId: co!.id, module: 'modeling', enabled: true, status: 'trial', trialEndsAt: trialEnd, planKey: modelingPlan.key, cycle: modelingCycle, projectLimit: modelingPlan.projectLimit, primarySector, modelingSectors }] : []),
       ]);
       if (hasModeling) await tx.insert(modelingMembers).values({ companyId: co!.id, userId: u!.id, addedBy: u!.id });
       if (hasValuation) await tx.insert(valuationMembers).values({ companyId: co!.id, userId: u!.id, addedBy: u!.id });
@@ -105,12 +107,13 @@ export function authRoutes() {
       return { company: co!, user: u!, trialEnd };
     });
     const token = await startSession(c, { sub: result.user.id, companyId: result.company.id, role: 'owner', employeeId: null, name: result.user.name });
+    const verification = await issueEmailVerification(db, result.user.id);
     // Boas-vindas ao proprietário e aviso à administração da plataforma (sem bloquear o registo).
     const base = appBaseUrl();
     const trialEnd = result.trialEnd.split('-').reverse().join('/');
     await sendMail(db, {
       to: result.user.email, companyId: result.company.id, kind: 'boas_vindas', subject: 'Bem-vindo ao Kianda', title: `Bem-vindo ao Kianda, ${result.user.name.split(' ')[0]}`,
-      paragraphs: [`A conta de ${result.company.name} está criada, com ${TRIAL_DAYS} dias de calendário de período experimental, incluindo o dia do registo e até ${trialEnd}, inclusive, pela hora de Angola, nos módulos escolhidos: ${new Intl.ListFormat('pt', { type: 'conjunction' }).format([hasHr ? 'Recursos Humanos' : '', hasModeling ? 'Modelagem Financeira' : '', hasValuation ? 'Análise e Avaliação (Valora)' : ''].filter(Boolean))}.`, 'Sem cobrança automática. Durante a avaliação, os documentos ficam apenas em pré-visualização; exportar e imprimir exige uma subscrição paga. No fim da avaliação, os módulos sem pagamento ficam em consulta e os dados guardados são conservados. Consulte os módulos, planos e pagamentos na página Módulos e licenças. Cada módulo tem a sua subscrição.'],
+      paragraphs: [`A conta de ${result.company.name} está criada. Confirme o email na ligação enviada separadamente para iniciar os ${TRIAL_DAYS} dias de experiência nos módulos escolhidos: ${new Intl.ListFormat('pt', { type: 'conjunction' }).format([hasHr ? 'Recursos Humanos' : '', hasModeling ? 'Modelagem Financeira' : '', hasValuation ? 'Análise e Avaliação (Valora)' : ''].filter(Boolean))}.`, 'Sem cobrança automática. Durante a avaliação, pode introduzir dados e pré-visualizar os documentos; exportar e imprimir exige uma subscrição paga. Escolha o plano e o pagamento depois de entrar na conta, em Módulos e licenças.'],
       facts: [['Código da empresa', result.company.code ?? '—']], button: base ? { label: 'Ver módulos e licenças', url: `${base}/licenca` } : null,
     });
     for (const a of await db.select().from(platformAdmins)) {
@@ -120,7 +123,7 @@ export function authRoutes() {
         button: base ? { label: 'Abrir consola', url: `${base}/plataforma` } : null,
       });
     }
-    return c.json({ company: result.company, user: { id: result.user.id, name: result.user.name, email: result.user.email, role: 'owner' }, token }, 201);
+    return c.json({ company: result.company, user: { id: result.user.id, name: result.user.name, email: result.user.email, role: 'owner' }, token, requiresEmailVerification: true, verification }, 201);
   });
 
   app.post('/v1/auth/login', rateLimit('login', 10, 900_000), async (c) => {

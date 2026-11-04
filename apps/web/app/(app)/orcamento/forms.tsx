@@ -1,4 +1,6 @@
 'use client';
+
+import { MapDisclosure } from '@/components/map-disclosure';
 import { ExportLink } from '@/components/document-export';
 
 
@@ -48,7 +50,7 @@ export function BudgetPlanner({ init, departments, budgetId }: { init: Assumptio
       </div>
       <h3 style={{ fontSize: 13, margin: '14px 0 6px' }}>Admissões previstas</h3>
       {a.hires.length > 0 && (
-        <table className="dense">
+        <MapDisclosure title="Grelha do orçamento"><table className="dense">
           <thead><tr><th>Departamento</th><th>Entrada</th><th className="num">N.º</th><th className="num">Salário base (Kz)</th><th className="num">Alimentação</th><th className="num">Transporte</th><th /></tr></thead>
           <tbody>
             {a.hires.map((h, i) => (
@@ -63,7 +65,7 @@ export function BudgetPlanner({ init, departments, budgetId }: { init: Assumptio
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></MapDisclosure>
       )}
       <button type="button" className="btn ghost sm" style={{ marginTop: 6 }} onClick={() => set({ hires: [...a.hires, { departmentId: departments[0]?.id ?? null, from: periods[0]!, count: 1, baseMinor: 0, mealMinor: 0, transportMinor: 0 }] })}>+ Admissão</button>
 
@@ -82,13 +84,13 @@ export function BudgetPlanner({ init, departments, budgetId }: { init: Assumptio
           <div className="warn" style={{ marginBottom: 8 }}>
             Custo com pessoal previsto para {a.year}: <b>{formatKz(sim.totalMinor)}</b> · {sim.staff} trabalhador(es) no quadro actual
           </div>
-          <table className="dense">
+          <MapDisclosure title="Linhas do orçamento"><table className="dense">
             <thead><tr><th>Mês</th>{sim.months.map((m) => <th key={m.period} className="num">{MONTHS[Number(m.period.slice(5)) - 1]!.slice(0, 3)}</th>)}</tr></thead>
             <tbody>
               <tr><td>Custo</td>{sim.months.map((m) => <td key={m.period} className="num">{formatKz(m.costMinor)}</td>)}</tr>
               <tr><td>Efectivo</td>{sim.months.map((m) => <td key={m.period} className="num">{String(m.headcount).replace('.', ',')}</td>)}</tr>
             </tbody>
-          </table>
+          </table></MapDisclosure>
         </div>
       )}
     </div>
@@ -111,7 +113,7 @@ export function BudgetGrid({ budgetId, year, departments, lines, editable }: { b
   return (
     <div className="card section" style={{ overflowX: 'auto' }}>
       <h2 style={{ fontSize: 14, padding: '12px 16px 0' }}>Orçamento por departamento (custo com pessoal, Kz)</h2>
-      <table className="dense" style={{ minWidth: 1100 }}>
+      <MapDisclosure title="Mapa de custos com pessoal"><table className="dense" style={{ minWidth: 1100 }}>
         <thead><tr><th>Departamento</th>{periods.map((p, i) => <th key={p} className="num">{MONTHS[i]!.slice(0, 3)}</th>)}<th className="num">Total</th></tr></thead>
         <tbody>
           {all.map((id) => (
@@ -129,7 +131,7 @@ export function BudgetGrid({ budgetId, year, departments, lines, editable }: { b
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></MapDisclosure>
       {editable && (
         <div className="form-actions" style={{ padding: '10px 16px', gap: 8 }}>
           <select value={adding} onChange={(e) => setAdding(e.target.value)} aria-label="Acrescentar departamento">

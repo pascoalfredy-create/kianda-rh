@@ -50,7 +50,7 @@ export function preloadApi(...paths: string[]) {
 }
 
 export interface Me {
-  user: { sub: string; name: string; role: string; companyId: string; employeeId: string | null };
+  user: { sub: string; name: string; role: string; companyId: string; employeeId: string | null; requiresEmailVerification?: boolean };
   company: { id: string; name: string; nif: string; code?: string | null; hasLogo?: boolean } | null;
   licence?: { status: string; label: string; canWrite: boolean; trialEndsAt: string | null; paidUntil: string | null };
   platformAdmin?: boolean;

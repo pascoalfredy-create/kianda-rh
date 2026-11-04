@@ -1,4 +1,5 @@
 import type { App } from '../src/app.js';
+import { eq, getDb, users } from '@kianda/db';
 
 export interface InjectResponse {
   statusCode: number;
@@ -10,7 +11,7 @@ export interface InjectResponse {
 }
 
 /** Adaptador de testes: mesma forma que o inject do Fastify, sobre app.request do Hono (sem rede). */
-export function testClient(app: App) {
+export function testClient(app: App, options: { confirmEmails?: boolean } = {}) {
   return {
     async inject(o: { method: string; url: string; headers?: Record<string, string>; payload?: unknown }): Promise<InjectResponse> {
       const headers: Record<string, string> = { ...(o.headers ?? {}) };
@@ -27,6 +28,12 @@ export function testClient(app: App) {
       const res = await app.request(o.url, { method: o.method, headers, body });
       const bytes = new Uint8Array(await res.arrayBuffer());
       const text = new TextDecoder().decode(bytes);
+      // Cenários de negócio partem de proprietários já confirmados. O teste dedicado do
+      // circuito de email usa confirmEmails:false e confirma a ligação real da API.
+      if (options.confirmEmails !== false && o.url === '/v1/auth/register' && res.status === 201) {
+        const registration = JSON.parse(text);
+        await getDb().update(users).set({ emailVerifiedAt: new Date() }).where(eq(users.id, registration.user.id));
+      }
       const cookies = res.headers.getSetCookie().map((c) => {
         const [pair] = c.split(';');
         const i = pair!.indexOf('=');

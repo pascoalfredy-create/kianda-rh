@@ -71,8 +71,9 @@ test('página pública: o Valora aparece como terceiro módulo e os planos levam
   await page.screenshot({ path: '/tmp/e2e/publico-02-planos-valora.png', fullPage: false });
   await dialog.locator('article', { hasText: 'Corporate' }).getByRole('link', { name: /Escolher Valora/ }).click();
   await expect(page).toHaveURL(/\/registo\?modulo=valuation&plano=corporate&ciclo=annual/);
-  await expect(page.getByLabel('Plano do Valora')).toHaveValue('corporate');
-  await expect(page.getByLabel('Pagamento do Valora')).toHaveValue('annual');
+  await expect(page.getByLabel('Plano do Valora')).toHaveCount(0);
+  await expect(page.getByLabel('Pagamento do Valora')).toHaveCount(0);
+  await expect(page.locator('body')).toContainText('Um mês grátis');
   expect(errors).toEqual([]);
 });
 

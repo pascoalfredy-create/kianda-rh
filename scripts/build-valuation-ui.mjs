@@ -148,10 +148,10 @@ const imports = [
   `import {endSession,reloadPrivatePageOnRestore} from '${fileURLToPath(new URL('lib/session-client.ts', web))}';`,
   'const XLSX={utils:xlsxUtils,write:(wb)=>xlsxWrite(wb)};',
 ].join('\n') + '\n';
-const result = await build({ stdin: { contents: imports + source + '\n' + adapter, resolveDir: fileURLToPath(web), sourcefile: 'valora-ui.js' }, alias: { '@kianda/core': fileURLToPath(new URL('packages/core/src/index.ts', root)) }, bundle: true, format: 'iife', platform: 'browser', target: 'es2022', minify: true, legalComments: 'none', write: false, logLevel: 'silent' });
+const result = await build({ stdin: { contents: imports + `import {prepareMapDisclosures} from '${fileURLToPath(new URL('lib/map-disclosure.ts', web))}';\n` + source + '\n' + adapter, resolveDir: fileURLToPath(web), sourcefile: 'valora-ui.js' }, alias: { '@kianda/core': fileURLToPath(new URL('packages/core/src/index.ts', root)) }, bundle: true, format: 'iife', platform: 'browser', target: 'es2022', minify: true, legalComments: 'none', write: false, logLevel: 'silent' });
 const js = result.outputFiles[0].text;
 const digest = (s) => createHash('sha256').update(s).digest('hex');
-const css = await readFile(new URL('valuation/space.css', web), 'utf8');
+const css = await readFile(new URL('valuation/space.css', web), 'utf8') + '\n' + await readFile(new URL('components/map-disclosure.css', web), 'utf8');
 const generated = `// Gerado por scripts/build-valuation-ui.mjs a partir de valuation/prototype.html. Não editar à mão.\nexport const VALUATION_SHELL = ${JSON.stringify(shell)};\nexport const VALUATION_SUFFIX = ${JSON.stringify(suffix)};\nexport const VALUATION_SPACE_CSS = ${JSON.stringify(css)};\nexport const VALUATION_ASSET_HASH = '${digest(js).slice(0, 16)}';\nexport const VALUATION_REFERENCE_HASH = '${digest(original)}';\n`;
 // Motor isolado para os testes (mesmas funções da interface, sem DOM).
 const engineEnd = source.indexOf('/* ================= GRÁFICOS (SVG)');

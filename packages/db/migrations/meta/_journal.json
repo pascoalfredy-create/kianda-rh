@@ -337,6 +337,13 @@
       "when": 1793640700000,
       "tag": "0047_indexed_salaries",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1793785895545,
+      "tag": "0048_onboarding_email_trial",
+      "breakpoints": true
     }
   ]
 }

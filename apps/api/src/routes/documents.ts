@@ -1,5 +1,5 @@
 import {
-  BUILTIN_TEMPLATES, compensationAt, describeSchedule, DOCUMENT_FIELDS, formatKz, scheduleStats, kzInWords, longDatePt, luandaDate, packOrLatest, renderTemplate, unknownFields,
+  BUILTIN_TEMPLATES, compensationAt, describeSchedule, DOCUMENT_FIELDS, formatKz, scheduleStats, kzInWords, longDatePt, luandaDate, packOrLatest, renderTemplate, templateFields, unknownFields,
 } from '@kianda/core';
 import {
   allowanceTypes, and, asc, auditLogs, companies, employeeAllowances, workSchedules, compensationChanges, contracts, departments, desc, documentTemplates, employees, eq, getDb, issuedDocuments, like,
@@ -22,7 +22,7 @@ export async function templatesFor(db: Db, companyId: string) {
   return BUILTIN_TEMPLATES.map((t) => {
     const c = custom.find((x) => x.key === t.key);
     return c
-      ? { ...t, title: c.title, body: c.body, source: 'empresa' as const, version: `Empresa v${c.version}`, basedOn: c.basedOn, kiandaVersion: pack.version }
+      ? { ...t, title: c.title, body: c.body, inputs: templateFields(c.body).filter(key => key.startsWith('pedido.')).map(key => t.inputs.find(i => i.key === key) ?? { key, label: key.slice(7).replaceAll('_', ' '), required: false }), source: 'empresa' as const, version: `Empresa v${c.version}`, basedOn: c.basedOn, kiandaVersion: pack.version }
       : { ...t, source: 'kianda' as const, version: pack.version, basedOn: null, kiandaVersion: pack.version };
   });
 }
@@ -145,7 +145,7 @@ export function documentRoutes() {
     const key = c.req.param('key');
     const builtin = BUILTIN_TEMPLATES.find((t) => t.key === key);
     if (!builtin) throw new DomainError('nao_encontrado', 'Modelo inexistente', 404);
-    const b = z.object({ title: z.string().trim().min(3).max(120), body: z.string().trim().min(20).max(30_000) }).parse(await body(c));
+    const b = z.object({ title: z.string().trim().min(3).max(120), body: z.string().trim().min(20).max(30_000), sourceFileName: z.string().trim().min(1).max(200).optional().nullable() }).parse(await body(c));
     const unknown = unknownFields(b.body);
     if (unknown.length) throw new DomainError('campos_desconhecidos', `Campos desconhecidos: ${unknown.map((u) => `{{${u}}}`).join(', ')}`, 400);
     const db = getDb();
@@ -154,7 +154,7 @@ export function documentRoutes() {
     const row = await db.transaction(async (tx) => {
       await tx.update(documentTemplates).set({ active: false }).where(and(eq(documentTemplates.companyId, actor.companyId), eq(documentTemplates.key, key)));
       const [x] = await tx.insert(documentTemplates).values({ companyId: actor.companyId, key, version: (last?.v ?? 0) + 1, title: b.title, body: b.body, basedOn: pack.version, createdBy: actor.actorId }).returning();
-      await tx.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'update', entity: 'document_template', entityId: x!.id, after: { key, version: x!.version } });
+      await tx.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'update', entity: 'document_template', entityId: x!.id, after: { key, version: x!.version, sourceFileName: b.sourceFileName ?? null } });
       return x!;
     });
     return c.json(row);

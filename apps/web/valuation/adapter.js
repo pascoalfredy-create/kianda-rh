@@ -70,7 +70,7 @@ function lockInputs(){
   document.querySelectorAll('.wrap input,.wrap select,.wrap textarea,.wrap button').forEach(el=>{if(!el.matches(KEEP))el.disabled=true});
 }
 new MutationObserver(()=>{if(!valoraCanWrite())lockInputs()}).observe(document.querySelector('.wrap'),{childList:true,subtree:true});
-{const original=renderView;renderView=function(v){if(!D)return;original(v)}}
+{const original=renderView;renderView=function(v){if(!D)return;original(v);prepareMapDisclosures(document.querySelector('.wrap'),v)}}
 
 /* ---------- Abrir uma análise ---------- */
 function syncYears(){

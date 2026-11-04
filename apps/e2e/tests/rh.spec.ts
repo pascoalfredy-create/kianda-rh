@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { apiAs, closePool, registerCompany, signIn, watchErrors, type Company } from './support.js';
+import { apiAs, closePool, openMaps, registerCompany, signIn, watchErrors, type Company } from './support.js';
 
 /** Ecrãs do RH para o proprietário de uma empresa nova (com dois colaboradores). */
 const ROUTES = [
@@ -70,6 +70,7 @@ test('processamento salarial: preparar o mês no ecrã calcula a folha dos dois 
   await page.goto('/processamento?mes=2026-10');
   await expect(page.locator('body')).toContainText(/Outubro/i);
   await page.getByRole('button', { name: 'Preparar processamento' }).click();
+  await openMaps(page);
   for (const p of people) await expect(page.getByText(p.name).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Recalcular' })).toBeVisible();
   expect(errors).toEqual([]);

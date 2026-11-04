@@ -1,4 +1,6 @@
 
+import { MapDisclosure } from '@/components/map-disclosure';
+
 import { ExportLink } from '@/components/document-export';
 import { formatKz } from '@kianda/core';
 import Link from 'next/link';
@@ -73,7 +75,7 @@ async function TrialBalance({ from, to, link }: { from: string; to: string; link
         <ExportLink className="btn ghost sm" href={`/api/v1/ledger/trial-balance?from=${from}&to=${to}&format=csv`}>Exportar balancete (CSV)</ExportLink>
       </div>
       <div className="card" style={{ overflowX: 'auto' }}>
-        <table className="dense">
+        <MapDisclosure title="Balancete"><table className="dense">
           <thead>
             <tr><th rowSpan={2}>Conta</th><th rowSpan={2}>Descrição</th><th colSpan={2} style={{ textAlign: 'center' }}>Saldo inicial</th><th colSpan={2} style={{ textAlign: 'center' }}>Movimentos do período</th><th colSpan={2} style={{ textAlign: 'center' }}>Saldo final</th></tr>
             <tr><th className="num">Devedor</th><th className="num">Credor</th><th className="num">Débito</th><th className="num">Crédito</th><th className="num">Devedor</th><th className="num">Credor</th></tr>
@@ -96,7 +98,7 @@ async function TrialBalance({ from, to, link }: { from: string; to: string; link
             })}
           </tbody>
           <tfoot><tr><td colSpan={4}><b>Totais do período</b></td><td className="num"><b>{formatKz(tb.totals.debitMinor)}</b></td><td className="num"><b>{formatKz(tb.totals.creditMinor)}</b></td><td colSpan={2} /></tr></tfoot>
-        </table>
+        </table></MapDisclosure>
         {!tb.rows.length && <div className="empty">Sem lançamentos até {pt(to)}</div>}
       </div>
       <p className="muted" style={{ marginTop: 10 }}>Inclui só os lançamentos gerados pelo Kianda (processamento e pagamentos de pessoal). Clique numa conta para ver o razão.</p>
@@ -114,14 +116,14 @@ async function Journal({ from, to }: { from: string; to: string }) {
             <span><b>{e.reference}</b> · {pt(e.date)} · diário {e.journal} · <span className="muted">{e.description}</span></span>
             <span><span className="tag">{SOURCE[e.source] ?? e.source}</span> {e.exportedAt ? <span className="tag future">exportado</span> : null}</span>
           </div>
-          <table className="dense">
+          <MapDisclosure title="Diário"><table className="dense">
             <tbody>
               {e.lines.map((l, i) => (
                 <tr key={i}><td style={{ width: 110 }}><b>{l.account}</b></td><td>{l.description}</td><td className="muted" style={{ width: 90 }}>{l.costCenter ?? ''}</td><td className="num" style={{ width: 160 }}>{k(l.debitMinor)}</td><td className="num" style={{ width: 160 }}>{k(l.creditMinor)}</td></tr>
               ))}
             </tbody>
             <tfoot><tr><td colSpan={3} /><td className="num"><b>{formatKz(e.debitMinor)}</b></td><td className="num"><b>{formatKz(e.creditMinor)}</b></td></tr></tfoot>
-          </table>
+          </table></MapDisclosure>
         </div>
       ))}
       {!entries.length && <div className="card empty">Sem lançamentos de {pt(from)} a {pt(to)}</div>}
@@ -141,14 +143,14 @@ async function Ledger({ from, to, code, q }: { from: string; to: string; code?: 
       {!r ? <div className="card empty">Escolha uma conta.</div> : (
         <div className="card section">
           <h2>{code} — {r.label || 'conta'}</h2>
-          <table className="dense">
+          <MapDisclosure title="Razão"><table className="dense">
             <thead><tr><th>Data</th><th>Referência</th><th>Descrição</th><th className="num">Débito</th><th className="num">Crédito</th><th className="num">Saldo</th></tr></thead>
             <tbody>
               <tr><td colSpan={5} className="muted">Saldo inicial em {pt(from)}</td><td className="num">{bal(r.openingMinor)}</td></tr>
               {r.movements.map((m, i) => <tr key={i}><td>{pt(m.date)}</td><td>{m.reference}</td><td>{m.description}</td><td className="num">{k(m.debitMinor)}</td><td className="num">{k(m.creditMinor)}</td><td className="num"><b>{bal(m.balanceMinor)}</b></td></tr>)}
             </tbody>
             <tfoot><tr><td colSpan={5}><b>Saldo final em {pt(to)}</b></td><td className="num"><b>{bal(r.closingMinor)}</b></td></tr></tfoot>
-          </table>
+          </table></MapDisclosure>
         </div>
       )}
     </>

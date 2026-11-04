@@ -3,35 +3,23 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import Registo from './page';
 import { registrationHref, registrationSelection } from '../../lib/registration-selection';
 
-describe('passagem dos planos públicos para o registo', () => {
-  it('abre Integra Corporate anual com a escolha visível, mantendo o RH opcional', async () => {
-    const href = registrationHref('modeling', 'corporate', 'annual');
-    const query = Object.fromEntries(new URL(href, 'https://kianda.test').searchParams);
-    const html = renderToStaticMarkup(await Registo({ searchParams: Promise.resolve(query) }));
-    expect(html).toContain('<option value="corporate" selected="">');
-    expect(html).toContain('<option value="annual" selected="">');
-    expect(html).toContain('Plano de Modelagem'); expect(html).not.toContain('Pagamento RH');
-    expect(html).toContain('1\u00a0224\u00a0000,00 Kz');
+describe('cadastro da experiência antes da escolha comercial', () => {
+  it('apresenta trinta dias e confirmação do email sem planos, ciclos ou preços', () => {
+    const html = renderToStaticMarkup(Registo());
+    expect(html).toContain('Um mês grátis (30 dias)');
+    expect(html).toContain('confirmação do email');
+    expect(html).toContain('Módulos e licenças');
+    for (const oldControl of ['Plano RH', 'Plano do Valora', 'Plano de Modelagem', 'Pagamento RH', 'Pagamento da Modelagem', 'Pagamento do Valora', '29.900', '29\u00a0900']) expect(html).not.toContain(oldControl);
   });
-  it('abre o Valora no plano e ciclo escolhidos, com o preço do plano', async () => {
-    const query = Object.fromEntries(new URL(registrationHref('valuation', 'corporate', 'semiannual'), 'https://kianda.test').searchParams);
-    const html = renderToStaticMarkup(await Registo({ searchParams: Promise.resolve(query) }));
-    expect(html).toContain('Plano do Valora'); expect(html).toContain('<option value="corporate" selected="">');
-    expect(html).toContain('393\u00a0660,00 Kz'); expect(html).not.toContain('Pagamento RH');
-    expect(registrationSelection({ modulo: 'valuation', plano: 'x' })).toEqual({ module: 'valuation', planKey: 'essencial', cycle: 'monthly' });
+  it('exige NIF de dez dígitos e permite mostrar a palavra-passe', () => {
+    const html = renderToStaticMarkup(Registo());
+    expect(html).toContain('NIF da empresa *');
+    expect(html).toContain('pattern="[0-9]{10}"');
+    expect(html.match(/<input\b(?=[^>]*name="nif")[^>]*>/)?.[0]).toContain('required=""');
+    expect(html).toContain('Mostrar palavra-passe');
   });
-  it('abre a faixa RH escolhida com o mesmo ciclo e sem activar Integra', async () => {
-    const href = registrationHref('hr', 't3', 'semiannual');
-    const query = Object.fromEntries(new URL(href, 'https://kianda.test').searchParams);
-    const html = renderToStaticMarkup(await Registo({ searchParams: Promise.resolve(query) }));
-    expect(html).toContain('<option value="t3" selected="">');
-    expect(html).toContain('<option value="semiannual" selected="">');
-    expect(html).toContain('377\u00a0460,00 Kz');
-    expect(html).not.toContain('Plano de Modelagem'); expect(html).toContain('Pagamento RH');
-  });
-  it('usa os valores normais quando o endereço não tem uma escolha válida', () => {
-    expect(registrationSelection({})).toEqual({ module: 'hr', planKey: '', cycle: 'monthly' });
+  it('as ligações públicas e valores comerciais continuam a ser rotas locais válidas', () => {
+    expect(registrationHref('valuation', 'corporate', 'annual')).toBe('/registo?modulo=valuation&plano=corporate&ciclo=annual');
     expect(registrationSelection({ modulo: ['modeling', 'hr'], plano: 'inexistente', ciclo: '__proto__' })).toEqual({ module: 'hr', planKey: '', cycle: 'monthly' });
-    expect(registrationSelection({ modulo: 'modeling', plano: 'unlimited', ciclo: 'monthly' })).toEqual({ module: 'modeling', planKey: 'unlimited', cycle: 'monthly' });
   });
 });
