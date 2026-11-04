@@ -15,6 +15,7 @@ Os limites iniciais são os perfis de entrada existentes: RH até 100 colaborado
 - Permite introduzir dados, calcular e pré-visualizar documentos. Downloads e impressão exigem subscrição paga do respectivo módulo.
 - Os testes antigos sem período pago são estendidos para 30 dias desde a criação da empresa. Datas maiores já concedidas, períodos pagos e suspensões/cancelamentos manuais são preservados.
 - A tolerância após períodos pagos continua a ser uma regra separada.
+- Pedidos de pagamento antigos ainda pendentes são alinhados com a nova data final, conservando referências, montantes e a duração completa do ciclo. Pedidos pagos e datas futuras mais favoráveis são preservados (migração 0049).
 
 ## Confirmação do email
 
