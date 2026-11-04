@@ -1,0 +1,91 @@
+'use client';
+
+import { useRef, useState } from 'react';
+import { formatKz, parseAmount } from '@kianda/core';
+import { useMutation } from '@/lib/client';
+import { monthLabel } from '@/lib/format';
+
+export interface BatchResult { batchId: string; count: number; totalMinor: number; replayed: boolean }
+type Kind = 'bonus' | 'other_earning' | 'advance' | 'other_deduction' | 'salary_cut';
+
+export function BatchVariables({ period, people, disabled, onPendingChange, onCancel, onSaved }: {
+  period: string; people: { id: string; name: string }[]; disabled: boolean;
+  onPendingChange: (pending: boolean) => void; onCancel: () => void; onSaved: (result: BatchResult) => void;
+}) {
+  const { busy, error, run } = useMutation();
+  const [kind, setKind] = useState<Kind>('bonus'), [label, setLabel] = useState('');
+  const [inInss, setInInss] = useState(true), [inIrt, setInIrt] = useState(true);
+  const [filter, setFilter] = useState(''), [page, setPage] = useState(0);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [amounts, setAmounts] = useState<Record<string, string>>({}), [common, setCommon] = useState('');
+  const request = useRef<{ payload: string; id: string } | null>(null);
+  const earning = kind === 'bonus' || kind === 'other_earning';
+  const locked = disabled || busy;
+  const filtered = people.filter((p) => p.name.toLocaleLowerCase('pt-PT').includes(filter.trim().toLocaleLowerCase('pt-PT')));
+  const pages = Math.max(1, Math.ceil(filtered.length / 50)), current = Math.min(page, pages - 1);
+  const visible = filtered.slice(current * 50, (current + 1) * 50);
+  const value = (id: string) => parseAmount(amounts[id] ?? '');
+  const invalid = [...selected].filter((id) => (value(id) ?? 0) <= 0 || !Number.isSafeInteger(value(id)));
+  const total = [...selected].reduce((sum, id) => sum + (value(id) ?? 0), 0);
+  const canSave = !locked && selected.size > 0 && selected.size <= 1000 && !invalid.length && label.trim().length >= 2 && Number.isSafeInteger(total);
+  function choose(id: string, checked: boolean) {
+    setSelected((before) => { const next = new Set(before); checked ? next.add(id) : next.delete(id); return next; });
+  }
+  return <form className="form card cols4" aria-label="Variáveis em lote" onChange={() => onPendingChange(true)} onSubmit={async (e) => {
+    e.preventDefault();
+    if (!canSave) return;
+    const rows = [...selected].sort().map((employeeId) => ({ employeeId, amount: value(employeeId)! / 100 }));
+    const body = { period, kind, label: label.trim(), inInss, inIrt, rows };
+    const payload = JSON.stringify(body);
+    if (request.current?.payload !== payload) request.current = { payload, id: crypto.randomUUID() };
+    onPendingChange(true);
+    await run<BatchResult>('/v1/payroll-variables/batch', 'POST', { ...body, requestId: request.current.id }, (result) => { if (result) onSaved(result); });
+  }}>
+    <fieldset disabled={locked} style={{ display: 'contents' }}>
+      <h3>Variáveis em lote · {monthLabel(period)}</h3>
+      <p className="muted wide">Seleccione os colaboradores e indique os valores deste mês. O lote só é gravado se todos os lançamentos forem válidos. Depois, calcule ou recalcule a folha mensal da equipa.</p>
+      <label>Tipo do lote<select value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
+        <option value="bonus">Prémio / gratificação</option><option value="other_earning">Outro abono</option>
+        <option value="advance">Adiantamento (desconto)</option><option value="other_deduction">Outro desconto</option>
+        <option value="salary_cut">Desconto na remuneração (reduz INSS/IRT — cálculo manual)</option>
+      </select></label>
+      <label className="span2">Descrição do lote<input value={label} onChange={(e) => setLabel(e.target.value)} required minLength={2} maxLength={160} placeholder={earning ? 'Ex.: Prémio de desempenho do mês' : 'Ex.: Desconto acordado do mês'} /></label>
+      {earning && <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <label style={{ flexDirection: 'row', gap: 6 }}><input type="checkbox" checked={inInss} onChange={(e) => setInInss(e.target.checked)} style={{ width: 16, height: 16 }} /> Incide INSS</label>
+        <label style={{ flexDirection: 'row', gap: 6 }}><input type="checkbox" checked={inIrt} onChange={(e) => setInIrt(e.target.checked)} style={{ width: 16, height: 16 }} /> Incide IRT</label>
+      </div>}
+      <label className="span2">Pesquisar colaboradores<input value={filter} onChange={(e) => { e.stopPropagation(); setFilter(e.target.value); setPage(0); }} placeholder="Nome do colaborador" /></label>
+      <label>Valor comum (Kz)<input inputMode="decimal" value={common} onChange={(e) => setCommon(e.target.value)} placeholder="Opcional" /></label>
+      <div style={{ alignSelf: 'end' }}><button type="button" className="btn ghost sm" disabled={!selected.size || (parseAmount(common) ?? 0) <= 0} onClick={() => {
+        setAmounts((before) => { const next = { ...before }; for (const id of selected) next[id] = common; return next; }); onPendingChange(true);
+      }}>Aplicar valor aos seleccionados</button></div>
+      <div className="wide actions" style={{ justifyContent: 'flex-start' }}>
+        <button type="button" className="btn ghost sm" disabled={!filtered.length || new Set([...selected, ...filtered.map(p => p.id)]).size > 1000} onClick={() => { setSelected(new Set([...selected, ...filtered.map(p => p.id)])); onPendingChange(true); }}>Seleccionar resultados ({filtered.length})</button>
+        <button type="button" className="btn ghost sm" disabled={!selected.size} onClick={() => { setSelected(new Set()); onPendingChange(true); }}>Limpar selecção</button>
+        <span className="muted">{selected.size} seleccionado(s) · valor do lote {Number.isSafeInteger(total) ? formatKz(total) : 'Total acima do limite'}</span>
+      </div>
+      <div className="wide table-scroll">
+        <table aria-label="Colaboradores do lote"><thead><tr><th>Seleccionar</th><th>Colaborador</th><th>Valor (Kz)</th></tr></thead><tbody>
+          {visible.map((p) => <tr key={p.id}>
+            <td><input type="checkbox" aria-label={`Seleccionar ${p.name}`} checked={selected.has(p.id)} disabled={!selected.has(p.id) && selected.size >= 1000} onChange={(e) => choose(p.id, e.target.checked)} style={{ width: 16, height: 16 }} /></td>
+            <td>{p.name}</td>
+            <td><input inputMode="decimal" aria-label={`Valor de ${p.name}`} value={amounts[p.id] ?? ''} disabled={!selected.has(p.id)} required={selected.has(p.id)} onChange={(e) => setAmounts((before) => ({ ...before, [p.id]: e.target.value }))} style={{ width: 140, maxWidth: '100%' }} /></td>
+          </tr>)}
+        </tbody></table>
+        {!filtered.length && <p className="empty">Sem colaboradores com esse nome.</p>}
+      </div>
+      <div className="wide actions" style={{ justifyContent: 'flex-start' }}>
+        <button type="button" className="btn ghost sm" disabled={current === 0} onClick={() => setPage(current - 1)}>Anterior</button>
+        <span className="muted">Página {current + 1} de {pages} · {filtered.length} resultado(s)</span>
+        <button type="button" className="btn ghost sm" disabled={current >= pages - 1} onClick={() => setPage(current + 1)}>Seguinte</button>
+      </div>
+      <p className="muted wide">Até 1.000 colaboradores por lote. A selecção mantém-se ao mudar a pesquisa ou a página. Pode ajustar cada valor depois de aplicar o valor comum.</p>
+      {!!invalid.length && <p className="muted wide">{invalid.length} valor(es) por preencher ou corrigir entre os seleccionados.</p>}
+      <div className="form-actions">
+        {error && <span className="err" role="alert">{error}</span>}
+        <button type="button" className="btn ghost" onClick={onCancel}>Cancelar lote</button>
+        <button className="btn" disabled={!canSave}>{busy ? 'A guardar o lote…' : 'Guardar lote'}</button>
+      </div>
+    </fieldset>
+  </form>;
+}

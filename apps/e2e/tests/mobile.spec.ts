@@ -37,6 +37,25 @@ test('RH no telemóvel: preparar mostra os campos e calcula sem alargar o ecrã'
   expect(errors).toEqual([]);
 });
 
+test('RH no telemóvel: lote de variáveis mantém os campos utilizáveis e grava a selecção', async ({ page, context }) => {
+  const owner = await registerCompany();
+  const employee = await apiAs(owner.token, 'POST', '/v1/employees', { number: '1', name: 'Pessoa do lote móvel', jobTitle: 'Técnico', contract: { type: 'indefinite', startDate: '2026-01-01', base: 100000 } });
+  expect(employee.status).toBe(201); await signIn(context, owner.token);
+  await page.goto('/processamento?mes=2026-10');
+  await page.getByRole('button', { name: 'Preparar processamento', exact: true }).click();
+  await page.getByRole('button', { name: 'Lançar em lote', exact: true }).click();
+  const form = page.getByRole('form', { name: 'Variáveis em lote', exact: true });
+  await form.getByLabel('Descrição do lote', { exact: true }).fill('Prémio no telefone');
+  await form.getByRole('checkbox', { name: 'Seleccionar Pessoa do lote móvel', exact: true }).check();
+  await form.getByLabel('Valor comum (Kz)', { exact: true }).fill('10000');
+  await form.getByRole('button', { name: 'Aplicar valor aos seleccionados', exact: true }).click();
+  expect(await page.evaluate<number>('document.documentElement.scrollWidth - window.innerWidth')).toBeLessThanOrEqual(1);
+  await form.getByRole('button', { name: 'Guardar lote', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Lote guardado: 1');
+  await page.getByRole('button', { name: 'Calcular folha', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Recalcular', exact: true })).toBeVisible();
+});
+
 test('RH no telemóvel: corrigir a remuneração mostra os campos e actualiza a ficha', async ({ page, context }) => {
   const company = await registerCompany();
   const employee = await apiAs(company.token, 'POST', '/v1/employees', { number: '1', name: 'Correcção no telefone', jobTitle: 'Técnico', contract: { type: 'indefinite', startDate: '2026-11-01', base: 285600000, currency: 'USD', baseUsd: 300000 } });

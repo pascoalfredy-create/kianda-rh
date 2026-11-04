@@ -4,6 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { formObject, useMutation } from '@/lib/client';
 import { monthLabel } from '@/lib/format';
+import { formatKz } from '@kianda/core';
+import { BatchVariables, type BatchResult } from './batch-variables';
 
 export function PrepareButton({ period, prepared, people, variableCount, indexed = 0, fx }: { period: string; prepared: boolean; people: { id: string; name: string }[]; variableCount: number; indexed?: number; fx?: { rate: string | null; date: string | null; source: string | null } }) {
   const { busy, error, run } = useMutation();
@@ -34,14 +36,14 @@ export function PrepareButton({ period, prepared, people, variableCount, indexed
       </>}
       {open && <section aria-label="Preparação do processamento" style={{ width: '100%', minWidth: 0 }}>
         <h2>Preparar {monthLabel(period)}</h2>
-        <p className="muted">A base e os subsídios vêm dos contratos. As faltas e horas extra vêm da assiduidade aprovada. Reveja esses dados e, se necessário, lance as variáveis deste mês antes de calcular.</p>
+        <p className="muted">A folha calcula toda a equipa elegível do mês. A base e os subsídios vêm dos contratos; as faltas e horas extra vêm dos registos aprovados. Pode lançar as variáveis individualmente ou em lote antes de calcular.</p>
         <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', margin: '12px 0' }}>
           <Link className="btn ghost sm" href="/colaboradores">Rever salários e contratos</Link>
           <Link className="btn ghost sm" href={`/assiduidade?mes=${period}`}>Rever assiduidade</Link>
         </div>
         {fxFields}
         <p className="muted">{variableCount} {variableCount === 1 ? 'variável guardada' : 'variáveis guardadas'} para este mês. O preenchimento abaixo é opcional; guarde cada variável que quiser incluir na folha.</p>
-        {people.length ? <AddVariable period={period} people={people} initialOpen disabled={busy} onPendingChange={setPendingVariable} /> : <p className="muted">Sem colaboradores activos para lançar variáveis. Reveja as fichas e os contratos da equipa.</p>}
+        {people.length ? <VariableEntry period={period} people={people} initialOpen preparing disabled={busy} onPendingChange={setPendingVariable} /> : <p className="muted">Sem colaboradores activos para lançar variáveis. Reveja as fichas e os contratos da equipa.</p>}
         <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', marginTop: 14 }}>
           <button type="button" className="btn" disabled={calculateDisabled} onClick={calculate}>{busy ? 'A calcular…' : 'Calcular folha'}</button>
           <button type="button" className="btn ghost" disabled={busy || pendingVariable} onClick={() => setOpen(false)}>Cancelar preparação</button>
@@ -87,7 +89,19 @@ export function SubsidyToggle({ runId, employeeId, kind, paid, override }: { run
   );
 }
 
-export function AddVariable({ period, people, initialOpen = false, disabled = false, onPendingChange }: { period: string; people: { id: string; name: string }[]; initialOpen?: boolean; disabled?: boolean; onPendingChange?: (pending: boolean) => void }) {
+export function VariableEntry({ period, people, initialOpen = false, preparing = false, disabled = false, onPendingChange }: { period: string; people: { id: string; name: string }[]; initialOpen?: boolean; preparing?: boolean; disabled?: boolean; onPendingChange?: (pending: boolean) => void }) {
+  const [batch, setBatch] = useState(false), [pending, setPending] = useState(false);
+  const [saved, setSaved] = useState<BatchResult | null>(null);
+  const notify = (value: boolean) => { setPending(value); onPendingChange?.(value); };
+  return <section aria-label="Lançamento de variáveis" style={{ minWidth: 0, width: '100%' }}>
+    <div className="actions" style={{ justifyContent: 'flex-start', marginBottom: 10 }}><button type="button" className="btn ghost" disabled={disabled || pending} onClick={() => { setBatch(!batch); setSaved(null); }}>{batch ? 'Lançamento individual' : 'Lançar em lote'}</button></div>
+    {batch ? <BatchVariables period={period} people={people} disabled={disabled} onPendingChange={notify} onCancel={() => { notify(false); setBatch(false); }} onSaved={(result) => { setSaved(result); notify(false); setBatch(false); }} />
+      : <AddVariable period={period} people={people} initialOpen={initialOpen} preparing={preparing} disabled={disabled} onPendingChange={notify} />}
+    {saved && <p role="status" className="ok">Lote {saved.replayed ? 'já confirmado' : 'guardado'}: {saved.count} variável(eis), total {formatKz(saved.totalMinor)}. {preparing ? 'Clique em Calcular folha.' : 'Clique em Recalcular para actualizar a folha.'}</p>}
+  </section>;
+}
+
+export function AddVariable({ period, people, initialOpen = false, preparing = false, disabled = false, onPendingChange }: { period: string; people: { id: string; name: string }[]; initialOpen?: boolean; preparing?: boolean; disabled?: boolean; onPendingChange?: (pending: boolean) => void }) {
   const { busy, error, run } = useMutation();
   const [kind, setKind] = useState('bonus');
   const [open, setOpen] = useState(initialOpen);
@@ -133,7 +147,7 @@ export function AddVariable({ period, people, initialOpen = false, disabled = fa
         <button type="button" className="btn ghost" disabled={locked} onClick={() => { setOpen(false); onPendingChange?.(false); }}>Cancelar</button>
         <button className="btn" disabled={locked}>Lançar</button>
       </div>
-      <p className="muted wide">Depois de lançar, carregue em “{onPendingChange ? 'Calcular folha' : 'Recalcular'}” para actualizar o processamento.</p>
+      <p className="muted wide">Depois de lançar, carregue em “{preparing ? 'Calcular folha' : 'Recalcular'}” para actualizar o processamento.</p>
     </form>
   );
 }
