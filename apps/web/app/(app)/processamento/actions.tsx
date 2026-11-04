@@ -41,7 +41,7 @@ export function PrepareButton({ period, prepared, people, variableCount, indexed
         </div>
         {fxFields}
         <p className="muted">{variableCount} {variableCount === 1 ? 'variável guardada' : 'variáveis guardadas'} para este mês. O preenchimento abaixo é opcional; guarde cada variável que quiser incluir na folha.</p>
-        {people.length ? <AddVariable period={period} people={people} initialOpen onPendingChange={setPendingVariable} /> : <p className="muted">Sem colaboradores activos para lançar variáveis. Reveja as fichas e os contratos da equipa.</p>}
+        {people.length ? <AddVariable period={period} people={people} initialOpen disabled={busy} onPendingChange={setPendingVariable} /> : <p className="muted">Sem colaboradores activos para lançar variáveis. Reveja as fichas e os contratos da equipa.</p>}
         <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', marginTop: 14 }}>
           <button type="button" className="btn" disabled={calculateDisabled} onClick={calculate}>{busy ? 'A calcular…' : 'Calcular folha'}</button>
           <button type="button" className="btn ghost" disabled={busy || pendingVariable} onClick={() => setOpen(false)}>Cancelar preparação</button>
@@ -87,12 +87,13 @@ export function SubsidyToggle({ runId, employeeId, kind, paid, override }: { run
   );
 }
 
-export function AddVariable({ period, people, initialOpen = false, onPendingChange }: { period: string; people: { id: string; name: string }[]; initialOpen?: boolean; onPendingChange?: (pending: boolean) => void }) {
+export function AddVariable({ period, people, initialOpen = false, disabled = false, onPendingChange }: { period: string; people: { id: string; name: string }[]; initialOpen?: boolean; disabled?: boolean; onPendingChange?: (pending: boolean) => void }) {
   const { busy, error, run } = useMutation();
   const [kind, setKind] = useState('bonus');
   const [open, setOpen] = useState(initialOpen);
+  const locked = busy || disabled;
   const earning = kind === 'bonus' || kind === 'other_earning';
-  if (!open) return <button className="btn" onClick={() => setOpen(true)}>Lançar variável</button>;
+  if (!open) return <button className="btn" disabled={locked} onClick={() => setOpen(true)}>Lançar variável</button>;
   return (
     <form
       className="form card cols4"
@@ -108,10 +109,10 @@ export function AddVariable({ period, people, initialOpen = false, onPendingChan
     >
       <h3>Nova variável de {period}</h3>
       <label className="span2">Colaborador
-        <select name="employeeId" required>{people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+        <select name="employeeId" required disabled={locked}>{people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
       </label>
       <label>Tipo
-        <select name="kind" value={kind} onChange={(e) => setKind(e.target.value)}>
+        <select name="kind" disabled={locked} value={kind} onChange={(e) => setKind(e.target.value)}>
           <option value="bonus">Prémio / gratificação</option>
           <option value="other_earning">Outro abono</option>
           <option value="advance">Adiantamento (desconto)</option>
@@ -119,18 +120,18 @@ export function AddVariable({ period, people, initialOpen = false, onPendingChan
           <option value="salary_cut">Desconto na remuneração (reduz INSS/IRT — cálculo manual)</option>
         </select>
       </label>
-      <label>Valor (Kz)<input name="amount" inputMode="decimal" required /></label>
-      <label className="span2">Descrição<input name="label" required placeholder={earning ? 'Ex.: Prémio de desempenho do trimestre' : 'Ex.: Prestação do empréstimo 3/10'} /></label>
+      <label>Valor (Kz)<input name="amount" inputMode="decimal" required disabled={locked} /></label>
+      <label className="span2">Descrição<input name="label" required disabled={locked} placeholder={earning ? 'Ex.: Prémio de desempenho do trimestre' : 'Ex.: Prestação do empréstimo 3/10'} /></label>
       {earning && (
         <div className="span2" style={{ display: 'flex', gap: 18, alignItems: 'end', paddingBottom: 8 }}>
-          <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><input type="checkbox" name="inInss" defaultChecked style={{ height: 16 }} /> Incide INSS</label>
-          <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><input type="checkbox" name="inIrt" defaultChecked style={{ height: 16 }} /> Incide IRT</label>
+          <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><input type="checkbox" name="inInss" defaultChecked disabled={locked} style={{ height: 16 }} /> Incide INSS</label>
+          <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><input type="checkbox" name="inIrt" defaultChecked disabled={locked} style={{ height: 16 }} /> Incide IRT</label>
         </div>
       )}
       <div className="form-actions">
         {error && <span className="err">{error}</span>}
-        <button type="button" className="btn ghost" disabled={busy} onClick={() => { setOpen(false); onPendingChange?.(false); }}>Cancelar</button>
-        <button className="btn" disabled={busy}>Lançar</button>
+        <button type="button" className="btn ghost" disabled={locked} onClick={() => { setOpen(false); onPendingChange?.(false); }}>Cancelar</button>
+        <button className="btn" disabled={locked}>Lançar</button>
       </div>
       <p className="muted wide">Depois de lançar, carregue em “{onPendingChange ? 'Calcular folha' : 'Recalcular'}” para actualizar o processamento.</p>
     </form>
