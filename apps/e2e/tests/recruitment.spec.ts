@@ -40,9 +40,11 @@ test('publicar uma vaga gera a ligação; candidatura anónima com CV entra no q
   await page.getByRole('button', { name: 'Enviar candidatura', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Candidatura recebida');
   await expect(page.getByRole('status')).toContainText(/K-[A-F0-9]{8}/);
+  const reference = /K-[A-F0-9]{8}/.exec(await page.getByRole('status').innerText())![0];
   await signIn(context, owner.token); await page.goto(`/recrutamento/${openingId}`);
   await page.getByRole('link', { name: 'Amélia Portal', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Amélia Portal', exact: true })).toBeVisible();
+  await expect(page.locator('body')).toContainText(reference);
   await expect(page.locator('body')).toContainText('4 ano(s)');
   await expect(page.getByRole('link', { name: 'curriculo-amelia.pdf', exact: true })).toBeVisible();
   await expect(page.locator('body')).toContainText('Candidatura recebida pelo portal público, com consentimento.');
@@ -63,7 +65,7 @@ test('suspender e fechar desactiva o link e impede o envio de um formulário já
   await page.getByLabel('Autorizo o tratamento dos meus dados para este processo de recrutamento.', { exact: true }).check();
   expect((await apiAs(owner.token, 'PATCH', `/v1/openings/${created.body.id}`, { status: 'on_hold' })).status).toBe(200);
   await page.getByRole('button', { name: 'Enviar candidatura', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('já não está a receber candidaturas');
+  await expect(page.getByRole('region', { name: 'Formulário de candidatura', exact: true }).getByRole('alert')).toContainText('já não está a receber candidaturas');
   await page.reload(); await expect(page.getByRole('heading', { name: 'Vaga indisponível', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Ver outras vagas', exact: true })).toHaveAttribute('href', `/carreiras/${owner.id}`);
   expect((await apiAs(owner.token, 'PATCH', `/v1/openings/${created.body.id}`, { status: 'open', isPublic: true })).status).toBe(200);
@@ -84,7 +86,7 @@ test('falha de rede conserva contactos e CV e permite repetir a candidatura', as
   await page.getByLabel('Autorizo o tratamento dos meus dados para este processo de recrutamento.', { exact: true }).check();
   await page.route('**/api/v1/public/careers/**/apply', route => route.abort('failed'), { times: 1 });
   await page.getByRole('button', { name: 'Enviar candidatura', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('Verifique a ligação');
+  await expect(page.getByRole('region', { name: 'Formulário de candidatura', exact: true }).getByRole('alert')).toContainText('Verifique a ligação');
   await expect(page.getByLabel('Nome completo', { exact: true })).toHaveValue('Bento Recuperação');
   await expect(page.getByRole('button', { name: 'Remover CV', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Enviar candidatura', exact: true }).click();

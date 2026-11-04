@@ -47,7 +47,7 @@ export function ApplyForm({ company, openingId }: { company: string; openingId: 
       <details className="wide"><summary style={{ cursor: 'pointer' }}>Dados profissionais (opcional)</summary><div className="form" style={{ padding: '12px 0 0' }}>
         <label>Função actual<input name="currentRole" maxLength={120} /></label>
         <label>Anos de experiência<input name="yearsExperience" type="number" min={0} max={80} step={1} /></label>
-        <label>Nível de formação<select name="highestEducation" defaultValue=""><option value="">—</option>{['Ensino secundário', 'Ensino técnico', 'Licenciatura', 'Pós-graduação', 'Mestrado', 'Doutoramento'].map(s => <option key={s}>{s}</option>)}</select></label>
+        <label>Nível de formação<select name="highestEducation" aria-label="Nível de formação" defaultValue=""><option value="">—</option>{['Ensino secundário', 'Ensino técnico', 'Licenciatura', 'Pós-graduação', 'Mestrado', 'Doutoramento'].map(s => <option key={s}>{s}</option>)}</select></label>
         <label>Área de formação<input name="fieldOfStudy" maxLength={160} /></label>
         <label className="span2">Perfil profissional online<input name="linkedinUrl" type="url" maxLength={2000} placeholder="https://…" /></label>
         <label>Pretensão salarial (Kz)<input name="expectedSalary" inputMode="decimal" /></label>

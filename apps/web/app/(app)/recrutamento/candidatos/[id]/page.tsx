@@ -33,6 +33,7 @@ export default async function Candidato({ params }: { params: Promise<{ id: stri
         <div className="card section">
           <h2>Dados</h2>
           <dl className="dl">
+            <div><dt>Referência</dt><dd>K-{c.id.slice(0, 8).toUpperCase()}</dd></div>
             <div><dt>Email</dt><dd>{c.email ?? '—'}</dd></div>
             <div><dt>Telefone</dt><dd>{c.phone ?? '—'}</dd></div>
             {c.profile.currentRole && <div><dt>Função actual</dt><dd>{c.profile.currentRole}</dd></div>}
