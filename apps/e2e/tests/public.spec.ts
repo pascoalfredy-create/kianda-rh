@@ -25,7 +25,7 @@ test('uma falha de rede no login apresenta um erro e permite tentar novamente', 
   await page.getByLabel('Email', { exact: true }).fill('rede@e2e.kianda.test');
   await page.getByLabel('Palavra-passe', { exact: true }).fill('RedeDeTeste2026');
   await page.getByRole('button', { name: 'Entrar', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('Verifique a ligação');
+  await expect(page.locator('form [role="alert"]')).toContainText('Verifique a ligação');
   await expect(page.getByRole('button', { name: 'Entrar', exact: true })).toBeEnabled();
   await page.getByRole('link', { name: '← Página inicial', exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
@@ -70,7 +70,7 @@ test('login: palavra-passe errada é recusada e a certa entra na conta', async (
   await page.fill('input[type=email]', company.email);
   await page.fill('input[type=password]', 'PalavraErrada2026xyz');
   await page.getByRole('button', { name: 'Entrar' }).click();
-  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.locator('form [role="alert"]')).toBeVisible();
   await expect(page).toHaveURL(/\/login/);
   await page.fill('input[type=password]', PASSWORD);
   await page.getByRole('button', { name: 'Entrar' }).click();

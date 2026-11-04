@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest';
-import { auditLogs, closeDb, eq, getDb, users } from '@kianda/db';
+import { and, auditLogs, closeDb, eq, getDb, users } from '@kianda/db';
 import { REGISTRATION_TERMS_VERSION } from '@kianda/core';
 import { buildApp } from '../src/app.js';
 import { testClient } from './inject.js';
@@ -31,7 +31,7 @@ describe.skipIf(!process.env.DATABASE_URL)('retirada de acessos em sessões já 
     expect(r.statusCode).toBe(201);
     const headers = { cookie: `kianda_session=${r.cookies.find(c => c.name === 'kianda_session')!.value}` };
     const id = r.json().user.id;
-    const [event] = await getDb().select().from(auditLogs).where(eq(auditLogs.entityId, r.json().company.id));
+    const [event] = await getDb().select().from(auditLogs).where(and(eq(auditLogs.entityId, r.json().company.id), eq(auditLogs.action, 'register')));
     expect(event!.after).toMatchObject({ terms: { accepted: true, version: REGISTRATION_TERMS_VERSION } });
     await getDb().update(users).set({ role: 'employee' }).where(eq(users.id, id));
     const me = await app.inject({ method: 'GET', url: '/v1/auth/me', headers });

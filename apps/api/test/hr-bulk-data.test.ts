@@ -78,7 +78,7 @@ describe.skipIf(!process.env.DATABASE_URL)('leituras RH em conjunto: resultados,
   it('carrega sessão, módulos e contadores com uma única leitura, sem expor o logotipo', async () => {
     const measured = await measureQueries(() => request(owner, 'GET', '/v1/auth/me'));
     expect(measured.value.statusCode).toBe(200);
-    expect(measured.queries).toBeLessThanOrEqual(5); // Uma leitura e a transacção RLS.
+    expect(measured.queries).toBeLessThanOrEqual(6); // Revalida o utilizador numa leitura constante, mais a transacção RLS.
     expect(measured.value.json().company).toMatchObject({ id: companyId, hasLogo: false });
     expect(measured.value.json().company).not.toHaveProperty('logoDataUrl');
     expect((await request(other, 'GET', '/v1/auth/me')).json().company.id).not.toBe(companyId);
@@ -164,7 +164,7 @@ describe.skipIf(!process.env.DATABASE_URL)('leituras RH em conjunto: resultados,
     });
     const r = await measureQueries(() => request(owner, 'GET', '/v1/employees'));
     expect(r.value.statusCode).toBe(200);
-    expect(r.queries).toBeLessThanOrEqual(6); // Licença, uma leitura dos dados e transacção RLS.
+    expect(r.queries).toBeLessThanOrEqual(7); // Revalida o utilizador, licença, uma leitura dos dados e transacção RLS.
     const employee = r.value.json().find((e: { id: string }) => e.id === ids[0]);
     expect(employee.contract.baseMinor).toBe(44000000);
     expect(employee.alerts.some((a: string) => a.includes('Passaporte') && a.includes('caducou'))).toBe(true);
@@ -225,8 +225,8 @@ describe.skipIf(!process.env.DATABASE_URL)('leituras RH em conjunto: resultados,
     expect(data.variables).toHaveLength(2);
     expect(data.run).toEqual((await request(owner, 'GET', `/v1/payroll-runs/${data.run.id}`)).json());
     expect(data.variables).toEqual((await request(owner, 'GET', '/v1/payroll-variables?period=2026-07')).json());
-    // 9 + 1: colaboradores com salário indexado ao dólar (o câmbio só é pedido quando os há).
-    expect(opening.queries).toBeLessThanOrEqual(10);
+    // 9 + 1 de salários indexados + 1 de revalidação do utilizador (o câmbio só é pedido quando os há).
+    expect(opening.queries).toBeLessThanOrEqual(11);
     expect((await request(other, 'GET', '/v1/payroll-runs/opening?period=2026-07')).json()).toEqual({ run: null, variables: [] });
     expect((await request(sessions.get('manager')!, 'GET', '/v1/payroll-runs/opening?period=2026-07')).statusCode).toBe(403);
     expect((await request(owner, 'GET', '/v1/payroll-runs/opening?period=errado')).statusCode).toBe(400);
