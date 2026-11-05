@@ -8,9 +8,18 @@ let saveTimer=null,saving=null,pendingSave=false,conflict=false,offline=false;
 const ESC=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dateLbl=s=>{try{return new Date(s).toLocaleDateString('pt-PT',{day:'2-digit',month:'2-digit',year:'numeric'})}catch(e){return ''}};
 
+function valoraEmptyOverviewKpis(){
+  return [
+    ...['Receita real','EBITDA real','Resultado líquido real','Tesouraria real'].map(label=>kpi(label,'—','Mkz','Sem meses reais encerrados')),
+    kpi(`Previsão receita ${EX}`,f0(R.fy?.rec),'Mkz','Orçamento e previsão anual'),
+    kpi(`Previsão RL ${EX}`,f0(R.fy?.rl),'Mkz','Orçamento e previsão anual'),
+  ].join('');
+}
+
 function valoraCanWrite(){return !!VS&&VS.canWrite&&!!CUR&&!CUR.archivedAt&&!conflict}
 function valoraIssue(x){return valuationDataIssue(x)}
 function valoraFechoLabel(){return D.fecho?`Fecho: ${MES[D.fecho-1]} ${EX}`:`Sem meses reais · ${EX}`}
+document.querySelector('#valoraCopilot')?.addEventListener('click',async e=>{e.preventDefault();try{await ensureSaved();location.assign('/copiloto?modulo=valuation'+(CUR?.id?'&projecto='+encodeURIComponent(CUR.id):''))}catch(error){banner('err',ESC(error.message))}});
 
 /* ---------- Pedidos à API ---------- */
 async function api(path,opt={}){

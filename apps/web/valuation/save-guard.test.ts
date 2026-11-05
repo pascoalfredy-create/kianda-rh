@@ -28,6 +28,14 @@ function harness(error?: Record<string, unknown>, issue: string | null = null) {
 }
 
 describe('Valora conserva o rascunho quando não o consegue gravar', () => {
+  it('uma análise sem meses reais mostra informação em falta e preserva a previsão', () => {
+    const code = source.slice(source.indexOf('function valoraEmptyOverviewKpis('), source.indexOf('function valoraCanWrite('));
+    const cards: unknown[][] = [];
+    const ctx = { R: { fy: { rec: 123, rl: 45 } }, EX: 2026, f0: String, kpi: (...args: unknown[]) => { cards.push(args); return ''; } };
+    runInNewContext(`${code};valoraEmptyOverviewKpis();`, ctx);
+    expect(cards).toHaveLength(6); expect(cards.slice(0, 4).every(c => c[1] === '—' && c[3] === 'Sem meses reais encerrados')).toBe(true);
+    expect(cards[4]!.slice(0, 2)).toEqual(['Previsão receita 2026', '123']); expect(cards[5]!.slice(0, 2)).toEqual(['Previsão RL 2026', '45']);
+  });
   for (const [name, error] of [
     ['sem rede', { offline: true, message: 'Sem ligação' }],
     ['conflito', { status: 409, code: 'revisao_invalida', message: 'Conflito' }],

@@ -179,6 +179,7 @@ function protect() {
 }
 function render() {
   if(!session)return;
+  const copilot=document.querySelector('#integra-copilot');if(copilot)copilot.href='/copiloto?modulo=modeling'+(M()?.id?'&projecto='+encodeURIComponent(M().id):'');
   $('#view').dataset.view=VIEW;
   $('#view').dataset.wide=String(['demonstracoes','credito','sensibilidade','analise'].includes(VIEW)||VIEW==='pressupostos'&&['capex','receitas'].includes(SUB.pt));
   if(!M()) {
@@ -384,6 +385,7 @@ async function applyPersonnelImport(){
 document.addEventListener('click',async ev=>{
   const target=ev.target instanceof Element?ev.target:null;if(!target)return;
   const menuAction=target.closest('[data-act]');
+  if(menuAction?.dataset.act==='openCopilot'){ev.preventDefault();if(busy)return;try{await store?.flush();location.assign('/copiloto?modulo=modeling'+(M()?.id?'&projecto='+encodeURIComponent(M().id):''))}catch(error){notice=error.message;render()}return;}
   if(menuAction?.dataset.act==='navToggle'){const group=menuAction.dataset.group,open=!navExpanded[group];for(const key of Object.keys(navExpanded))delete navExpanded[key];navExpanded[group]=open;renderNavigation();return;}
   if(menuAction?.dataset.act==='toggleMenu'){setMenuOpen(!$('.app').classList.contains('menu-open'));return;}
   if(menuAction?.dataset.act==='closeMenu'){setMenuOpen(false);return;}

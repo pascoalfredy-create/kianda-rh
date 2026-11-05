@@ -25,6 +25,8 @@ export function moduleAccess(grant: ModuleGrant | null, today: string) {
 
 /** Apenas domínios de negócio; sessão, utilizadores, definições e facturação são partilhados. */
 export function moduleForPath(path: string): PlatformModule | null {
+  const copilot = /^\/v1\/copilots\/(hr|modeling|valuation)(?:\/|$)/.exec(path);
+  if (copilot) return copilot[1] as PlatformModule;
   if (/^\/v1\/modeling(?:\/|$)/.test(path)) return 'modeling';
   if (/^\/v1\/valuation(?:\/|$)/.test(path)) return 'valuation';
   if (/^\/v1\/(auth|users|access|billing|platform|modules)(?:\/|$)/.test(path)) return null;

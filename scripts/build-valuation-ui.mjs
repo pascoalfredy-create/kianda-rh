@@ -38,6 +38,12 @@ function spelling(text) {
 }
 shell = spelling(shell); source = spelling(source);
 
+// Uma análise nova tem fecho=0: valores reais em falta não são zero nem podem ser desreferenciados.
+replace("$('#kpis26').innerHTML=[", "$('#kpis26').innerHTML=D.fecho?[");
+replace('`Sem recurso à linha de crédito`)].join(\'\');', '`Sem recurso à linha de crédito`)].join(\'\'):valoraEmptyOverviewKpis();');
+replace("$('#sub-rv').textContent=`Mkz · real até ${mf}, previsão (esbatido) nos meses seguintes`;", "$('#sub-rv').textContent=D.fecho?`Mkz · real até ${mf}, previsão (esbatido) nos meses seguintes`:'Mkz · sem meses reais encerrados; orçamento e previsão nos meses seguintes';");
+replace('function diag(){', "function diag(){\n  if(!D.fecho)return [['neu','Sem meses reais encerrados','Preencha e encerre os meses reais para comparar a execução com o orçamento. O histórico e as previsões continuam disponíveis.']];");
+
 /* ---------- Estrutura: cabeçalho, menu no telemóvel, anos dinâmicos ---------- */
 replaceShell('<div class="brand"><div class="brand-mark">V</div><div><b>Valora</b><small>Análise, gestão & avaliação</small></div></div>',
   '<div class="brand"><div class="brand-mark">V</div><div><b>Valora</b><small>Análise, gestão & avaliação</small></div><button type="button" class="btn valora-menu" id="valoraMenu" aria-label="Abrir menu" aria-expanded="false" aria-controls="nav">☰</button></div>');
@@ -45,7 +51,7 @@ replaceShell('<div class="side-foot">Protótipo · dados fictícios<br>Valores e
   '<div class="side-foot"><span id="valoraFoot"></span>Valores em Kz<br><a href="/modulos" class="valora-link">Módulos e licenças</a> · <button type="button" class="valora-link" id="valoraLogout">Terminar sessão</button></div>');
 // Sair do Valora para os outros módulos: sempre à vista no cabeçalho (como no Integra), também no telemóvel.
 replaceShell('<button class="btn" id="btnTheme" title="Alternar tema claro/escuro">Tema</button>\n</header>',
-  '<button class="btn" id="btnTheme" title="Alternar tema claro/escuro">Tema</button>\n  <a class="btn valora-modules" href="/modulos" id="valoraModules">Módulos e licenças</a><button type="button" class="btn" id="valoraLogoutTop">Terminar sessão</button>\n</header>');
+  '<button class="btn" id="btnTheme" title="Alternar tema claro/escuro">Tema</button>\n  <a class="btn" id="valoraCopilot" href="/copiloto?modulo=valuation">Copiloto</a><a class="btn valora-modules" href="/modulos" id="valoraModules">Módulos e licenças</a><button type="button" class="btn" id="valoraLogoutTop">Terminar sessão</button>\n</header>');
 replaceShell('<p class="intro">Demonstrações por natureza (PGC Angola: <b>', '<p class="intro">Demonstrações por natureza (<b>');
 replace(' segundo o PGC Angola, com exercício comparativo', ', com exercício comparativo');
 replaceShell('<div class="entity"><b id="hdrEnt">Kalunga Distribuição, S.A.</b><span class="pill" id="pillFecho">Fecho: Out 2026</span></div>',
