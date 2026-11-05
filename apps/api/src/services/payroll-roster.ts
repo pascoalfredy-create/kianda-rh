@@ -1,11 +1,11 @@
-import { compensationAt, lastDayOfMonth } from '@kianda/core';
-import { and, asc, compensationChanges, contracts, departments, desc, employees, eq, inArray, lte, type Db } from '@kianda/db';
+import { compensationAt, lastDayOfMonth, EMPLOYEE_MIGRATION_REASON } from '@kianda/core';
+import { and, asc, compensationChanges, contracts, departments, desc, employees, eq, inArray, lte, sql, type Db } from '@kianda/db';
 
 /** O último contrato iniciado até ao fim do mês decide quem pertence à folha. */
 export async function eligiblePayrollStaff(db: Db, companyId: string, period: string) {
   const rows = await db.selectDistinctOn([employees.id], { e: employees, c: contracts }).from(employees)
     .innerJoin(contracts, and(eq(contracts.employeeId, employees.id), lte(contracts.startDate, lastDayOfMonth(period))))
-    .where(and(eq(employees.companyId, companyId), inArray(employees.status, ['active', 'terminated'])))
+    .where(and(eq(employees.companyId, companyId), inArray(employees.status, ['active', 'terminated']), sql`not exists (select 1 from ${compensationChanges} where ${compensationChanges.employeeId} = ${employees.id} and ${compensationChanges.contractId} = ${contracts.id} and ${compensationChanges.reason} = ${EMPLOYEE_MIGRATION_REASON} and ${compensationChanges.effectiveDate} > ${lastDayOfMonth(period)})`))
     .orderBy(employees.id, desc(contracts.startDate));
   return rows.filter(({ c }) => !(c.terminatedAt ?? c.endDate) || (c.terminatedAt ?? c.endDate)! >= `${period}-01`)
     .sort((a, b) => a.e.number.localeCompare(b.e.number, 'pt', { numeric: true }));
