@@ -1,11 +1,13 @@
-import { luandaDate, openingAcceptsApplications, pipelineStats, publicOpeningPath, SOURCES, STAGES, stageTransitionProblem, type Stage } from '@kianda/core';
+import { atsCompatibility, atsCriteriaProblems, formatKz, luandaDate, openingAcceptsApplications, pipelineStats, publicOpeningPath, SOURCES, STAGES, stageTransitionProblem, type Stage } from '@kianda/core';
 import {
-  and, asc, auditLogs, candidateEvents, candidates, departments, desc, employees, eq, getDb, inArray, jobOpenings, type Db,
+  and, asc, auditLogs, candidateEvents, candidates, companies, departments, desc, employees, eq, getDb, inArray, jobOpenings, recruitmentMail, recruitmentOffers, type Db,
 } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { body, requireCompany, type Actor, type AppEnv } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
+import { queueCandidateStage, queueRecruitmentMail } from '../services/recruitment-mail.js';
+import { mailConfig } from '../services/integrations.js';
 
 const isHr = (a: Actor) => a.role === 'owner' || a.role === 'hr_admin';
 const kz = z.number().nonnegative().max(1e11);
@@ -22,11 +24,13 @@ const openingFields = z.object({
   salaryMax: kz.optional().nullable(),
   description: z.string().trim().max(5000).optional().nullable(),
   requirements: z.string().trim().max(5000).optional().nullable(),
+  atsCriteria: z.array(z.object({ kind: z.enum(['skill', 'experience', 'education', 'language', 'certification']), label: z.string().trim().min(2).max(160), weight: z.number().int().min(1).max(100), required: z.boolean(), minimumYears: z.number().int().min(0).max(80).optional() })).max(12).superRefine((v, ctx) => { for (const message of atsCriteriaProblems(v)) ctx.addIssue({ code: 'custom', message }); }),
   status: z.enum(['draft', 'open', 'on_hold', 'closed']),
   isPublic: z.boolean(),
   closesOn: z.iso.date().optional().nullable(),
 });
 const openingBody = openingFields.extend({
+  atsCriteria: openingFields.shape.atsCriteria.default([]),
   contractType: openingFields.shape.contractType.default('indefinite'), positions: openingFields.shape.positions.default(1),
   status: openingFields.shape.status.default('draft'), isPublic: openingFields.shape.isPublic.default(false),
 }).refine((b) => b.salaryMin == null || b.salaryMax == null || b.salaryMin <= b.salaryMax, { message: 'Mínimo acima do máximo', path: ['salaryMax'] });
@@ -50,6 +54,7 @@ const candidateBody = z.object({
   availableFrom: z.iso.date().optional().nullable(),
   note: z.string().trim().max(2000).optional().nullable(),
 });
+const profileBody = z.object({ currentRole: z.string().trim().max(120).nullable().optional(), yearsExperience: z.number().int().min(0).max(80).nullable().optional(), highestEducation: z.string().trim().max(120).nullable().optional(), fieldOfStudy: z.string().trim().max(160).nullable().optional(), skills: z.array(z.string().trim().min(1).max(100)).max(30).optional(), languages: z.array(z.string().trim().min(1).max(100)).max(20).optional(), certifications: z.array(z.string().trim().min(1).max(100)).max(30).optional() });
 
 async function opening(db: Db, actor: Actor, id: string, lock = false) {
   const query = db.select().from(jobOpenings).where(and(eq(jobOpenings.id, id), eq(jobOpenings.companyId, actor.companyId)));
@@ -62,7 +67,9 @@ async function candidate(db: Db, actor: Actor, id: string, lockOpening = false) 
   const [c] = await db.select().from(candidates).where(and(eq(candidates.id, id), eq(candidates.companyId, actor.companyId)));
   if (!c) throw new DomainError('nao_encontrado', 'Candidato inexistente', 404);
   const o = await opening(db, actor, c.openingId, lockOpening);
-  return { c, o };
+  const current = lockOpening ? (await db.select().from(candidates).where(and(eq(candidates.id, id), eq(candidates.companyId, actor.companyId))))[0] : c;
+  if (!current) throw new DomainError('nao_encontrado', 'Candidato inexistente', 404);
+  return { c: current, o };
 }
 
 const event = (db: Db, actor: Actor, v: Omit<typeof candidateEvents.$inferInsert, 'actorId' | 'actorName'>) =>
@@ -144,7 +151,8 @@ export function recruitmentRoutes() {
       companyId: actor.companyId, openingId: o.id, name: b.name, email: b.email || null, phone: b.phone ?? null, source: b.source, cvUrl: b.cvUrl || null,
       coverLetter: b.coverLetter ?? null, expectedSalaryMinor: toMinor(b.expectedSalary), availableFrom: b.availableFrom ?? null,
     }).returning();
-    await event(db, actor, { candidateId: x!.id, kind: 'stage', toStage: 'applied', text: b.note ?? `Registado por ${actor.session.name ?? 'RH'}` });
+    const [ev] = await event(db, actor, { candidateId: x!.id, kind: 'stage', toStage: 'applied', text: b.note ?? `Registado por ${actor.session.name ?? 'RH'}` }).returning();
+    await queueCandidateStage(db, x!, o.title, 'applied', ev!.id);
     return c.json(x, 201);
   });
 
@@ -153,7 +161,12 @@ export function recruitmentRoutes() {
     const db = getDb();
     const { c: x, o } = await candidate(db, actor, c.req.param('id'));
     const events = await db.select().from(candidateEvents).where(eq(candidateEvents.candidateId, x.id)).orderBy(desc(candidateEvents.createdAt));
-    return c.json({ ...x, opening: { id: o.id, title: o.title, status: o.status, contractType: o.contractType, departmentId: o.departmentId, hiringManagerId: o.hiringManagerId }, events, canHire: isHr(actor) && x.stage === 'offer' && o.status !== 'closed' });
+    const [offers, notifications] = await Promise.all([
+      db.select().from(recruitmentOffers).where(eq(recruitmentOffers.candidateId, x.id)).orderBy(desc(recruitmentOffers.version)),
+      db.select({ id: recruitmentMail.id, eventId: recruitmentMail.eventId, kind: recruitmentMail.kind, status: recruitmentMail.status, attempts: recruitmentMail.attempts, error: recruitmentMail.error, createdAt: recruitmentMail.createdAt, sentAt: recruitmentMail.sentAt }).from(recruitmentMail).where(eq(recruitmentMail.candidateId, x.id)).orderBy(desc(recruitmentMail.createdAt)),
+    ]);
+    const latest = offers[0];
+    return c.json({ ...x, opening: { id: o.id, title: o.title, status: o.status, contractType: o.contractType, departmentId: o.departmentId, hiringManagerId: o.hiringManagerId }, events, offers, notifications, mailConfigured: !!mailConfig(), canEdit: isHr(actor), ats: atsCompatibility(o.atsCriteria, x.profile, x.cvText ?? ''), canHire: isHr(actor) && x.stage === 'offer' && o.status !== 'closed' && (!latest || latest.status === 'accepted') });
   });
 
   app.patch('/v1/candidates/:id', async (c) => {
@@ -183,7 +196,9 @@ export function recruitmentRoutes() {
     if (b.stage === 'rejected' && !b.reason) throw new DomainError('motivo_obrigatorio', 'Indique o motivo da recusa', 400);
     const [u] = await db.update(candidates).set({ stage: b.stage, rejectionReason: b.stage === 'rejected' ? b.reason! : null, updatedAt: new Date() }).where(and(eq(candidates.id, x.id), eq(candidates.stage, x.stage))).returning();
     if (!u) throw new DomainError('candidatura_alterada', 'A etapa mudou entretanto. Actualize a candidatura.', 409);
-    await event(db, actor, { candidateId: x.id, kind: 'stage', fromStage: x.stage, toStage: b.stage, text: b.reason ?? null });
+    const [ev] = await event(db, actor, { candidateId: x.id, kind: 'stage', fromStage: x.stage, toStage: b.stage, text: b.reason ?? null }).returning();
+    await queueCandidateStage(db, u!, o.title, b.stage, ev!.id);
+    if (['rejected', 'withdrawn'].includes(b.stage)) await db.update(recruitmentOffers).set({ status: 'withdrawn' }).where(and(eq(recruitmentOffers.candidateId, x.id), inArray(recruitmentOffers.status, ['draft', 'sent', 'accepted'])));
     return c.json(u);
   });
 
@@ -195,6 +210,80 @@ export function recruitmentRoutes() {
     if (b.kind === 'interview' && !b.scheduledAt) throw new DomainError('data_obrigatoria', 'Indique a data e hora da entrevista', 400);
     const [e] = await event(db, actor, { candidateId: x.id, kind: b.kind, text: b.text, scheduledAt: b.scheduledAt ? new Date(b.scheduledAt) : null }).returning();
     return c.json(e, 201);
+  });
+
+  app.patch('/v1/candidates/:id/profile', async c => {
+    const actor = c.get('actor'), db = getDb();
+    const { c: x } = await candidate(db, actor, c.req.param('id'));
+    if (x.employeeId) throw new DomainError('contratado', 'Use a ficha do colaborador após a admissão.', 409);
+    const b = z.object({ profile: profileBody.optional(), cvText: z.string().trim().min(20).max(30000).nullable().optional(), cvTextSource: z.string().trim().max(160).nullable().optional() }).parse(await body(c));
+    if (b.cvText && !b.cvTextSource) throw new DomainError('origem_obrigatoria', 'Identifique o documento de origem.', 400);
+    await db.update(candidates).set({ profile: { ...x.profile, ...b.profile }, ...(b.cvText !== undefined ? { cvText: b.cvText, cvTextSource: b.cvText ? b.cvTextSource : null } : {}), updatedAt: new Date() }).where(eq(candidates.id, x.id));
+    await event(db, actor, { candidateId: x.id, kind: 'comment', text: b.cvText === null ? 'Texto de análise do CV removido.' : 'Perfil profissional / evidência do ATS actualizados pelo recrutador.' });
+    return c.json({ ok: true });
+  });
+
+  app.post('/v1/candidates/:id/notifications/:mailId/retry', async c => {
+    const actor = c.get('actor'), db = getDb();
+    if (!isHr(actor)) throw new DomainError('sem_permissao', 'Só o RH gere o envio de mensagens.', 403);
+    const { c: x } = await candidate(db, actor, c.req.param('id'));
+    const [m] = await db.select().from(recruitmentMail).where(and(eq(recruitmentMail.id, c.req.param('mailId')), eq(recruitmentMail.candidateId, x.id))).for('update');
+    if (!m) throw new DomainError('nao_encontrado', 'Mensagem inexistente.', 404);
+    if (m.status === 'sent') return c.json({ ok: true, alreadySent: true });
+    if (!['pending', 'failed'].includes(m.status) || (m.firstAttemptAt && Date.now() - m.firstAttemptAt.getTime() >= 23 * 3600000)) throw new DomainError('verificar_entrega', 'Verifique a entrega no fornecedor antes de reenviar esta mensagem.', 409);
+    await db.update(recruitmentMail).set({ status: 'pending', attempts: 0, nextAttemptAt: new Date(), error: null }).where(eq(recruitmentMail.id, m.id));
+    // Um item já existente também precisa de activar o envio depois do commit.
+    await queueRecruitmentMail(db, x.id, m.eventId!, m.payload as import('../services/mail.js').MailMessage);
+    return c.json({ ok: true });
+  });
+
+  app.post('/v1/candidates/:id/offers', async c => {
+    const actor = c.get('actor'), db = getDb();
+    if (!isHr(actor)) throw new DomainError('sem_permissao', 'Só o RH prepara propostas salariais.', 403);
+    const { c: x, o } = await candidate(db, actor, c.req.param('id'), true);
+    if (x.stage !== 'offer' || o.status === 'closed') throw new DomainError('etapa_invalida', 'Prepare a proposta na etapa Proposta de uma vaga aberta.', 409);
+    const b = z.object({ kind: z.enum(['accept_expected', 'counteroffer']), base: kz.positive().optional(), expectedBasis: z.literal('gross_base').optional(), meal: kz.default(0), transport: kz.default(0), startDate: z.iso.date().nullable().optional(), validUntil: z.iso.date(), terms: z.string().trim().max(3000).default('') }).parse(await body(c));
+    if (b.validUntil < luandaDate(new Date())) throw new DomainError('prazo_vencido', 'A proposta deve ter validade actual ou futura.', 400);
+    if (b.kind === 'accept_expected' && (x.expectedSalaryMinor == null || x.expectedSalaryMinor <= 0 || b.expectedBasis !== 'gross_base')) throw new DomainError('pretensao_por_confirmar', 'Confirme com o candidato que a pretensão corresponde ao salário base bruto mensal.', 400);
+    if (b.kind === 'counteroffer' && !b.base) throw new DomainError('salario_obrigatorio', 'Indique o salário base bruto da contraproposta.', 400);
+    const [last] = await db.select().from(recruitmentOffers).where(eq(recruitmentOffers.candidateId, x.id)).orderBy(desc(recruitmentOffers.version)).limit(1);
+    await db.update(recruitmentOffers).set({ status: 'superseded' }).where(and(eq(recruitmentOffers.candidateId, x.id), inArray(recruitmentOffers.status, ['draft', 'sent', 'accepted'])));
+    const [offer] = await db.insert(recruitmentOffers).values({ companyId: actor.companyId, candidateId: x.id, version: (last?.version ?? 0) + 1, kind: b.kind, baseMinor: b.kind === 'accept_expected' ? x.expectedSalaryMinor! : toMinor(b.base)!, mealMinor: toMinor(b.meal)!, transportMinor: toMinor(b.transport)!, expectedSalaryMinor: x.expectedSalaryMinor, startDate: b.startDate, validUntil: b.validUntil, terms: b.terms, createdBy: actor.actorId }).returning();
+    await event(db, actor, { candidateId: x.id, kind: 'offer', text: `${b.kind === 'accept_expected' ? 'Aceitação da pretensão' : 'Contraproposta'} preparada · versão ${offer!.version} · base bruta ${formatKz(offer!.baseMinor)}.` });
+    await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'create_offer', entity: 'candidate', entityId: x.id, after: offer });
+    return c.json(offer, 201);
+  });
+
+  app.post('/v1/candidates/:id/offers/:offerId/send', async c => {
+    const actor = c.get('actor'), db = getDb();
+    if (!isHr(actor)) throw new DomainError('sem_permissao', 'Só o RH envia propostas.', 403);
+    const b = z.object({ replyTo: z.email().max(254) }).parse(await body(c));
+    const { c: x, o } = await candidate(db, actor, c.req.param('id'), true);
+    const [offer] = await db.select().from(recruitmentOffers).where(and(eq(recruitmentOffers.id, c.req.param('offerId')), eq(recruitmentOffers.candidateId, x.id))).for('update');
+    if (!offer) throw new DomainError('nao_encontrado', 'Proposta inexistente.', 404);
+    if (offer.status === 'sent') return c.json({ ok: true, alreadySent: true });
+    if (x.stage !== 'offer' || o.status === 'closed' || offer.status !== 'draft' || offer.validUntil < luandaDate(new Date())) throw new DomainError('proposta_invalida', 'A proposta não está disponível para envio. Actualize a candidatura.', 409);
+    if (!x.email) throw new DomainError('email_obrigatorio', 'Registe o email do candidato antes de enviar.', 400);
+    const [co] = await db.select({ name: companies.name }).from(companies).where(eq(companies.id, actor.companyId));
+    await queueRecruitmentMail(db, x.id, `offer-${offer.id}`, { companyId: actor.companyId, to: x.email, kind: 'recruitment_offer', subject: `${co!.name} · Proposta para ${o.title}`, title: offer.kind === 'accept_expected' ? 'Proposta de acordo com a sua pretensão' : 'Contraproposta salarial', paragraphs: [`Olá ${x.name},`, `A ${co!.name} apresenta a seguinte proposta para a função de ${o.title}.`, offer.terms, 'Comunique a sua aceitação ou contraproposta à equipa de recrutamento. A admissão e o contrato são formalizados separadamente.'].filter(Boolean), facts: [['Base bruta mensal', formatKz(offer.baseMinor)], ['Alimentação mensal', formatKz(offer.mealMinor)], ['Transporte mensal', formatKz(offer.transportMinor)], ['Início previsto', offer.startDate ?? 'A acordar'], ['Válida até', offer.validUntil], ['Versão', String(offer.version)]], replyTo: b.replyTo });
+    await db.update(recruitmentOffers).set({ status: 'sent', sentAt: new Date() }).where(eq(recruitmentOffers.id, offer.id));
+    await event(db, actor, { candidateId: x.id, kind: 'offer', text: `Envio da proposta v${offer.version} solicitado. O estado de entrega consta nas notificações.` });
+    return c.json({ ok: true });
+  });
+
+  app.post('/v1/candidates/:id/offers/:offerId/response', async c => {
+    const actor = c.get('actor'), db = getDb();
+    if (!isHr(actor)) throw new DomainError('sem_permissao', 'Só o RH regista o acordo salarial.', 403);
+    const { c: x, o } = await candidate(db, actor, c.req.param('id'), true);
+    const b = z.object({ status: z.enum(['accepted', 'declined', 'countered']), note: z.string().trim().min(5, 'Registe a origem e o conteúdo da resposta do candidato.').max(1500), counter: kz.positive().optional() }).parse(await body(c));
+    const [offer] = await db.select().from(recruitmentOffers).where(and(eq(recruitmentOffers.id, c.req.param('offerId')), eq(recruitmentOffers.candidateId, x.id))).for('update');
+    if (!offer) throw new DomainError('nao_encontrado', 'Proposta inexistente.', 404);
+    if (x.stage !== 'offer' || o.status === 'closed' || !['draft', 'sent'].includes(offer.status) || offer.validUntil < luandaDate(new Date())) throw new DomainError('proposta_invalida', 'A proposta já foi respondida, substituída ou expirou.', 409);
+    if (b.status === 'countered' && !b.counter) throw new DomainError('salario_obrigatorio', 'Indique a nova pretensão do candidato.', 400);
+    await db.update(recruitmentOffers).set({ status: b.status, responseNote: b.note, counterMinor: b.status === 'countered' ? toMinor(b.counter) : null, decidedAt: new Date() }).where(eq(recruitmentOffers.id, offer.id));
+    await event(db, actor, { candidateId: x.id, kind: 'offer', text: `Resposta à proposta v${offer.version}: ${b.status === 'accepted' ? 'aceite' : b.status === 'declined' ? 'recusada' : `contrapretensão ${formatKz(toMinor(b.counter)!)}`}. ${b.note}` });
+    await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'offer_response', entity: 'candidate', entityId: x.id, after: { offerId: offer.id, ...b } });
+    return c.json({ ok: true });
   });
 
   return app;

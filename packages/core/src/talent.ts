@@ -23,6 +23,9 @@ export interface CandidateProfile {
   highestEducation?: string | null;
   fieldOfStudy?: string | null;
   linkedinUrl?: string | null;
+  skills?: string[];
+  languages?: string[];
+  certifications?: string[];
 }
 
 /** Ligação estável da vaga, utilizável sem conta Kianda. */

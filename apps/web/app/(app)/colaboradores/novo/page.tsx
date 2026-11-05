@@ -11,8 +11,9 @@ export default async function NovoColaborador({ searchParams }: { searchParams: 
   const me = await currentUser();
   if (!CAN_EDIT.includes(me?.user.role ?? '')) redirect('/colaboradores');
   const [departments, people] = await Promise.all([api<Department[]>('/v1/departments'), api<EmployeeRow[]>('/v1/employees')]);
-  const cand = candidato ? await api<{ id: string; name: string; email: string | null; phone: string | null; expectedSalaryMinor: number | null; opening: { title: string; contractType: string; departmentId: string | null; hiringManagerId: string | null } }>(`/v1/candidates/${candidato}`).catch(() => null) : null;
-  const prefill = cand ? { candidateId: cand.id, name: cand.name, email: cand.email, phone: cand.phone, jobTitle: cand.opening.title, departmentId: cand.opening.departmentId, managerId: cand.opening.hiringManagerId, contractType: cand.opening.contractType, expectedSalary: cand.expectedSalaryMinor } : undefined;
+  const cand = candidato ? await api<{ id: string; name: string; email: string | null; phone: string | null; expectedSalaryMinor: number | null; offers: { status: string; baseMinor: number; mealMinor: number; transportMinor: number; startDate: string | null }[]; opening: { title: string; contractType: string; departmentId: string | null; hiringManagerId: string | null } }>(`/v1/candidates/${candidato}`).catch(() => null) : null;
+  const agreed = cand?.offers[0]?.status === 'accepted' ? cand.offers[0] : null;
+  const prefill = cand ? { candidateId: cand.id, name: cand.name, email: cand.email, phone: cand.phone, jobTitle: cand.opening.title, departmentId: cand.opening.departmentId, managerId: cand.opening.hiringManagerId, contractType: cand.opening.contractType, expectedSalary: agreed?.baseMinor ?? cand.expectedSalaryMinor, mealMinor: agreed?.mealMinor, transportMinor: agreed?.transportMinor, startDate: agreed?.startDate } : undefined;
   const numeric = people.map((p) => Number(p.number)).filter(Number.isFinite);
   const nextNumber = numeric.length ? String(Math.max(...numeric) + 1) : '1001';
   return (

@@ -3,7 +3,7 @@ import {
   angolanIbanProblem, isValidAngolanBI, kz, luandaDate, normalizeIban, packOrLatest, PackNotFoundError, type CompensationChange, type CountryPack, type DocumentType,
 } from '@kianda/core';
 import {
-  candidates, candidateEvents, auditLogs, compensationChanges, contracts, departments, employeeDocuments, employees, files, getDb, jobOpenings, payrollRuns, users, type Db,
+  candidates, candidateEvents, auditLogs, compensationChanges, contracts, departments, employeeDocuments, employees, files, getDb, jobOpenings, payrollRuns, recruitmentOffers, users, type Db,
 } from '@kianda/db';
 import { and, asc, desc, eq, gte, inArray, or, sql } from '@kianda/db';
 import { removeFiles } from '../services/storage.js';
@@ -11,6 +11,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { body, requireCompany, requireRole, type Actor, type AppEnv } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
+import { queueCandidateStage } from '../services/recruitment-mail.js';
 import { licenceOf } from '../services/licence.js';
 import { startChecklist } from '../services/checklists.js';
 import { requestsForNewEmployee } from '../services/acknowledgements.js';
@@ -221,6 +222,9 @@ export function employeeRoutes() {
         if (!o || o.status === 'closed') throw new DomainError('vaga_fechada', 'Reabra a vaga antes de admitir o candidato', 409);
         const [current] = await tx.select({ stage: candidates.stage, employeeId: candidates.employeeId }).from(candidates).where(and(eq(candidates.id, cand.id), eq(candidates.companyId, req.companyId))).for('update');
         if (!current || current.stage !== 'offer' || current.employeeId) throw new DomainError('candidatura_alterada', 'A candidatura mudou entretanto. Actualize o ecrã antes de admitir.', 409);
+        const [offer] = await tx.select().from(recruitmentOffers).where(eq(recruitmentOffers.candidateId, cand.id)).orderBy(desc(recruitmentOffers.version)).limit(1);
+        if (offer && offer.status !== 'accepted') throw new DomainError('acordo_pendente', 'Registe a aceitação da proposta pelo candidato antes da admissão.', 409);
+        if (offer && (contract.currency !== 'AOA' || kz(contract.base) !== offer.baseMinor || kz(contract.meal) !== offer.mealMinor || kz(contract.transport) !== offer.transportMinor)) throw new DomainError('salario_divergente', 'A remuneração da admissão deve coincidir com a proposta aceite. Prepare um novo acordo se os termos mudaram.', 409);
       }
       const [e] = await tx.insert(employees).values({ companyId: req.companyId, ...data, biNumber: data.biNumber ?? null }).returning();
       const [c] = await tx.insert(contracts).values({
@@ -239,7 +243,9 @@ export function employeeRoutes() {
       if (cand) {
         // Recrutamento: o candidato passa a contratado e fica ligado à ficha.
         await tx.update(candidates).set({ stage: 'hired', employeeId: e!.id, hiredAt: new Date(), updatedAt: new Date() }).where(eq(candidates.id, cand.id));
-        await tx.insert(candidateEvents).values({ candidateId: cand.id, kind: 'stage', fromStage: cand.stage, toStage: 'hired', text: `Admitido com o n.º ${e!.number}`, actorId: req.actorId, actorName: req.session.name ?? null });
+        const [ev] = await tx.insert(candidateEvents).values({ candidateId: cand.id, kind: 'stage', fromStage: cand.stage, toStage: 'hired', text: `Admitido com o n.º ${e!.number}`, actorId: req.actorId, actorName: req.session.name ?? null }).returning();
+        const [job] = await tx.select({ title: jobOpenings.title }).from(jobOpenings).where(eq(jobOpenings.id, cand.openingId));
+        await queueCandidateStage(tx as unknown as Db, cand, job!.title, 'hired', ev!.id);
       }
       return { ...e!, contract: c };
     });

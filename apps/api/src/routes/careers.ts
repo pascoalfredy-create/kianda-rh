@@ -8,6 +8,7 @@ import { body, clientIp, rateLimit, type AppEnv } from '../plugins/tenant.js';
 import { moduleLicence } from '../services/modules.js';
 import { DomainError } from '../services/payroll.js';
 import { deleteObjects, detectKind, MAX_FILE_BYTES, storeFile } from '../services/storage.js';
+import { queueCandidateStage } from '../services/recruitment-mail.js';
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().nullable();
 const httpUrl = z.url().max(2000).refine(v => /^https?:\/\//i.test(v), 'Use uma ligação HTTP ou HTTPS');
@@ -18,7 +19,7 @@ const applicationBody = z.object({
   cvUrl: httpUrl.optional().nullable().or(z.literal('')),
   coverLetter: optionalText(3000), expectedSalary: z.number().nonnegative().max(1e11).optional().nullable(),
   availableFrom: z.iso.date().optional().nullable(),
-  profile: z.object({ currentRole: optionalText(120), yearsExperience: z.number().int().min(0).max(80).optional().nullable(), highestEducation: optionalText(120), fieldOfStudy: optionalText(160), linkedinUrl: httpUrl.optional().nullable().or(z.literal('')) }).optional(),
+  profile: z.object({ currentRole: optionalText(120), yearsExperience: z.number().int().min(0).max(80).optional().nullable(), highestEducation: optionalText(120), fieldOfStudy: optionalText(160), linkedinUrl: httpUrl.optional().nullable().or(z.literal('')), skills: z.array(z.string().trim().min(1).max(100)).max(30).optional(), languages: z.array(z.string().trim().min(1).max(100)).max(20).optional(), certifications: z.array(z.string().trim().min(1).max(100)).max(30).optional() }).optional(),
   consent: z.literal(true, { message: 'É necessário autorizar o tratamento dos dados' }),
   website: z.string().max(0).optional(),
 });
@@ -84,7 +85,8 @@ export function careersRoutes() {
         const [quota] = await tx.select({ daily: sql<number>`count(*)::int`, hourly: sql<number>`count(*) filter (where ${auditLogs.at} >= ${hour} and ${auditLogs.after}->>'ipHash' = ${ipHash})::int` }).from(auditLogs).where(and(eq(auditLogs.companyId, companyId), eq(auditLogs.action, 'public_apply'), gte(auditLogs.at, day)));
         if (Number(quota?.daily ?? 0) >= 200 || Number(quota?.hourly ?? 0) >= 30) throw new DomainError('limite_candidaturas', 'Foram recebidas muitas candidaturas. Tente novamente mais tarde.', 429);
         const [created] = await tx.insert(candidates).values({ companyId, openingId: o.id, name: b.name, email: b.email, phone: b.phone, source: 'site', cvUrl: b.cvUrl || null, coverLetter: b.coverLetter || null, profile: b.profile ?? {}, expectedSalaryMinor: b.expectedSalary == null ? null : Math.round(b.expectedSalary * 100), availableFrom: b.availableFrom ?? null, consentAt: now }).returning({ id: candidates.id });
-        await tx.insert(candidateEvents).values({ candidateId: created!.id, kind: 'stage', toStage: 'applied', text: 'Candidatura recebida pelo portal público, com consentimento.', actorName: 'Portal de candidaturas' });
+        const [ev] = await tx.insert(candidateEvents).values({ candidateId: created!.id, kind: 'stage', toStage: 'applied', text: 'Candidatura recebida pelo portal público, com consentimento.', actorName: 'Portal de candidaturas' }).returning();
+        await queueCandidateStage(tx as unknown as Db, { id: created!.id, companyId, name: b.name, email: b.email }, o.title, 'applied', ev!.id);
         await tx.insert(auditLogs).values({ companyId, actorId: 'public-careers', action: 'public_apply', entity: 'candidate', entityId: created!.id, after: { openingId, ipHash, hasAttachment: Boolean(cv), consentAt: now.toISOString() } });
         if (cv) stored = await storeFile(tx as unknown as Db, { companyId, entity: 'candidate', entityId: created!.id, employeeId: null, uploadedBy: 'public-careers', name: cv.name, data: cv.data });
         return created!;

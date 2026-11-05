@@ -16,6 +16,7 @@ export * from './bank.js';
 export * from './expenses.js';
 export * from './documents.js';
 export * from './talent.js';
+export * from './ats.js';
 export * from './licensing.js';
 export * from './access.js';
 export * from './sectors.js';

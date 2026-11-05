@@ -1,14 +1,16 @@
-import { formatKz, SOURCES, STAGE_LABEL, type CandidateProfile, type Stage } from '@kianda/core';
+import { formatKz, SOURCES, STAGE_LABEL, type atsCompatibility, type CandidateProfile, type Stage } from '@kianda/core';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { EventForm, Rating, StageActions } from '../../forms';
 import { DeleteCandidate } from '@/components/privacy-actions';
 import { Attachments } from '@/components/attachments';
+import { AtsPanel } from '../../ats-panel';
+import { CandidateOffers, CandidateNotifications, type Offer, type CandidateNotification } from '../../offers';
 
 export const dynamic = 'force-dynamic';
 
 interface Ev { id: string; kind: string; fromStage: Stage | null; toStage: Stage | null; text: string | null; scheduledAt: string | null; actorName: string | null; createdAt: string }
-interface Cand { id: string; name: string; email: string | null; phone: string | null; source: keyof typeof SOURCES; stage: Stage; rating: number | null; cvUrl: string | null; coverLetter: string | null; profile: CandidateProfile; expectedSalaryMinor: number | null; availableFrom: string | null; rejectionReason: string | null; employeeId: string | null; consentAt: string | null; createdAt: string; opening: { id: string; title: string; status: string }; events: Ev[]; canHire: boolean }
+interface Cand { id: string; name: string; email: string | null; phone: string | null; source: keyof typeof SOURCES; stage: Stage; rating: number | null; cvUrl: string | null; coverLetter: string | null; profile: CandidateProfile; expectedSalaryMinor: number | null; availableFrom: string | null; rejectionReason: string | null; employeeId: string | null; consentAt: string | null; createdAt: string; opening: { id: string; title: string; status: string }; events: Ev[]; canHire: boolean; canEdit: boolean; mailConfigured: boolean; cvText: string | null; cvTextSource: string | null; ats: ReturnType<typeof atsCompatibility>; offers: Offer[]; notifications: CandidateNotification[] }
 const dt = (d: string) => new Date(d).toLocaleString('pt-PT', { timeZone: 'Africa/Luanda', dateStyle: 'short', timeStyle: 'short' });
 
 export default async function Candidato({ params }: { params: Promise<{ id: string }> }) {
@@ -29,6 +31,9 @@ export default async function Candidato({ params }: { params: Promise<{ id: stri
       {!c.employeeId && <div style={{ margin: '0 0 14px' }}><DeleteCandidate id={c.id} back={`/recrutamento/${c.opening.id}`} /></div>}
       {c.employeeId && <div className="warn">Contratado. <Link href={`/colaboradores/${c.employeeId}`}>Abrir a ficha do colaborador</Link>.</div>}
       {c.rejectionReason && <div className="warn">Motivo: {c.rejectionReason}</div>}
+      <AtsPanel id={c.id} profile={c.profile} ats={c.ats} cvText={c.cvText} cvTextSource={c.cvTextSource} editable={!c.employeeId && c.opening.status !== 'closed'} />
+      <CandidateOffers id={c.id} expectedSalaryMinor={c.expectedSalaryMinor} offers={c.offers} editable={c.canEdit && c.opening.status !== 'closed'} stage={c.stage} />
+      <CandidateNotifications id={c.id} items={c.notifications} configured={c.mailConfigured} editable={c.canEdit} />
       <div className="two" style={{ alignItems: 'start' }}>
         <div className="card section">
           <h2>Dados</h2>

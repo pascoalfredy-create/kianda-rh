@@ -1,9 +1,10 @@
 'use client';
 
-import { SOURCES, STAGE_LABEL, type Stage, parseAmount } from '@kianda/core';
+import { SOURCES, STAGE_LABEL, type AtsCriterion, type Stage, parseAmount } from '@kianda/core';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation } from '@/lib/client';
+import { AtsFields } from './ats-fields';
 
 const num = (v: FormDataEntryValue | null) => { const t = String(v ?? '').trim(); const m = parseAmount(t); return t === '' ? null : m === null ? NaN : m / 100; };
 
@@ -23,6 +24,7 @@ export function OpeningForm({ departments, people, init }: { departments: { id: 
         title: f.get('title'), departmentId: f.get('departmentId') || null, hiringManagerId: f.get('hiringManagerId') || null, location: f.get('location') || null,
         contractType: f.get('contractType'), positions: Number(f.get('positions') || 1), salaryMin: num(f.get('salaryMin')), salaryMax: num(f.get('salaryMax')),
         description: f.get('description') || null, requirements: f.get('requirements') || null, status: publish || (status === 'draft' && f.get('isPublic') === 'on') ? 'open' : status, isPublic: publish || f.get('isPublic') === 'on', closesOn: f.get('closesOn') || null,
+        atsCriteria: JSON.parse(String(f.get('atsCriteria') ?? '[]')),
       };
       if (await run<{ id: string }>(init ? `/v1/openings/${init.id}` : '/v1/openings', init ? 'PATCH' : 'POST', payload, o => { if (o) router.push(`/recrutamento/${o.id}`); }) && !init) setOpen(false);
     }}>
@@ -40,6 +42,7 @@ export function OpeningForm({ departments, people, init }: { departments: { id: 
       <label style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><input type="checkbox" name="isPublic" defaultChecked={Boolean(init?.isPublic)} /> Publicar na página de carreiras</label>
       <label className="wide">Descrição<textarea name="description" rows={4} defaultValue={v('description')} /></label>
       <label className="wide">Requisitos<textarea name="requirements" rows={4} defaultValue={v('requirements')} /></label>
+      <AtsFields initial={(init?.atsCriteria as AtsCriterion[] | undefined) ?? []} />
       <p className="muted wide">O intervalo salarial é interno: não aparece na página de carreiras.</p>
       <div className="form-actions wide">
         {error && <span className="err">{error}</span>}

@@ -124,10 +124,11 @@ export function mailConfig(): MailConfig | null {
   return { apiKey, from, baseUrl: env('RESEND_BASE_URL') ?? 'https://api.resend.com' };
 }
 
-export async function resendSend(cfg: MailConfig, m: { to: string; subject: string; html: string; text: string; replyTo?: string | null }) {
+export async function resendSend(cfg: MailConfig, m: { to: string; subject: string; html: string; text: string; replyTo?: string | null; idempotencyKey?: string }) {
   const res = await fetch(`${cfg.baseUrl}/emails`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json', ...(m.idempotencyKey ? { 'Idempotency-Key': m.idempotencyKey } : {}) },
+    signal: AbortSignal.timeout(8000),
     body: JSON.stringify({ from: cfg.from, to: [m.to], subject: m.subject, html: m.html, text: m.text, ...(m.replyTo ? { reply_to: m.replyTo } : {}) }),
   });
   if (!res.ok) throw new IntegrationError('resend', `Resend respondeu ${res.status}: ${(await res.text()).slice(0, 200)}`, res.status);

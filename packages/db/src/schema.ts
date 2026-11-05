@@ -3,7 +3,7 @@
  * Regras: montantes em cêntimos de kwanza (bigint); todas as tabelas de negócio têm company_id (multi-empresa).
  */
 import { relations, sql } from 'drizzle-orm';
-import type { CandidateProfile } from '@kianda/core';
+import type { AtsCriterion, CandidateProfile } from '@kianda/core';
 import {
   bigint, boolean, customType, date, doublePrecision, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex,
 } from 'drizzle-orm/pg-core';
@@ -849,6 +849,7 @@ export const jobOpenings = pgTable('job_openings', {
   salaryMaxMinor: bigint('salary_max_minor', { mode: 'number' }),
   description: text('description'),
   requirements: text('requirements'),
+  atsCriteria: jsonb('ats_criteria').$type<AtsCriterion[]>().notNull().default([]),
   /** draft | open | on_hold | closed */
   status: text('status').notNull().default('draft'),
   /** Publicada na página de carreiras. */
@@ -872,6 +873,8 @@ export const candidates = pgTable('candidates', {
   cvUrl: text('cv_url'),
   coverLetter: text('cover_letter'),
   profile: jsonb('profile').$type<CandidateProfile>().notNull().default({}),
+  cvText: text('cv_text'),
+  cvTextSource: text('cv_text_source'),
   expectedSalaryMinor: bigint('expected_salary_minor', { mode: 'number' }),
   availableFrom: date('available_from'),
   rejectionReason: text('rejection_reason'),
@@ -896,6 +899,34 @@ export const candidateEvents = pgTable('candidate_events', {
   actorName: text('actor_name'),
   createdAt: createdAt(),
 }, (t) => [index('candidate_events_candidate').on(t.candidateId)]);
+
+/** Propostas versionadas: não alteram automaticamente o salário nem admitem o candidato. */
+export const recruitmentOffers = pgTable('recruitment_offers', {
+  id: id(), companyId: text('company_id').notNull().references(() => companies.id),
+  candidateId: text('candidate_id').notNull().references(() => candidates.id, { onDelete: 'cascade' }),
+  version: integer('version').notNull(), kind: text('kind').notNull(),
+  baseMinor: money('base_minor'), mealMinor: money('meal_minor'), transportMinor: money('transport_minor'),
+  expectedSalaryMinor: bigint('expected_salary_minor', { mode: 'number' }),
+  startDate: date('start_date'), validUntil: date('valid_until').notNull(),
+  terms: text('terms').notNull().default(''),
+  status: text('status').notNull().default('draft'),
+  responseNote: text('response_note'), counterMinor: bigint('counter_minor', { mode: 'number' }),
+  createdBy: text('created_by').notNull(), createdAt: createdAt(), sentAt: timestamp('sent_at', { withTimezone: true }),
+  decidedAt: timestamp('decided_at', { withTimezone: true }),
+}, t => [uniqueIndex('recruitment_offers_candidate_version').on(t.candidateId, t.version), index('recruitment_offers_company').on(t.companyId)]);
+
+/** Caixa de saída transaccional; payload privado e removido na eliminação da candidatura. */
+export const recruitmentMail = pgTable('recruitment_mail', {
+  id: id(), companyId: text('company_id').notNull().references(() => companies.id),
+  candidateId: text('candidate_id').notNull().references(() => candidates.id, { onDelete: 'cascade' }),
+  eventId: text('event_id'), kind: text('kind').notNull(),
+  dedupeKey: text('dedupe_key').notNull().unique(), payload: jsonb('payload').notNull(),
+  status: text('status').notNull().default('pending'), attempts: integer('attempts').notNull().default(0),
+  nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+  firstAttemptAt: timestamp('first_attempt_at', { withTimezone: true }),
+  createdAt: createdAt(), sentAt: timestamp('sent_at', { withTimezone: true }),
+  providerId: text('provider_id'), error: text('error'),
+}, t => [index('recruitment_mail_due').on(t.status, t.nextAttemptAt), index('recruitment_mail_candidate').on(t.candidateId), index('recruitment_mail_company').on(t.companyId)]);
 
 /** Ciclos de avaliação de desempenho. */
 export const reviewCycles = pgTable('review_cycles', {

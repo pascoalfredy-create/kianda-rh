@@ -22,7 +22,7 @@ export function ApplyForm({ company, openingId }: { company: string; openingId: 
       data.set('data', JSON.stringify({
         name: f.get('name'), email: String(f.get('email') || '').trim(), phone: f.get('phone'), cvUrl: f.get('cvUrl') || null, coverLetter: f.get('coverLetter') || null,
         expectedSalary: parsedSalary === null ? null : parsedSalary / 100, availableFrom: f.get('availableFrom') || null,
-        profile: { currentRole: f.get('currentRole') || null, yearsExperience: f.get('yearsExperience') ? Number(f.get('yearsExperience')) : null, highestEducation: f.get('highestEducation') || null, fieldOfStudy: f.get('fieldOfStudy') || null, linkedinUrl: f.get('linkedinUrl') || null },
+        profile: { currentRole: f.get('currentRole') || null, yearsExperience: f.get('yearsExperience') ? Number(f.get('yearsExperience')) : null, highestEducation: f.get('highestEducation') || null, fieldOfStudy: f.get('fieldOfStudy') || null, linkedinUrl: f.get('linkedinUrl') || null, ...Object.fromEntries(['skills', 'languages', 'certifications'].map(k => [k, String(f.get(k) ?? '').split(/[,;\n]/).map(v => v.trim()).filter(Boolean)])) },
         consent: f.get('consent') === 'on', website: f.get('website') || undefined,
       }));
       if (cv) data.set('cv', cv, cv.name);
@@ -50,6 +50,8 @@ export function ApplyForm({ company, openingId }: { company: string; openingId: 
         <label>Nível de formação<select name="highestEducation" aria-label="Nível de formação" defaultValue=""><option value="">—</option>{['Ensino secundário', 'Ensino técnico', 'Licenciatura', 'Pós-graduação', 'Mestrado', 'Doutoramento'].map(s => <option key={s}>{s}</option>)}</select></label>
         <label>Área de formação<input name="fieldOfStudy" maxLength={160} /></label>
         <label className="span2">Perfil profissional online<input name="linkedinUrl" type="url" maxLength={2000} placeholder="https://…" /></label>
+        <label className="wide">Competências (separadas por vírgula)<input name="skills" maxLength={1500} placeholder="Ex.: Excel, Contabilidade…" /></label>
+        <label>Idiomas<input name="languages" maxLength={500} /></label><label>Certificações<input name="certifications" maxLength={1500} /></label>
         <label>Pretensão salarial (Kz)<input name="expectedSalary" inputMode="decimal" /></label>
         <label>Disponível a partir de<input name="availableFrom" type="date" /></label>
       </div></details>
