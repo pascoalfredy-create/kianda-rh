@@ -358,6 +358,13 @@
       "when": 1793829904741,
       "tag": "0050_recruitment_public_portal",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1793836522256,
+      "tag": "0051_recruitment_automation",
+      "breakpoints": true
     }
   ]
 }

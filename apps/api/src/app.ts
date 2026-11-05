@@ -38,6 +38,7 @@ import { payrollRoutes } from './routes/payroll.js';
 import { publicRoutes } from './routes/public.js';
 import { pushRoutes } from './routes/push.js';
 import { runPushInBackground, takePushFlag } from './services/push.js';
+import { runRecruitmentMailInBackground, takeRecruitmentMailFlag } from './services/recruitment-mail.js';
 import { DomainError } from './services/payroll.js';
 
 /**
@@ -72,10 +73,11 @@ export function buildApp(opts: { logger?: boolean; rateLimit?: boolean } = {}) {
   // Notificações: depois de um pedido que as gerou, envia-as sem atrasar a resposta.
   app.use('*', async (c, next) => {
     await next();
-    if (c.req.method !== 'GET' && c.res.status < 400 && takePushFlag()) {
+    if (c.req.method !== 'GET' && c.res.status < 400) {
       let waitUntil: ((p: Promise<unknown>) => void) | undefined;
       try { const ctx = c.executionCtx; waitUntil = (p) => ctx.waitUntil(p); } catch { /* Node: sem contexto de execução */ }
-      runPushInBackground(waitUntil);
+      if (takePushFlag()) runPushInBackground(waitUntil);
+      if (takeRecruitmentMailFlag()) runRecruitmentMailInBackground(waitUntil);
     }
   });
 

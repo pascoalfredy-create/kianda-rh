@@ -10,6 +10,7 @@ import { buildApp, type App } from './app.js';
 import { syncGatewayPayments } from './services/billing.js';
 import { dailyReminders } from './services/jobs.js';
 import { dispatchPush, setPushRunner } from './services/push.js';
+import { dispatchRecruitmentMail, setRecruitmentMailRunner } from './services/recruitment-mail.js';
 import { r2Store, setObjectStore, type R2BucketLike } from './services/storage.js';
 
 interface Env {
@@ -44,6 +45,7 @@ export default {
     if (!connectionString) return Response.json({ error: 'configuracao', message: 'Base de dados não configurada (HYPERDRIVE ou DATABASE_URL)' }, { status: 500 });
     // O envio de notificações corre depois da resposta, com uma ligação própria (a do pedido fecha-se).
     setPushRunner((work) => withRequestDb(connectionString, () => work(getDb())));
+    setRecruitmentMailRunner((work) => withRequestDb(connectionString, () => work(getDb())));
     return withRequestDb(connectionString, async () => app!.fetch(request, env, ctx));
   },
 
@@ -58,6 +60,7 @@ export default {
       else console.log('multicaixa', JSON.stringify(await syncGatewayPayments(db)));
       // Reserva: notificações que não saíram logo depois do pedido.
       console.log('push', JSON.stringify(await dispatchPush(db)));
+      console.log('recruitment_mail', JSON.stringify(await dispatchRecruitmentMail(db)));
     });
   },
 };

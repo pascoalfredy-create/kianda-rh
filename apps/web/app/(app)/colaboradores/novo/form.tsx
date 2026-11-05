@@ -7,7 +7,7 @@ import { SalaryBaseFields } from '@/components/salary-base-fields';
 import { formObject, send } from '@/lib/client';
 import { PROVINCES, type Department, type PersonRef } from '@/lib/types';
 
-export interface Prefill { candidateId: string; name: string; email: string | null; phone: string | null; jobTitle: string; departmentId: string | null; managerId: string | null; contractType: string; expectedSalary: number | null }
+export interface Prefill { candidateId: string; name: string; email: string | null; phone: string | null; jobTitle: string; departmentId: string | null; managerId: string | null; contractType: string; expectedSalary: number | null; mealMinor?: number; transportMinor?: number; startDate?: string | null }
 
 export function NewEmployeeForm({ departments, people, nextNumber, prefill }: { departments: Department[]; people: PersonRef[]; nextNumber: string; prefill?: Prefill }) {
   const [type, setType] = useState(prefill?.contractType ?? 'indefinite');
@@ -62,11 +62,11 @@ export function NewEmployeeForm({ departments, people, nextNumber, prefill }: { 
               <option value="internship">Estágio</option>
             </select>
           </label>
-          <label>Data de início<input type="date" name="startDate" required /></label>
+          <label>Data de início<input type="date" name="startDate" required defaultValue={prefill?.startDate ?? ''} /></label>
           <label>Data de fim{type === 'fixed_term' ? ' *' : ''}<input type="date" name="endDate" required={type === 'fixed_term'} /></label>
           <SalaryBaseFields baseKz={prefill?.expectedSalary ? formatAmount(prefill.expectedSalary) : ''} />
-          <label>Subsídio de alimentação (Kz)<input name="meal" inputMode="decimal" placeholder="0" /></label>
-          <label>Subsídio de transporte (Kz)<input name="transport" inputMode="decimal" placeholder="0" /></label>
+          <label>Subsídio de alimentação (Kz)<input name="meal" inputMode="decimal" placeholder="0" defaultValue={prefill?.mealMinor ? formatAmount(prefill.mealMinor) : ''} /></label>
+          <label>Subsídio de transporte (Kz)<input name="transport" inputMode="decimal" placeholder="0" defaultValue={prefill?.transportMinor ? formatAmount(prefill.transportMinor) : ''} /></label>
           {type === 'fixed_term' && <label className="wide">Fundamento do termo *<textarea name="termJustification" required /></label>}
           <p className="muted wide">O salário base é validado contra o salário mínimo nacional do ano de início. Os subsídios de alimentação e transporte estão isentos até ao limite legal.</p>
         </div>
