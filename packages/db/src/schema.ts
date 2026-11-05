@@ -278,6 +278,8 @@ export const contracts = pgTable('contracts', {
   /** AOA, ou USD = salário base indexado ao dólar (convertido ao câmbio do dia do processamento; base_minor = referência em Kz). */
   salaryCurrency: text('salary_currency').notNull().default('AOA'),
   baseForeignMinor: bigint('base_foreign_minor', { mode: 'number' }),
+  /** Remuneração conhecida desde a migração; null para vínculos com base conhecida desde o início. */
+  salaryKnownFrom: date('salary_known_from'),
   terminatedAt: date('terminated_at'),
   terminationReason: text('termination_reason'),
   createdAt: createdAt(),

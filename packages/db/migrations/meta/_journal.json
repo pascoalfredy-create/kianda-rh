@@ -365,6 +365,13 @@
       "when": 1793836522256,
       "tag": "0051_recruitment_automation",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1793867274665,
+      "tag": "0052_employee_import_salary_reference",
+      "breakpoints": true
     }
   ]
 }
