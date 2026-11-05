@@ -24,6 +24,8 @@ const variableBatch = variableInput.omit({ employeeId: true, amount: true }).ext
   label: variableInput.shape.label.max(160, 'Máximo de 160 caracteres na descrição do lote'),
   rows: z.array(variableInput.pick({ employeeId: true, amount: true }).extend({ employeeId: z.string().min(1).max(128) })).min(1, 'Seleccione pelo menos um colaborador').max(1000, 'Máximo de 1.000 colaboradores por lote'),
 }).refine((b) => new Set(b.rows.map((r) => r.employeeId)).size === b.rows.length, { path: ['rows'], message: 'Um colaborador só pode aparecer uma vez no mesmo lote' });
+const variableSnapshot = z.object({ kind: z.string(), label: z.string(), amountMinor: z.number().int(), code: z.string().nullable(), inInss: z.boolean(), inIrt: z.boolean(), note: z.string().nullable() });
+const variableEdit = variableInput.omit({ employeeId: true, period: true }).extend({ expected: variableSnapshot }).strict();
 
 function variableValues(actor: { companyId: string; actorId: string }, b: z.infer<typeof variableInput>): typeof payrollVariables.$inferInsert {
   const cut = b.kind === 'salary_cut', earning = b.kind === 'bonus' || b.kind === 'other_earning';
@@ -164,9 +166,10 @@ export function payrollRoutes() {
     const actor = c.get('actor');
     const b = variableInput.parse(await body(c));
     const db = getDb();
+    await db.select({ id: companies.id }).from(companies).where(eq(companies.id, actor.companyId)).for('update');
     const [emp] = await db.select({ id: employees.id }).from(employees).where(and(eq(employees.id, b.employeeId), eq(employees.companyId, actor.companyId)));
     if (!emp) return c.json({ error: 'colaborador_inexistente', message: 'Colaborador inexistente' }, 404);
-    const [run] = await db.select({ status: payrollRuns.status }).from(payrollRuns).where(and(eq(payrollRuns.companyId, actor.companyId), eq(payrollRuns.period, b.period)));
+    const [run] = await db.select({ status: payrollRuns.status }).from(payrollRuns).where(and(eq(payrollRuns.companyId, actor.companyId), eq(payrollRuns.period, b.period))).for('update');
     if (run?.status === 'closed') throw new DomainError('processamento_fechado', `O processamento de ${b.period} já está fechado: lance no mês seguinte.`);
     // Desconto na remuneração (cálculo manual: maternidade, suspensões…): abono negativo que reduz as bases de INSS e IRT.
     const [v] = await db.insert(payrollVariables).values(variableValues(actor, b)).returning();
@@ -184,6 +187,7 @@ export function payrollRoutes() {
     const normalised = rows.map(({ id: _id, createdBy: _createdBy, ...v }) => v).sort((a, d) => a.employeeId.localeCompare(d.employeeId));
     const payloadHash = createHash('sha256').update(JSON.stringify(normalised)).digest('hex');
     const result = await getDb().transaction(async (tx) => {
+      await tx.select({ id: companies.id }).from(companies).where(eq(companies.id, actor.companyId)).for('update');
       // A PK reserva este pedido na mesma transacção: pedidos concorrentes esperam pela gravação/rollback.
       // O registo de auditoria só fica visível quando todas as variáveis tiverem sido gravadas.
       const summary = { period: b.period, count: rows.length, totalMinor, variableIds: rows.map((r) => r.id), payloadHash };
@@ -216,14 +220,32 @@ export function payrollRoutes() {
     return c.json(result, result.replayed ? 200 : 201);
   });
 
+  app.patch('/v1/payroll-variables/:id', requireRole('payroll'), async c => {
+    const actor = c.get('actor'), b = variableEdit.parse(await body(c)), db = getDb();
+    await db.select({ id: companies.id }).from(companies).where(eq(companies.id, actor.companyId)).for('update');
+    const [before] = await db.select().from(payrollVariables).where(and(eq(payrollVariables.id, c.req.param('id')), eq(payrollVariables.companyId, actor.companyId))).for('update');
+    if (!before) throw new DomainError('nao_encontrado', 'Alteração mensal inexistente', 404);
+    if (before.terminationId) throw new DomainError('gerida_pela_cessacao', 'Esta linha faz parte de um fecho de contas: altere-a na cessação do contrato');
+    if (before.advanceId) throw new DomainError('gerida_pelo_adiantamento', 'Esta prestação é gerida na página Adiantamentos');
+    const [run] = await db.select({ status: payrollRuns.status }).from(payrollRuns).where(and(eq(payrollRuns.companyId, actor.companyId), eq(payrollRuns.period, before.period))).for('update');
+    if (run?.status === 'closed') throw new DomainError('processamento_fechado', 'O processamento deste mês já está fechado');
+    const current = variableSnapshot.parse(before);
+    if (Object.entries(b.expected).some(([key, value]) => current[key as keyof typeof current] !== value)) throw new DomainError('alteracao_actualizada', 'Este lançamento foi alterado entretanto. Actualize o ecrã antes de guardar.', 409);
+    const { companyId: _company, employeeId: _employee, period: _period, createdBy: _created, ...values } = variableValues(actor, { ...b, employeeId: before.employeeId, period: before.period });
+    const [after] = await db.update(payrollVariables).set(values).where(eq(payrollVariables.id, before.id)).returning();
+    await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'update', entity: 'payroll_variable', entityId: before.id, before: { ...before }, after: { ...after } });
+    return c.json(after);
+  });
+
   app.delete('/v1/payroll-variables/:id', requireRole('payroll'), async (c) => {
     const actor = c.get('actor');
     const db = getDb();
+    await db.select({ id: companies.id }).from(companies).where(eq(companies.id, actor.companyId)).for('update');
     const [v] = await db.select().from(payrollVariables).where(and(eq(payrollVariables.id, c.req.param('id')), eq(payrollVariables.companyId, actor.companyId)));
     if (!v) return c.json({ error: 'nao_encontrado', message: 'Variável inexistente' }, 404);
     if (v.terminationId) throw new DomainError('gerida_pela_cessacao', 'Esta linha faz parte de um fecho de contas: altere-a na cessação do contrato');
     if (v.advanceId) throw new DomainError('gerida_pelo_adiantamento', 'Esta linha é uma prestação de um adiantamento salarial: gerida na página Adiantamentos');
-    const [run] = await db.select({ status: payrollRuns.status }).from(payrollRuns).where(and(eq(payrollRuns.companyId, actor.companyId), eq(payrollRuns.period, v.period)));
+    const [run] = await db.select({ status: payrollRuns.status }).from(payrollRuns).where(and(eq(payrollRuns.companyId, actor.companyId), eq(payrollRuns.period, v.period))).for('update');
     if (run?.status === 'closed') throw new DomainError('processamento_fechado', 'O processamento deste mês já está fechado');
     await db.delete(payrollVariables).where(eq(payrollVariables.id, v.id));
     await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'delete', entity: 'payroll_variable', entityId: v.id, before: { ...v } });

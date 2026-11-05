@@ -7,6 +7,7 @@ import { actorFromApi, api, apiWithActor, ApiError } from '@/lib/api';
 import { currentPeriod, monthLabel, shiftMonth } from '@/lib/format';
 import { PAYROLL_ROLES, VARIABLE_LABEL, type JournalRow, type PayrollBatchPerson, type PayrollLineRow, type PayrollRunDetail, type PayrollVariableRow } from '@/lib/types';
 import { VariableEntry, CloseButton, DeleteVariable, PrepareButton, SubsidyToggle } from './actions';
+import { EditVariable } from './edit-variable';
 
 export const dynamic = 'force-dynamic';
 
@@ -156,7 +157,7 @@ function Variables({ period, rows, editable, people }: { period: string; rows: P
                   <td>{v.label}</td>
                   <td className="num" style={{ color: earning ? undefined : 'var(--red)' }}>{earning ? '' : '−'}{formatKz(v.amountMinor)}</td>
                   <td className="muted">{earning ? [v.inInss && 'INSS', v.inIrt && 'IRT'].filter(Boolean).join(' + ') || 'Isento' : '—'}</td>
-                  <td className="num">{editable && <DeleteVariable id={v.id} />}</td>
+                  <td className="num">{editable && <><EditVariable variable={v} /> <DeleteVariable id={v.id} /></>}</td>
                 </tr>
               );
             })}
