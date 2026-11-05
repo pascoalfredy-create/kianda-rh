@@ -15,8 +15,10 @@ export function WorkspaceState({ scope, children }: { scope: string; children: R
 /** Os valores são restaurados depois da hidratação; nunca se enviam alterações à API. */
 export function useWorkspaceState<T>(key: string, initial: T): [T, Dispatch<SetStateAction<T>>] {
   const memory = useContext(Workspace);
-  const defaults = useRef({ key, value: initial });
-  if (defaults.current.key !== key) defaults.current = { key, value: initial };
+  const serialized = JSON.stringify(initial);
+  const defaults = useRef({ key, serialized, value: initial });
+  // Sem rascunho, uma actualização do servidor também actualiza os valores iniciais.
+  if (defaults.current.key !== key || defaults.current.serialized !== serialized) defaults.current = { key, serialized, value: initial };
   const [local, setLocal] = useState(initial);
   const read = useCallback(() => memory?.get(key), [memory, key]);
   const stored = useSyncExternalStore(memory?.subscribe ?? (() => () => {}), read, serverSnapshot);

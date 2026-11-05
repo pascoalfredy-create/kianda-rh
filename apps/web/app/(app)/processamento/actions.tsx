@@ -21,7 +21,8 @@ export function PrepareButton({ period, prepared, people, payrollPeople, process
   const [variableVersion, setVariableVersion] = useState(0);
   const [batchMode, setBatchMode] = useWorkspaceState(`${draftKey}batch`, false);
   const [chosen, setSelected] = useWorkspaceState<string[]>(`${draftKey}selected`, []);
-  const selected = chosen.filter(id => typeof id === 'string' && payrollPeople.some(person => person.id === id));
+  const eligibleIds = new Set(payrollPeople.map(person => person.id));
+  const selected = chosen.filter(id => typeof id === 'string' && eligibleIds.has(id));
   const [result, setResult] = useState('');
   const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
   const [rate, setRate] = useWorkspaceState(`${draftKey}rate`, fx?.rate ? String(Number(fx.rate)).replace('.', ',') : '');
