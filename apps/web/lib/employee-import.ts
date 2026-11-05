@@ -1,4 +1,5 @@
-import { DOCUMENT_LIMIT, EMPLOYEE_IMPORT_LIMIT, employeeImportKey, guessEmployeeImportMapping, parseCsv, type EmployeeImportCell } from '@kianda/core';
+import { DOCUMENT_LIMIT, parseCsv } from '@kianda/core';
+import { EMPLOYEE_IMPORT_LIMIT, employeeImportKey, guessEmployeeImportMapping, type EmployeeImportCell } from '@kianda/core/employee-import';
 import { decodeDocumentText, extractWordRows } from './document-import';
 import { extractPdfContent, pdfPageRows, type PdfTextItem } from '../modeling/pdf-import';
 import { readXlsxRows, readXlsxWorkbookInfo } from './employee-xlsx';

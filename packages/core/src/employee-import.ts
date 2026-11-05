@@ -2,7 +2,6 @@ import { parseAmount, parseDate } from './bank.js';
 import { angolanIbanProblem, isValidAngolanBI, normalizeIban } from './validation.js';
 
 export const EMPLOYEE_IMPORT_LIMIT = 5000;
-export const EMPLOYEE_MIGRATION_REASON = 'Migração inicial de colaboradores';
 export const EMPLOYEE_IMPORT_FIELDS = [
   { key: 'number', label: 'N.º mecanográfico', required: true, aliases: ['numero', 'numero funcionario', 'numero colaborador', 'codigo funcionario', 'codigo', 'matricula', 'employee number'] },
   { key: 'name', label: 'Nome completo', required: true, aliases: ['nome', 'nome funcionario', 'nome colaborador', 'funcionario', 'colaborador', 'name'] },

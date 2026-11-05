@@ -1,4 +1,5 @@
-import { ackAudienceIncludes, EMPLOYEE_MIGRATION_REASON, EMPLOYEE_IMPORT_FIELDS, EMPLOYEE_IMPORT_LIMIT, employeeImportKey, kz, luandaDate, parseEmployeeImport, type EmployeeImportPreview, type EmployeeImportResult } from '@kianda/core';
+import { ackAudienceIncludes, kz, luandaDate } from '@kianda/core';
+import { EMPLOYEE_IMPORT_FIELDS, EMPLOYEE_IMPORT_LIMIT, employeeImportKey, parseEmployeeImport, type EmployeeImportPreview, type EmployeeImportResult } from '@kianda/core/employee-import';
 import { ackDocuments, ackRequests, and, auditLogs, companies, compensationChanges, contracts, departments, desc, employees, eq, payrollRuns, type Db } from '@kianda/db';
 import { z } from 'zod';
 import type { Actor } from '../plugins/tenant.js';
@@ -103,8 +104,8 @@ export async function commitEmployeeImport(db: Db, actor: Actor, input: CommitIn
         const { department, costCenter: _cost, contract: _contract, salaryEffectiveDate: _date, ...personal } = data;
         return { ...personal, id: employeeId, companyId: actor.companyId, departmentId: department ? departmentIds.get(employeeImportKey(department))! : null };
       }));
-      await tx.insert(contracts).values(group.map(({ row: { data }, employeeId, contractId }) => ({ id: contractId, employeeId, type: data.contract.type, startDate: data.contract.startDate, endDate: data.contract.endDate, termJustification: data.contract.termJustification, baseMinor: kz(data.contract.base), mealMinor: kz(data.contract.meal), transportMinor: kz(data.contract.transport), ...salaryCols(data.contract) })));
-      await tx.insert(compensationChanges).values(group.map(({ row: { data }, employeeId, contractId }) => ({ companyId: actor.companyId, employeeId, contractId, effectiveDate: data.salaryEffectiveDate, baseMinor: kz(data.contract.base), mealMinor: kz(data.contract.meal), transportMinor: kz(data.contract.transport), ...salaryCols(data.contract), reason: EMPLOYEE_MIGRATION_REASON, createdBy: actor.actorId })));
+      await tx.insert(contracts).values(group.map(({ row: { data }, employeeId, contractId }) => ({ id: contractId, employeeId, salaryKnownFrom: data.salaryEffectiveDate, type: data.contract.type, startDate: data.contract.startDate, endDate: data.contract.endDate, termJustification: data.contract.termJustification, baseMinor: kz(data.contract.base), mealMinor: kz(data.contract.meal), transportMinor: kz(data.contract.transport), ...salaryCols(data.contract) })));
+      await tx.insert(compensationChanges).values(group.map(({ row: { data }, employeeId, contractId }) => ({ companyId: actor.companyId, employeeId, contractId, effectiveDate: data.salaryEffectiveDate, baseMinor: kz(data.contract.base), mealMinor: kz(data.contract.meal), transportMinor: kz(data.contract.transport), ...salaryCols(data.contract), reason: 'Migração inicial de colaboradores', createdBy: actor.actorId })));
     }
     // Migração de vínculos existentes: sem acolhimento retroactivo nem criação automática de contas/convites.
     const published = await tx.select().from(ackDocuments).where(and(eq(ackDocuments.companyId, actor.companyId), eq(ackDocuments.status, 'published')));

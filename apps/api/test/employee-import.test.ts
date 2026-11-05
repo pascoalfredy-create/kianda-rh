@@ -40,6 +40,9 @@ describe.skipIf(!process.env.DATABASE_URL)('migração em lote de colaboradores'
     expect(person.compensation.current.baseMinor).toBe(15000000);
     expect(await getDb().select().from(employeeChecklists).where(eq(employeeChecklists.companyId, companyId))).toHaveLength(0);
     expect(await getDb().select().from(users).where(eq(users.companyId, companyId))).toHaveLength(2);
+    expect(person.contract.salaryKnownFrom).toBe('2026-11-01');
+    const correction = await req(owner, 'PATCH', '/v1/employees/' + list[0].id + '/compensation/' + person.compensation.current.id, { base: 155000, meal: 0, transport: 0, currency: 'AOA', reason: 'Correcção de importação', expected: person.compensation.current });
+    expect(correction.statusCode, correction.body).toBe(200);
     const beforeMigration = await req(owner, 'GET', '/v1/payroll-runs/opening?period=2026-10&batch=1');
     expect(beforeMigration.json().payrollPeople).toHaveLength(0);
     expect((await req(owner, 'POST', '/v1/payroll-runs/batch', { period: '2026-10', employeeIds: [list[0].id] })).statusCode).toBe(400);

@@ -1,7 +1,8 @@
 'use client';
 import { useRef, useState } from 'react';
 import Link from 'next/link';
-import { EMPLOYEE_IMPORT_FIELDS, EMPLOYEE_IMPORT_LIMIT, employeeImportMappingProblem, employeeImportSourceRows, formatKz, guessEmployeeImportMapping, parseAmount, type EmployeeImportMapping, type EmployeeImportOptions, type EmployeeImportPreview, type EmployeeImportResult } from '@kianda/core';
+import { formatKz, parseAmount } from '@kianda/core';
+import { EMPLOYEE_IMPORT_FIELDS, EMPLOYEE_IMPORT_LIMIT, employeeImportMappingProblem, employeeImportSourceRows, guessEmployeeImportMapping, type EmployeeImportMapping, type EmployeeImportOptions, type EmployeeImportPreview, type EmployeeImportResult } from '@kianda/core/employee-import';
 import { send } from '@/lib/client';
 import { EMPLOYEE_IMPORT_ACCEPT, guessEmployeeHeader, readEmployeeImportDocument, type EmployeeImportDocument } from '@/lib/employee-import';
 
