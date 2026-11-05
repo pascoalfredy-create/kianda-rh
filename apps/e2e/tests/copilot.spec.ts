@@ -33,6 +33,7 @@ test('Integra e Valora abrem o seu especialista, sem enviar o resumo financeiro 
   await summary.getByText(/Ver resumo · revisão/).click();
   await expect(summary).toContainText('VAL do projecto'); expect(calls).toBe(0);
   await page.goto('/valora');
+  await expect(page.locator('#kpis26')).toContainText('Sem meses reais encerrados');
   await page.getByRole('link', { name: 'Copiloto', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Copiloto Kianda Valora', exact: true })).toBeVisible();
   await expect(summary.getByRole('combobox', { name: 'Contexto financeiro', exact: true })).toHaveValue(analysis.body.id);

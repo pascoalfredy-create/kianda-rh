@@ -38,6 +38,12 @@ function spelling(text) {
 }
 shell = spelling(shell); source = spelling(source);
 
+// Uma análise nova tem fecho=0: valores reais em falta não são zero nem podem ser desreferenciados.
+replace("$('#kpis26').innerHTML=[", "$('#kpis26').innerHTML=D.fecho?[");
+replace('`Sem recurso à linha de crédito`)].join(\'\');', '`Sem recurso à linha de crédito`)].join(\'\'):valoraEmptyOverviewKpis();');
+replace("$('#sub-rv').textContent=`Mkz · real até ${mf}, previsão (esbatido) nos meses seguintes`;", "$('#sub-rv').textContent=D.fecho?`Mkz · real até ${mf}, previsão (esbatido) nos meses seguintes`:'Mkz · sem meses reais encerrados; orçamento e previsão nos meses seguintes';");
+replace('function diag(){', "function diag(){\n  if(!D.fecho)return [['neu','Sem meses reais encerrados','Preencha e encerre os meses reais para comparar a execução com o orçamento. O histórico e as previsões continuam disponíveis.']];");
+
 /* ---------- Estrutura: cabeçalho, menu no telemóvel, anos dinâmicos ---------- */
 replaceShell('<div class="brand"><div class="brand-mark">V</div><div><b>Valora</b><small>Análise, gestão & avaliação</small></div></div>',
   '<div class="brand"><div class="brand-mark">V</div><div><b>Valora</b><small>Análise, gestão & avaliação</small></div><button type="button" class="btn valora-menu" id="valoraMenu" aria-label="Abrir menu" aria-expanded="false" aria-controls="nav">☰</button></div>');

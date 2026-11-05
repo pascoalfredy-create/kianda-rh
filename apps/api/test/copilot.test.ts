@@ -34,6 +34,7 @@ describe('conhecimento e contextos dos copilotos', () => {
     d.dr.v61[2] = 100; d.dr.c71[2] = 20; d.dr.c72[2] = 10; d.dr.c75[2] = 10; d.bal.caixa[2] = 45;
     const c = valuationCopilotContext(d, 2); expect(c).toMatchObject({ unit: 'Milhões de Kz (Mkz)', revision: 2, figures: { anoHistorico: 2025, receitas: 100, ebitda: 60, resultadoLiquidoCalculado: 45, diferencaBalanco: 0 } });
     expect(JSON.stringify(c)).not.toMatch(/Entidade Reservada|5000000000/);
+    expect(valuationCopilotContext(blankValuationData({ entity: 'Sem dados', lastClosedYear: 2025 }), 1).notes.join(' ')).toContain('uma análise em branco não prova actividade nula');
   });
   it('sem activação explícita não contacta o fornecedor, mesmo com chave e modelo', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'chave-sintetica'); vi.stubEnv('KIANDA_AI_MODEL', 'modelo-simulado'); vi.stubEnv('KIANDA_COPILOT_AI_ENABLED', 'false');
