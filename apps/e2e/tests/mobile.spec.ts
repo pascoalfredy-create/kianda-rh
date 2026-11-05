@@ -47,8 +47,9 @@ test('RH no telemóvel: preparar mostra os campos e calcula sem alargar o ecrã'
   await page.goto('/processamento?mes=2026-10');
   await page.getByRole('button', { name: 'Preparar processamento' }).click();
   const preparation = page.getByRole('region', { name: 'Preparação do processamento' });
-  await expect(preparation.getByLabel('Colaborador')).toBeVisible();
-  await expect(preparation.getByLabel('Valor (Kz)')).toBeVisible();
+  await expect(preparation.getByRole('region', { name: 'Remunerações habituais do mês' })).toBeVisible();
+  await expect(preparation.getByLabel('Valor (Kz)')).toHaveCount(0);
+  await expect(preparation.getByRole('button', { name: 'Calcular folha', exact: true })).toBeEnabled();
   expect(await page.evaluate<number>('document.documentElement.scrollWidth - window.innerWidth')).toBeLessThanOrEqual(1);
   await page.screenshot({ path: '/tmp/e2e/rh-preparar-telemovel.png', fullPage: true });
   await preparation.getByRole('button', { name: 'Calcular folha', exact: true }).click();

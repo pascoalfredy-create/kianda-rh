@@ -232,6 +232,10 @@ export interface PayrollBatchPerson {
   baseForeignMinor: number | null; startDate: string; endDate: string | null;
 }
 export interface PayrollVariableRow {
+  code?: string | null;
+  note?: string | null;
+  terminationId?: string | null;
+  advanceId?: string | null;
   id: string;
   employeeId: string;
   kind: 'bonus' | 'other_earning' | 'advance' | 'other_deduction';

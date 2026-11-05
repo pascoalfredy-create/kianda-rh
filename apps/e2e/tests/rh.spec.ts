@@ -74,6 +74,7 @@ test('processamento salarial: preparar abre os campos, guarda um prémio e só d
   await expect(preparation).toBeVisible();
   await expect(page.getByRole('button', { name: 'Recalcular', exact: true })).toBeHidden();
   expect((await apiAs(company.token, 'GET', '/v1/payroll-runs?period=2026-10')).body).toEqual([]);
+  await preparation.getByRole('button', { name: 'Lançar variável', exact: true }).click();
   const variable = preparation.getByRole('form', { name: 'Variável do processamento' });
   await expect(variable.getByLabel('Colaborador')).toBeVisible();
   await variable.getByLabel('Colaborador').selectOption({ label: people[0]!.name });
@@ -91,7 +92,8 @@ test('processamento salarial: preparar abre os campos, guarda um prémio e só d
   await expect(page.getByRole('row', { name: new RegExp(people[1]!.name) })).not.toContainText(/12[\s.]000,00/);
   await expect(page.getByRole('button', { name: 'Recalcular' })).toBeVisible();
   await page.getByRole('button', { name: 'Rever preparação', exact: true }).click();
-  await expect(preparation.getByRole('form', { name: 'Variável do processamento' })).toBeVisible();
+  await expect(preparation.getByRole('form', { name: 'Variável do processamento' })).toHaveCount(0);
+  await expect(preparation.getByRole('button', { name: 'Calcular folha', exact: true })).toBeEnabled();
   await expect(preparation).toContainText('1 variável guardada');
   expect(errors).toEqual([]);
 });
@@ -101,6 +103,7 @@ test('cancelar a preparação não cria uma folha nem guarda variáveis por pree
   await page.goto('/processamento?mes=2026-09');
   await page.getByRole('button', { name: 'Preparar processamento' }).click();
   const preparation = page.getByRole('region', { name: 'Preparação do processamento' });
+  await preparation.getByRole('button', { name: 'Lançar variável', exact: true }).click();
   const variable = preparation.getByRole('form', { name: 'Variável do processamento' });
   await variable.getByLabel('Valor (Kz)').fill('9000');
   await expect(preparation.getByRole('button', { name: 'Calcular folha', exact: true })).toBeDisabled();
