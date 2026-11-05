@@ -48,8 +48,8 @@ test('ATS, remoção de texto do CV, proposta de acordo com a pretensão e admis
   await negotiation.getByRole('button', { name: 'Registar resposta', exact: true }).click();
   await expect(negotiation).toContainText('Aceite pelo candidato');
   await page.getByRole('link', { name: 'Admitir…', exact: true }).click();
-  await expect(page.getByLabel('Subsídio de alimentação (Kz)', { exact: true })).toHaveValue(/30[ .]?000,00/);
-  await expect(page.getByLabel('Subsídio de transporte (Kz)', { exact: true })).toHaveValue(/20[ .]?000,00/);
+  await expect(page.getByLabel('Subsídio de alimentação (Kz)', { exact: true })).toHaveValue(/30[\s.]?000,00/);
+  await expect(page.getByLabel('Subsídio de transporte (Kz)', { exact: true })).toHaveValue(/20[\s.]?000,00/);
   await expect(page.getByLabel('Data de início', { exact: true })).toHaveValue('2026-12-01');
   expect(errors).toEqual([]);
 });
