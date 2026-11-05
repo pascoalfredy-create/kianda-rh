@@ -1,12 +1,12 @@
 'use client';
-import { useState } from 'react';
-import Link from 'next/link';
+import { ContextLink as Link } from '@/components/context-link';
+import { useWorkspaceState } from '@/components/workspace-state';
 import { formatKz } from '@kianda/core';
 import type { PayrollBatchPerson } from '@/lib/types';
 
-export function PayrollSelection({ people, selected, onChange, processedIds, disabled, mode = 'selected' }: { people: PayrollBatchPerson[]; selected: string[]; onChange: (ids: string[]) => void; processedIds: string[]; disabled: boolean; mode?: 'all' | 'selected' }) {
+export function PayrollSelection({ people, selected, onChange, processedIds, disabled, mode = 'selected', draftKey = 'payroll:roster:' }: { people: PayrollBatchPerson[]; selected: string[]; onChange: (ids: string[]) => void; processedIds: string[]; disabled: boolean; mode?: 'all' | 'selected'; draftKey?: string }) {
   const selectable = mode === 'selected';
-  const [search, setSearch] = useState(''), [department, setDepartment] = useState(''), [pendingOnly, setPendingOnly] = useState(false), [page, setPage] = useState(0);
+  const [search, setSearch] = useWorkspaceState(`${draftKey}search`, ''), [department, setDepartment] = useWorkspaceState(`${draftKey}department`, ''), [pendingOnly, setPendingOnly] = useWorkspaceState(`${draftKey}pending`, false), [page, setPage] = useWorkspaceState(`${draftKey}page`, 0);
   const chosen = new Set(selected), processed = new Set(processedIds);
   const departments = [...new Set(people.map(p => p.department ?? 'Sem departamento'))].sort();
   const query = search.toLocaleLowerCase('pt');

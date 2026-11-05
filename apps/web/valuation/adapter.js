@@ -3,6 +3,9 @@
  * Dados por empresa no servidor, com revisões; nada da análise fica no armazenamento local do navegador.
  */
 const VS=(()=>{try{return JSON.parse(document.getElementById('valora-session').textContent)}catch(e){return null}})();
+const valuationWorkspace=VS?new WorkspaceMemory(workspaceScope(VS.company?.id,VS.user.id)):null;
+function rememberValoraLocation(){if(VS&&CUR)valuationWorkspace?.set('valuation:location',{analysis:CUR.id,view:current(),ui:{...UI},scroll:window.scrollY||0})}
+window.addEventListener('pagehide',rememberValoraLocation);
 let CUR=null,LIST=VS?VS.analyses:[],USAGE=VS?VS.usage:null;
 let saveTimer=null,saving=null,pendingSave=false,conflict=false,offline=false;
 const ESC=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -19,7 +22,7 @@ function valoraEmptyOverviewKpis(){
 function valoraCanWrite(){return !!VS&&VS.canWrite&&!!CUR&&!CUR.archivedAt&&!conflict}
 function valoraIssue(x){return valuationDataIssue(x)}
 function valoraFechoLabel(){return D.fecho?`Fecho: ${MES[D.fecho-1]} ${EX}`:`Sem meses reais · ${EX}`}
-document.querySelector('#valoraCopilot')?.addEventListener('click',async e=>{e.preventDefault();try{await ensureSaved();location.assign('/copiloto?modulo=valuation'+(CUR?.id?'&projecto='+encodeURIComponent(CUR.id):''))}catch(error){banner('err',ESC(error.message))}});
+document.querySelector('#valoraCopilot')?.addEventListener('click',async e=>{e.preventDefault();try{await ensureSaved();rememberValoraLocation();location.assign(contextualHref('/copiloto?modulo=valuation'+(CUR?.id?'&projecto='+encodeURIComponent(CUR.id):''),'/valora#'+current()))}catch(error){banner('err',ESC(error.message))}});
 
 /* ---------- Pedidos à API ---------- */
 async function api(path,opt={}){
@@ -79,7 +82,7 @@ function lockInputs(){
   document.querySelectorAll('.wrap input,.wrap select,.wrap textarea,.wrap button').forEach(el=>{if(!el.matches(KEEP))el.disabled=true});
 }
 new MutationObserver(()=>{if(!valoraCanWrite())lockInputs()}).observe(document.querySelector('.wrap'),{childList:true,subtree:true});
-{const original=renderView;renderView=function(v){if(!D)return;original(v);prepareMapDisclosures(document.querySelector('.wrap'),v)}}
+{const original=renderView;renderView=function(v){if(!D)return;original(v);prepareMapDisclosures(document.querySelector('.wrap'),`${CUR?.id}:${v}`,valuationWorkspace);rememberValoraLocation()}}
 
 /* ---------- Abrir uma análise ---------- */
 function syncYears(){
@@ -264,9 +267,23 @@ $('#nav').addEventListener('click',e=>{if(e.target.closest('a')){document.queryS
 for(const id of ['#valoraLogout','#valoraLogoutTop'])$(id).onclick=async()=>{const b=$(id);b.disabled=true;b.textContent='A terminar…';try{await ensureSaved()}catch(e){if(!confirm('Existem alterações não gravadas. Terminar sessão e descartá-las?')){b.disabled=false;b.textContent='Terminar sessão';banner('err',ESC(e.message));return}clearTimeout(saveTimer);pendingSave=false}try{await endSession()}catch(e){b.disabled=false;b.textContent='Terminar sessão';banner('err',ESC(e.message))}};
 reloadPrivatePageOnRestore();
 
-function valoraStart(){
+async function valoraStart(){
   if(!VS){document.body.classList.add('valora-none');return}
-  if(VS.current)loadAnalysis(VS.current);else showEmpty();
+  const saved=valuationWorkspace.get('valuation:location');
+  if(saved&&typeof saved==='object'){
+    if(TITLES[saved.view]&&!location.hash)history.replaceState(null,'','#'+saved.view);
+    if(saved.ui&&typeof saved.ui==='object'){
+      if(['M','T','S','A'].includes(saved.ui.mode))UI.mode=saved.ui.mode;
+      if(['real','orc','prev'].includes(saved.ui.scn))UI.scn=saved.ui.scn;
+      if(['dr','bal','fc','hist'].includes(saved.ui.dtab))UI.dtab=saved.ui.dtab;
+    }
+  }
+  let row=VS.current;
+  if(saved?.analysis&&saved.analysis!==row?.id&&LIST.some(x=>x.id===saved.analysis&&!x.archivedAt)){
+    try{row=await api('/analyses/'+encodeURIComponent(saved.analysis))}catch(error){setSave(error.message,true)}
+  }
+  if(row)loadAnalysis(row);else showEmpty();
+  if(saved&&typeof saved.scroll==='number'&&saved.scroll>0)window.requestAnimationFrame?.(()=>window.scrollTo(0,saved.scroll));
 }
 try{setupNumberFields(document);}catch{}
 valoraStart();

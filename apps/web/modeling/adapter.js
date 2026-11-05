@@ -3,6 +3,11 @@ let store, session, templates = [], notice = '', busy = false;
 let previewModel=null, projectDialog=null, projectUsage=null, projectTab='active';
 let currencyDialog=null;
 let leaving=false, signingOut=false;
+let modelingWorkspace;
+function rememberModelingLocation(){
+  if(!modelingWorkspace||leaving)return;
+  modelingWorkspace.set('modeling:location',{project:S.active,view:VIEW,sub:{...SUB},unit:S.unit,scroll:window.scrollY||0});
+}
 function clearModelSession(){
   leaving=true;store?.stopAutosave();
   session=null;S.models=[];S.active=null;previewModel=null;versionView=null;
@@ -179,7 +184,8 @@ function protect() {
 }
 function render() {
   if(!session)return;
-  const copilot=document.querySelector('#integra-copilot');if(copilot)copilot.href='/copiloto?modulo=modeling'+(M()?.id?'&projecto='+encodeURIComponent(M().id):'');
+  rememberModelingLocation();
+  const copilot=document.querySelector('#integra-copilot');if(copilot)copilot.href=contextualHref('/copiloto?modulo=modeling'+(M()?.id?'&projecto='+encodeURIComponent(M().id):''),'/modelagem#'+VIEW);
   $('#view').dataset.view=VIEW;
   $('#view').dataset.wide=String(['demonstracoes','credito','sensibilidade','analise'].includes(VIEW)||VIEW==='pressupostos'&&['capex','receitas'].includes(SUB.pt));
   if(!M()) {
@@ -193,7 +199,7 @@ function render() {
   if(notice)$('#view').insertAdjacentHTML('afterbegin',`<div id="integra-notice">${alertMessage(notice)}</div>`);
   if(versionView)$('#view').insertAdjacentHTML('afterbegin',versionBanner());
   else if(previewModel)$('#view').insertAdjacentHTML('afterbegin',`<div class="alert b" role="status">${ico('info',17)}<div>Projecto arquivado · consulta. Para voltar a gravar alterações, escolha Gerir projectos… no selector de modelos e restaure o projecto.</div></div>`);
-  projectPicker();protect();prepareFinancialTables($('#view'));prepareMapDisclosures($('#view'),VIEW);
+  projectPicker();protect();prepareFinancialTables($('#view'));prepareMapDisclosures($('#view'),`${S.active}:${VIEW}`,modelingWorkspace);
 }
 async function downloadReport(key) {
   if(!session?.formats?.pdf)throw Error('Pode pré-visualizar os documentos. Active uma subscrição paga do Integra para exportar.');
@@ -385,7 +391,7 @@ async function applyPersonnelImport(){
 document.addEventListener('click',async ev=>{
   const target=ev.target instanceof Element?ev.target:null;if(!target)return;
   const menuAction=target.closest('[data-act]');
-  if(menuAction?.dataset.act==='openCopilot'){ev.preventDefault();if(busy)return;try{await store?.flush();location.assign('/copiloto?modulo=modeling'+(M()?.id?'&projecto='+encodeURIComponent(M().id):''))}catch(error){notice=error.message;render()}return;}
+  if(menuAction?.dataset.act==='openCopilot'){ev.preventDefault();if(busy)return;try{await store?.flush();rememberModelingLocation();location.assign(contextualHref('/copiloto?modulo=modeling'+(M()?.id?'&projecto='+encodeURIComponent(M().id):''),'/modelagem#'+VIEW))}catch(error){notice=error.message;render()}return;}
   if(menuAction?.dataset.act==='navToggle'){const group=menuAction.dataset.group,open=!navExpanded[group];for(const key of Object.keys(navExpanded))delete navExpanded[key];navExpanded[group]=open;renderNavigation();return;}
   if(menuAction?.dataset.act==='toggleMenu'){setMenuOpen(!$('.app').classList.contains('menu-open'));return;}
   if(menuAction?.dataset.act==='closeMenu'){setMenuOpen(false);return;}
@@ -427,16 +433,28 @@ $('#mSel').onchange=async()=>{
 };
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();setMenuOpen(false);}});
 window.addEventListener('beforeunload',e=>{if(!leaving&&store?.dirty){e.preventDefault();e.returnValue='';}});
+window.addEventListener('pagehide',rememberModelingLocation);
+window.addEventListener('popstate',()=>{const view=(location.hash||'').slice(1);if(VIEWS[view]){VIEW=view;render();}});
 async function boot(){
   try{setupNumberFields(document);}catch{}
   try {
     session=JSON.parse($('#integra-session').textContent);
+    modelingWorkspace=new WorkspaceMemory(workspaceScope(session.company?.id,session.user.id));
+    const saved=modelingWorkspace.get('modeling:location');
     store=new ModelingStore(session.canWrite,modelingRequest,showError);
     const opening=session.bootstrap;
     const data=opening?[opening.models,opening.templates]:await Promise.all([modelingRequest('/models'),modelingRequest('/templates')]);
     templates=data[1];store.load(data[0]);S.models=store.models;S.active=S.models[0]?.id||null;
+    if(saved&&typeof saved==='object'){
+      if(S.models.some(m=>m.id===saved.project))S.active=saved.project;
+      if(VIEWS[saved.view])VIEW=saved.view;
+      if(saved.sub&&typeof saved.sub==='object')SUB=Object.fromEntries(Object.entries(saved.sub).filter(([key,value])=>['pt','dt','at','rep'].includes(key)&&typeof value==='string'&&value.length<100));
+      if(['M','K','U'].includes(saved.unit))S.unit=saved.unit;
+    }
     const view=(location.hash||'').slice(1);if(VIEWS[view])VIEW=view;
+    try{history.replaceState(null,'','#'+VIEW)}catch{}
     render();
+    if(saved&&typeof saved.scroll==='number'&&saved.scroll>0)window.requestAnimationFrame?.(()=>window.scrollTo(0,saved.scroll));
   }catch(error){$('#view').innerHTML=alertMessage(errorText(error));document.querySelectorAll('button,select').forEach(e=>e.disabled=e.dataset.act!=='logout');}
 }
 // A fonte externa melhora a tipografia quando chega, sem bloquear a interface ou o motor.

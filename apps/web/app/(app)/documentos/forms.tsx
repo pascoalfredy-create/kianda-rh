@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { send, useMutation } from '@/lib/client';
 import { readTemplateDocument } from '@/lib/document-import';
+import { useClearWorkspace, useWorkspaceState } from '@/components/workspace-state';
 
 interface Tpl { key: string; title: string; category: DocumentCategory; description: string; inputs: { key: string; label: string; placeholder?: string; required: boolean }[]; source: string; version: string; body: string }
 
@@ -22,27 +23,31 @@ function Preview({ text }: { text: string }) {
 
 export function IssueForm({ templates, employees, initialEmployee, initialTemplate }: { initialTemplate?: string; templates: Tpl[]; employees: { id: string; name: string; number: string }[]; initialEmployee?: string }) {
   const router = useRouter();
-  const [employeeId, setEmployeeId] = useState(initialEmployee ?? '');
-  const [key, setKey] = useState(templates.find(t => t.key === initialTemplate)?.key ?? templates[0]?.key ?? '');
-  const [inputs, setInputs] = useState<Record<string, string>>({});
+  const draftKey = `document:issue:${initialEmployee ?? ''}:${initialTemplate ?? ''}:`;
+  const clearDraft = useClearWorkspace(draftKey);
+  const [employeeId, setEmployeeId] = useWorkspaceState(`${draftKey}employee`, initialEmployee ?? '');
+  const [key, setKey] = useWorkspaceState(`${draftKey}template`, templates.find(t => t.key === initialTemplate)?.key ?? templates[0]?.key ?? '');
+  const [inputs, setInputs] = useWorkspaceState<Record<string, string>>(`${draftKey}inputs`, {});
   const [pv, setPv] = useState<{ text: string; missingLabels: string[]; version: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const tpl = templates.find((t) => t.key === key);
   useEffect(() => {
     if (!employeeId || !key) { setPv(null); return; }
+    let cancelled = false;
     const t = setTimeout(async () => {
       const r = await send<{ text: string; missingLabels: string[]; version: string }>('/v1/documents/preview', 'POST', { employeeId, templateKey: key, inputs });
+      if (cancelled) return;
       if (r.ok) { setPv(r.data!); setError(''); } else setError(r.message ?? 'Erro');
     }, 250);
-    return () => clearTimeout(t);
+    return () => { cancelled = true; clearTimeout(t); };
   }, [employeeId, key, inputs]);
   async function issue() {
     setBusy(true); setError('');
     const r = await send<{ id: string }>('/v1/documents', 'POST', { employeeId, templateKey: key, inputs });
     setBusy(false);
     if (!r.ok) return setError(r.message ?? 'Erro');
-    router.push(`/documentos/${r.data!.id}`);
+    clearDraft(); router.push(`/documentos/${r.data!.id}`);
   }
   const groups = [...new Set(templates.map((t) => t.category))];
   return (
@@ -79,10 +84,12 @@ export function IssueForm({ templates, employees, initialEmployee, initialTempla
 
 export function TemplateEditor({ tpl, fields }: { tpl: Tpl; fields: { key: string; label: string }[] }) {
   const { busy, error, run } = useMutation();
-  const [title, setTitle] = useState(tpl.title);
-  const [bodyText, setBody] = useState(tpl.body);
+  const draftKey = `document:template:${tpl.key}:${tpl.version}:`;
+  const clearDraft = useClearWorkspace(draftKey);
+  const [title, setTitle] = useWorkspaceState(`${draftKey}title`, tpl.title);
+  const [bodyText, setBody] = useWorkspaceState(`${draftKey}body`, tpl.body);
   const [ok, setOk] = useState('');
-  const [source, setSource] = useState<{ name: string; previousBody: string } | null>(null);
+  const [source, setSource] = useWorkspaceState<{ name: string; previousBody: string } | null>(`${draftKey}source`, null);
   const [importBusy, setImportBusy] = useState(false), [importError, setImportError] = useState('');
   const [ready, setReady] = useState(false);
   const [replaceText, setReplaceText] = useState(''), [field, setField] = useState(fields[0]?.key ?? '');
@@ -119,7 +126,7 @@ export function TemplateEditor({ tpl, fields }: { tpl: Tpl; fields: { key: strin
         <button type="button" className="btn ghost" disabled={!replaceText || !bodyText.includes(replaceText) || !field || busy || importBusy} onClick={() => { setBody(bodyText.replaceAll(replaceText, `{{${field}}}`)); setReplaceText(''); setOk(''); }}>Substituir pelo campo</button>
         <p className="muted">Ao emitir, o Kianda conserva as cláusulas deste modelo e preenche os campos com os dados de cada colaborador. A importação só entra em uso depois de gravar a nova versão.</p>
         <div className="actions" style={{ justifyContent: 'flex-start' }}>
-          <button className="btn" disabled={busy || importBusy} onClick={async () => { setOk(''); if (await run(`/v1/document-templates/${tpl.key}`, 'PUT', { title, body: bodyText, sourceFileName: source?.name ?? null })) { setSource(null); setOk('Nova versão gravada e em uso na empresa.'); } }}>Gravar nova versão</button>
+          <button className="btn" disabled={busy || importBusy} onClick={async () => { setOk(''); if (await run(`/v1/document-templates/${tpl.key}`, 'PUT', { title, body: bodyText, sourceFileName: source?.name ?? null })) { clearDraft(); setSource(null); setOk('Nova versão gravada e em uso na empresa.'); } }}>Gravar nova versão</button>
           {tpl.source === 'empresa' && <button className="btn ghost" disabled={busy} onClick={async () => { if (window.confirm('Voltar ao modelo do Kianda? As versões da empresa ficam no histórico.') && await run(`/v1/document-templates/${tpl.key}/reset`, 'POST', {})) window.location.reload(); }}>Voltar ao modelo do Kianda</button>}
           {error && <span style={{ color: 'var(--red)' }}>{error}</span>}
           {ok && <span style={{ color: 'var(--brand)' }}>{ok}</span>}

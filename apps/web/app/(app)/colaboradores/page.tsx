@@ -1,5 +1,6 @@
 import { formatKz } from '@kianda/core';
-import Link from 'next/link';
+import { ContextLink as Link } from '@/components/context-link';
+import { returnPath } from '@/lib/return-path';
 import { actorFromApi, apiWithActor, ApiError, type ApiActor } from '@/lib/api';
 import { CAN_EDIT, CONTRACT_LABEL, STATUS_LABEL, type EmployeeRow } from '@/lib/types';
 import { RhDialog } from '@/components/rh-dialog';
@@ -7,7 +8,7 @@ import Ficha from './[id]/profile';
 import Novo from './novo/page';
 
 export const dynamic = 'force-dynamic';
-type Filters = { q?: string; estado?: string; dept?: string; provincia?: string; contrato?: string; ficha?: string; s?: string; novo?: string };
+type Filters = { q?: string; estado?: string; dept?: string; provincia?: string; contrato?: string; ficha?: string; s?: string; novo?: string; voltar?: string };
 export default async function Colaboradores({ searchParams }: { searchParams: Promise<Filters> }) {
   const sp = await searchParams;
   const { q = '', estado = 'activos', dept = '', provincia = '', contrato = '' } = sp;
@@ -21,6 +22,8 @@ export default async function Colaboradores({ searchParams }: { searchParams: Pr
     (!dept || e.department === dept) && (!provincia || e.province === provincia) && (!contrato || e.contract?.type === contrato) &&
     (!needle || [e.name, e.number, e.nif ?? '', e.jobTitle, e.department ?? ''].some(v => v.toLocaleLowerCase('pt-PT').includes(needle))));
   const qs = new URLSearchParams({ q, estado, dept, provincia, contrato });
+  const origin = returnPath(sp.voltar, '');
+  if (origin) qs.set('voltar', origin);
   const returnTo = `/colaboradores?${qs}`;
   const canEdit = CAN_EDIT.includes(actor?.role ?? '');
   const initial = (name: string) => name.split(/\s+/).slice(0, 2).map(w => w[0]).join('');
@@ -28,6 +31,7 @@ export default async function Colaboradores({ searchParams }: { searchParams: Pr
     <div className="page-head"><div><h1>Colaboradores</h1><p className="sub">{rows.length === 1 ? 'Uma pessoa' : `${rows.length} pessoas`} com ficha, contrato e dados de pagamento.</p></div>{canEdit && <div className="form-actions"><Link href="/colaboradores/importar" className="btn ghost">Importar colaboradores</Link><Link href={`${returnTo}&novo=1`} className="btn">+ Novo colaborador</Link></div>}</div>
     {error ? <div className="alert">{error}</div> : <div className="card">
       <form className="employee-filters">
+        {origin && <input type="hidden" name="voltar" value={origin} />}
         <input name="q" defaultValue={q} placeholder="Filtrar por nome, cargo, NIF…" aria-label="Pesquisar colaborador" />
         <select name="dept" defaultValue={dept} aria-label="Departamento"><option value="">Todos os departamentos</option>{[...new Set(rows.map(e => e.department).filter(Boolean))].sort().map(d => <option key={d!}>{d}</option>)}</select>
         <select name="provincia" defaultValue={provincia} aria-label="Província"><option value="">Todas as províncias</option>{[...new Set(rows.map(e => e.province).filter(Boolean))].sort().map(p => <option key={p!}>{p}</option>)}</select>
