@@ -25,7 +25,7 @@ export default async function Colaboradores({ searchParams }: { searchParams: Pr
   const canEdit = CAN_EDIT.includes(actor?.role ?? '');
   const initial = (name: string) => name.split(/\s+/).slice(0, 2).map(w => w[0]).join('');
   return <>
-    <div className="page-head"><div><h1>Colaboradores</h1><p className="sub">{rows.length === 1 ? 'Uma pessoa' : `${rows.length} pessoas`} com ficha, contrato e dados de pagamento.</p></div>{canEdit && <Link href={`${returnTo}&novo=1`} className="btn">+ Novo colaborador</Link>}</div>
+    <div className="page-head"><div><h1>Colaboradores</h1><p className="sub">{rows.length === 1 ? 'Uma pessoa' : `${rows.length} pessoas`} com ficha, contrato e dados de pagamento.</p></div>{canEdit && <div className="form-actions"><Link href="/colaboradores/importar" className="btn ghost">Importar colaboradores</Link><Link href={`${returnTo}&novo=1`} className="btn">+ Novo colaborador</Link></div>}</div>
     {error ? <div className="alert">{error}</div> : <div className="card">
       <form className="employee-filters">
         <input name="q" defaultValue={q} placeholder="Filtrar por nome, cargo, NIF…" aria-label="Pesquisar colaborador" />

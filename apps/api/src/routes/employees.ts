@@ -3,11 +3,12 @@ import {
   angolanIbanProblem, isValidAngolanBI, kz, luandaDate, normalizeIban, packOrLatest, PackNotFoundError, type CompensationChange, type CountryPack, type DocumentType,
 } from '@kianda/core';
 import {
-  candidates, candidateEvents, auditLogs, compensationChanges, contracts, departments, employeeDocuments, employees, files, getDb, jobOpenings, payrollRuns, recruitmentOffers, users, type Db,
+  candidates, candidateEvents, auditLogs, companies, compensationChanges, contracts, departments, employeeDocuments, employees, files, getDb, jobOpenings, payrollRuns, recruitmentOffers, users, type Db,
 } from '@kianda/db';
 import { and, asc, desc, eq, gte, inArray, or, sql } from '@kianda/db';
 import { removeFiles } from '../services/storage.js';
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import { body, requireCompany, requireRole, type Actor, type AppEnv } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
@@ -15,64 +16,15 @@ import { queueCandidateStage } from '../services/recruitment-mail.js';
 import { licenceOf } from '../services/licence.js';
 import { startChecklist } from '../services/checklists.js';
 import { requestsForNewEmployee } from '../services/acknowledgements.js';
+import { optionalText, optionalDate, moneyFields, usdCheck, usdMessage, salaryCols, contractBody, personal, createBody, assertMinimumWage } from '../services/employee-input.js';
+import { commitEmployeeImport, employeeImportBody, employeeImportCommitBody, employeeImportTemplate, previewEmployeeImport } from '../services/employee-import.js';
+import { xlsxResponse } from '../lib/xlsx.js';
 
 const STAFF = ['hr_admin', 'payroll', 'finance', 'manager'] as const;
 const today = () => luandaDate(new Date());
-const packFor = (date: string) => getPack('AO', Number(date.slice(0, 4)));
 /** Para alertas informativos com a data de hoje: nunca falha num ano sem pacote publicado (usa o mais recente). */
 const alertPack = (date: string) => packOrLatest('AO', Number(date.slice(0, 4)));
 
-const optionalText = z.string().trim().max(200).optional().nullable().transform((v) => (v === '' ? null : v));
-const optionalDate = z.union([z.iso.date(), z.literal(''), z.null()]).optional().transform((v) => (v === '' ? null : v));
-
-const moneyFields = z.object({
-  /** Em USD (indexado): referência em Kz ao câmbio indicado na ficha; o processamento converte ao câmbio do dia. */
-  base: z.number().nonnegative(),
-  meal: z.number().nonnegative().default(0),
-  transport: z.number().nonnegative().default(0),
-  currency: z.enum(['AOA', 'USD']).default('AOA'),
-  baseUsd: z.number().positive('Indique o salário base em USD').max(10_000_000).optional().nullable(),
-});
-const usdCheck = (m: { currency: string; baseUsd?: number | null }) => m.currency === 'AOA' || !!m.baseUsd;
-const usdMessage = { message: 'Indique o salário base em USD', path: ['baseUsd'] };
-
-/** Colunas da moeda do salário (USD = base indexada ao dólar). */
-const salaryCols = (m: { currency: 'AOA' | 'USD'; baseUsd?: number | null }) =>
-  m.currency === 'USD' ? { salaryCurrency: 'USD', baseForeignMinor: Math.round(m.baseUsd! * 100) } : { salaryCurrency: 'AOA', baseForeignMinor: null };
-
-const contractBody = moneyFields.extend({
-  type: z.enum(['indefinite', 'fixed_term', 'internship']),
-  startDate: z.iso.date(),
-  endDate: optionalDate,
-  termJustification: optionalText,
-}).refine((c) => c.type !== 'fixed_term' || (c.endDate && c.termJustification), { message: 'Contrato a termo exige data de fim e fundamento do termo', path: ['endDate'] })
-  .refine((c) => !c.endDate || c.endDate > c.startDate, { message: 'A data de fim tem de ser posterior ao início', path: ['endDate'] })
-  .refine(usdCheck, usdMessage);
-
-const personal = {
-  name: z.string().trim().min(2),
-  jobTitle: z.string().trim().min(2),
-  departmentId: z.string().optional().nullable(),
-  managerId: z.string().optional().nullable(),
-  province: optionalText,
-  municipality: optionalText,
-  gender: z.enum(['F', 'M']).optional().nullable(),
-  birthDate: optionalDate,
-  nationality: optionalText,
-  maritalStatus: optionalText,
-  biNumber: z.string().trim().toUpperCase().refine(isValidAngolanBI, 'BI com formato inválido (ex.: 004512398LA041)').optional().nullable(),
-  nif: optionalText,
-  inssNumber: optionalText,
-  iban: z.string().transform(normalizeIban).superRefine((v, ctx) => { const p = angolanIbanProblem(v); if (p) ctx.addIssue({ code: 'custom', message: p }); }).optional().nullable(),
-  bank: optionalText,
-  email: z.union([z.email(), z.literal(''), z.null()]).optional().transform((v) => (v === '' ? null : v)),
-  phone: optionalText,
-  address: optionalText,
-  emergencyContactName: optionalText,
-  emergencyContactPhone: optionalText,
-};
-
-const createBody = z.object({ number: z.string().trim().min(1), ...personal, contract: contractBody, candidateId: z.string().optional() });
 const patchBody = z.object({ ...personal, status: z.enum(['active', 'suspended']), vacationCarryOver: z.coerce.number().int().min(0, 'Dias transitados não podem ser negativos').max(44, 'Máximo de 44 dias transitados') }).partial();
 
 const compensationBody = moneyFields.extend({ effectiveDate: z.iso.date(), reason: z.string().trim().min(3, 'Indique o motivo da alteração') }).refine(usdCheck, usdMessage);
@@ -113,23 +65,6 @@ async function assertManager(db: Db, companyId: string, employeeId: string | nul
   if (employeeId && createsCycle(nodes, employeeId, managerId)) throw new DomainError('ciclo_hierarquia', 'Esta chefia criaria um ciclo na hierarquia (a pessoa já está abaixo deste colaborador)', 400);
 }
 
-/**
- * Salário mínimo do ano da data de efeito. Datas passadas sem pacote registado (ex.: migração de histórico de 2023–2025)
- * não são verificadas — a remuneração em vigor hoje continua a ser verificada nos alertas da ficha.
- * Datas futuras sem pacote são recusadas (422) até o pacote do ano ser publicado.
- */
-function assertMinimumWage(baseMinor: number, type: string, date: string, microOrStartup = false) {
-  let pack: CountryPack;
-  try {
-    pack = packFor(date);
-  } catch (err) {
-    if (err instanceof PackNotFoundError && date < today()) return;
-    throw err;
-  }
-  const alerts = complianceAlerts({ baseMinor, internship: type === 'internship', microOrStartup }, pack);
-  if (alerts.length) throw new DomainError('abaixo_salario_minimo', `${alerts[0]} (${pack.version})`, 400);
-}
-
 /** Alterações salariais não podem cair em meses já fechados: o acerto faz-se no processamento seguinte. */
 async function assertPeriodOpen(db: Db, companyId: string, effectiveDate: string) {
   const [closed] = await db.select({ period: payrollRuns.period }).from(payrollRuns)
@@ -152,6 +87,18 @@ const audit = (db: Db, req: Actor, action: string, entity: string, entityId: str
 export function employeeRoutes() {
   const app = new Hono<AppEnv>();
   for (const path of ['/v1/departments', '/v1/employees', '/v1/employees/*', '/v1/org-chart']) app.use(path, requireCompany);
+  app.use('/v1/employees/import/*', bodyLimit({ maxSize: 6 * 1024 * 1024, onError: c => c.json({ error: 'ficheiro_excessivo', message: 'Os dados seleccionados excedem 6 MB. Divida o ficheiro em lotes menores.' }, 413) }));
+  app.get('/v1/employees/import/template', requireRole('hr_admin'), () => xlsxResponse(employeeImportTemplate(), 'kianda-modelo-importacao-colaboradores.xlsx'));
+  app.post('/v1/employees/import/preview', requireRole('hr_admin'), async c => {
+    const input = employeeImportBody.parse(await body(c));
+    return c.json(await previewEmployeeImport(getDb(), c.get('actor'), input));
+  });
+  app.post('/v1/employees/import/commit', requireRole('hr_admin'), async c => {
+    const input = employeeImportCommitBody.parse(await body(c));
+    const result = await commitEmployeeImport(getDb(), c.get('actor'), input);
+    return c.json(result, result.replayed ? 200 : 201);
+  });
+
 
   app.get('/v1/departments', requireRole(...STAFF), async (ctx) => {
     const req = ctx.get('actor');
@@ -208,15 +155,14 @@ export function employeeRoutes() {
     await assertDepartment(db, req.companyId, b.departmentId);
     await assertManager(db, req.companyId, null, b.managerId);
     assertMinimumWage(kz(b.contract.base), b.contract.type, b.contract.startDate);
-    const lic = await licenceOf(db, req.companyId);
-    if (lic.limit !== null && lic.activeEmployees >= lic.limit) {
-      throw new DomainError('limite_colaboradores', `A licença (${lic.tier.label}) permite ${lic.limit} colaboradores activos. Mude para a faixa seguinte no menu Licença.`, 402);
-    }
     const { contract, candidateId, ...data } = b;
     const [cand] = candidateId ? await db.select().from(candidates).where(and(eq(candidates.id, candidateId), eq(candidates.companyId, req.companyId))) : [];
     if (candidateId && !cand) throw new DomainError('nao_encontrado', 'Candidato inexistente', 404);
     if (cand && cand.stage !== 'offer') throw new DomainError('etapa_invalida', 'Só se admite um candidato na etapa de proposta', 409);
     const result = await db.transaction(async (tx) => {
+      await tx.select({ id: companies.id }).from(companies).where(eq(companies.id, req.companyId)).for('update');
+      const lic = await licenceOf(tx as unknown as Db, req.companyId);
+      if (lic.limit !== null && lic.activeEmployees >= lic.limit) throw new DomainError('limite_colaboradores', 'A licença permite ' + lic.limit + ' colaboradores activos. Mude para a faixa seguinte em Módulos e licenças.', 402);
       if (cand) {
         const [o] = await tx.select({ status: jobOpenings.status }).from(jobOpenings).where(and(eq(jobOpenings.id, cand.openingId), eq(jobOpenings.companyId, req.companyId))).for('update');
         if (!o || o.status === 'closed') throw new DomainError('vaga_fechada', 'Reabra a vaga antes de admitir o candidato', 409);
@@ -300,8 +246,13 @@ export function employeeRoutes() {
     const { id } = z.object({ id: z.string() }).parse(ctx.req.param());
     const b = patchBody.parse(await body(ctx));
     const db = getDb();
+    await db.select({ id: companies.id }).from(companies).where(eq(companies.id, req.companyId)).for('update');
     const before = await loadEmployee(db, req, id);
     if (before.status === 'terminated') throw new DomainError('colaborador_cessado', 'A ficha de um colaborador cessado não pode ser alterada');
+    if (b.status === 'active' && before.status !== 'active') {
+      const lic = await licenceOf(db, req.companyId);
+      if (lic.limit !== null && lic.activeEmployees >= lic.limit) throw new DomainError('limite_colaboradores', 'A licença atingiu o limite de colaboradores activos.', 402);
+    }
     if ('departmentId' in b) await assertDepartment(db, req.companyId, b.departmentId);
     if ('managerId' in b) await assertManager(db, req.companyId, id, b.managerId);
     const changes = Object.fromEntries(Object.entries(b).filter(([k, v]) => v !== undefined && (before as Record<string, unknown>)[k] !== v));
