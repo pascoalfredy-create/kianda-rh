@@ -47,7 +47,7 @@ export async function readEmployeeImportDocument(file: File, sheetIndex = 0, sig
   signal?.throwIfAborted();
   if (grid.length > EMPLOYEE_IMPORT_LIMIT + 100 || grid.some(row => row.length > 128)) return fail('A tabela excede 5.100 linhas ou 128 colunas. Separe apenas os dados dos colaboradores.');
   if (grid.some(row => row.some(v => typeof v === 'string' && v.length > 1000))) return fail('A tabela contém uma célula demasiado extensa. Seleccione uma tabela de colaboradores.');
-  if (!grid.some(row => row.some(v => v !== null && String(v).trim()))) return fail('O documento não contém uma tabela com dados.');
+  if (sheets.length < 2 && !grid.some(row => row.some(v => v !== null && String(v).trim()))) return fail('O documento não contém uma tabela com dados.');
   return { grid, sheets, dateSystem };
 }
 export function guessEmployeeHeader(grid: EmployeeImportCell[][]): number {

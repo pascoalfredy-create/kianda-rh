@@ -73,8 +73,7 @@ export async function readXlsxRows(buffer: ArrayBuffer, options: { sheetIndex?: 
   const rows: (string | number | boolean | null)[][] = [];
   for (const row of xml.matchAll(/<row\b([^>]*)>([\s\S]*?)<\/row>|<row\b([^>]*)\/>/g)) {
     const index = Number(attr(row[1] ?? row[3] ?? '', 'r') ?? rows.length + 1) - 1;
-    if (!Number.isInteger(index) || index < 0 || index > 100_000) fail();
-    if (index >= (options.maxRows ?? 100_001)) fail('A folha excede o limite de linhas. Separe os dados em ficheiros menores.');
+    if (!Number.isInteger(index) || index < 0 || index > (options.maxRows ? 1_048_575 : 100_000)) fail();
     const cells: (string | number | boolean | null)[] = [];
     for (const cell of (row[2] ?? '').matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
       const tag = cell[1]!, body = cell[2] ?? '', ref = attr(tag, 'r'), type = attr(tag, 't') ?? 'n';
@@ -93,6 +92,7 @@ export async function readXlsxRows(buffer: ArrayBuffer, options: { sheetIndex?: 
       while (cells.length < col) cells.push(null);
       cells[col] = value;
     }
+    if (index >= (options.maxRows ?? 100_001)) { if (!cells.some(v => v !== null && v !== '')) continue; return fail('A folha excede o limite de linhas. Separe os dados em ficheiros menores.'); }
     while (rows.length < index) rows.push([]);
     rows[index] = cells;
   }

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { xlsx } from '../../api/src/lib/xlsx';
-import { apiAs, registerCompany, signIn, watchErrors } from './support';
+import { xlsx } from '../../api/src/lib/xlsx.js';
+import { apiAs, registerCompany, signIn, watchErrors } from './support.js';
 test('uma empresa migra o Excel, remove a prévia errada e confirma as fichas sem duplicados', async ({ page, context }) => {
   const company = await registerCompany(), errors = watchErrors(page);
   const bytes = xlsx([

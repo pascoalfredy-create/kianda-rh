@@ -23,7 +23,7 @@ export function EmployeeImportForm({ today }: { today: string }) {
     setFile(next); setDocument(null); setMapping({}); setSheet(nextSheet); setReading(true); setChecking(false);
     try {
       const doc = await readEmployeeImportDocument(next, nextSheet, abort.signal); if (revision.current !== version) return;
-      const at = guessEmployeeHeader(doc.grid); setDocument(doc); setHeader(at); setMapping(guessEmployeeImportMapping(doc.grid[at]!.map(v => String(v ?? ''))));
+      const at = guessEmployeeHeader(doc.grid); setDocument(doc); setHeader(at); setMapping(guessEmployeeImportMapping((doc.grid[at] ?? []).map(v => String(v ?? '')))); if (!doc.grid.some(row => row.some(v => v !== null && v !== ''))) setError('A folha seleccionada está vazia. Escolha outra folha do Excel.');
     } catch (e) { if (revision.current === version && !abort.signal.aborted) setError(e instanceof Error ? e.message : 'Não foi possível ler o ficheiro.'); }
     finally { if (revision.current === version) setReading(false); }
   }
