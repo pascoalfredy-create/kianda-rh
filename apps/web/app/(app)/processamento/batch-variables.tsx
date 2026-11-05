@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { formatKz, parseAmount } from '@kianda/core';
 import { useMutation } from '@/lib/client';
 import { monthLabel } from '@/lib/format';
@@ -8,8 +8,9 @@ import { monthLabel } from '@/lib/format';
 export interface BatchResult { batchId: string; count: number; totalMinor: number; replayed: boolean }
 type Kind = 'bonus' | 'other_earning' | 'advance' | 'other_deduction' | 'salary_cut';
 
-export function BatchVariables({ period, people, disabled, onPendingChange, onCancel, onSaved }: {
+export function BatchVariables({ period, people, disabled, onPendingChange, onSavingChange, onCancel, onSaved }: {
   period: string; people: { id: string; name: string }[]; disabled: boolean;
+  onSavingChange?: (saving: boolean) => void;
   onPendingChange: (pending: boolean) => void; onCancel: () => void; onSaved: (result: BatchResult) => void;
 }) {
   const { busy, error, run } = useMutation();
@@ -28,10 +29,12 @@ export function BatchVariables({ period, people, disabled, onPendingChange, onCa
   const invalid = [...selected].filter((id) => (value(id) ?? 0) <= 0 || !Number.isSafeInteger(value(id)));
   const total = [...selected].reduce((sum, id) => sum + (value(id) ?? 0), 0);
   const canSave = !locked && selected.size > 0 && selected.size <= 1000 && !invalid.length && label.trim().length >= 2 && Number.isSafeInteger(total);
+  const dirty = selected.size > 0 && (!!label.trim() || !!common.trim() || [...selected].some(id => !!amounts[id]?.trim()));
+  useEffect(() => { onPendingChange(dirty); }, [dirty, onPendingChange]);
   function choose(id: string, checked: boolean) {
     setSelected((before) => { const next = new Set(before); checked ? next.add(id) : next.delete(id); return next; });
   }
-  return <form className="form card cols4" aria-label="Variáveis em lote" onChange={() => onPendingChange(true)} onSubmit={async (e) => {
+  return <form className="form card cols4" aria-label="Variáveis em lote" onSubmit={async (e) => {
     e.preventDefault();
     if (!canSave) return;
     const rows = [...selected].sort().map((employeeId) => ({ employeeId, amount: value(employeeId)! / 100 }));
@@ -39,11 +42,13 @@ export function BatchVariables({ period, people, disabled, onPendingChange, onCa
     const payload = JSON.stringify(body);
     if (request.current?.payload !== payload) request.current = { payload, id: crypto.randomUUID() };
     onPendingChange(true);
-    await run<BatchResult>('/v1/payroll-variables/batch', 'POST', { ...body, requestId: request.current.id }, (result) => { if (result) onSaved(result); });
+    onSavingChange?.(true);
+    try { await run<BatchResult>('/v1/payroll-variables/batch', 'POST', { ...body, requestId: request.current.id }, (result) => { if (result) onSaved(result); }); }
+    finally { onSavingChange?.(false); }
   }}>
     <fieldset disabled={locked} style={{ display: 'contents' }}>
       <h3>Variáveis em lote · {monthLabel(period)}</h3>
-      <p className="muted wide">Seleccione os colaboradores e indique os valores deste mês. O lote só é gravado se todos os lançamentos forem válidos. Depois, calcule ou recalcule a folha mensal da equipa.</p>
+      <p className="muted wide">Use este lote apenas para alterações pontuais do mês. Os salários e subsídios fixos já estão registados. Pode calcular a folha sem preencher este formulário. Para guardar uma alteração, indique os seus valores e descrição.</p>
       <label>Tipo do lote<select value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
         <option value="bonus">Prémio / gratificação</option><option value="other_earning">Outro abono</option>
         <option value="advance">Adiantamento (desconto)</option><option value="other_deduction">Outro desconto</option>
@@ -57,11 +62,11 @@ export function BatchVariables({ period, people, disabled, onPendingChange, onCa
       <label className="span2">Pesquisar colaboradores<input value={filter} onChange={(e) => { e.stopPropagation(); setFilter(e.target.value); setPage(0); }} placeholder="Nome do colaborador" /></label>
       <label>Valor comum (Kz)<input inputMode="decimal" value={common} onChange={(e) => setCommon(e.target.value)} placeholder="Opcional" /></label>
       <div style={{ alignSelf: 'end' }}><button type="button" className="btn ghost sm" disabled={!selected.size || (parseAmount(common) ?? 0) <= 0} onClick={() => {
-        setAmounts((before) => { const next = { ...before }; for (const id of selected) next[id] = common; return next; }); onPendingChange(true);
+        setAmounts((before) => { const next = { ...before }; for (const id of selected) next[id] = common; return next; });
       }}>Aplicar valor aos seleccionados</button></div>
       <div className="wide actions" style={{ justifyContent: 'flex-start' }}>
-        <button type="button" className="btn ghost sm" disabled={!filtered.length || new Set([...selected, ...filtered.map(p => p.id)]).size > 1000} onClick={() => { setSelected(new Set([...selected, ...filtered.map(p => p.id)])); onPendingChange(true); }}>Seleccionar resultados ({filtered.length})</button>
-        <button type="button" className="btn ghost sm" disabled={!selected.size} onClick={() => { setSelected(new Set()); onPendingChange(true); }}>Limpar selecção</button>
+        <button type="button" className="btn ghost sm" disabled={!filtered.length || new Set([...selected, ...filtered.map(p => p.id)]).size > 1000} onClick={() => { setSelected(new Set([...selected, ...filtered.map(p => p.id)])); }}>Seleccionar resultados ({filtered.length})</button>
+        <button type="button" className="btn ghost sm" disabled={!selected.size} onClick={() => { setSelected(new Set()); }}>Limpar selecção</button>
         <span className="muted">{selected.size} seleccionado(s) · valor do lote {Number.isSafeInteger(total) ? formatKz(total) : 'Total acima do limite'}</span>
       </div>
       <div className="wide table-scroll">
