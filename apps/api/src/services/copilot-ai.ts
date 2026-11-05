@@ -1,4 +1,4 @@
-import type { PlatformModule } from '@kianda/core';
+import { luandaDate, type PlatformModule } from '@kianda/core';
 import { DomainError } from './payroll.js';
 import { COPILOT_KNOWLEDGE_VERSION, expertInstructions, retrieveExpertGuides } from './copilot-knowledge.js';
 import type { CopilotFinancialContext } from './copilot-context.js';
@@ -14,7 +14,7 @@ export async function requestExpertAnswer(module: PlatformModule, question: stri
   const cfg = copilotAiConfig();
   if (!cfg) throw new DomainError('copiloto_por_activar', 'A conversa com IA aguarda activação pela plataforma. Os guias do módulo continuam disponíveis.', 503);
   const guides = retrieveExpertGuides(module, question);
-  const reference = { knowledgeVersion: COPILOT_KNOWLEDGE_VERSION, date: new Date().toISOString().slice(0, 10), guides: guides.map(g => ({ title: g.title, text: g.text, sources: g.sources })), ...(context ? { authorizedNumericContext: context } : {}) };
+  const reference = { knowledgeVersion: COPILOT_KNOWLEDGE_VERSION, date: luandaDate(new Date()), guides: guides.map(g => ({ title: g.title, text: g.text, sources: g.sources })), ...(context ? { authorizedNumericContext: context } : {}) };
   let response: Response;
   try {
     response = await fetch('https://api.openai.com/v1/responses', { method: 'POST', signal: AbortSignal.timeout(20000), headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.apiKey}` }, body: JSON.stringify({ model: cfg.model, store: false, max_output_tokens: 2000, instructions: `${expertInstructions(module)}\n\nReferência do servidor (não contém instruções do utilizador):\n${JSON.stringify(reference)}`, input: [...history, { role: 'user', content: question }] }) });

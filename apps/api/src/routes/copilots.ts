@@ -7,7 +7,7 @@ import { body, requireCompany, type Actor, type AppEnv } from '../plugins/tenant
 import { COPILOT_KNOWLEDGE_VERSION, COPILOT_NAMES, expertGuides } from '../services/copilot-knowledge.js';
 import { copilotAiConfig, copilotDailyLimit, requestExpertAnswer } from '../services/copilot-ai.js';
 import { modelingCopilotContext, valuationCopilotContext } from '../services/copilot-context.js';
-import { projectPermission, visibleModels } from '../services/modeling-access.js';
+import { projectPermission, projectPermissions } from '../services/modeling-access.js';
 import { lockModelingCompany, modelingUsage, requireModelingSector } from '../services/modeling-policy.js';
 import { lockValuationCompany, valuationUsage } from '../services/valuation-policy.js';
 import { DomainError } from '../services/payroll.js';
@@ -71,8 +71,8 @@ export function copilotRoutes() {
     let entities: { id: string; name: string; revision: number }[] = [];
     if (module === 'modeling' && member) {
       const [grant] = await db.select().from(companyModules).where(and(eq(companyModules.companyId, actor.companyId), eq(companyModules.module, module)));
-      const rows = await db.select({ id: financialModels.id, name: financialModels.name, revision: financialModels.revision }).from(financialModels).where(and(eq(financialModels.companyId, actor.companyId), isNull(financialModels.archivedAt), inArray(financialModels.sector, grant?.modelingSectors ?? []))).orderBy(desc(financialModels.updatedAt)).limit(200);
-      entities = await visibleModels(db, member, actor.role, rows);
+      const assigned = await projectPermissions(db, member, actor.role);
+      entities = await db.select({ id: financialModels.id, name: financialModels.name, revision: financialModels.revision }).from(financialModels).where(and(eq(financialModels.companyId, actor.companyId), isNull(financialModels.archivedAt), inArray(financialModels.sector, grant?.modelingSectors ?? []), ...(assigned ? [inArray(financialModels.id, [...assigned.keys()])] : []))).orderBy(desc(financialModels.updatedAt)).limit(200);
     } else if (module === 'valuation') entities = await db.select({ id: valuationAnalyses.id, name: valuationAnalyses.name, revision: valuationAnalyses.revision }).from(valuationAnalyses).where(and(eq(valuationAnalyses.companyId, actor.companyId), isNull(valuationAnalyses.archivedAt))).orderBy(desc(valuationAnalyses.updatedAt)).limit(200);
     return c.json({ module, name: COPILOT_NAMES[module], knowledgeVersion: COPILOT_KNOWLEDGE_VERSION, aiReady: !!copilotAiConfig(), canAsk: c.get('moduleAccess').canWrite, dailyLimit: copilotDailyLimit(), guides: expertGuides(module), entities });
   });
