@@ -58,6 +58,7 @@ export function navigation(me: Me, counts: { absences: number; expenses: number;
   ]);
   add('Módulos', [
     item('/modulos', 'Módulos', 'modules'),
+    (me.modules.hr.canAccess || me.modules.modeling.canAccess || me.modules.valuation?.canAccess) && item('/copiloto', 'Copilotos', 'star'),
     !me.modules.hr.canAccess && { ...item('/modulos#hr', 'Recursos Humanos', 'users'), locked: true },
     { ...item(me.modules.modeling.canAccess ? '/modelagem' : '/modulos#modeling', 'Modelagem Financeira', 'chart'), locked: !me.modules.modeling.canAccess },
     { ...item(me.modules.valuation?.canAccess ? '/valora' : '/modulos#valuation', 'Análise e Avaliação', 'money'), locked: !me.modules.valuation?.canAccess },

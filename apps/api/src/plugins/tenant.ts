@@ -27,7 +27,7 @@ export interface Actor {
   session: SessionClaims;
 }
 
-export type AppEnv = { Variables: { actor: Actor; companyGuarded: boolean; moduleAccess: ModuleAccess; modelingPermission: string; valuationPermission: string; modelingMember: import('@kianda/db').ModelingMemberRow } };
+export type AppEnv = { Variables: { actor: Actor; companyGuarded: boolean; moduleAccess: ModuleAccess; modelingPermission: string; valuationPermission: string; modelingMember: import('@kianda/db').ModelingMemberRow; afterTenant?: () => Promise<Response> } };
 export type Ctx = Context<AppEnv>;
 
 export const SESSION_COOKIE = 'kianda_session';
@@ -96,6 +96,10 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
   } catch (e) {
     if (!(e instanceof Rollback)) throw e;
   }
+  // O copiloto prepara permissões/contexto/quota no RLS e só chama a IA depois do commit.
+  // O callback não transporta a ligação transaccional nem pode voltar a usar o db do pedido.
+  const afterTenant = c.get('afterTenant');
+  if (!c.error && c.res.status < 400 && afterTenant) c.res = await afterTenant();
 };
 
 class Rollback extends Error {}

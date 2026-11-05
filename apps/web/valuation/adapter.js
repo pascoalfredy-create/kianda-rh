@@ -11,6 +11,7 @@ const dateLbl=s=>{try{return new Date(s).toLocaleDateString('pt-PT',{day:'2-digi
 function valoraCanWrite(){return !!VS&&VS.canWrite&&!!CUR&&!CUR.archivedAt&&!conflict}
 function valoraIssue(x){return valuationDataIssue(x)}
 function valoraFechoLabel(){return D.fecho?`Fecho: ${MES[D.fecho-1]} ${EX}`:`Sem meses reais · ${EX}`}
+document.querySelector('#valoraCopilot')?.addEventListener('click',async e=>{e.preventDefault();try{await ensureSaved();location.assign('/copiloto?modulo=valuation'+(CUR?.id?'&projecto='+encodeURIComponent(CUR.id):''))}catch(error){banner('err',ESC(error.message))}});
 
 /* ---------- Pedidos à API ---------- */
 async function api(path,opt={}){
