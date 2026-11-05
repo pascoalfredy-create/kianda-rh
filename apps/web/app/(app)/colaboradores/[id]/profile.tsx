@@ -1,7 +1,7 @@
 import { Attachments } from '@/components/attachments';
 import { formatKz, formatUsd, formatPercent, luandaDate } from '@kianda/core';
 import type { Compensation } from '@/lib/types';
-import Link from 'next/link';
+import { ContextLink as Link, ReturnLink } from '@/components/context-link';
 import { notFound } from 'next/navigation';
 import { api, ApiError, currentUser } from '@/lib/api';
 import {
@@ -61,7 +61,7 @@ export default async function Ficha({ params, searchParams, panelBase }: { panel
 
   return (
     <>
-      {isStaff && !panelBase && <Link href="/colaboradores" className="crumb">← Colaboradores</Link>}
+      {isStaff && !panelBase && <ReturnLink fallback="/colaboradores" className="crumb">← Colaboradores</ReturnLink>}
       <div className="card hero">
         <div className="avatar">{initials(p.name)}</div>
         <div>

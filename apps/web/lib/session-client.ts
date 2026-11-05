@@ -1,9 +1,11 @@
 import { disablePush } from './push-client';
+import { WORKSPACE_KEY } from './workspace-memory';
 /** Limpa as páginas pessoais e os metadados locais partilhados pelo RH e Integra. */
 export async function clearOfflineData() {
   try { if ('caches' in window) await caches.delete('kianda-pages-v1'); } catch { /* armazenamento indisponível */ }
   try { navigator.serviceWorker?.controller?.postMessage('clear-pages'); } catch { /* sem service worker */ }
   try { localStorage.removeItem('kianda_me_cache'); } catch { /* sem armazenamento */ }
+  try { sessionStorage.removeItem(WORKSPACE_KEY); } catch { /* sem armazenamento */ }
 }
 
 /** Só abandona a conta depois de o servidor confirmar o fim da sessão. */

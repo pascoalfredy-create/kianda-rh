@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect } from 'react';
+import { useClearWorkspace, useWorkspaceState } from '@/components/workspace-state';
 import { formatKz, parseAmount } from '@kianda/core';
 import { useMutation } from '@/lib/client';
 import { monthLabel } from '@/lib/format';
@@ -8,18 +9,23 @@ import { monthLabel } from '@/lib/format';
 export interface BatchResult { batchId: string; count: number; totalMinor: number; replayed: boolean }
 type Kind = 'bonus' | 'other_earning' | 'advance' | 'other_deduction' | 'salary_cut';
 
-export function BatchVariables({ period, people, disabled, onPendingChange, onSavingChange, onCancel, onSaved }: {
+export function BatchVariables({ period, people, disabled, onPendingChange, onSavingChange, onCancel, onSaved, draftKey = `payroll:${period}:lot:` }: {
   period: string; people: { id: string; name: string }[]; disabled: boolean;
+  draftKey?: string;
   onSavingChange?: (saving: boolean) => void;
   onPendingChange: (pending: boolean) => void; onCancel: () => void; onSaved: (result: BatchResult) => void;
 }) {
   const { busy, error, run } = useMutation();
-  const [kind, setKind] = useState<Kind>('bonus'), [label, setLabel] = useState('');
-  const [inInss, setInInss] = useState(true), [inIrt, setInIrt] = useState(true);
-  const [filter, setFilter] = useState(''), [page, setPage] = useState(0);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [amounts, setAmounts] = useState<Record<string, string>>({}), [common, setCommon] = useState('');
-  const request = useRef<{ payload: string; id: string } | null>(null);
+  const clearDraft = useClearWorkspace(draftKey);
+  const [kind, setKind] = useWorkspaceState<Kind>(`${draftKey}kind`, 'bonus'), [label, setLabel] = useWorkspaceState(`${draftKey}label`, '');
+  const [inInss, setInInss] = useWorkspaceState(`${draftKey}inInss`, true), [inIrt, setInIrt] = useWorkspaceState(`${draftKey}inIrt`, true);
+  const [filter, setFilter] = useWorkspaceState(`${draftKey}filter`, ''), [page, setPage] = useWorkspaceState(`${draftKey}page`, 0);
+  const [chosen, setChosen] = useWorkspaceState<string[]>(`${draftKey}selected`, []);
+  const eligible = new Set(people.map(person => person.id));
+  const selected = new Set(chosen.filter(id => typeof id === 'string' && eligible.has(id)));
+  const setSelected = (value: Set<string>) => setChosen([...value]);
+  const [amounts, setAmounts] = useWorkspaceState<Record<string, string>>(`${draftKey}amounts`, {}), [common, setCommon] = useWorkspaceState(`${draftKey}common`, '');
+  const [request, setRequest] = useWorkspaceState(`${draftKey}request`, { payload: '', id: '' });
   const earning = kind === 'bonus' || kind === 'other_earning';
   const locked = disabled || busy;
   const filtered = people.filter((p) => p.name.toLocaleLowerCase('pt-PT').includes(filter.trim().toLocaleLowerCase('pt-PT')));
@@ -32,7 +38,7 @@ export function BatchVariables({ period, people, disabled, onPendingChange, onSa
   const dirty = selected.size > 0 && (!!label.trim() || !!common.trim() || [...selected].some(id => !!amounts[id]?.trim()));
   useEffect(() => { onPendingChange(dirty); }, [dirty, onPendingChange]);
   function choose(id: string, checked: boolean) {
-    setSelected((before) => { const next = new Set(before); checked ? next.add(id) : next.delete(id); return next; });
+    const next = new Set(selected); checked ? next.add(id) : next.delete(id); setSelected(next);
   }
   return <form className="form card cols4" aria-label="Variáveis em lote" onSubmit={async (e) => {
     e.preventDefault();
@@ -40,10 +46,11 @@ export function BatchVariables({ period, people, disabled, onPendingChange, onSa
     const rows = [...selected].sort().map((employeeId) => ({ employeeId, amount: value(employeeId)! / 100 }));
     const body = { period, kind, label: label.trim(), inInss, inIrt, rows };
     const payload = JSON.stringify(body);
-    if (request.current?.payload !== payload) request.current = { payload, id: crypto.randomUUID() };
+    const requestId = request.payload === payload && request.id ? request.id : crypto.randomUUID();
+    setRequest({ payload, id: requestId });
     onPendingChange(true);
     onSavingChange?.(true);
-    try { await run<BatchResult>('/v1/payroll-variables/batch', 'POST', { ...body, requestId: request.current.id }, (result) => { if (result) onSaved(result); }); }
+    try { await run<BatchResult>('/v1/payroll-variables/batch', 'POST', { ...body, requestId }, (result) => { if (result) { clearDraft(); onSaved(result); } }); }
     finally { onSavingChange?.(false); }
   }}>
     <fieldset disabled={locked} style={{ display: 'contents' }}>
@@ -88,7 +95,7 @@ export function BatchVariables({ period, people, disabled, onPendingChange, onSa
       {!!invalid.length && <p className="muted wide">{invalid.length} valor(es) por preencher ou corrigir entre os seleccionados.</p>}
       <div className="form-actions">
         {error && <span className="err" role="alert">{error}</span>}
-        <button type="button" className="btn ghost" onClick={onCancel}>Cancelar lote</button>
+        <button type="button" className="btn ghost" onClick={() => { clearDraft(); onCancel(); }}>Cancelar lote</button>
         <button className="btn" disabled={!canSave}>{busy ? 'A guardar o lote…' : 'Guardar lote'}</button>
       </div>
     </fieldset>

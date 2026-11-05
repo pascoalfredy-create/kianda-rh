@@ -6,6 +6,8 @@ import { Suspense } from 'react';
 import { AppShell } from '@/components/app-shell';
 import { canExportDocuments, luandaDate, trialDaysRemaining } from '@kianda/core';
 import { DocumentExportAccess } from '@/components/document-export';
+import { WorkspaceState } from '@/components/workspace-state';
+import { workspaceScope } from '@/lib/workspace-memory';
 
 /** Área autenticada: sem sessão válida (verificada pela API), redirecciona para o login. */
 /** Aviso de licença: experimental a terminar, pagamento em atraso ou só consulta. */
@@ -29,9 +31,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (me.user.requiresEmailVerification) redirect('/confirmar-email');
   const counts = me.notifications ?? { absences: 0, expenses: 0, tasks: 0, acks: 0 };
   return <Suspense fallback={<div className="empty">A abrir o Kianda…</div>}>
-    <DocumentExportAccess allowed={canExportDocuments(me.modules.hr.status)}><AppShell me={me} counts={counts}>
+    <WorkspaceState key={workspaceScope(me.company?.id, me.user.id)} scope={workspaceScope(me.company?.id, me.user.id)}><DocumentExportAccess allowed={canExportDocuments(me.modules.hr.status)}><AppShell me={me} counts={counts}>
       <LicenceBanner me={me} />
       {children}
-    </AppShell></DocumentExportAccess>
+    </AppShell></DocumentExportAccess></WorkspaceState>
   </Suspense>;
 }

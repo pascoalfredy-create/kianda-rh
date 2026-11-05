@@ -1,7 +1,7 @@
 
 import { MapDisclosure } from '@/components/map-disclosure';
 import { formatFxRate, formatKz } from '@kianda/core';
-import Link from 'next/link';
+import { ContextLink as Link } from '@/components/context-link';
 import { redirect } from 'next/navigation';
 import { actorFromApi, api, apiWithActor, ApiError } from '@/lib/api';
 import { currentPeriod, monthLabel, shiftMonth } from '@/lib/format';
