@@ -1,7 +1,7 @@
 const openedMaps = new Map<string, boolean>();
 
 /** Adaptador dos dois ecrãs financeiros imperativos. Não altera dados, cálculos ou exportadores. */
-export function prepareMapDisclosures(root: HTMLElement, scope: string) {
+export function prepareMapDisclosures(root: HTMLElement, scope: string, memory?: WorkspaceMemory) {
   for (const [index, table] of [...root.querySelectorAll('table')].entries()) {
     if (table.closest('.map-disclosure') || table.parentElement?.closest('table')) continue;
     const caption = table.closest('.card')?.querySelector('h2,h3,h4')?.textContent?.trim() || table.caption?.textContent?.trim() || `Mapa ${index + 1}`;
@@ -13,8 +13,11 @@ export function prepareMapDisclosures(root: HTMLElement, scope: string) {
     for (const [text, className] of [[caption, ''], ['Ver', 'map-show'], ['Recolher', 'map-hide']]) {
       const span = document.createElement('span'); span.textContent = text!; span.className = className!; summary.append(span);
     }
-    details.append(summary, content); details.open = openedMaps.get(key) ?? false;
-    details.addEventListener('toggle', () => { openedMaps.set(key, details.open); });
+    const stored = memory?.get(`map:${key}`);
+    details.append(summary, content); details.open = typeof stored === 'boolean' ? stored : openedMaps.get(key) ?? false;
+    details.addEventListener('toggle', () => { openedMaps.set(key, details.open); memory?.set(`map:${key}`, details.open); });
     target.before(details); content.append(target);
   }
 }
+import type { WorkspaceMemory } from './workspace-memory';
+

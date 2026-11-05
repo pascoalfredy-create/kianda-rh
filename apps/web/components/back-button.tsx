@@ -18,7 +18,12 @@ export function BackButton() {
   if (path === '/') return null;
   const back = () => {
     const origin = returnPath(search.get('voltar'), '');
-    if (origin && origin !== current) { router.replace(origin); return; }
+    if (origin && origin !== current) {
+      if (/^\/(?:modelagem|valora)(?:[?#]|$)/.test(origin)) { window.location.assign(origin); return; }
+      if (visited.current.at(-2) === origin) router.back();
+      else router.replace(origin);
+      return;
+    }
     let sameSite = false;
     try {
       const ref = new URL(document.referrer);

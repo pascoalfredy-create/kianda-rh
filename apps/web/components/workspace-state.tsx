@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { compatibleDraft, WorkspaceMemory } from '@/lib/workspace-memory';
 
 const Workspace = createContext<WorkspaceMemory | null>(null);
@@ -15,14 +15,15 @@ export function WorkspaceState({ scope, children }: { scope: string; children: R
 /** Os valores são restaurados depois da hidratação; nunca se enviam alterações à API. */
 export function useWorkspaceState<T>(key: string, initial: T): [T, Dispatch<SetStateAction<T>>] {
   const memory = useContext(Workspace);
-  const defaults = useRef(initial);
+  const defaults = useRef({ key, value: initial });
+  if (defaults.current.key !== key) defaults.current = { key, value: initial };
   const [local, setLocal] = useState(initial);
   const read = useCallback(() => memory?.get(key), [memory, key]);
   const stored = useSyncExternalStore(memory?.subscribe ?? (() => () => {}), read, serverSnapshot);
-  const value = memory ? compatibleDraft(stored, defaults.current) ? stored as T : defaults.current : local;
+  const value = memory ? compatibleDraft(stored, defaults.current.value) ? stored as T : defaults.current.value : local;
   const set = useCallback<Dispatch<SetStateAction<T>>>(next => {
     if (!memory) { setLocal(next); return; }
-    const before = memory.get(key), current = compatibleDraft(before, defaults.current) ? before as T : defaults.current;
+    const before = memory.get(key), current = compatibleDraft(before, defaults.current.value) ? before as T : defaults.current.value;
     memory.set(key, typeof next === 'function' ? (next as (value: T) => T)(current) : next);
   }, [key, memory]);
   return [value, set];
@@ -36,6 +37,12 @@ export function useClearWorkspace(prefix: string) {
 /** Restabelece a posição quando o conteúdo e os rascunhos voltam a estar montados. */
 function ScrollMemory({ memory }: { memory: WorkspaceMemory }) {
   const path = usePathname(), search = useSearchParams();
+  const router = useRouter(), visited = useRef(new Set<string>()), previousPath = useRef(path);
+  useEffect(() => {
+    // O retorno recupera a interface; os registos têm de vir da API actual.
+    if (previousPath.current !== path && visited.current.has(path)) router.refresh();
+    visited.current.add(path); previousPath.current = path;
+  }, [path, router]);
   const params = new URLSearchParams(search.toString()); params.delete('voltar');
   const key = `scroll:${path}?${params}`;
   useEffect(() => {

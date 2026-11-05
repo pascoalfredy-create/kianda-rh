@@ -1,7 +1,8 @@
 'use client';
 
 import { baseForNet, calculatePayroll, convertUsdMinor, formatFxRate, indexedBaseLabel, formatKz, formatUsd, kz, parseFxRate, type PayrollInput, type PayrollResult, parseAmount } from '@kianda/core';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { useWorkspaceState } from '@/components/workspace-state';
 
 type Mode = 'net' | 'gross';
 const num = (s: string) => { const n = (parseAmount(s) ?? 0) / 100; return n > 0 ? n : 0; };
@@ -12,21 +13,21 @@ const thisMonth = () => new Date(Date.now() + 3_600_000).toISOString().slice(0, 
  * com o mesmo motor do processamento, a correr no navegador. Salário em USD convertido ao câmbio indicado.
  */
 export default function Simulador() {
-  const [mode, setMode] = useState<Mode>('net');
-  const [period, setPeriod] = useState(thisMonth());
-  const [target, setTarget] = useState('500000');
-  const [base, setBase] = useState('420000');
-  const [usd, setUsd] = useState(false);
-  const [baseUsd, setBaseUsd] = useState('1500');
-  const [rate, setRate] = useState('');
-  const [meal, setMeal] = useState('30000');
-  const [transport, setTransport] = useState('25000');
-  const [other, setOther] = useState('0');
-  const [deductions, setDeductions] = useState('0');
-  const [overtime, setOvertime] = useState('0');
-  const [allowancesInInss, setAllowancesInInss] = useState(false);
-  const [otherInInss, setOtherInInss] = useState(true);
-  const [otherInIrt, setOtherInIrt] = useState(true);
+  const [mode, setMode] = useWorkspaceState<Mode>('simulator:mode', 'net');
+  const [period, setPeriod] = useWorkspaceState('simulator:period', thisMonth());
+  const [target, setTarget] = useWorkspaceState('simulator:target', '500000');
+  const [base, setBase] = useWorkspaceState('simulator:base', '420000');
+  const [usd, setUsd] = useWorkspaceState('simulator:usd', false);
+  const [baseUsd, setBaseUsd] = useWorkspaceState('simulator:baseUsd', '1500');
+  const [rate, setRate] = useWorkspaceState('simulator:rate', '');
+  const [meal, setMeal] = useWorkspaceState('simulator:meal', '30000');
+  const [transport, setTransport] = useWorkspaceState('simulator:transport', '25000');
+  const [other, setOther] = useWorkspaceState('simulator:other', '0');
+  const [deductions, setDeductions] = useWorkspaceState('simulator:deductions', '0');
+  const [overtime, setOvertime] = useWorkspaceState('simulator:overtime', '0');
+  const [allowancesInInss, setAllowancesInInss] = useWorkspaceState('simulator:allowancesInInss', false);
+  const [otherInInss, setOtherInInss] = useWorkspaceState('simulator:otherInInss', true);
+  const [otherInIrt, setOtherInIrt] = useWorkspaceState('simulator:otherInIrt', true);
   const fx = usd ? parseFxRate(rate) : null;
 
   const out = useMemo<{ r?: PayrollResult; baseMinor?: number; error?: string }>(() => {

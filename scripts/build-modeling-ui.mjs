@@ -26,6 +26,7 @@ span('function newModel(', '/* ---------------- Estado', `function newModel(sk,o
 span('let S;', '/* ---------------- Motor', `let S={models:[],active:null,unit:'M',an:null};\nconst M=()=>previewModel||S.models.find(m=>m.id===S.active)||S.models[0];\n\n`);
 span('/* ---------------- Motor', '/* ---------------- Formatação', `function run(m,ov={}){return runFinancialModel(m,ov);}\nfunction breakEvenPrice(m){return financialBreakEvenPrice(m);}\nfunction waccOf(m){try{return run(m).wacc}catch{return null}}\nfunction keOf(m){try{return run(m).ke}catch{return null}}\n\n`);
 replace('function render(){', 'function renderPrototype(){');
+replace("history.replaceState(null,'','#'+v)", "history.pushState(null,'','#'+v)");
 span("  $('#nav').innerHTML=", "  $('#mSel').innerHTML=", '  renderNavigation();\n');
 replace('function liveStrip(){', 'function liveStripPrototype(){');
 // Mantém o relatório no computador e permite que o selector e o documento empilhem no telefone.
@@ -173,7 +174,7 @@ source = source.slice(0, source.indexOf('/* ---------------- Eventos'));
 const adapter = (await readFile(new URL('modeling/adapter.js', web), 'utf8')).replace('__NEW_MODEL_DIALOG__', dialog);
 const imports = `import {runFinancialModel} from '${fileURLToPath(new URL('packages/core/src/modeling/engine.ts', root))}';\nimport {financialBreakEvenPrice} from '${fileURLToPath(new URL('packages/core/src/modeling/analysis.ts', root))}';\nimport {FinancialModelError,FINANCIAL_ENGINE_VERSION} from '${fileURLToPath(new URL('packages/core/src/modeling/types.ts', root))}';\nimport {setupNumberFields,parseNumberInput} from '${fileURLToPath(new URL('lib/number-fields.ts', web))}';\nimport {analyzeFinancialProjection} from '${fileURLToPath(new URL('packages/core/src/modeling/project-analysis.ts', root))}';\nimport {ModelingStore,modelingRequest,presentModel} from '${fileURLToPath(new URL('modeling/store.ts', web))}';\n`;
 const mobileImports = `import {setupModelingMobile,prepareFinancialTables} from '${fileURLToPath(new URL('modeling/mobile.ts', web))}';\n`;
-const sessionImports = `import {endSession,reloadPrivatePageOnRestore} from '${fileURLToPath(new URL('lib/session-client.ts', web))}';\n`;
+const sessionImports = `import {endSession,reloadPrivatePageOnRestore} from '${fileURLToPath(new URL('lib/session-client.ts', web))}';\nimport {WorkspaceMemory,workspaceScope} from '${fileURLToPath(new URL('lib/workspace-memory.ts', web))}';\nimport {contextualHref} from '${fileURLToPath(new URL('lib/navigation-context.ts', web))}';\n`;
 const result = await build({ stdin: { contents: imports + mobileImports + sessionImports + `import {prepareMapDisclosures} from '${fileURLToPath(new URL('lib/map-disclosure.ts', web))}';\n` + source + adapter, resolveDir: fileURLToPath(web), sourcefile: 'integra-ui.js' }, alias: {'@kianda/core':fileURLToPath(new URL('packages/core/src/index.ts',root))}, bundle: true, format: 'iife', platform: 'browser', target: 'es2022', minify: true, legalComments: 'none', write: false, logLevel: 'silent' });
 const js = result.outputFiles[0].text;
 const digest = (s) => createHash('sha256').update(s).digest('hex');

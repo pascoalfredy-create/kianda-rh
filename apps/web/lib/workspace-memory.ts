@@ -3,12 +3,21 @@ export const WORKSPACE_KEY = 'kianda-workspace-v1';
 const TTL = 8 * 60 * 60 * 1000;
 type StoragePort = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 interface Snapshot { scope: string; expires: number; values: Record<string, unknown> }
+const instances = new Set<WorkspaceMemory>();
+
+export function clearWorkspaceMemory() {
+  for (const memory of instances) memory.stop();
+  instances.clear();
+  try { sessionStorage.removeItem(WORKSPACE_KEY); } catch { /* sem armazenamento */ }
+}
 
 export class WorkspaceMemory {
   private values = new Map<string, unknown>();
   private listeners = new Set<() => void>();
   private loaded = false;
-  constructor(readonly scope: string, private storage: () => StoragePort | undefined = () => typeof window === 'undefined' ? undefined : window.sessionStorage, private now = Date.now) {}
+  private stopped = false;
+  constructor(readonly scope: string, private storage: () => StoragePort | undefined = () => typeof window === 'undefined' ? undefined : window.sessionStorage, private now = Date.now) { if (typeof window !== 'undefined') instances.add(this); }
+  stop() { this.stopped = true; this.values.clear(); }
   private load() {
     if (this.loaded || typeof window === 'undefined') return;
     this.loaded = true;
@@ -20,9 +29,10 @@ export class WorkspaceMemory {
       this.values = new Map(Object.entries(data.values));
     } catch { /* O bloqueio do armazenamento não impede a navegação. */ }
   }
-  get = (key: string): unknown => { this.load(); return this.values.get(key); };
+  get = (key: string): unknown => { if (this.stopped) return undefined; this.load(); return this.values.get(key); };
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   set(key: string, value: unknown) {
+    if (this.stopped) return;
     this.load();
     if (Object.is(this.values.get(key), value)) return;
     this.values.delete(key); this.values.set(key, value);
@@ -30,6 +40,7 @@ export class WorkspaceMemory {
     this.persist();
   }
   clear(prefix: string) {
+    if (this.stopped) return;
     this.load();
     for (const key of this.values.keys()) if (key.startsWith(prefix)) this.values.delete(key);
     this.persist();
