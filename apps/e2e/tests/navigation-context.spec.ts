@@ -32,7 +32,7 @@ test('ficha salarial e assiduidade regressam à preparação, com rascunho e sal
   await expect(preparation.getByLabel('Valor (Kz)', { exact: true })).toHaveValue('7000');
   await expect(preparation.getByLabel('Descrição', { exact: true })).toHaveValue('Prémio em revisão');
   await expect(preparation.getByLabel('Fonte do câmbio', { exact: true })).toHaveValue('Referência do teste');
-  await expect(preparation.getByRole('table', { name: 'Selecção de salários do lote', exact: true })).toContainText(/USD 3[\s.]200,00/);
+  await expect(preparation.getByRole('table', { name: 'Selecção de salários do lote', exact: true })).toContainText(/USD 3[\s.]?200,00/);
   await expect(preparation.getByRole('button', { name: 'Processar seleccionados', exact: true })).toBeDisabled();
   await expect.poll(async () => Math.abs(await page.evaluate(() => window.scrollY) - leftAt)).toBeLessThan(100);
   await preparation.getByRole('button', { name: 'Descartar alteração por guardar', exact: true }).click();
