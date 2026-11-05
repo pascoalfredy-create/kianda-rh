@@ -13,6 +13,7 @@ type Scope = { table: string; via?: { column: string; parent: string } };
 export const COMPANY_TABLES_PURGE_ORDER: Scope[] = [
   { table: 'valuation_analyses' }, { table: 'valuation_members' }, { table: 'financial_model_versions' }, { table: 'modeling_project_access' }, { table: 'modeling_members' }, { table: 'financial_personnel_imports' }, { table: 'financial_historical_inputs' }, { table: 'financial_models' }, { table: 'company_modules' },
   { table: 'candidate_events', via: { column: 'candidate_id', parent: 'candidates' } },
+  { table: 'recruitment_mail' }, { table: 'recruitment_offers' },
   { table: 'candidates' }, { table: 'job_openings' },
   { table: 'reviews' }, { table: 'review_cycles' },
   { table: 'expense_lines', via: { column: 'claim_id', parent: 'expense_claims' } },
