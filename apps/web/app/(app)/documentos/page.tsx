@@ -1,5 +1,5 @@
 import { DOCUMENT_CATEGORY, type DocumentCategory } from '@kianda/core';
-import Link from 'next/link';
+import { ContextLink as Link } from '@/components/context-link';
 import { api, currentUser } from '@/lib/api';
 import { RhIcon } from '@/components/rh-icon';
 import { IssueForm } from './forms';

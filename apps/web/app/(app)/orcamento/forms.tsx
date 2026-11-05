@@ -7,6 +7,7 @@ import { ExportLink } from '@/components/document-export';
 import { formatKz, formatAmount, parseAmount } from '@kianda/core';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { useClearWorkspace, useWorkspaceState } from '@/components/workspace-state';
 import { send, useMutation } from '@/lib/client';
 import { monthLabel } from '@/lib/format';
 
@@ -22,7 +23,9 @@ const kzOut = (m: number) => (m ? formatAmount(m) : '');
 /** Hipóteses → simulação → criar (ou recalcular) o orçamento. */
 export function BudgetPlanner({ init, departments, budgetId }: { init: Assumptions; departments: Dept[]; budgetId?: string }) {
   const router = useRouter();
-  const [a, setA] = useState<Assumptions>(init);
+  const draftKey = `budget:${budgetId ?? 'new'}:${init.year}:planner:`;
+  const clearDraft = useClearWorkspace(draftKey);
+  const [a, setA] = useWorkspaceState<Assumptions>(`${draftKey}assumptions`, init);
   const [sim, setSim] = useState<Sim | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -43,7 +46,7 @@ export function BudgetPlanner({ init, departments, budgetId }: { init: Assumptio
       <h2 style={{ fontSize: 14, marginTop: 0 }}>{budgetId ? 'Recalcular com novas hipóteses' : `Hipóteses para ${a.year}`}</h2>
       <p className="muted" style={{ marginTop: 0 }}>Parte do quadro activo hoje (salário em vigor, alimentação, transporte e subsídios atribuídos; contratos a termo terminam na data prevista).</p>
       <div className="form cols4">
-        <label>Aumento salarial (%)<input inputMode="decimal" defaultValue={String(a.increaseBps / 100).replace('.', ',')} onChange={(e) => set({ increaseBps: Math.round(Number(e.target.value.replace(',', '.') || 0) * 100) })} /></label>
+        <label>Aumento salarial (%)<input inputMode="decimal" value={String(a.increaseBps / 100).replace('.', ',')} onChange={(e) => set({ increaseBps: Math.round(Number(e.target.value.replace(',', '.') || 0) * 100) })} /></label>
         <label>A partir de<select value={a.increaseFrom} onChange={(e) => set({ increaseFrom: e.target.value })}>{periods.map((p, i) => <option key={p} value={p}>{MONTHS[i]}</option>)}</select></label>
         <label>Subsídio de férias em<select value={a.holidayMonth} onChange={(e) => set({ holidayMonth: Number(e.target.value) })}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select></label>
         <label>Subsídio de Natal em<select value={a.christmasMonth} onChange={(e) => set({ christmasMonth: Number(e.target.value) })}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select></label>
@@ -58,9 +61,9 @@ export function BudgetPlanner({ init, departments, budgetId }: { init: Assumptio
                 <td><select value={h.departmentId ?? ''} onChange={(e) => setHire(i, { departmentId: e.target.value || null })}><option value="">Sem departamento</option>{departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select></td>
                 <td><select value={h.from} onChange={(e) => setHire(i, { from: e.target.value })}>{periods.map((p, k) => <option key={p} value={p}>{MONTHS[k]}</option>)}</select></td>
                 <td className="num"><input type="number" min={1} max={500} value={h.count} onChange={(e) => setHire(i, { count: Math.max(1, Number(e.target.value)) })} style={{ width: 64 }} /></td>
-                <td className="num"><input inputMode="decimal" defaultValue={kzOut(h.baseMinor)} onChange={(e) => setHire(i, { baseMinor: kzIn(e.target.value) })} style={{ width: 120 }} /></td>
-                <td className="num"><input inputMode="decimal" defaultValue={kzOut(h.mealMinor)} onChange={(e) => setHire(i, { mealMinor: kzIn(e.target.value) })} style={{ width: 100 }} /></td>
-                <td className="num"><input inputMode="decimal" defaultValue={kzOut(h.transportMinor)} onChange={(e) => setHire(i, { transportMinor: kzIn(e.target.value) })} style={{ width: 100 }} /></td>
+                <td className="num"><input inputMode="decimal" value={kzOut(h.baseMinor)} onChange={(e) => setHire(i, { baseMinor: kzIn(e.target.value) })} style={{ width: 120 }} /></td>
+                <td className="num"><input inputMode="decimal" value={kzOut(h.mealMinor)} onChange={(e) => setHire(i, { mealMinor: kzIn(e.target.value) })} style={{ width: 100 }} /></td>
+                <td className="num"><input inputMode="decimal" value={kzOut(h.transportMinor)} onChange={(e) => setHire(i, { transportMinor: kzIn(e.target.value) })} style={{ width: 100 }} /></td>
                 <td className="num"><button type="button" className="btn ghost sm" onClick={() => set({ hires: a.hires.filter((_, j) => j !== i) })}>×</button></td>
               </tr>
             ))}
@@ -75,7 +78,7 @@ export function BudgetPlanner({ init, departments, budgetId }: { init: Assumptio
         <button type="button" className="btn" disabled={busy} onClick={async () => {
           if (budgetId && !window.confirm('Recalcular substitui os ajustes manuais feitos na grelha. Continuar?')) return;
           const r = await call(budgetId ? `/v1/budgets/${budgetId}/regenerate` : '/v1/budgets');
-          if (r) router.refresh();
+          if (r) { clearDraft(); setSim(null); router.refresh(); }
         }}>{budgetId ? 'Recalcular orçamento' : 'Criar orçamento'}</button>
       </div>
 
