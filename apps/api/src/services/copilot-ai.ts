@@ -5,7 +5,7 @@ import type { CopilotFinancialContext } from './copilot-context.js';
 
 export function copilotAiConfig() {
   const apiKey = process.env.OPENAI_API_KEY?.trim(), model = process.env.KIANDA_AI_MODEL?.trim();
-  return process.env.KIANDA_COPILOT_AI_ENABLED === 'true' && apiKey && model ? { apiKey, model } : null;
+  return process.env.KIANDA_COPILOT_AI_ENABLED?.trim().toLowerCase() === 'true' && apiKey && model ? { apiKey, model } : null;
 }
 export function copilotDailyLimit() {
   const n = Number(process.env.KIANDA_COPILOT_DAILY_LIMIT ?? 100); return Number.isInteger(n) && n >= 1 && n <= 10000 ? n : 100;

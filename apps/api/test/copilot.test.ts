@@ -40,6 +40,12 @@ describe('conhecimento e contextos dos copilotos', () => {
     vi.stubEnv('OPENAI_API_KEY', 'chave-sintetica'); vi.stubEnv('KIANDA_AI_MODEL', 'modelo-simulado'); vi.stubEnv('KIANDA_COPILOT_AI_ENABLED', 'false');
     const f = vi.spyOn(globalThis, 'fetch'); await expect(requestExpertAnswer('hr', 'Explique o INSS', [])).rejects.toMatchObject({ code: 'copiloto_por_activar' }); expect(f).not.toHaveBeenCalled();
   });
+  it('activa a conversa quando a variável do GitHub usa True', async () => {
+    enabled(); vi.stubEnv('KIANDA_COPILOT_AI_ENABLED', 'True');
+    const provider = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response());
+    await expect(requestExpertAnswer('hr', 'Explique o INSS', [])).resolves.toMatchObject({ mode: 'ai', usedContext: false });
+    expect(provider).toHaveBeenCalledTimes(1);
+  });
   it('a integração usa Responses sem guardar respostas e trata recusas e respostas incompletas', async () => {
     enabled(); const f = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(response()).mockResolvedValueOnce(new Response(JSON.stringify({ status: 'incomplete', output: [] }))).mockResolvedValueOnce(new Response('segredo-do-fornecedor', { status: 401 }));
     const r = await requestExpertAnswer('hr', 'Explique os 8% do INSS', []); expect(r).toMatchObject({ mode: 'ai', usedContext: false });
