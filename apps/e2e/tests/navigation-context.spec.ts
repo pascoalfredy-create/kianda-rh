@@ -21,7 +21,7 @@ test('ficha salarial e assiduidade regressam à preparação, com rascunho e sal
   await preparation.getByLabel('Descrição', { exact: true }).fill('Prémio em revisão');
   const salaryLink = preparation.getByRole('link', { name: 'Ficha salarial', exact: true });
   await salaryLink.scrollIntoViewIfNeeded();
-  const leftAt = await page.evaluate(() => window.scrollY);
+  const leftAt = await page.evaluate<number>('window.scrollY');
   await salaryLink.click();
   await page.getByRole('link', { name: 'Dados', exact: true }).click();
   expect((await apiAs(owner.token, 'POST', `/v1/employees/${person.body.id}/compensation`, { effectiveDate: '2026-09-01', base: 3046400, currency: 'USD', baseUsd: 3200, reason: 'Ajuste durante a revisão' })).status).toBe(201);
@@ -34,7 +34,7 @@ test('ficha salarial e assiduidade regressam à preparação, com rascunho e sal
   await expect(preparation.getByLabel('Fonte do câmbio', { exact: true })).toHaveValue('Referência do teste');
   await expect(preparation.getByRole('table', { name: 'Selecção de salários do lote', exact: true })).toContainText(/USD 3[\s.]?200,00/);
   await expect(preparation.getByRole('button', { name: 'Processar seleccionados', exact: true })).toBeDisabled();
-  await expect.poll(async () => Math.abs(await page.evaluate(() => window.scrollY) - leftAt)).toBeLessThan(100);
+  await expect.poll(async () => Math.abs(await page.evaluate<number>('window.scrollY') - leftAt)).toBeLessThan(100);
   await preparation.getByRole('button', { name: 'Descartar alteração por guardar', exact: true }).click();
   await preparation.getByRole('button', { name: 'Lançar em lote', exact: true }).click();
   const variableBatch = preparation.getByRole('form', { name: 'Variáveis em lote', exact: true });
