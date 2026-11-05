@@ -54,7 +54,7 @@ export function CandidateNotifications({ id, items, configured, editable }: { id
   return <details className="card section" style={{ padding: 16, marginBottom: 16 }}><summary>Ver notificações ao candidato ({items.length})</summary>
     <p className="muted">Cada mudança de etapa gera uma mensagem automática. Comentários e motivos internos não são enviados. «Enviado» confirma a aceitação pelo serviço, não a leitura ou entrega na caixa do candidato.</p>
     {!configured && <p className="warn">O envio de email ainda precisa de configuração da plataforma. As mensagens ficam guardadas para envio posterior.</p>}
-    {items.map(m => <p key={m.id}>{m.kind === 'recruitment_offer' ? 'Proposta salarial' : 'Mudança de etapa'} · {new Date(m.createdAt).toLocaleString('pt-PT')} · <b>{labels[m.status] ?? m.status}</b>{m.error && <span className="muted"> · {m.error}</span>}{editable && ['pending', 'failed'].includes(m.status) && <button type="button" className="btn ghost sm" disabled={busy || !configured} onClick={() => run(`/v1/candidates/${id}/notifications/${m.id}/retry`, 'POST')}>Voltar a tentar</button>}</p>)}
+    {items.map(m => <p key={m.id}>{m.kind === 'recruitment_offer' ? 'Proposta salarial' : 'Mudança de etapa'} · {new Date(m.createdAt).toLocaleString('pt-PT', { timeZone: 'Africa/Luanda', dateStyle: 'short', timeStyle: 'short' })} · <b>{labels[m.status] ?? m.status}</b>{m.error && <span className="muted"> · {m.error}</span>}{editable && ['pending', 'failed'].includes(m.status) && <button type="button" className="btn ghost sm" disabled={busy || !configured} onClick={() => run(`/v1/candidates/${id}/notifications/${m.id}/retry`, 'POST')}>Voltar a tentar</button>}</p>)}
     {error && <p className="err" role="alert">{error}</p>}
   </details>;
 }
