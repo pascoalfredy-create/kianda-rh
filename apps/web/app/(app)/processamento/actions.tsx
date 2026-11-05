@@ -6,21 +6,30 @@ import { formObject, useMutation } from '@/lib/client';
 import { monthLabel } from '@/lib/format';
 import { formatKz } from '@kianda/core';
 import { BatchVariables, type BatchResult } from './batch-variables';
+import { PayrollSelection } from './payroll-selection';
+import type { PayrollBatchPerson } from '@/lib/types';
 
-export function PrepareButton({ period, prepared, people, variableCount, indexed = 0, fx }: { period: string; prepared: boolean; people: { id: string; name: string }[]; variableCount: number; indexed?: number; fx?: { rate: string | null; date: string | null; source: string | null } }) {
+export function PrepareButton({ period, prepared, people, payrollPeople, processedIds, variableCount, indexed = 0, fx }: { period: string; prepared: boolean; people: { id: string; name: string }[]; payrollPeople: PayrollBatchPerson[]; processedIds: string[]; variableCount: number; indexed?: number; fx?: { rate: string | null; date: string | null; source: string | null } }) {
   const { busy, error, run } = useMutation();
   const [open, setOpen] = useState(false);
   const [pendingVariable, setPendingVariable] = useState(false);
+  const [batchMode, setBatchMode] = useState(false), [selected, setSelected] = useState<string[]>([]), [result, setResult] = useState('');
   const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
   const [rate, setRate] = useState(fx?.rate ? String(Number(fx.rate)).replace('.', ',') : '');
   const [date, setDate] = useState(fx?.date ?? today);
   const [source, setSource] = useState(fx?.source ?? 'BNA — câmbio de referência');
-  const needsFx = indexed > 0;
-  const body = needsFx && rate.trim() ? { period, fx: { rate, date, source } } : { period };
-  const calculateDisabled = busy || pendingVariable || (needsFx && !rate.trim() && !fx?.rate);
+  const indexedInScope = open && batchMode ? payrollPeople.filter(p => selected.includes(p.id) && p.salaryCurrency === 'USD' && !!p.baseForeignMinor).length : indexed;
+  const needsFx = indexedInScope > 0;
+  const body = { period, ...(needsFx && rate.trim() ? { fx: { rate, date, source } } : {}), ...(open && batchMode ? { employeeIds: selected } : {}) };
+  const calculateDisabled = busy || pendingVariable || (needsFx && !rate.trim() && !fx?.rate) || (open && batchMode && (selected.length === 0 || selected.length > 1000));
+  function prepare(batch: boolean) {
+    setResult(''); setBatchMode(batch);
+    const pending = payrollPeople.filter(p => !processedIds.includes(p.id));
+    setSelected((pending.length ? pending : payrollPeople).slice(0, 1000).map(p => p.id)); setOpen(true);
+  }
   async function calculate() {
     if (calculateDisabled) return;
-    if (await run('/v1/payroll-runs', 'POST', body)) setOpen(false);
+    if (await run<{ lines: number; totalLines: number }>(open && batchMode ? '/v1/payroll-runs/batch' : '/v1/payroll-runs', 'POST', body, r => { if (r) setResult(`${open && batchMode ? 'Lote concluído' : 'Folha calculada'}: ${r.lines} colaborador(es) processado(s), ${r.totalLines} no total da folha mensal.`); })) { setOpen(false); setBatchMode(false); }
   }
   const fxFields = needsFx && <div className="fx-fields" role="group" aria-label="Câmbio do dia">
     <label>Câmbio USD→Kz<input aria-label="Câmbio USD→Kz" inputMode="decimal" value={rate} placeholder="ex.: 912,50" onChange={e => setRate(e.target.value)} style={{ width: 110 }} /></label>
@@ -31,12 +40,14 @@ export function PrepareButton({ period, prepared, people, variableCount, indexed
     <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', ...(open ? { flexBasis: '100%', minWidth: 0 } : {}) }}>
       {!open && <>
         {prepared && fxFields}
-        <button type="button" className="btn" disabled={busy || (prepared && calculateDisabled)} onClick={() => prepared ? calculate() : setOpen(true)}>{busy ? 'A calcular…' : prepared ? 'Recalcular' : 'Preparar processamento'}</button>
-        {prepared && <button type="button" className="btn ghost" disabled={busy} onClick={() => setOpen(true)}>Rever preparação</button>}
+        <button type="button" className="btn" disabled={busy || (prepared && calculateDisabled)} onClick={() => prepared ? calculate() : prepare(false)}>{busy ? 'A calcular…' : prepared ? 'Recalcular' : 'Preparar processamento'}</button>
+        <button type="button" className="btn ghost" disabled={busy} onClick={() => prepare(true)}>Processar em lote</button>
+        {prepared && <button type="button" className="btn ghost" disabled={busy} onClick={() => prepare(false)}>Rever preparação</button>}
       </>}
       {open && <section aria-label="Preparação do processamento" style={{ width: '100%', minWidth: 0 }}>
-        <h2>Preparar {monthLabel(period)}</h2>
-        <p className="muted">A folha calcula toda a equipa elegível do mês. A base e os subsídios vêm dos contratos; as faltas e horas extra vêm dos registos aprovados. Pode lançar as variáveis individualmente ou em lote antes de calcular.</p>
+        <h2>{batchMode ? 'Processar em lote — ' : 'Preparar '}{monthLabel(period)}</h2>
+        <p className="muted">{batchMode ? 'Seleccione os colaboradores deste lote. Os lotes juntam-se na mesma folha mensal e o fecho faz-se após processar toda a equipa elegível.' : 'A folha calcula toda a equipa elegível do mês.'} A base e os subsídios vêm dos contratos; as faltas e horas extra vêm dos registos aprovados.</p>
+        {batchMode && <PayrollSelection people={payrollPeople} selected={selected} onChange={setSelected} processedIds={processedIds} disabled={busy} />}
         <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', margin: '12px 0' }}>
           <Link className="btn ghost sm" href="/colaboradores">Rever salários e contratos</Link>
           <Link className="btn ghost sm" href={`/assiduidade?mes=${period}`}>Rever assiduidade</Link>
@@ -45,13 +56,14 @@ export function PrepareButton({ period, prepared, people, variableCount, indexed
         <p className="muted">{variableCount} {variableCount === 1 ? 'variável guardada' : 'variáveis guardadas'} para este mês. O preenchimento abaixo é opcional; guarde cada variável que quiser incluir na folha.</p>
         {people.length ? <VariableEntry period={period} people={people} initialOpen preparing disabled={busy} onPendingChange={setPendingVariable} /> : <p className="muted">Sem colaboradores activos para lançar variáveis. Reveja as fichas e os contratos da equipa.</p>}
         <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', marginTop: 14 }}>
-          <button type="button" className="btn" disabled={calculateDisabled} onClick={calculate}>{busy ? 'A calcular…' : 'Calcular folha'}</button>
-          <button type="button" className="btn ghost" disabled={busy || pendingVariable} onClick={() => setOpen(false)}>Cancelar preparação</button>
+          <button type="button" className="btn" disabled={calculateDisabled} onClick={calculate}>{busy ? 'A calcular…' : batchMode ? 'Processar seleccionados' : 'Calcular folha'}</button>
+          <button type="button" className="btn ghost" disabled={busy || pendingVariable} onClick={() => { setOpen(false); setBatchMode(false); }}>Cancelar preparação</button>
           {pendingVariable && <span className="muted" role="status">Guarde ou cancele a variável antes de calcular ou sair da preparação.</span>}
         </div>
       </section>}
-      {needsFx && <span className="muted" style={{ fontSize: 12.5, flexBasis: '100%' }}>{indexed} colaborador(es) com salário indexado ao dólar: a base é convertida a este câmbio no recibo.</span>}
+      {needsFx && <span className="muted" style={{ fontSize: 12.5, flexBasis: '100%' }}>{indexedInScope} colaborador(es) com salário indexado ao dólar: a base é convertida a este câmbio no recibo.</span>}
       {error && <span role="alert" style={{ color: 'var(--red)' }}>{error}</span>}
+      {result && !open && <p className="ok" role="status" style={{ flexBasis: '100%' }}>{result}</p>}
     </div>
   );
 }

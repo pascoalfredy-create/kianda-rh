@@ -9,6 +9,7 @@ import {
   gte, inArray, sql, journalEntries, journalLines, lte, ne, payrollLines, payrollRuns, payrollVariables, type Db,
 } from '@kianda/db';
 import { notifyEmployees } from './push.js';
+import { eligiblePayrollStaff } from './payroll-roster.js';
 
 export class DomainError extends Error {
   constructor(public readonly code: string, message: string, public readonly status = 409) { super(message); }
@@ -31,14 +32,23 @@ const amountOf = (l: { breakdown: unknown }, code: string) => linesOf(l).filter(
 /** Câmbio USD→Kz do dia do processamento (salários indexados ao dólar). */
 export interface PayrollFx { rate: number; date: string; source?: string | null }
 
-export async function draftPayroll(db: Db, companyId: string, period: string, actorId: string, fx?: PayrollFx) {
+export async function draftPayroll(db: Db, companyId: string, period: string, actorId: string, fx?: PayrollFx, employeeIds?: string[]) {
   if (!periodRe.test(period)) throw new DomainError('periodo_invalido', 'Período inválido (AAAA-MM)', 400);
   const year = Number(period.slice(0, 4));
   const month = Number(period.slice(5, 7));
   const pack = getPack('AO', year);
+  if (employeeIds && (!employeeIds.length || employeeIds.length > 1000 || new Set(employeeIds).size !== employeeIds.length)) throw new DomainError('lote_invalido', 'Seleccione entre 1 e 1.000 colaboradores, sem duplicados.', 400);
   return db.transaction(async (tx) => {
-    let [run] = await tx.select().from(payrollRuns).where(and(eq(payrollRuns.companyId, companyId), eq(payrollRuns.period, period)));
+    // Também protege dois primeiros lotes concorrentes para um mês ainda sem folha.
+    await tx.select({ id: companies.id }).from(companies).where(eq(companies.id, companyId)).for('update');
+    let [run] = await tx.select().from(payrollRuns).where(and(eq(payrollRuns.companyId, companyId), eq(payrollRuns.period, period))).for('update');
     if (run?.status === 'closed') throw new DomainError('processamento_fechado', 'O processamento deste período já está fechado');
+    const selected = employeeIds ? new Set(employeeIds) : null;
+    if (run && selected) {
+      const existing = await tx.select({ employeeId: payrollLines.employeeId }).from(payrollLines).where(eq(payrollLines.runId, run.id));
+      const preserves = existing.some(l => !selected.has(l.employeeId));
+      if (preserves && (run.packVersion !== pack.version || (fx && (Number(run.fxRate ?? 0) !== fx.rate || run.fxDate !== fx.date)))) throw new DomainError('lote_requer_recalculo_total', 'A alteração do câmbio ou das regras exige Recalcular toda a folha, para manter os colaboradores no mesmo enquadramento.', 409);
+    }
     run ??= (await tx.insert(payrollRuns).values({ companyId, period, packVersion: pack.version, preparedBy: actorId }).returning())[0]!;
     if (fx) run = (await tx.update(payrollRuns).set({ fxRate: String(fx.rate), fxDate: fx.date, fxSource: fx.source?.trim() || null }).where(eq(payrollRuns.id, run.id)).returning())[0]!;
     const fxRate = run.fxRate ? Number(run.fxRate) : null;
@@ -48,10 +58,9 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
 
     const periodStart = `${period}-01`;
     const periodEnd = lastDayOfMonth(period);
-    const staff = await tx.select({ e: employees, c: contracts }).from(employees)
-      .innerJoin(contracts, eq(contracts.employeeId, employees.id))
-      .where(and(eq(employees.companyId, companyId), inArray(employees.status, ['active', 'terminated'])))
-      .orderBy(employees.number, desc(contracts.startDate));
+    const eligible = await eligiblePayrollStaff(tx as unknown as Db, companyId, period);
+    if (selected && employeeIds!.some(id => !eligible.some(s => s.e.id === id))) throw new DomainError('lote_colaboradores_invalidos', 'O lote contém colaboradores de outra empresa, sem contrato elegível ou fora do mês. Nenhum salário foi processado.', 400);
+    const staff = selected ? eligible.filter(s => selected.has(s.e.id)) : eligible;
     const firstContract = new Map<string, string>();
     for (const r of await tx.select({ id: contracts.employeeId, d: contracts.startDate }).from(contracts)
       .innerJoin(employees, eq(employees.id, contracts.employeeId)).where(eq(employees.companyId, companyId)).orderBy(asc(contracts.startDate))) {
@@ -308,12 +317,13 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
     // Colaboradores que já não entram (cessados, suspensos) saem do rascunho.
     const stale = await tx.select({ id: payrollLines.id, employeeId: payrollLines.employeeId }).from(payrollLines).where(eq(payrollLines.runId, run.id));
     const keepIds = new Set(keep);
-    const remove = stale.filter((l) => !keepIds.has(l.employeeId)).map((l) => l.id);
+    const remove = stale.filter((l) => !keepIds.has(l.employeeId) && (!selected || selected.has(l.employeeId))).map((l) => l.id);
     if (remove.length) await tx.delete(payrollLines).where(inArray(payrollLines.id, remove));
 
-    [run] = await tx.update(payrollRuns).set({ preparedBy: actorId, warnings, packVersion: pack.version }).where(eq(payrollRuns.id, run.id)).returning() as [typeof run];
-    await tx.insert(auditLogs).values({ companyId, actorId, action: 'draft', entity: 'payroll_run', entityId: run.id, after: { period, employees: results.length, warnings: warnings.length } });
-    return { run, lines: results.length, warnings };
+    const allWarnings = selected ? [...(run.warnings as PayrollWarning[]).filter(w => !w.employeeId || !selected.has(w.employeeId)), ...warnings] : warnings;
+    [run] = await tx.update(payrollRuns).set({ preparedBy: actorId, warnings: allWarnings, packVersion: pack.version }).where(eq(payrollRuns.id, run.id)).returning() as [typeof run];
+    await tx.insert(auditLogs).values({ companyId, actorId, action: selected ? 'draft_batch' : 'draft', entity: 'payroll_run', entityId: run.id, after: { period, employees: results.length, totalEmployees: stale.length - remove.length, ...(selected ? { employeeIds } : {}), warnings: allWarnings.length } });
+    return { run, lines: results.length, totalLines: stale.length - remove.length, warnings: allWarnings };
   });
 }
 
@@ -328,7 +338,8 @@ export async function companyAccounts(db: Db, companyId: string): Promise<PgcAcc
 /** Fecha o processamento: bloqueia alterações e gera o lançamento PGC (classe 7 contra 34/36). */
 export async function closePayroll(db: Db, companyId: string, runId: string, actorId: string, role = 'owner') {
   return db.transaction(async (tx) => {
-    const [run] = await tx.select().from(payrollRuns).where(and(eq(payrollRuns.id, runId), eq(payrollRuns.companyId, companyId)));
+    await tx.select({ id: companies.id }).from(companies).where(eq(companies.id, companyId)).for('update');
+    const [run] = await tx.select().from(payrollRuns).where(and(eq(payrollRuns.id, runId), eq(payrollRuns.companyId, companyId))).for('update');
     if (!run) throw new DomainError('nao_encontrado', 'Processamento inexistente', 404);
     if (run.status === 'closed') throw new DomainError('processamento_fechado', 'Já está fechado');
     // Segregação de funções: quem prepara não fecha (excepto o proprietário, em empresas pequenas).
@@ -338,6 +349,10 @@ export async function closePayroll(db: Db, companyId: string, runId: string, act
       .leftJoin(departments, eq(departments.id, employees.departmentId))
       .where(eq(payrollLines.runId, run.id));
     if (!lines.length) throw new DomainError('sem_linhas', 'O processamento não tem colaboradores');
+    const eligible = await eligiblePayrollStaff(tx as unknown as Db, companyId, run.period), valid = new Set(eligible.map(s => s.e.id));
+    const included = new Set(lines.map(l => l.l.employeeId)), missing = eligible.filter(s => !included.has(s.e.id));
+    if (missing.length) throw new DomainError('processamento_incompleto', `Faltam ${missing.length} colaborador(es) por processar: ${missing.slice(0, 5).map(s => s.e.name).join(', ')}. Processe o lote em falta antes de fechar o mês.`, 409);
+    if (lines.some(l => !valid.has(l.l.employeeId))) throw new DomainError('equipa_alterada', 'A elegibilidade da equipa mudou. Recalcule toda a folha antes de fechar o mês.', 409);
 
     const byCc = new Map<string, PayrollTotals['byCostCenter'][number]>();
     const totals: PayrollTotals = { byCostCenter: [], irtMinor: 0, inssEmployeeMinor: 0, inssEmployerMinor: 0, advancesMinor: 0, otherDeductionsMinor: 0, netMinor: 0 };

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { actorFromApi, api, apiWithActor, ApiError } from '@/lib/api';
 import { currentPeriod, monthLabel, shiftMonth } from '@/lib/format';
-import { PAYROLL_ROLES, VARIABLE_LABEL, type JournalRow, type PayrollLineRow, type PayrollRunDetail, type PayrollVariableRow } from '@/lib/types';
+import { PAYROLL_ROLES, VARIABLE_LABEL, type JournalRow, type PayrollBatchPerson, type PayrollLineRow, type PayrollRunDetail, type PayrollVariableRow } from '@/lib/types';
 import { VariableEntry, CloseButton, DeleteVariable, PrepareButton, SubsidyToggle } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -16,7 +16,7 @@ const k = (v: number) => (v ? formatKz(v).replace(' Kz', '') : '—');
 export default async function Processamento({ searchParams }: { searchParams: Promise<{ mes?: string; s?: string }> }) {
   const sp = await searchParams;
   const period = sp.mes ?? currentPeriod();
-  const opening = await apiWithActor<{ run: PayrollRunDetail | null; variables: PayrollVariableRow[]; indexedEmployees?: number; people?: { id: string; name: string }[] }>(`/v1/payroll-runs/opening?period=${period}&people=1`).catch((error) => {
+  const opening = await apiWithActor<{ run: PayrollRunDetail | null; variables: PayrollVariableRow[]; indexedEmployees?: number; people?: { id: string; name: string }[]; payrollPeople?: PayrollBatchPerson[] }>(`/v1/payroll-runs/opening?period=${period}&people=1&batch=1`).catch((error) => {
     if (error instanceof ApiError && error.actor && !PAYROLL_ROLES.includes(error.actor.role)) redirect('/');
     throw error;
   });
@@ -27,7 +27,9 @@ export default async function Processamento({ searchParams }: { searchParams: Pr
   const tab = sp.s ?? 'resumo';
   const canPrepare = role === 'owner' || role === 'payroll';
   const canClose = role === 'owner' || role === 'finance';
-  const { run, variables, indexedEmployees = 0, people = [] } = opening.data;
+  const { run, variables, indexedEmployees = 0, people = [], payrollPeople = [] } = opening.data;
+  const processedIds = run?.lines.map(l => l.employeeId) ?? [];
+  const missing = payrollPeople.filter(p => !processedIds.includes(p.id)).length;
   const draft = run?.status === 'draft';
   const editable = canPrepare && run?.status !== 'closed';
 
@@ -50,10 +52,11 @@ export default async function Processamento({ searchParams }: { searchParams: Pr
         <span className="muted" style={{ flex: 1 }}>
           {run ? <>Preparado por {run.preparedByName ?? '—'}{run.closedAt ? ` · fechado por ${run.closedByName ?? '—'} em ${new Date(run.closedAt).toLocaleDateString('pt-PT')}` : ''}{run.fxRate ? ` · câmbio ${formatFxRate(Number(run.fxRate))} Kz/USD de ${run.fxDate!.split('-').reverse().join('/')}${run.fxSource ? ` (${run.fxSource})` : ''}` : ''}</> : 'Ainda não há processamento para este mês.'}
         </span>
-        {editable && <PrepareButton key={period} period={period} prepared={!!run} people={people} variableCount={variables.length} indexed={indexedEmployees} fx={run ? { rate: run.fxRate ?? null, date: run.fxDate ?? null, source: run.fxSource ?? null } : undefined} />}
+        {editable && <PrepareButton key={period} period={period} prepared={!!run} people={people} payrollPeople={payrollPeople} processedIds={processedIds} variableCount={variables.length} indexed={indexedEmployees} fx={run ? { rate: run.fxRate ?? null, date: run.fxDate ?? null, source: run.fxSource ?? null } : undefined} />}
         {run?.status === 'closed' && <Link href="/obrigacoes" className="btn ghost">Pagamentos e mapas →</Link>}
         {canClose && draft && <CloseButton runId={run!.id} period={period} selfPrepared={run!.preparedBy === actor.sub} />}
       </div>
+      {draft && missing > 0 && <p className="warn">{missing} colaborador(es) elegível(eis) ainda por processar neste mês. Use Processar em lote para completar a folha.</p>}
 
       {run && run.warnings.length > 0 && (
         <div className="warn"><b>{run.warnings.length} aviso(s)</b><ul>{run.warnings.map((w, i) => <li key={i}>{w.message}</li>)}</ul></div>
