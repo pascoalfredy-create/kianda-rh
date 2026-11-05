@@ -1,7 +1,7 @@
 import { DOCUMENT_LIMIT, EMPLOYEE_IMPORT_LIMIT, employeeImportKey, guessEmployeeImportMapping, parseCsv, type EmployeeImportCell } from '@kianda/core';
 import { decodeDocumentText, extractWordRows } from './document-import';
 import { extractPdfContent, pdfPageRows, type PdfTextItem } from '../modeling/pdf-import';
-import { readXlsxRows, readXlsxWorkbookInfo } from '../valuation/xlsx';
+import { readXlsxRows, readXlsxWorkbookInfo } from './employee-xlsx';
 export const EMPLOYEE_IMPORT_ACCEPT = '.xlsx,.csv,.txt,.pdf,.docx';
 export interface EmployeeImportDocument { grid: EmployeeImportCell[][]; sheets: string[]; dateSystem: '1900' | '1904' }
 const fail = (message: string): never => { throw new Error(message); };

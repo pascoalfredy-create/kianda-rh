@@ -48,11 +48,19 @@ describe.skipIf(!process.env.DATABASE_URL)('migração em lote de colaboradores'
   }, 60000);
   it('recusa duplicados e permite ignorar existentes sem lhes alterar a remuneração', async () => {
     const duplicate = await preview(owner, source(1)); expect(duplicate.json()).toMatchObject({ canImport: false, counts: { errors: 1 } });
-    const data = source(1001, 2); data.options = { ...options, skipExisting: true }; data.rows[0]!.values.base = 999999;
+    const data = source(1001, 2); data.options = { ...options, skipExisting: true }; data.rows[0]!.values.base = 1;
     const checked = await preview(owner, data); expect(checked.json()).toMatchObject({ canImport: true, counts: { skipped: 1, ready: 1 } });
     const done = await commit(owner, data, checked.json().fingerprint); expect(done.statusCode, done.body).toBe(201); expect(done.json()).toMatchObject({ created: 1, skipped: 1 });
     const [last] = await getDb().select().from(employees).where(and(eq(employees.companyId, companyId), eq(employees.number, '001001')));
     const [salary] = await getDb().select().from(compensationChanges).where(eq(compensationChanges.employeeId, last!.id)); expect(salary!.baseMinor).toBe(15000000);
+  });
+  it('reconhece o centro de custo informado noutra linha do mesmo departamento', async () => {
+    const data = source(2200, 2);
+    for (const row of data.rows) row.values.department = 'Contabilidade';
+    Object.assign(data.rows[1]!.values, { costCenter: 'CC72' });
+    const checked = await preview(owner, data);
+    expect(checked.json()).toMatchObject({ canImport: true, newDepartments: [{ name: 'Contabilidade', costCenter: 'CC72' }] });
+    expect((await commit(owner, data, checked.json().fingerprint)).statusCode).toBe(201);
   });
   it('um erro impede todo o lote, incluindo novos departamentos, e o hash impede confirmar outro ficheiro', async () => {
     const bad = source(2000, 2); bad.rows[1]!.values.base = -1; bad.rows[0]!.values.department = 'Não criar';

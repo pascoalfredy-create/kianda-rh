@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { employeeRowsFromPdf, guessEmployeeHeader, readEmployeeImportDocument } from './employee-import';
-import { utils, write, readXlsxRows } from '../valuation/xlsx';
+import { utils, write } from '../valuation/xlsx';
+import { readXlsxRows } from './employee-xlsx';
 const header = ['N.º mecanográfico', 'Nome completo', 'Função', 'Data de admissão', 'Salário base'];
 const file = (name: string, value: Uint8Array | string): File => {
   const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : value;

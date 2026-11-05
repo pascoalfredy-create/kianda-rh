@@ -38,12 +38,18 @@ export async function previewEmployeeImport(db: Db, actor: Actor, input: Input):
   const departmentMap = new Map<string, typeof depts>();
   for (const d of depts) { const key = employeeImportKey(d.name); departmentMap.set(key, [...(departmentMap.get(key) ?? []), d]); }
   const newDepartments = new Map<string, { name: string; costCenter: string }>();
+  const centers = new Map<string, Set<string>>();
+  for (const r of parsed) if (r.data.department && r.data.costCenter) { const key = employeeImportKey(r.data.department), values = centers.get(key) ?? new Set<string>(); values.add(r.data.costCenter); centers.set(key, values); }
   const rows: EmployeeImportPreview['rows'] = parsed.map(row => {
     const { data, errors, warnings } = row;
     const matches = new Set<string>();
     for (const field of ['number', 'nif', 'biNumber', 'inssNumber'] as const) if (data[field]) for (const id of ids.get(field + ':' + employeeImportKey(data[field]!)) ?? []) matches.add(id);
     if (matches.size > 1) errors.push('Os identificadores correspondem a fichas diferentes. Reveja o número, NIF, BI e INSS.');
     else if (matches.size === 1 && !input.options.skipExisting) errors.push('Já existe uma ficha com este número, NIF, BI ou INSS. Pode optar por ignorar existentes.');
+    if (matches.size === 1 && input.options.skipExisting) {
+      const duplicateErrors = errors.filter(e => e.includes('repetido no ficheiro'));
+      return { ...row, errors: duplicateErrors, warnings: ['Ficha existente: os campos do ficheiro não serão aplicados.'], status: duplicateErrors.length ? 'error' : 'skipped' };
+    }
     const validation = createBody.safeParse({ ...data, departmentId: null });
     if (!validation.success) for (const issue of validation.error.issues) errors.push(issue.path.join('.') + ': ' + issue.message);
     if (data.salaryEffectiveDate > luandaDate(new Date())) errors.push('A data de efeito da remuneração importada não pode estar no futuro.');
@@ -55,10 +61,10 @@ export async function previewEmployeeImport(db: Db, actor: Actor, input: Input):
       else if (found.length > 1) errors.push('O nome do departamento é ambíguo. Corrija os departamentos antes da importação.');
       else if (!found.length && !input.options.createDepartments) errors.push('Departamento por criar: ' + data.department + '. Active a criação de departamentos ou ajuste o ficheiro.');
       else if (!found.length) {
-        const prior = newDepartments.get(key);
-        if (prior && data.costCenter && prior.costCenter !== data.costCenter) errors.push('O mesmo departamento tem centros de custo diferentes no ficheiro.');
-        else if (!prior) newDepartments.set(key, { name: data.department, costCenter: data.costCenter ?? 'IMP-' + String(newDepartments.size + 1).padStart(3, '0') });
-        if (!data.costCenter) warnings.push('Departamento novo com centro de custo provisório; reveja-o em Configuração.');
+        const prior = newDepartments.get(key), known = centers.get(key) ?? new Set<string>();
+        if (known.size > 1) errors.push('O mesmo departamento tem centros de custo diferentes no ficheiro.');
+        else if (!prior) newDepartments.set(key, { name: data.department, costCenter: [...known][0] ?? 'IMP-' + String(newDepartments.size + 1).padStart(3, '0') });
+        if (!known.size) warnings.push('Departamento novo com centro de custo provisório; reveja-o em Configuração.');
       } else if (data.costCenter && found[0]!.costCenter !== data.costCenter) warnings.push('Mantém-se o centro de custo do departamento já existente.');
     }
     return { ...row, errors: [...new Set(errors)], warnings: [...new Set(warnings)], status: errors.length ? 'error' : matches.size ? 'skipped' : 'ready' };
