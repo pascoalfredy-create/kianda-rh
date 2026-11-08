@@ -59,8 +59,10 @@ describe('Kianda Valora: interface aprovada servida pela plataforma', () => {
     expect(html).toContain('&lt;img'); expect(html).not.toContain('/valuation-runtime.js');
   });
   it('no período experimental avisa que os documentos ficam em pré-visualização e bloqueia a impressão', () => {
-    const html = valuationPage({ licence: { status: 'trial', trialEndsAt: '2026-11-08', paidUntil: null }, formats: { pdf: false, docx: false, xlsx: false } } as ValuationSession, 'n');
-    expect(html).toContain('Avaliação gratuita'); expect(html).toContain('08/11/2026'); expect(html).toContain('@media print');
+    // Fim da avaliação sempre 10 dias depois de hoje (hora de Luanda): o teste não depende da data em que corre.
+    const until = new Date(Date.now() + 3600_000 + 10 * 86400_000).toISOString().slice(0, 10);
+    const html = valuationPage({ licence: { status: 'trial', trialEndsAt: until, paidUntil: null }, formats: { pdf: false, docx: false, xlsx: false } } as ValuationSession, 'n');
+    expect(html).toContain('Avaliação gratuita'); expect(html).toContain(until.split('-').reverse().join('/')); expect(html).toContain('@media print');
   });
 });
 
