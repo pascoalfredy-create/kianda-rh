@@ -1207,6 +1207,12 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(ok.json().status).toBe('paid');
       const b = (await get(financeUser, '/v1/billing')).json();
       expect(b).toMatchObject({ status: 'active', cycle: 'annual', paidUntil: pending.periodEnd });
+      // MRR ao preço do ciclo contratado (anual com desconto ÷ 12), por módulo, incluindo o Valora.
+      const after = (await get(owner, '/v1/platform/companies')).json(), row = after.companies.find((x: { id: string }) => x.id === companyId);
+      expect(row.hrMrr).toBeGreaterThan(0); expect(row.hrMrr).toBeLessThan(row.monthlyMinor);
+      expect(after.summary.mrrByModule).toEqual(expect.objectContaining({ hr: expect.any(Number), modeling: expect.any(Number), valuation: expect.any(Number) }));
+      expect(after.summary.mrrMinor).toBe(after.summary.mrrByModule.hr + after.summary.mrrByModule.modeling + after.summary.mrrByModule.valuation);
+      expect(after.summary.modules.valuation).toEqual(expect.objectContaining({ trial: expect.any(Number), active: expect.any(Number) }));
       await app.inject({ method: 'PUT', url: '/v1/platform/settings', headers: as(owner), payload: { bank: { holder: 'Kianda RH, Lda.', bankName: 'BAI', iban: 'AO06004000005521889010252' }, supportEmail: 'suporte@kianda.ao', supportPhone: '+244 923 000 000' } });
       const extra = await post(financeUser, '/v1/billing/requests', { kind: 'extra_seats', seats: 10 });
       expect(extra.statusCode).toBe(400);
@@ -1549,6 +1555,10 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(reminderFor({ status: 'active', trialEndsAt: '2026-10-01', paidUntil: '2026-12-31' }, '2026-12-24')?.kind).toBe('renovacao_7d');
       expect(reminderFor({ status: 'active', trialEndsAt: null, paidUntil: '2026-12-31' }, '2027-01-08')?.kind).toBe('modo_consulta');
       expect(reminderFor({ status: 'active', trialEndsAt: null, paidUntil: '2099-12-31' }, '2026-12-24')).toBeNull();
+      // Integra e Valora: os mesmos marcos, com o nome do módulo e um tipo próprio (não se confundem com o RH).
+      const integra = reminderFor({ status: 'active', trialEndsAt: null, paidUntil: '2026-12-31' }, '2026-12-24', 'Kianda Integra', 'modeling_');
+      expect(integra).toMatchObject({ kind: 'modeling_renovacao_7d', subject: 'A sua licença Kianda Integra termina dentro de 7 dias' });
+      expect(reminderFor({ status: 'trial', trialEndsAt: '2026-11-03', paidUntil: null }, '2026-11-03', 'Kianda Valora', 'valuation_')?.subject).toBe('O período experimental do Kianda Valora termina hoje');
       expect((await post(owner, '/v1/platform/jobs/reminders')).json().checked).toBeGreaterThan(0);
     });
   });

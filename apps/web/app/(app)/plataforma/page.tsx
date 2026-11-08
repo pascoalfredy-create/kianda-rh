@@ -25,7 +25,7 @@ export default async function Plataforma() {
   const me = (await currentUser())!;
   if (!me.platformAdmin) redirect('/');
   const [{ companies, summary }, pays, settings, integ] = await Promise.all([
-    api<{ companies: Co[]; summary: { total: number; trial: number; active: number; pastDue: number; suspended: number; mrrMinor: number } }>('/v1/platform/companies'),
+    api<{ companies: Co[]; summary: { total: number; trial: number; active: number; pastDue: number; suspended: number; mrrMinor: number; mrrByModule: Record<'hr' | 'modeling' | 'valuation', number>; modules: Record<'hr' | 'modeling' | 'valuation', { trial: number; active: number; pastDue: number }> } }>('/v1/platform/companies'),
     api<Pay[]>('/v1/platform/payment-requests'),
     api<{ bank: { holder: string; bankName: string; iban: string } | null; supportEmail: string | null; supportPhone: string | null; admins: string[] }>('/v1/platform/settings'),
     api<Integrations>('/v1/platform/integrations'),
@@ -39,7 +39,8 @@ export default async function Plataforma() {
       <div className="grid">
         <div className="card kpi"><div className="l">Empresas</div><div className="v">{summary.total}</div><div className="muted">{summary.trial} em experimental</div></div>
         <div className="card kpi"><div className="l">RH: activas (pagas)</div><div className="v">{summary.active}</div><div className="muted">{summary.pastDue} em atraso · {summary.suspended} suspensas</div></div>
-        <div className="card kpi"><div className="l">Receita mensal recorrente</div><div className="v">{formatKz(summary.mrrMinor)}</div><div className="muted">valor mensal das licenças pagas</div></div>
+        <div className="card kpi"><div className="l">Receita mensal recorrente</div><div className="v">{formatKz(summary.mrrMinor)}</div><div className="muted">ao preço do ciclo contratado · RH {formatKz(summary.mrrByModule.hr)} · Integra {formatKz(summary.mrrByModule.modeling)} · Valora {formatKz(summary.mrrByModule.valuation)}</div></div>
+        <div className="card kpi"><div className="l">Integra e Valora</div><div className="v">{summary.modules.modeling.active + summary.modules.valuation.active}</div><div className="muted">Integra: {summary.modules.modeling.active} pagas, {summary.modules.modeling.trial} em avaliação, {summary.modules.modeling.pastDue} em atraso · Valora: {summary.modules.valuation.active} pagas, {summary.modules.valuation.trial} em avaliação, {summary.modules.valuation.pastDue} em atraso</div></div>
         <div className="card kpi" style={pays.length ? { borderColor: '#f3d9a6' } : undefined}><div className="l">Pagamentos por confirmar</div><div className="v" style={{ color: pays.length ? 'var(--amber)' : undefined }}>{pays.length}</div></div>
       </div>
       {pays.length > 0 && (

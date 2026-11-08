@@ -2,6 +2,8 @@ import { AO_2026, calculatePayroll, getPack, kz, labourRules, listPacks, PackNot
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { body, type AppEnv } from '../plugins/tenant.js';
+import { getDb } from '@kianda/db';
+import { platformSettingsGet } from '../services/licence.js';
 
 const simulateBody = z.object({
   period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
@@ -20,6 +22,11 @@ export function publicRoutes() {
   const app = new Hono<AppEnv>();
 
   app.get('/health', (c) => c.json({ status: 'ok', packs: listPacks() }));
+  /** Contacto de suporte comercial, para a página pública e o cadastro (sem sessão). */
+  app.get('/v1/public/support', async (c) => {
+    const { supportEmail, supportPhone } = await platformSettingsGet(getDb());
+    return c.json({ email: supportEmail, phone: supportPhone }, 200, { 'cache-control': 'public, max-age=600' });
+  });
 
   app.get('/v1/packs/AO/:year', (c) => {
     const { year } = z.object({ year: z.coerce.number().int() }).parse(c.req.param());

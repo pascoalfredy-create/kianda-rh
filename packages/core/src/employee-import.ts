@@ -51,7 +51,7 @@ export interface EmployeeImportParsedRow { line: number; data: ImportedEmployee;
 export interface EmployeeImportPreview {
   fingerprint: string; canImport: boolean; sourceName: string; issues: string[];
   counts: { total: number; ready: number; skipped: number; errors: number; warnings: number };
-  licence: { activeEmployees: number; limit: number | null }; newDepartments: { name: string; costCenter: string }[];
+  licence: { activeEmployees: number; limit: number | null; notice?: string }; newDepartments: { name: string; costCenter: string }[];
   rows: (EmployeeImportParsedRow & { status: 'ready' | 'skipped' | 'error' })[];
 }
 export interface EmployeeImportResult { importId: string; created: number; skipped: number; departmentsCreated: number; replayed: boolean }
