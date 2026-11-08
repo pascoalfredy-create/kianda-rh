@@ -9,7 +9,8 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { body, requireCompany, requireRole, type AppEnv } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
-import { isPlatformAdmin, licenceOf, platformSettingsGet, priceTable, tierOf, type PlatformSettings } from '../services/licence.js';
+import { isPlatformAdmin, licenceFromRows, licenceOf, platformSettingsGet, priceTable, tierOf, type PlatformSettings } from '../services/licence.js';
+import { consoleMrr } from '../services/console-mrr.js';
 import {
   afterPayment, applyGatewayPayment, attachGatewayReference, confirmPaymentRequest, emailPaymentInstructions, invoiceSettingsGet, issueInvoice,
   releaseGatewayReference, syncGatewayPayments,
@@ -225,30 +226,33 @@ export function platformRoutes() {
 
   app.get('/v1/platform/companies', async (c) => {
     const db = getDb();
-    const cos = (await db.select().from(companies).orderBy(desc(companies.createdAt))).filter((co) => co.nif !== 'PLATAFORMA');
-    const subs = await db.select().from(subscriptions);
-    const counts = await db.select({ companyId: employees.companyId, n: sql<number>`count(*)::int` }).from(employees).where(eq(employees.status, 'active')).groupBy(employees.companyId);
-    const owners = await db.select({ id: users.id, companyId: users.companyId, email: users.email, name: users.name }).from(users).where(eq(users.role, 'owner'));
-    const pending = await db.select({ companyId: paymentRequests.companyId, n: sql<number>`count(*)::int` }).from(paymentRequests).where(eq(paymentRequests.status, 'pending')).groupBy(paymentRequests.companyId);
-    const out = [];
-    for (const co of cos) {
-      const l = await licenceOf(db, co.id);
-      const sub = subs.find((s) => s.companyId === co.id);
-      const monthly = sub ? tierOf(sub).monthlyMinor : null;
+    // Tudo em consultas agregadas (sem uma ronda de consultas por empresa).
+    const [cos, subs, counts, owners, pending, grants] = await Promise.all([
+      db.select().from(companies).orderBy(desc(companies.createdAt)),
+      db.select().from(subscriptions),
+      db.select({ companyId: employees.companyId, n: sql<number>`count(*)::int` }).from(employees).where(eq(employees.status, 'active')).groupBy(employees.companyId),
+      db.select({ id: users.id, companyId: users.companyId, email: users.email, name: users.name }).from(users).where(eq(users.role, 'owner')),
+      db.select({ companyId: paymentRequests.companyId, n: sql<number>`count(*)::int` }).from(paymentRequests).where(eq(paymentRequests.status, 'pending')).groupBy(paymentRequests.companyId),
+      db.select().from(companyModules),
+    ]);
+    const out = await Promise.all(cos.filter((x) => x.nif !== 'PLATAFORMA').map(async (co) => {
+      const sub = subs.find((s) => s.companyId === co.id) ?? null, active = counts.find((x) => x.companyId === co.id)?.n ?? 0;
+      const l = licenceFromRows(sub, active);
       const owner = owners.find(o => o.companyId === co.id);
-      const modules = await companyModulesOverview(db, co.id, owner?.id ?? '', 'owner');
-      const modelingPrice = modules.modeling.planKey && modules.modeling.cycle ? modelingPlanPrice(modules.modeling.planKey, modules.modeling.cycle as BillingCycle, modules.modeling.extraUsers) : null;
-      const modelingMrr = modules.modeling.canWrite && ['active', 'past_due'].includes(modules.modeling.status) && modules.modeling.paidUntil && modules.modeling.paidUntil < '2099-01-01' && modelingPrice ? Math.round(modelingPrice.totalMinor / CYCLES[modules.modeling.cycle as BillingCycle].months) : 0;
-      out.push({
+      const modules = await companyModulesOverview(db, co.id, owner?.id ?? '', 'owner', { licence: l, sector: co.sector, grants: grants.filter(g => g.companyId === co.id), member: undefined, valuationMember: undefined } as never);
+      const mrr = consoleMrr(sub, l.status, modules);
+      return {
         id: co.id, name: co.name, nif: co.nif, sector: co.sector, sectorLabel: co.sector ? SECTORS[co.sector as keyof typeof SECTORS] ?? co.sector : null, code: co.code, createdAt: co.createdAt,
-        owner: owner ?? null, activeEmployees: counts.find((x) => x.companyId === co.id)?.n ?? 0, modules, modelingMrr,
+        owner: owner ?? null, activeEmployees: active, modules, modelingMrr: mrr.modeling, valuationMrr: mrr.valuation, hrMrr: mrr.hr,
         status: l.status, statusLabel: l.statusLabel, tierKey: sub?.tierKey ?? null, tierLabel: l.tier.label, cycle: sub?.cycle ?? null, limit: l.limit,
         trialEndsAt: sub?.trialEndsAt ?? null, paidUntil: sub?.paidUntil ?? null, notes: sub?.notes ?? null,
-        monthlyMinor: modules.hr.subscribed && (l.status === 'active' || l.status === 'past_due') ? monthly : null, pendingPayments: pending.find((p) => p.companyId === co.id)?.n ?? 0,
-      });
-    }
-    const mrr = out.reduce((s, x) => s + (x.paidUntil && x.paidUntil < '2099-01-01' ? x.monthlyMinor ?? 0 : 0) + x.modelingMrr, 0);
-    return c.json({ companies: out, summary: { total: out.length, trial: out.filter((x) => x.status === 'trial').length, active: out.filter((x) => x.status === 'active').length, pastDue: out.filter((x) => x.status === 'past_due').length, suspended: out.filter((x) => x.status === 'suspended').length, mrrMinor: mrr } });
+        monthlyMinor: modules.hr.subscribed && (l.status === 'active' || l.status === 'past_due') && sub ? tierOf(sub).monthlyMinor : null, pendingPayments: pending.find((p) => p.companyId === co.id)?.n ?? 0,
+      };
+    }));
+    const sum = (k: 'hrMrr' | 'modelingMrr' | 'valuationMrr') => out.reduce((s, x) => s + x[k], 0);
+    const byModule = (m: 'hr' | 'modeling' | 'valuation') => ({ trial: out.filter(x => x.modules[m].subscribed && x.modules[m].status === 'trial').length, active: out.filter(x => x.modules[m].subscribed && x.modules[m].status === 'active').length, pastDue: out.filter(x => x.modules[m].subscribed && x.modules[m].status === 'past_due').length });
+    const mrrByModule = { hr: sum('hrMrr'), modeling: sum('modelingMrr'), valuation: sum('valuationMrr') };
+    return c.json({ companies: out, summary: { total: out.length, trial: out.filter((x) => x.status === 'trial').length, active: out.filter((x) => x.status === 'active').length, pastDue: out.filter((x) => x.status === 'past_due').length, suspended: out.filter((x) => x.status === 'suspended').length, mrrMinor: mrrByModule.hr + mrrByModule.modeling + mrrByModule.valuation, mrrByModule, modules: { hr: byModule('hr'), modeling: byModule('modeling'), valuation: byModule('valuation') } } });
   });
 
   app.get('/v1/platform/payment-requests', async (c) => {

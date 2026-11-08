@@ -4,7 +4,8 @@ import { ackDocuments, ackRequests, and, auditLogs, companies, compensationChang
 import { z } from 'zod';
 import type { Actor } from '../plugins/tenant.js';
 import { assertMinimumWage, createBody, salaryCols } from './employee-input.js';
-import { licenceOf } from './licence.js';
+import { ensureEmployeeCapacity, licenceOf } from './licence.js';
+import { tierFor } from '@kianda/core';
 import { DomainError } from './payroll.js';
 import { xlsx } from '../lib/xlsx.js';
 
@@ -72,11 +73,12 @@ export async function previewEmployeeImport(db: Db, actor: Actor, input: Input):
   });
   const used = new Set(rows.filter(r => r.status === 'ready' && r.data.department).map(r => employeeImportKey(r.data.department!)));
   const ready = rows.filter(r => r.status === 'ready').length, issues: string[] = [];
-  if (lic.limit !== null && lic.activeEmployees + ready > lic.limit) issues.push('A licença permite ' + lic.limit + ' colaboradores activos. Existem ' + lic.activeEmployees + ' e o ficheiro acrescentaria ' + ready + '. Escolha a faixa adequada em Módulos e licenças antes de importar.');
+  const trialGrows = lic.limit !== null && lic.activeEmployees + ready > lic.limit && lic.status === 'trial' && lic.tier.key !== 'custom';
+  if (lic.limit !== null && lic.activeEmployees + ready > lic.limit && !trialGrows) issues.push('A licença permite ' + lic.limit + ' colaboradores activos. Existem ' + lic.activeEmployees + ' e o ficheiro acrescentaria ' + ready + '. Escolha a faixa adequada em Módulos e licenças antes de importar.');
   if (!ready) issues.push('Não existem colaboradores novos e válidos para importar.');
   return { fingerprint: await fingerprint(input), sourceName: input.sourceName, canImport: !issues.length && !rows.some(r => r.status === 'error'), issues,
     counts: { total: rows.length, ready, skipped: rows.filter(r => r.status === 'skipped').length, errors: rows.filter(r => r.status === 'error').length, warnings: rows.filter(r => r.warnings.length).length },
-    licence: { limit: lic.limit, activeEmployees: lic.activeEmployees }, newDepartments: [...newDepartments].filter(([key]) => used.has(key)).map(([, d]) => d), rows };
+    licence: { limit: lic.limit, activeEmployees: lic.activeEmployees, ...(trialGrows ? { notice: `Durante a avaliação gratuita, a faixa passa a «${tierFor(lic.activeEmployees + ready).label}» ao importar; o preço dessa faixa só se aplica quando escolher a subscrição.` } : {}) }, newDepartments: [...newDepartments].filter(([key]) => used.has(key)).map(([, d]) => d), rows };
 }
 export async function commitEmployeeImport(db: Db, actor: Actor, input: CommitInput): Promise<EmployeeImportResult> {
   return db.transaction(async tx => {
@@ -92,6 +94,8 @@ export async function commitEmployeeImport(db: Db, actor: Actor, input: CommitIn
     if (hash !== input.fingerprint) throw new DomainError('importacao_alterada', 'O ficheiro ou os pressupostos mudaram. Volte a validar antes de confirmar.', 409);
     const preview = await previewEmployeeImport(t, actor, input);
     if (!preview.canImport) throw new DomainError('importacao_invalida', 'A validação detectou erros, duplicados ou um limite de licença. Volte a validar e corrija os pontos indicados.', 409);
+    // Em avaliação, a faixa acompanha a equipa importada (ver ensureEmployeeCapacity).
+    if (!(await ensureEmployeeCapacity(t, actor.companyId, preview.counts.ready, actor.actorId)).ok) throw new DomainError('limite_colaboradores', 'A licença não comporta os colaboradores a importar. Escolha a faixa adequada em Módulos e licenças.', 402);
     const departmentRows = await tx.select().from(departments).where(eq(departments.companyId, actor.companyId));
     const departmentIds = new Map(departmentRows.map(d => [employeeImportKey(d.name), d.id]));
     if (preview.newDepartments.length) {

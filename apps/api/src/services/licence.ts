@@ -1,8 +1,8 @@
 import {
-  canWrite, cyclePrice, CYCLES, DEFAULT_TIERS, LEGACY_CUSTOM_TIER, effectiveStatus, employeeLimit, luandaDate, SUBSCRIPTION_STATUS,
+  canWrite, cyclePrice, CYCLES, DEFAULT_TIERS, LEGACY_CUSTOM_TIER, effectiveStatus, employeeLimit, luandaDate, SUBSCRIPTION_STATUS, tierFor,
   type BillingCycle, type SubscriptionStatus, type Tier,
 } from '@kianda/core';
-import { and, eq, employees, platformAdmins, platformSettings, sql, subscriptions, users, type Db } from '@kianda/db';
+import { and, auditLogs, eq, employees, platformAdmins, platformSettings, sql, subscriptions, users, type Db } from '@kianda/db';
 
 export interface PlatformSettings { bank: { holder: string; bankName: string; iban: string } | null; supportEmail: string | null; supportPhone: string | null }
 const DEFAULT_SETTINGS: PlatformSettings = { bank: null, supportEmail: null, supportPhone: null };
@@ -68,3 +68,21 @@ export async function isPlatformAdmin(db: Db, userId: string): Promise<boolean> 
   const [a] = await db.select({ email: platformAdmins.email }).from(users).innerJoin(platformAdmins, eq(platformAdmins.email, sql`lower(${users.email})`)).where(eq(users.id, userId));
   return Boolean(a);
 }
+
+/**
+ * Capacidade de colaboradores activos. Em avaliação gratuita, a faixa acompanha a equipa real (sobe
+ * automaticamente, sem bloquear a experiência de empresas com mais de 100 pessoas); com licença paga,
+ * o limite da faixa contratada mantém-se e a mudança faz-se em Módulos e licenças.
+ */
+export async function ensureEmployeeCapacity(db: Db, companyId: string, adding: number, actorId?: string): Promise<{ ok: true; tierChanged?: string } | { ok: false; limit: number; activeEmployees: number }> {
+  const lic = await licenceOf(db, companyId);
+  if (lic.limit === null || lic.activeEmployees + adding <= lic.limit) return { ok: true };
+  if (lic.status === 'trial' && lic.sub && lic.sub.tierKey !== 'custom') {
+    const tier = tierFor(lic.activeEmployees + adding);
+    await db.update(subscriptions).set({ tierKey: tier.key }).where(eq(subscriptions.companyId, companyId));
+    await db.insert(auditLogs).values({ companyId, actorId: actorId ?? 'sistema', action: 'trial_tier_adjusted', entity: 'subscription', entityId: companyId, before: { tierKey: lic.sub.tierKey }, after: { tierKey: tier.key, activeEmployees: lic.activeEmployees + adding } });
+    return { ok: true, tierChanged: tier.label };
+  }
+  return { ok: false, limit: lic.limit, activeEmployees: lic.activeEmployees };
+}
+

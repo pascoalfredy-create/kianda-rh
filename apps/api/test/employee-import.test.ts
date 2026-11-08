@@ -77,7 +77,7 @@ describe.skipIf(!process.env.DATABASE_URL)('migração em lote de colaboradores'
   it('limita por empresa, perfil e faixa de licença e deixa descarregar o modelo no teste', async () => {
     const foreign = await preview(other, source(1)); expect(foreign.json()).toMatchObject({ canImport: true, counts: { ready: 1 } }); expect(foreign.body).not.toContain('Pessoa Sintética 1001');
     expect((await preview(finance, source(3000))).statusCode).toBe(403);
-    const tooMany = await preview(other, source(1, 101)); expect(tooMany.json().canImport).toBe(false); expect(tooMany.json().issues.join(' ')).toContain('100');
+    const tooMany = await preview(other, source(1, 101)); expect(tooMany.json().canImport).toBe(true); expect(tooMany.json().licence.notice).toContain('101 a 250 colaboradores');
     const template = await req(other, 'GET', '/v1/employees/import/template'); expect(template.statusCode, template.body).toBe(200); expect(template.headers['content-type']).toContain('spreadsheetml');
     expect((await preview(other, { ...source(1), companyId })).statusCode).toBe(400);
     expect((await preview(other, source(1, 5001))).statusCode).toBe(400);

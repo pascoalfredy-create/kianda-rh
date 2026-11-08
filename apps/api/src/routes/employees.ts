@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { body, requireCompany, requireRole, type Actor, type AppEnv } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
 import { queueCandidateStage } from '../services/recruitment-mail.js';
-import { licenceOf } from '../services/licence.js';
+import { ensureEmployeeCapacity, licenceOf } from '../services/licence.js';
 import { startChecklist } from '../services/checklists.js';
 import { requestsForNewEmployee } from '../services/acknowledgements.js';
 import { optionalText, optionalDate, moneyFields, usdCheck, usdMessage, salaryCols, contractBody, personal, createBody, assertMinimumWage } from '../services/employee-input.js';
@@ -161,8 +161,8 @@ export function employeeRoutes() {
     if (cand && cand.stage !== 'offer') throw new DomainError('etapa_invalida', 'Só se admite um candidato na etapa de proposta', 409);
     const result = await db.transaction(async (tx) => {
       await tx.select({ id: companies.id }).from(companies).where(eq(companies.id, req.companyId)).for('update');
-      const lic = await licenceOf(tx as unknown as Db, req.companyId);
-      if (lic.limit !== null && lic.activeEmployees >= lic.limit) throw new DomainError('limite_colaboradores', 'A licença permite ' + lic.limit + ' colaboradores activos. Mude para a faixa seguinte em Módulos e licenças.', 402);
+      const cap = await ensureEmployeeCapacity(tx as unknown as Db, req.companyId, 1, req.actorId);
+      if (!cap.ok) throw new DomainError('limite_colaboradores', 'A licença permite ' + cap.limit + ' colaboradores activos. Mude para a faixa seguinte em Módulos e licenças.', 402);
       if (cand) {
         const [o] = await tx.select({ status: jobOpenings.status }).from(jobOpenings).where(and(eq(jobOpenings.id, cand.openingId), eq(jobOpenings.companyId, req.companyId))).for('update');
         if (!o || o.status === 'closed') throw new DomainError('vaga_fechada', 'Reabra a vaga antes de admitir o candidato', 409);
@@ -250,8 +250,8 @@ export function employeeRoutes() {
     const before = await loadEmployee(db, req, id);
     if (before.status === 'terminated') throw new DomainError('colaborador_cessado', 'A ficha de um colaborador cessado não pode ser alterada');
     if (b.status === 'active' && before.status !== 'active') {
-      const lic = await licenceOf(db, req.companyId);
-      if (lic.limit !== null && lic.activeEmployees >= lic.limit) throw new DomainError('limite_colaboradores', 'A licença atingiu o limite de colaboradores activos.', 402);
+      const cap = await ensureEmployeeCapacity(db, req.companyId, 1, req.actorId);
+      if (!cap.ok) throw new DomainError('limite_colaboradores', 'A licença atingiu o limite de colaboradores activos.', 402);
     }
     if ('departmentId' in b) await assertDepartment(db, req.companyId, b.departmentId);
     if ('managerId' in b) await assertManager(db, req.companyId, id, b.managerId);

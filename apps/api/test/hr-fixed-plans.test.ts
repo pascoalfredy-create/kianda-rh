@@ -20,7 +20,8 @@ describe.skipIf(!process.env.DATABASE_URL)('RH: apenas faixas fixas, sem cobran�
     await withTenant(companyId, async () => {
       await getDb().insert(employees).values(Array.from({ length: 100 }, (_, i) => ({ companyId, number: String(i + 1), name: `Pessoa sintética ${i + 1}`, jobTitle: 'Técnico' })));
       // Dados legados nunca podem voltar a aumentar o limite ou o preço da faixa.
-      await getDb().update(subscriptions).set({ extraSeats: 50 }).where(eq(subscriptions.companyId, companyId));
+      // Licença paga: na avaliação gratuita a faixa acompanha a equipa (ver trial-capacity.test.ts).
+      await getDb().update(subscriptions).set({ extraSeats: 50, status: 'active', paidUntil: '2027-12-31' }).where(eq(subscriptions.companyId, companyId));
       const [legacy] = await getDb().insert(paymentRequests).values({ companyId, number: `PF-LEGACY-${stamp}`, kind: 'extra_seats', seats: 10, grossMinor: 3000000, amountMinor: 3000000, gateway: 'proxypay', gatewayReference: stamp.slice(-9), createdBy: actorId }).returning();
       legacyId = legacy!.id;
       await getDb().insert(paymentRequests).values({ companyId, number: `PF-HISTORY-${stamp}`, kind: 'extra_seats', seats: 2, amountMinor: 600000, status: 'paid', paidAt: new Date(), invoiceRef: 'FT histórica', createdBy: actorId });

@@ -62,7 +62,10 @@ test('simulador e orçamento conservam pressupostos ao visitar documentos', asyn
   await page.goto('/orcamento?ano=2027');
   await page.getByLabel('Aumento salarial (%)', { exact: true }).fill('9');
   await page.getByRole('button', { name: '+ Admissão', exact: true }).click();
+  // O mapa só existe depois de o orçamento desenhar a tabela: abrir antes disso deixava-o fechado (teste instável).
+  await expect(page.locator('details.map-disclosure').first()).toBeVisible();
   await openMaps(page);
+  await expect(page.locator('details.map-disclosure[open]')).not.toHaveCount(0);
   await page.goto('/documentos');
   await page.goBack();
   await expect(page.getByLabel('Aumento salarial (%)', { exact: true })).toHaveValue('9');
