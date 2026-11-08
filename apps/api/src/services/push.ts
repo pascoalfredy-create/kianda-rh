@@ -4,7 +4,8 @@
  * só o tipo de evento e a ligação; o conteúdo vê-se dentro do Kianda, com sessão.
  */
 import { and, asc, eq, inArray, isNull, lt, platformSettings, pushOutbox, pushSubscriptions, sql, users, type Db } from '@kianda/db';
-import { generateVapidKeys, sendPush, type VapidKeys } from './webpush.js';
+import { b64url, fromB64url, generateVapidKeys, sendPush, type VapidKeys } from './webpush.js';
+import { jwtSecret } from '../plugins/tenant.js';
 
 export interface PushMessage { title: string; body: string; url: string; tag?: string }
 
@@ -49,14 +50,48 @@ export async function notifyDeciders(db: Db, companyId: string, emp: { id: strin
   return notifyUsers(db, companyId, hr.filter(u => u.employeeId !== emp.id).map(u => u.id), message);
 }
 
-/** Chaves VAPID da plataforma: criadas na primeira utilização e guardadas nas definições (a privada nunca sai do servidor). */
+/**
+ * Chave privada VAPID cifrada em repouso (AES-GCM, chave derivada por HKDF do segredo da API): quem lê a tabela
+ * platform_settings (cópia de segurança, consola da base de dados) não obtém a chave que assina os avisos.
+ * Se VAPID_PUBLIC_KEY e VAPID_PRIVATE_JWK estiverem definidas no ambiente, são essas que se usam.
+ */
+interface StoredVapid { publicKey: string; privateJwk?: VapidKeys['privateJwk']; sealed?: { iv: string; data: string } }
+const vapidCipherKey = async () => {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(jwtSecret()), 'HKDF', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: new TextEncoder().encode('kianda-vapid'), info: new TextEncoder().encode('platform_settings.webpush') }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+};
+export async function sealVapid(keys: VapidKeys): Promise<StoredVapid> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await vapidCipherKey(), new TextEncoder().encode(JSON.stringify(keys.privateJwk))));
+  return { publicKey: keys.publicKey, sealed: { iv: b64url(iv), data: b64url(data) } };
+}
+export async function openVapid(stored: StoredVapid): Promise<VapidKeys | null> {
+  if (stored.privateJwk) return { publicKey: stored.publicKey, privateJwk: stored.privateJwk };
+  if (!stored.sealed) return null;
+  try {
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64url(stored.sealed.iv) }, await vapidCipherKey(), fromB64url(stored.sealed.data));
+    return { publicKey: stored.publicKey, privateJwk: JSON.parse(new TextDecoder().decode(plain)) };
+  } catch { return null; }
+}
+
+/** Chaves VAPID da plataforma: do ambiente, ou criadas na primeira utilização e guardadas cifradas nas definições. */
 export async function vapidKeys(db: Db): Promise<VapidKeys> {
+  if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_JWK) return { publicKey: process.env.VAPID_PUBLIC_KEY, privateJwk: JSON.parse(process.env.VAPID_PRIVATE_JWK) };
   const [row] = await db.select().from(platformSettings).where(eq(platformSettings.key, 'webpush'));
-  if (row) return row.value as VapidKeys;
+  if (row) {
+    const stored = row.value as StoredVapid, keys = await openVapid(stored);
+    // Chave antiga em claro: passa a cifrada sem mudar o par (as subscrições existentes continuam válidas).
+    if (keys && stored.privateJwk) await db.update(platformSettings).set({ value: await sealVapid(keys) }).where(eq(platformSettings.key, 'webpush'));
+    if (keys) return keys;
+    // Segredo da API mudou: a chave guardada já não abre. Gera-se um par novo (os dispositivos voltam a activar avisos).
+    const fresh = await generateVapidKeys();
+    await db.update(platformSettings).set({ value: await sealVapid(fresh) }).where(eq(platformSettings.key, 'webpush'));
+    return fresh;
+  }
   const keys = await generateVapidKeys();
-  await db.insert(platformSettings).values({ key: 'webpush', value: keys }).onConflictDoNothing();
+  await db.insert(platformSettings).values({ key: 'webpush', value: await sealVapid(keys) }).onConflictDoNothing();
   const [saved] = await db.select().from(platformSettings).where(eq(platformSettings.key, 'webpush'));
-  return saved!.value as VapidKeys;
+  return (await openVapid(saved!.value as StoredVapid)) ?? keys;
 }
 
 const subject = () => process.env.APP_BASE_URL?.startsWith('https://') ? process.env.APP_BASE_URL : 'https://kianda.yelaperformance.com';

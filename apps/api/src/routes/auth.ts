@@ -1,6 +1,6 @@
 import { REGISTRATION_TERMS_VERSION, DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, defaultModelingSector, isValidCompanyNif, luandaDate, SECTORS, tierFor, trialEndDate, TRIAL_DAYS, VALUATION_PLANS, VALUATION_PLAN_KEYS, verifyTotp } from '@kianda/core';
 import { auditLogs, companies, companyModules, employees, getDb, modelingMembers, valuationMembers, platformAdmins, hashPassword, passwordProblems, subscriptions, users, verifyPassword, type Db } from '@kianda/db';
-import { and, eq } from '@kianda/db';
+import { and, eq, sql } from '@kianda/db';
 import { Hono } from 'hono';
 import { deleteCookie, setCookie } from 'hono/cookie';
 import { sign, verify } from 'hono/jwt';
@@ -40,11 +40,18 @@ export async function completeLogin(c: Ctx, db: Db, u: typeof users.$inferSelect
   return c.json({ user: { id: u.id, name: u.name, email: u.email, role: u.role }, company: { id: co.id, name: co.name }, token, requiresEmailVerification: u.emailVerificationRequired && !u.emailVerifiedAt });
 }
 
+/** O cookie de sessão é sempre Secure em HTTPS (também atrás de um proxy), qualquer que seja o NODE_ENV. */
+export function secureCookie(c: Ctx) {
+  return process.env.NODE_ENV === 'production' || new URL(c.req.url).protocol === 'https:' || c.req.header('x-forwarded-proto')?.split(',')[0]?.trim() === 'https';
+}
+
 export async function startSession(c: Ctx, claims: SessionClaims) {
   const exp = Math.floor(Date.now() / 1000) + SESSION_HOURS * 3600;
-  const token = await sign({ ...claims, exp }, jwtSecret(), 'HS256');
+  const [u] = await getDb().select({ sv: users.sessionVersion }).from(users).where(eq(users.id, claims.sub));
+  const { requiresEmailVerification: _r, ...stable } = claims;
+  const token = await sign({ ...stable, sv: u?.sv ?? 0, exp }, jwtSecret(), 'HS256');
   setCookie(c, SESSION_COOKIE, token, {
-    path: '/', httpOnly: true, sameSite: 'Lax', secure: process.env.NODE_ENV === 'production', maxAge: SESSION_HOURS * 3600,
+    path: '/', httpOnly: true, sameSite: 'Lax', secure: secureCookie(c), maxAge: SESSION_HOURS * 3600,
   });
   return token;
 }
@@ -171,8 +178,19 @@ export function authRoutes() {
     const [u] = await db.select().from(users).where(eq(users.id, actor.actorId));
     if (!u || !(await verifyPassword(b.current, u.passwordHash))) return c.json({ error: 'credenciais_invalidas', message: 'A palavra-passe actual está errada.' }, 400);
     if (b.current === b.next) return c.json({ error: 'igual', message: 'A nova palavra-passe tem de ser diferente da actual.' }, 400);
-    await db.update(users).set({ passwordHash: await hashPassword(b.next) }).where(eq(users.id, u.id));
+    // Nova palavra-passe termina as outras sessões; esta continua com um token novo.
+    await db.update(users).set({ passwordHash: await hashPassword(b.next), sessionVersion: sql`${users.sessionVersion} + 1` }).where(eq(users.id, u.id));
     await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'change_password', entity: 'user', entityId: u.id });
+    await startSession(c, actor.session);
+    return c.json({ ok: true });
+  });
+
+  /** Terminar a sessão em todos os outros dispositivos (telemóvel perdido, computador partilhado). */
+  app.post('/v1/auth/sessions/end-others', requireCompany, rateLimit('sessions', 10, 900_000), async (c) => {
+    const actor = c.get('actor'), db = getDb();
+    await db.update(users).set({ sessionVersion: sql`${users.sessionVersion} + 1` }).where(eq(users.id, actor.actorId));
+    await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'end_sessions', entity: 'user', entityId: actor.actorId });
+    await startSession(c, actor.session);
     return c.json({ ok: true });
   });
 

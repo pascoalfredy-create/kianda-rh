@@ -16,6 +16,31 @@ it('o servidor exige aceitação explícita dos termos no registo', async () => 
 });
 
 describe.skipIf(!process.env.DATABASE_URL)('retirada de acessos em sessões já emitidas', () => {
+  it('mudar a palavra-passe e «terminar sessões» revogam os tokens antigos e mantêm a sessão actual', async () => {
+    const reg = registration();
+    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { ...reg, acceptTerms: true } });
+    expect(r.statusCode).toBe(201);
+    const first = { cookie: `kianda_session=${r.cookies.find(c => c.name === 'kianda_session')!.value}` };
+    const login = await app.inject({ method: 'POST', url: '/v1/auth/login', payload: { email: reg.email, password: reg.password } });
+    const second = { cookie: `kianda_session=${login.cookies.find(c => c.name === 'kianda_session')!.value}` };
+    expect((await app.inject({ method: 'GET', url: '/v1/auth/me', headers: second })).statusCode).toBe(200);
+    const ended = await app.inject({ method: 'POST', url: '/v1/auth/sessions/end-others', headers: first });
+    expect(ended.statusCode).toBe(200);
+    const renewed = { cookie: `kianda_session=${ended.cookies.find(c => c.name === 'kianda_session')!.value}` };
+    expect((await app.inject({ method: 'GET', url: '/v1/auth/me', headers: second })).json().error).toBe('sessao_terminada');
+    expect((await app.inject({ method: 'GET', url: '/v1/auth/me', headers: first })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'GET', url: '/v1/auth/me', headers: renewed })).statusCode).toBe(200);
+    const changed = await app.inject({ method: 'POST', url: '/v1/auth/password', headers: renewed, payload: { current: reg.password, next: reg.password + 'Novo9' } });
+    expect(changed.statusCode, changed.body).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/v1/auth/me', headers: renewed })).statusCode).toBe(401);
+    const after = { cookie: `kianda_session=${changed.cookies.find(c => c.name === 'kianda_session')!.value}` };
+    expect((await app.inject({ method: 'GET', url: '/v1/auth/me', headers: after })).statusCode).toBe(200);
+  });
+  it('o cookie de sessão é Secure quando o pedido chega por HTTPS', async () => {
+    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', headers: { 'x-forwarded-proto': 'https' }, payload: { ...registration(), acceptTerms: true } });
+    expect(r.statusCode).toBe(201);
+    expect(r.headers['set-cookie']).toMatch(/kianda_session=[^;]+;.*Secure/);
+  });
   it('uma conta desactivada perde imediatamente o acesso da sessão antiga', async () => {
     const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { ...registration(), acceptTerms: true } });
     expect(r.statusCode).toBe(201);
