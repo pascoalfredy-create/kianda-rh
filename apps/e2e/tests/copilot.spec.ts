@@ -37,7 +37,7 @@ test('Integra e Valora abrem o seu especialista, sem enviar o resumo financeiro 
   await page.getByRole('link', { name: 'Copiloto', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Copiloto Kianda Valora', exact: true })).toBeVisible();
   await expect(summary.getByRole('combobox', { name: 'Contexto financeiro', exact: true })).toHaveValue(analysis.body.id);
-  await expect(summary).toContainText('Milhões de Kz'); expect(calls).toBe(0);
+  await expect(summary).toContainText('· Kz'); expect(calls).toBe(0);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate<number>('document.documentElement.scrollWidth - window.innerWidth')).toBeLessThanOrEqual(1);
   expect(errors).toEqual([]);

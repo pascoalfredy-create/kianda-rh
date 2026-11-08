@@ -89,6 +89,8 @@ export async function valoraGo(page: Page, view: string) {
 
 /** Abrir explicitamente os mapas que um cenário de negócio pretende consultar/editar. */
 export async function openMaps(page: Page) {
+  // Os mapas só existem depois de a página carregar os dados: abrir antes disso deixava-os fechados (teste instável).
+  await page.waitForLoadState('networkidle').catch(() => {});
   for (const map of await page.locator('details.map-disclosure:not([open])').all()) {
     const summary = map.locator('summary').first();
     if (await summary.isVisible()) await summary.click();
