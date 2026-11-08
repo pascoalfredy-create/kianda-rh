@@ -1,6 +1,6 @@
 'use client';
 
-import { CYCLES, DEFAULT_TIERS, MODELING_PLANS, SECTORS, TRIAL_DAYS, VALUATION_PLANS, defaultModelingSector } from '@kianda/core';
+import { CYCLES, DEFAULT_TIERS, MODELING_PLANS, SECTORS, TRIAL_DAYS, VALUATION_PLANS } from '@kianda/core';
 import type { RegistrationSelection } from '../../lib/registration-selection';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -25,7 +25,8 @@ export function RegistoForm({ selection = null }: { selection?: RegistrationSele
       const hrFits = (DEFAULT_TIERS.find(t => t.key === selection?.planKey)?.maxEmployees ?? Infinity) >= (estimate ?? 1);
       const plan = selection?.planKey && chosen ? (selection.module === 'hr' ? (hrFits ? { hrPlan: { tierKey: selection.planKey, cycle: selection.cycle } } : {})
         : selection.module === 'valuation' ? { valuationPlan: { key: selection.planKey, cycle: selection.cycle } }
-        : { modelingPlan: { key: selection.planKey, cycle: selection.cycle, primarySector: defaultModelingSector(String(f.get('sector') ?? '')), sectors: [defaultModelingSector(String(f.get('sector') ?? ''))] } }) : {};
+        // Integra: o plano exige escolher os sectores, o que se faz em Módulos e licenças (a avaliação inclui todos).
+        : {}) : {};
       const { res, body: j } = await jsonRequest('/api/v1/auth/register', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ ...plan, company: { name: f.get('companyName'), nif: String(f.get('nif')).trim(), sector: f.get('sector'), address: f.get('address') || null, ...(estimate ? { employeesEstimate: estimate } : {}) }, name: f.get('name'), email: f.get('email'), password: f.get('password'), acceptTerms: f.get('terms') === 'on', modules: ['hr', 'modeling', 'valuation'] }),
@@ -38,7 +39,7 @@ export function RegistoForm({ selection = null }: { selection?: RegistrationSele
       <div className="logo" style={{ padding: 0, marginBottom: 18 }}><KiandaMark size={34} /><div><b style={{ color: 'var(--ink)' }}>Kianda</b><small style={{ color: 'var(--ink3)' }}>RH · Integra · Valora</small></div></div>
       <h1 style={{ fontSize: 19, marginBottom: 4 }}>Criar a conta da empresa</h1>
       <p className="muted">Um mês grátis ({TRIAL_DAYS} dias), a partir da confirmação do email. Experimente os três módulos, introduza dados e pré-visualize os resultados. Os downloads e a impressão exigem uma subscrição paga.</p>
-      {chosen && selection && <p className="ok" role="status">Escolha guardada: {product} · {chosen} · pagamento {CYCLES[selection.cycle].label.toLowerCase()}. A avaliação é gratuita; a subscrição só começa quando a confirmar em Módulos e licenças.</p>}
+      {chosen && selection && <p className="ok" role="status">{selection.module === 'modeling' ? 'Plano de interesse' : 'Escolha guardada'}: {product} · {chosen} · pagamento {CYCLES[selection.cycle].label.toLowerCase()}. A avaliação é gratuita; {selection.module === 'modeling' ? 'escolha os sectores e confirme o plano em Módulos e licenças.' : 'a subscrição só começa quando a confirmar em Módulos e licenças.'}</p>}
       <p className="muted">Sem cartão nem cobrança automática. Depois de entrar na conta, pode consultar os limites do teste e escolher os planos e o pagamento em Módulos e licenças.</p>
       <h3 className="auth-section-title">Empresa</h3>
       <label>Denominação social<input name="companyName" required minLength={2} placeholder="Ex.: Kwanza Logística, Lda." /></label>
