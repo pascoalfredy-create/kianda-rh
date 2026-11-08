@@ -85,6 +85,8 @@ export const users = pgTable('users', {
   totpSecret: text('totp_secret'),
   totpEnabledAt: timestamp('totp_enabled_at', { withTimezone: true }),
   failedAttempts: integer('failed_attempts').notNull().default(0),
+  /** Versão das sessões: incrementa ao mudar a palavra-passe ou ao terminar todas as sessões (tokens antigos deixam de valer). */
+  sessionVersion: integer('session_version').notNull().default(0),
   lockedUntil: timestamp('locked_until', { withTimezone: true }),
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
   createdAt: createdAt(),
@@ -101,7 +103,7 @@ export const emailVerifications = pgTable('email_verifications', {
   usedAt: timestamp('used_at', { withTimezone: true }),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
   createdAt: createdAt(),
-}, (t) => [uniqueIndex('email_verifications_token_hash').on(t.tokenHash), index('email_verifications_user_created').on(t.userId, t.createdAt)]);
+}, (t) => [index('email_verifications_company').on(t.companyId), uniqueIndex('email_verifications_token_hash').on(t.tokenHash), index('email_verifications_user_created').on(t.userId, t.createdAt)]);
 
 /** Regimes de horário da empresa: semanal (7 dias) ou ciclo de turnos/rotação (minutos previstos por dia). */
 export const workSchedules = pgTable('work_schedules', {
@@ -216,7 +218,7 @@ export const personnelBudgetLines = pgTable('personnel_budget_lines', {
   headcount: numeric('headcount', { precision: 8, scale: 1 }).notNull().default('0'),
   grossMinor: money('gross_minor'),
   costMinor: money('cost_minor'),
-}, (t) => [index('personnel_budget_lines_budget').on(t.budgetId)]);
+}, (t) => [index('personnel_budget_lines_company_period').on(t.companyId, t.period), index('personnel_budget_lines_budget').on(t.budgetId)]);
 
 export const departments = pgTable('departments', {
   id: id(),
@@ -300,7 +302,7 @@ export const compensationChanges = pgTable('compensation_changes', {
   reason: text('reason').notNull(),
   createdBy: text('created_by'),
   createdAt: createdAt(),
-}, (t) => [uniqueIndex('compensation_changes_employee_date').on(t.employeeId, t.effectiveDate)]);
+}, (t) => [index('compensation_changes_company_employee').on(t.companyId, t.employeeId), uniqueIndex('compensation_changes_employee_date').on(t.employeeId, t.effectiveDate)]);
 
 /** Documentos de identificação e habilitação (metadados; o ficheiro digitalizado entra com o armazenamento de ficheiros). */
 export const employeeDocuments = pgTable('employee_documents', {
@@ -343,7 +345,7 @@ export const fileBlobs = pgTable('file_blobs', {
   fileId: text('file_id').primaryKey().references(() => files.id, { onDelete: 'cascade' }),
   companyId: text('company_id').notNull().references(() => companies.id),
   data: bytea('data').notNull(),
-});
+}, (t) => [index('file_blobs_company').on(t.companyId)]);
 
 export const absences = pgTable('absences', {
   id: id(),
@@ -517,7 +519,7 @@ export const ackRequests = pgTable('ack_requests', {
   /** Impressão digital do conteúdo que o colaborador tinha no ecrã ao aceitar (igual à do documento publicado). */
   acceptedSha256: text('accepted_sha256'),
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
-}, (t) => [uniqueIndex('ack_requests_document_employee').on(t.documentId, t.employeeId), index('ack_requests_employee').on(t.employeeId, t.status)]);
+}, (t) => [index('ack_requests_company_status').on(t.companyId, t.status), uniqueIndex('ack_requests_document_employee').on(t.documentId, t.employeeId), index('ack_requests_employee').on(t.employeeId, t.status)]);
 
 /** Notificações no telemóvel: uma subscrição Web Push por dispositivo e utilizador (o navegador cria as chaves). */
 export const pushSubscriptions = pgTable('push_subscriptions', {
@@ -531,7 +533,7 @@ export const pushSubscriptions = pgTable('push_subscriptions', {
   createdAt: createdAt(),
   lastSuccessAt: timestamp('last_success_at', { withTimezone: true }),
   failures: integer('failures').notNull().default(0),
-}, (t) => [index('push_subscriptions_user').on(t.userId)]);
+}, (t) => [index('push_subscriptions_company_user').on(t.companyId, t.userId), index('push_subscriptions_user').on(t.userId)]);
 
 /** Caixa de saída: o evento grava a notificação na mesma transacção; o envio acontece depois da resposta. */
 export const pushOutbox = pgTable('push_outbox', {
@@ -543,7 +545,7 @@ export const pushOutbox = pgTable('push_outbox', {
   sentAt: timestamp('sent_at', { withTimezone: true }),
   attempts: integer('attempts').notNull().default(0),
   error: text('error'),
-}, (t) => [index('push_outbox_pending').on(t.createdAt).where(sql`sent_at is null`)]);
+}, (t) => [index('push_outbox_company_user').on(t.companyId, t.userId), index('push_outbox_pending').on(t.createdAt).where(sql`sent_at is null`)]);
 
 /** Localização registada numa marcação (só no instante da marcação). */
 export interface PunchLocationRecord {
@@ -596,7 +598,7 @@ export const attendanceMonths = pgTable('attendance_months', {
   note: text('note'),
   approvedBy: text('approved_by').notNull(),
   approvedAt: timestamp('approved_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [uniqueIndex('attendance_months_employee_period').on(t.employeeId, t.period)]);
+}, (t) => [index('attendance_months_company_period').on(t.companyId, t.period), uniqueIndex('attendance_months_employee_period').on(t.employeeId, t.period)]);
 
 export const payrollRuns = pgTable('payroll_runs', {
   id: id(),
@@ -638,7 +640,7 @@ export const payrollPayments = pgTable('payroll_payments', {
   matchId: text('match_id'),
   createdBy: text('created_by').notNull(),
   createdAt: createdAt(),
-}, (t) => [uniqueIndex('payroll_payments_run_kind').on(t.runId, t.kind)]);
+}, (t) => [index('payroll_payments_company').on(t.companyId), uniqueIndex('payroll_payments_run_kind').on(t.runId, t.kind)]);
 
 /** Variáveis do mês: prémios, outros abonos, adiantamentos e outros descontos. */
 export const payrollVariables = pgTable('payroll_variables', {
@@ -733,7 +735,7 @@ export const outboundEmails = pgTable('outbound_emails', {
   providerId: text('provider_id'),
   error: text('error'),
   createdAt: createdAt(),
-}, (t) => [index('outbound_emails_created').on(t.createdAt)]);
+}, (t) => [index('outbound_emails_company_created').on(t.companyId, t.createdAt), index('outbound_emails_created').on(t.createdAt)]);
 
 /** Licença da empresa (uma por empresa). */
 export const subscriptions = pgTable('subscriptions', {
@@ -972,7 +974,7 @@ export const reviews = pgTable('reviews', {
   employeeComment: text('employee_comment'),
   acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [uniqueIndex('reviews_cycle_employee').on(t.cycleId, t.employeeId), index('reviews_reviewer').on(t.reviewerEmployeeId)]);
+}, (t) => [index('reviews_company').on(t.companyId), uniqueIndex('reviews_cycle_employee').on(t.cycleId, t.employeeId), index('reviews_reviewer').on(t.reviewerEmployeeId)]);
 
 /** Modelos de documentos adaptados pela empresa: cada gravação é uma nova versão (a última activa substitui o modelo do Kianda). */
 export const documentTemplates = pgTable('document_templates', {
@@ -1105,7 +1107,7 @@ export const bankStatements = pgTable('bank_statements', {
   closingBalanceMinor: bigint('closing_balance_minor', { mode: 'number' }),
   /** null = extracto sem coluna de saldo. */
   balanceOk: boolean('balance_ok'),
-});
+}, (t) => [index('bank_statements_company').on(t.companyId)]);
 
 /** Correspondência entre movimentos bancários e pagamentos registados (um pagamento pode ter vários movimentos). */
 export const bankMatches = pgTable('bank_matches', {
@@ -1117,7 +1119,7 @@ export const bankMatches = pgTable('bank_matches', {
   rule: text('rule'),
   createdBy: text('created_by').notNull(),
   createdAt: createdAt(),
-});
+}, (t) => [index('bank_matches_company').on(t.companyId)]);
 
 export const bankLines = pgTable('bank_lines', {
   id: id(),
@@ -1137,7 +1139,7 @@ export const bankLines = pgTable('bank_lines', {
   obligationKey: text('obligation_key'),
   category: text('category'),
   createdAt: createdAt(),
-}, (t) => [index('bank_lines_statement_status').on(t.statementId, t.status), index('bank_lines_account_status').on(t.accountId, t.status), index('bank_lines_account_fp').on(t.accountId, t.fingerprint)]);
+}, (t) => [index('bank_lines_company_status').on(t.companyId, t.status), index('bank_lines_statement_status').on(t.statementId, t.status), index('bank_lines_account_status').on(t.accountId, t.status), index('bank_lines_account_fp').on(t.accountId, t.fingerprint)]);
 
 /** Correspondência entre eventos de RH e contas do PGC Angola (Decreto n.º 82/2001), parametrizável por empresa. */
 export const accountMappings = pgTable('account_mappings', {
@@ -1276,7 +1278,7 @@ export const financialPersonnelImports = pgTable('financial_personnel_imports', 
   snapshot: jsonb('snapshot').notNull(),
   importedBy: text('imported_by').notNull(),
   importedAt: createdAt(),
-}, (t) => [index('financial_personnel_imports_model').on(t.modelId)]);
+}, (t) => [index('financial_personnel_imports_company_model').on(t.companyId, t.modelId), index('financial_personnel_imports_model').on(t.modelId)]);
 
 /** Balancetes de trabalho por projecto. A aprovação congela uma cópia na versão. */
 export const financialHistoricalInputs = pgTable('financial_historical_inputs', {

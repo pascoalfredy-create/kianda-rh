@@ -2,8 +2,8 @@ import { webcrypto } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closeDb, eq, getDb, pushSubscriptions } from '@kianda/db';
 import { buildApp } from '../src/app.js';
-import { dispatchPush } from '../src/services/push.js';
-import { b64url, encryptPayload, fromB64url, isPushEndpoint, setPushFetch } from '../src/services/webpush.js';
+import { dispatchPush, openVapid, sealVapid } from '../src/services/push.js';
+import { b64url, encryptPayload, fromB64url, generateVapidKeys, isPushEndpoint, setPushFetch } from '../src/services/webpush.js';
 import { testClient, type InjectResponse } from './inject.js';
 
 const subtle = webcrypto.subtle;
@@ -39,6 +39,13 @@ describe('Web Push: cifra e serviços aceites', () => {
     expect(await decrypt(body, d)).toEqual({ title: 'Olá' });
     const other = await device();
     await expect(decrypt(body, other)).rejects.toThrow();
+  });
+  it('a chave privada VAPID fica cifrada em repouso e abre-se com o segredo da API', async () => {
+    const keys = await generateVapidKeys(), stored = await sealVapid(keys);
+    expect(JSON.stringify(stored)).not.toContain(String(keys.privateJwk.d));
+    expect(await openVapid(stored)).toEqual(keys);
+    expect(await openVapid({ ...stored, sealed: { ...stored.sealed!, data: stored.sealed!.data.slice(0, -4) + 'AAAA' } })).toBeNull();
+    expect(await openVapid({ publicKey: keys.publicKey, privateJwk: keys.privateJwk })).toEqual(keys);
   });
   it('só envia para serviços de push conhecidos (nunca para endereços arbitrários)', () => {
     for (const ok of ['https://fcm.googleapis.com/fcm/send/abc', 'https://updates.push.services.mozilla.com/wpush/v2/x', 'https://web.push.apple.com/abc', 'https://wns2-par02p.notify.windows.com/w/?token=1']) expect(isPushEndpoint(ok)).toBe(true);

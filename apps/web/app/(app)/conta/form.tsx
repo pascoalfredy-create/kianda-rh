@@ -12,7 +12,7 @@ export function PasswordForm() {
       setOk('');
       const f = new FormData(e.currentTarget);
       if (f.get('next') !== f.get('next2')) return setError('A confirmação não coincide');
-      if (await run('/v1/auth/password', 'POST', { current: f.get('current'), next: f.get('next') })) { setOk('Palavra-passe alterada.'); (e.target as HTMLFormElement).reset(); }
+      if (await run('/v1/auth/password', 'POST', { current: f.get('current'), next: f.get('next') })) { setOk('Palavra-passe alterada. As sessões noutros dispositivos foram terminadas.'); (e.target as HTMLFormElement).reset(); }
     }}>
       <h3>Alterar palavra-passe</h3>
       <label>Palavra-passe actual<input name="current" type="password" required autoComplete="current-password" /></label>
@@ -20,5 +20,19 @@ export function PasswordForm() {
       <label>Confirmar nova palavra-passe<input name="next2" type="password" required autoComplete="new-password" /></label>
       <div className="form-actions">{error ? <span className="err">{error}</span> : ok ? <span className="ok">{ok}</span> : null}<button className="btn" disabled={busy}>Alterar</button></div>
     </form>
+  );
+}
+
+/** Terminar a sessão em todos os outros dispositivos (esta continua aberta). */
+export function EndSessions() {
+  const { busy, error, run } = useMutation();
+  const [ok, setOk] = useState('');
+  return (
+    <div className="card" style={{ maxWidth: 520 }}>
+      <h3>Sessões noutros dispositivos</h3>
+      <p className="muted">Perdeu o telemóvel ou entrou num computador partilhado? Termine todas as outras sessões; esta continua aberta.</p>
+      <div className="form-actions">{error ? <span className="err">{error}</span> : ok ? <span className="ok" role="status">{ok}</span> : null}
+        <button type="button" className="btn ghost" disabled={busy} onClick={async () => { setOk(''); if (await run('/v1/auth/sessions/end-others', 'POST', {})) setOk('Sessões terminadas nos outros dispositivos.'); }}>Terminar outras sessões</button></div>
+    </div>
   );
 }
