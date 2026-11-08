@@ -36,7 +36,7 @@ Uma conta, um repositório e uma base de dados para três módulos com licenças
 
 - Produção no commit `8401caf` (PR #53), publicada com sucesso: testes, tipos, build, **E2E**, migrações, API, web e smoke público. `/api/health` → `{"status":"ok","packs":["AO-2026"]}`.
 - Testes: **core 315, API ≈298, web 159** (com Postgres no CI) + **27 E2E** no navegador. A contagem do core inclui o teste de coerência da documentação. Localmente a bateria completa da API pode dar falhas intermitentes em `api.test.ts` quando corre em paralelo com outros ficheiros; corrido sozinho passa (151/151) — no CI passa.
-- Última migração: **0047_indexed_salaries** (0046 = turnos). O `when` do `meta/_journal.json` tem de ser crescente (0046 = 1793640600000, 0047 = 1793640700000).
+- Última migração: **0054_payroll_line_department_snapshot** (0053 = sessões e índices; `when` 1793900000000 e 1793910000000). Histórico: **0047_indexed_salaries** (0046 = turnos). O `when` do `meta/_journal.json` tem de ser crescente (0046 = 1793640600000, 0047 = 1793640700000).
 
 **Entregas de 02–03/11/2026 (PR #44–#53):**
 
@@ -89,6 +89,23 @@ Uma conta, um repositório e uma base de dados para três módulos com licenças
 6. **AO-2027:** registar o pacote quando o OGE 2027 for publicado — sem ele, o processamento de Janeiro de 2027 é recusado.
 
 **Cópias de segurança — o que está e não está provado:** cada cópia é cifrada, decifrada e lida com `pg_restore --list` antes de ser guardada (30 dias, artefacto privado). Não é um ensaio de restauro completo numa segunda base. O backup PostgreSQL **não inclui** os ficheiros do R2 (`kianda-files`).
+
+### Correcções da auditoria (08/11/2026, PR #69–#76)
+
+Plano de acção (19 itens) da auditoria geral, comparada com a do outro agente, todo implementado:
+
+| PR | Parte | O quê |
+| --- | --- | --- |
+| #69 | A | Teste do Valora sem data fixa; documentação da análise histórica retirada do Integra. |
+| #70 | B | Valora: importador de balancetes novo (`valuation/balance-import.ts`): unidade obrigatória, cêntimos, hierarquia de contas, sinais pela natureza, exercício, acumulado → mês, folha do Excel, PDF/Word, controlo e «Desfazer»; montantes introduzidos em Kz (o modelo continua em Mkz); corrigido o ×1 000 000 nos activos reais; copiloto em Kz. |
+| #71 | C | Integra: `creditDiagnosis` no núcleo (DSCR no reembolso, carência à parte, todos os covenants, linguagem condicional) em painel, crédito, memorandos e relatórios; memorando de crédito marcado como rascunho; eixos redondos; separadores acessíveis. |
+| #72 | D | RH: o fecho recalcula num savepoint e recusa rascunhos desactualizados; avisos de CÁLCULO MANUAL exigem revisão escrita (fica na auditoria). |
+| #73 | E | Segurança: cabeçalhos em todas as páginas (`next.config.ts`), `users.session_version` (palavra-passe e «Terminar outras sessões» revogam tokens), cookie Secure em HTTPS, 15 índices por empresa, chave VAPID cifrada. Migração **0053**. O logout num dispositivo não termina os outros (decisão deliberada). |
+| #74 | F | Cópia diária reconstruída numa base isolada e consultada; cópia opcional do R2 (secrets `KIANDA_R2_ACCESS_KEY_ID`/`KIANDA_R2_SECRET_ACCESS_KEY`, a criar pelo dono); alertas de erro 500 por email aos administradores. |
+| #75 | G | Consola com MRR por módulo ao preço do ciclo, sem N+1; avisos de renovação do Integra e Valora; faixa do RH acompanha a equipa durante a avaliação; cadastro pergunta o n.º de colaboradores e guarda o plano das ligações públicas; suporte na página pública. |
+| #76 | H | Folha pela escala publicada; departamento/centro de custo fotografados na linha (migração **0054**); mapas com nome; percentagens com 2 casas; aviso de avaliação único com dd/mm/aaaa. |
+
+Só do dono (não fazer pelo agente): pacote AO-2027 quando o OGE sair; validação jurídica (turnos, cessação, doença, contratos, termos finais); quota OpenAI; ProxyPay/Vendus; reactivar 2FA; secrets do R2 para a cópia dos ficheiros.
 
 ## 4. Comercial, avaliação e exportações
 
@@ -240,3 +257,5 @@ O core mantém `suspendedDays`, `holidayWorkDays` e `familyEveMinutes` (testados
 - Orçamento (entrega 23): tabelas `personnel_budgets` (ano, estado, hipóteses jsonb) e `personnel_budget_lines` (departamento × mês: efectivo, ilíquido, custo), com RLS; `packages/core/src/budget.ts` (`budgetProjection`, `budgetVsActual`); rotas em `apps/api/src/routes/budget.ts` (`GET /v1/budgets?year`, `POST /v1/budgets/simulate`, `POST /v1/budgets`, `/:id/regenerate`, `PUT /:id/lines`, `/:id/approve` e `/:id/reopen` só proprietário, `DELETE`, `/:id/export`); página `/orcamento`.
 
 - App móvel (entrega 24): `app/manifest.ts`, `public/sw.js` (+ `public/_headers` para não guardar o sw em cache), `public/icons/*`, `components/pwa.tsx` (registo do SW, barra de sem rede, convite a instalar, `clearOfflineData` no logout), `lib/offline-punch.ts` (fila do ponto sem rede). API: `POST /v1/attendance/clock` aceita `at` + `clientRef` (origem `offline`, `offlineOut`), colunas `attendance_entries.client_ref/offline_out`.
+
+- E2E que abrem mapas logo depois de navegar ficavam instáveis: `openMaps` espera `networkidle`, e os testes que dependem de um mapa esperam que ele exista antes de o abrir.
