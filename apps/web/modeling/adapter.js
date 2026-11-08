@@ -180,7 +180,7 @@ function protect() {
   $('#mSel').disabled=busy;
   $('#integra-logout').disabled=busy;
   $('#integra-logout').textContent=signingOut?'A terminar sessão…':'Terminar sessão';
-  $('#mSel').title=notice||'Projectos da empresa. Escolha Gerir projectos… para consultar, arquivar ou restaurar.';
+  $('#mSel').title=notice||((($('#mSel').selectedOptions?.[0]?.textContent)||'')+' — Projectos da empresa. Escolha Gerir projectos… para consultar, arquivar ou restaurar.').replace(/^ — /,'');
 }
 function render() {
   if(!session)return;
@@ -431,7 +431,9 @@ $('#mSel').onchange=async()=>{
   const next=$('#mSel').value;busy=true;protect();
   try{if(next==='__version'){projectPicker();}else if(next==='__projects'){projectPicker();await openProjects();}else await chooseProject(next);}catch(error){projectPicker();showError(error);}finally{busy=false;protect();}
 };
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();setMenuOpen(false);}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();setMenuOpen(false);}
+  // Separadores (role=tab) activáveis com Enter ou Espaço, como botões.
+  if((e.key==='Enter'||e.key===' ')&&e.target instanceof Element&&e.target.matches('[role=tab][data-act]')){e.preventDefault();e.target.click();}});
 window.addEventListener('beforeunload',e=>{if(!leaving&&store?.dirty){e.preventDefault();e.returnValue='';}});
 window.addEventListener('pagehide',rememberModelingLocation);
 window.addEventListener('popstate',()=>{const view=(location.hash||'').slice(1);if(VIEWS[view]){VIEW=view;render();}});

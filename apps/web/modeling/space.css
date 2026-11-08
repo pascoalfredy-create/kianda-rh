@@ -110,3 +110,15 @@ td{font-size:13.5px;border-bottom:1px solid #f1f1ef;padding:8px 12px;font-varian
 input.kianda-number{text-align:right;font-variant-numeric:proportional-nums}
 /* Algarismos proporcionais em todo o lado: com este tipo de letra os tabulares afastam a vírgula («64 ,9%»). */
 *{font-variant-numeric:proportional-nums!important}
+
+/* Memorando ainda por completar: a marca sai também na impressão. */
+.draftmark{border:1.5px dashed #b7791f;color:#8a5a12;background:#fff8eb;font:600 11.5px Inter,system-ui,sans-serif;letter-spacing:.3px;text-transform:uppercase;padding:6px 10px;border-radius:6px;margin:0 0 10px}
+/* Nome do modelo comprido: corta com reticências e mostra o nome completo ao passar o rato. */
+.top .mdl select#mSel{min-width:180px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
+/* Cartões sem conteúdo não deixam caixas vazias. */
+.card:empty,.card>.bd:empty{display:none}
+.tabs a[role=tab]{cursor:pointer}
+.tabs a[role=tab]:focus-visible{outline:2px solid var(--brand,#1d4e89);outline-offset:2px}
+
+/* Copiloto e outros botões que são ligações: aspecto de botão, sem sublinhado. */
+a.btn,#integra-copilot{text-decoration:none;color:inherit}
