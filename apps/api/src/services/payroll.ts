@@ -336,7 +336,34 @@ export async function companyAccounts(db: Db, companyId: string): Promise<PgcAcc
 }
 
 /** Fecha o processamento: bloqueia alterações e gera o lançamento PGC (classe 7 contra 34/36). */
-export async function closePayroll(db: Db, companyId: string, runId: string, actorId: string, role = 'owner') {
+/** Sinal interno para desfazer o recálculo de verificação (savepoint) depois de ler os resultados. */
+class PayrollProbe extends Error { constructor(readonly hashes: Map<string, string | null>) { super('verificação do rascunho'); } }
+const MANUAL_WARNING = /CÁLCULO MANUAL/;
+
+/**
+ * Recalcula a folha dentro de um savepoint e devolve os hashes de cálculo por colaborador, sem gravar nada.
+ * Serve para recusar o fecho de um rascunho desactualizado (variáveis, salários, assiduidade, ausências,
+ * subsídios ou regras alterados depois do último «Recalcular»).
+ */
+async function freshPayrollHashes(tx: Db, companyId: string, period: string, actorId: string): Promise<Map<string, string | null>> {
+  try {
+    await tx.transaction(async (sp) => {
+      await draftPayroll(sp as unknown as Db, companyId, period, actorId);
+      const [run] = await sp.select({ id: payrollRuns.id }).from(payrollRuns).where(and(eq(payrollRuns.companyId, companyId), eq(payrollRuns.period, period)));
+      const rows = await sp.select({ employeeId: payrollLines.employeeId, hash: payrollLines.calculationHash }).from(payrollLines).where(eq(payrollLines.runId, run!.id));
+      throw new PayrollProbe(new Map(rows.map((r) => [r.employeeId, r.hash])));
+    });
+  } catch (error) {
+    if (error instanceof PayrollProbe) return error.hashes;
+    if (error instanceof DomainError) throw new DomainError('rascunho_desactualizado', `A folha já não pode ser recalculada com os dados actuais: ${error.message} Corrija e recalcule antes de fechar.`, 409);
+    throw error;
+  }
+  throw new Error('Verificação do rascunho sem resultado');
+}
+
+export interface ClosePayrollOptions { manualReview?: string }
+
+export async function closePayroll(db: Db, companyId: string, runId: string, actorId: string, role = 'owner', options: ClosePayrollOptions = {}) {
   return db.transaction(async (tx) => {
     await tx.select({ id: companies.id }).from(companies).where(eq(companies.id, companyId)).for('update');
     const [run] = await tx.select().from(payrollRuns).where(and(eq(payrollRuns.id, runId), eq(payrollRuns.companyId, companyId))).for('update');
@@ -353,6 +380,18 @@ export async function closePayroll(db: Db, companyId: string, runId: string, act
     const included = new Set(lines.map(l => l.l.employeeId)), missing = eligible.filter(s => !included.has(s.e.id));
     if (missing.length) throw new DomainError('processamento_incompleto', `Faltam ${missing.length} colaborador(es) por processar: ${missing.slice(0, 5).map(s => s.e.name).join(', ')}. Processe o lote em falta antes de fechar o mês.`, 409);
     if (lines.some(l => !valid.has(l.l.employeeId))) throw new DomainError('equipa_alterada', 'A elegibilidade da equipa mudou. Recalcule toda a folha antes de fechar o mês.', 409);
+    // O rascunho tem de corresponder aos dados actuais: recalcula sem gravar e compara os hashes de cálculo.
+    const fresh = await freshPayrollHashes(tx as unknown as Db, companyId, run.period, actorId);
+    const names = new Map((await tx.select({ id: employees.id, name: employees.name }).from(employees).where(inArray(employees.id, lines.map(l => l.l.employeeId)))).map(e => [e.id, e.name]));
+    const changed = lines.filter(l => !l.l.calculationHash || fresh.get(l.l.employeeId) !== l.l.calculationHash);
+    if (changed.length || fresh.size !== lines.length) {
+      const who = changed.slice(0, 5).map(l => names.get(l.l.employeeId) ?? l.l.employeeId).join(', ');
+      throw new DomainError('rascunho_desactualizado', `Os dados mudaram depois do último cálculo${who ? ` (${changed.length} colaborador(es): ${who}${changed.length > 5 ? '…' : ''})` : ''}. Use «Recalcular» e confirme os valores antes de fechar o mês.`, 409);
+    }
+    // Avisos de cálculo manual: o fecho exige a confirmação escrita de quem fecha, que fica registada.
+    const manual = ((run.warnings ?? []) as PayrollWarning[]).filter(w => MANUAL_WARNING.test(w.message));
+    const review = options.manualReview?.trim() ?? '';
+    if (manual.length && review.length < 10) throw new DomainError('revisao_calculo_manual', `Há ${manual.length} aviso(s) de CÁLCULO MANUAL neste mês. Confirme por escrito o que foi revisto e lançado (mínimo 10 caracteres) antes de fechar.`, 409);
 
     const byCc = new Map<string, PayrollTotals['byCostCenter'][number]>();
     const totals: PayrollTotals = { byCostCenter: [], irtMinor: 0, inssEmployeeMinor: 0, inssEmployerMinor: 0, advancesMinor: 0, otherDeductionsMinor: 0, netMinor: 0 };
@@ -382,7 +421,7 @@ export async function closePayroll(db: Db, companyId: string, runId: string, act
     const [je] = await tx.insert(journalEntries).values({ companyId, date: entry.date, journal: entry.journal, reference: entry.reference, description: entry.description, source: 'payroll' }).returning();
     await tx.insert(journalLines).values(entry.lines.map((l) => ({ entryId: je!.id, account: l.account, description: l.description, costCenter: l.costCenter, debitMinor: l.debitMinor, creditMinor: l.creditMinor })));
     const [closed] = await tx.update(payrollRuns).set({ status: 'closed', closedAt: new Date(), closedBy: actorId }).where(eq(payrollRuns.id, run.id)).returning();
-    await tx.insert(auditLogs).values({ companyId, actorId, action: 'close', entity: 'payroll_run', entityId: run.id, before: run, after: closed });
+    await tx.insert(auditLogs).values({ companyId, actorId, action: 'close', entity: 'payroll_run', entityId: run.id, before: run, after: { ...closed, ...(manual.length ? { manualReview: { note: review, warnings: manual.map(w => w.message) } } : {}) } });
     // Recibos disponíveis: aviso no telemóvel de cada colaborador processado (sem montantes no aviso).
     const month = new Date(`${run.period}-15T12:00:00Z`).toLocaleDateString('pt-PT', { month: 'long', year: 'numeric', timeZone: 'Africa/Luanda' });
     await notifyEmployees(tx as unknown as Db, companyId, [...new Set(lines.map(x => x.l.employeeId))], { title: 'Recibo de vencimento disponível', body: `O seu recibo de ${month} já pode ser consultado.`, url: '/recibos', tag: `recibo-${run.period}` });

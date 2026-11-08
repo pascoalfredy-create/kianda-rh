@@ -55,7 +55,7 @@ export default async function Processamento({ searchParams }: { searchParams: Pr
         </span>
         {editable && <PrepareButton key={period} period={period} prepared={!!run} people={people} payrollPeople={payrollPeople} processedIds={processedIds} variableCount={variables.length} indexed={indexedEmployees} fx={run ? { rate: run.fxRate ?? null, date: run.fxDate ?? null, source: run.fxSource ?? null } : undefined} />}
         {run?.status === 'closed' && <Link href="/obrigacoes" className="btn ghost">Pagamentos e mapas →</Link>}
-        {canClose && draft && <CloseButton runId={run!.id} period={period} selfPrepared={run!.preparedBy === actor.sub} />}
+        {canClose && draft && <CloseButton runId={run!.id} period={period} selfPrepared={run!.preparedBy === actor.sub} manualWarnings={run!.warnings.filter(w => /CÁLCULO MANUAL/.test(w.message)).length} />}
       </div>
       {draft && missing > 0 && <p className="warn">{missing} colaborador(es) elegível(eis) ainda por processar neste mês. Use Processar em lote para completar a folha.</p>}
 

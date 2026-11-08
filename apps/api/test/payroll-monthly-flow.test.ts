@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { auditLogs, and, closeDb, eq, getDb, payrollVariables } from '@kianda/db';
+import { auditLogs, and, closeDb, eq, getDb, payrollRuns, payrollVariables } from '@kianda/db';
 import { buildApp } from '../src/app.js';
 import { testClient, type InjectResponse } from './inject.js';
 const app = testClient(buildApp({ rateLimit: false }));
@@ -74,5 +74,23 @@ describe.skipIf(!process.env.DATABASE_URL)('processamento habitual e alteraçõe
     expect((await req(owner, 'DELETE', '/v1/payroll-variables/' + variable.id)).statusCode).toBe(409);
     expect((await req(owner, 'POST', '/v1/payroll-variables', { employeeId: a, period: '2026-10', kind: 'bonus', label: 'Tarde', amount: 1000 })).statusCode).toBe(409);
     expect((await opening('2026-10')).run).toEqual(frozen);
+  });
+  it('recusa fechar um rascunho desactualizado e exige a revisão escrita dos cálculos manuais', async () => {
+    expect((await req(payroll, 'POST', '/v1/payroll-runs', { period: '2026-12' })).statusCode).toBe(201);
+    const dec = (await opening('2026-12')).run;
+    // Alteração depois do cálculo: o fecho é recusado até recalcular.
+    expect((await req(payroll, 'POST', '/v1/payroll-variables', { employeeId: a, period: '2026-12', kind: 'bonus', label: 'Prémio de fim de ano', amount: 7000 })).statusCode).toBe(201);
+    const stale = await req(owner, 'POST', '/v1/payroll-runs/' + dec.id + '/close');
+    expect(stale.statusCode).toBe(409); expect(stale.json().error).toBe('rascunho_desactualizado'); expect(stale.json().message).toContain('Pessoa Mensal 0');
+    expect((await opening('2026-12')).run.status).toBe('draft');
+    expect((await req(payroll, 'POST', '/v1/payroll-runs', { period: '2026-12' })).statusCode).toBe(201);
+    // Aviso de cálculo manual: sem confirmação escrita não fecha; com ela fecha e fica no registo de auditoria.
+    await getDb().update(payrollRuns).set({ warnings: [{ employeeId: a, message: 'Pessoa Mensal 0: 1 feriado(s) trabalhado(s) — CÁLCULO MANUAL do acréscimo' }] }).where(eq(payrollRuns.id, dec.id));
+    const unreviewed = await req(owner, 'POST', '/v1/payroll-runs/' + dec.id + '/close', {});
+    expect(unreviewed.json().error).toBe('revisao_calculo_manual');
+    const note = 'Acréscimo do feriado lançado em Outro abono e conferido.';
+    expect((await req(owner, 'POST', '/v1/payroll-runs/' + dec.id + '/close', { manualReview: note })).statusCode).toBe(200);
+    const [log] = await getDb().select().from(auditLogs).where(and(eq(auditLogs.entityId, dec.id), eq(auditLogs.action, 'close')));
+    expect((log!.after as any).manualReview).toMatchObject({ note, warnings: [expect.stringContaining('CÁLCULO MANUAL')] });
   });
 });

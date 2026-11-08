@@ -128,7 +128,8 @@ export function payrollRoutes() {
 
   app.post('/v1/payroll-runs/:id/close', requireRole('finance'), async (c) => {
     const { companyId, actorId, role } = c.get('actor');
-    return c.json(await closePayroll(getDb(), companyId, c.req.param('id'), actorId, role));
+    const body = z.object({ manualReview: z.string().trim().max(2000).optional() }).parse(await c.req.json().catch(() => ({})));
+    return c.json(await closePayroll(getDb(), companyId, c.req.param('id'), actorId, role, body));
   });
 
   /** Decisão manual de subsídio para um colaborador (forçar, excluir ou voltar à regra automática) e recálculo. */
