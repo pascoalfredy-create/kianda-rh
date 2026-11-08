@@ -44,9 +44,9 @@ describe('interface aprovada e documento autenticado', () => {
   });
   it('explica a data de avaliação e o modo de consulta sem confundir a licença com o perfil de utilizador', () => {
     const trial = modelingPage({ canWrite: false, licence: { status: 'trial', trialEndsAt: '2099-12-31', paidUntil: null } } as ModelingSession, 'nonce');
-    expect(trial).toContain('31/12/2099 inclusive, pela hora de Angola');
+    expect(trial).toContain('Avaliação gratuita do Integra até 31/12/2099');
     expect(trial).not.toContain('regularize a licença com o proprietário');
-    expect(trial).toContain('Documentos apenas em pré-visualização');
+    expect(trial).toContain('para exportar e imprimir, escolha um plano');
     expect(trial).toContain('@media print{body>*');
     const expired = modelingPage({ licence: { status: 'suspended', trialEndsAt: '2026-01-01', paidUntil: null } } as ModelingSession, 'nonce');
     expect(expired).toContain('Módulo em consulta. Os dados guardados e a pré-visualização continuam disponíveis');

@@ -379,6 +379,13 @@
       "when": 1793900000000,
       "tag": "0053_session_version_company_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1793910000000,
+      "tag": "0054_payroll_line_department_snapshot",
+      "breakpoints": true
     }
   ]
 }

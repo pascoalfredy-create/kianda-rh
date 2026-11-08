@@ -53,7 +53,7 @@ test('alteração futura informa o agendamento; efeito hoje actualiza o cartão 
   await form.getByLabel('Data de efeito', { exact: true }).fill('2026-12-01');
   await form.getByLabel('Salário base (USD)', { exact: true }).fill('3300');
   await form.getByLabel('Motivo', { exact: true }).fill('Aumento acordado');
-  await expect(form).toContainText(/\+10[,.]0\s*%/);
+  await expect(form).toContainText(/\+10[,.]00\s*%/);
   await form.getByRole('button', { name: 'Registar', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Alteração agendada para 01/12/2026');
   await expect(current).toContainText(usd('3.000'));

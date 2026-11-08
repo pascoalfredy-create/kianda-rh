@@ -684,6 +684,9 @@ export const payrollLines = pgTable('payroll_lines', {
   irtBracket: integer('irt_bracket').notNull().default(1),
   breakdown: jsonb('breakdown').notNull().default([]),
   calculationHash: text('calculation_hash'),
+  /** Departamento e centro de custo no momento do cálculo: o histórico não muda quando a ficha muda de departamento. */
+  departmentId: text('department_id'),
+  costCenter: text('cost_center'),
 }, (t) => [uniqueIndex('payroll_lines_run_employee').on(t.runId, t.employeeId)]);
 
 /** Ligações de acesso: convite (cria o utilizador) ou recuperação (redefine palavra-passe/PIN). Só o hash do token é guardado. */

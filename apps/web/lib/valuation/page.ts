@@ -1,5 +1,6 @@
 import { VALUATION_ASSET_HASH, VALUATION_SHELL, VALUATION_SPACE_CSS, VALUATION_SUFFIX } from './generated';
-import { luandaDate, trialDaysRemaining } from '@kianda/core';
+import { luandaDate } from '@kianda/core';
+import { trialBannerText } from '../trial-banner';
 
 /** Sessão entregue à interface do Valora (GET /v1/valuation/bootstrap). */
 export interface ValuationSession {
@@ -22,9 +23,8 @@ export function valuationPage(session: ValuationSession | null, nonce: string, e
   shell = shell.replace('width=device-width, initial-scale=1', 'width=device-width, initial-scale=1, viewport-fit=cover');
   if (error) shell = shell.replace('<div class="wrap">', `<div class="wrap"><div class="card valora-empty" role="alert"><h3>Valora indisponível</h3><p class="intro">${escape(error)}</p><p><a class="btn" href="/modulos">Módulos e licenças</a></p></div>`);
   if (session?.licence.status === 'trial' && session.licence.trialEndsAt) {
-    const until = session.licence.trialEndsAt, days = trialDaysRemaining(until, luandaDate(new Date()));
-    const remaining = days === 1 ? 'Último dia de avaliação' : `Avaliação gratuita · ${days} dias de calendário, incluindo hoje`;
-    shell = shell.replace('<div id="valoraBanner"', `<div class="valora-banner" role="status">${remaining} · até ${escape(until.split('-').reverse().join('/'))} inclusive, pela hora de Angola. Documentos em pré-visualização; para exportar, active uma subscrição paga. <a href="/modulos">Ver licença</a></div><div id="valoraBanner"`);
+    const remaining = trialBannerText('Valora', session.licence.trialEndsAt, luandaDate(new Date()));
+    shell = shell.replace('<div id="valoraBanner"', `<div class="valora-banner" role="status">${escape(remaining)} <a href="/modulos">Ver licença</a></div><div id="valoraBanner"`);
   }
   if (session && !session.formats.pdf) shell = shell.replace('</head>', '<style>@media print{body>*{display:none!important}body::after{display:block!important;content:"Pré-visualização Kianda Valora. Active uma subscrição paga para imprimir ou exportar documentos.";padding:40px;font:18px sans-serif}}</style></head>');
   if (!session) shell = shell.replace('<button class="btn pri" id="btnAnalyses">', '<button class="btn pri" id="btnAnalyses" disabled>');
