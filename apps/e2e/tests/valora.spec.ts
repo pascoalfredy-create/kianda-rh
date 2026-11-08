@@ -36,17 +36,43 @@ test('Valora: cria uma análise, edita o orçamento e os dados ficam no servidor
   await expect(vendas).toBeVisible();
   const before = await apiAs(owner.token, 'GET', '/v1/valuation/analyses');
   const id = before.body[0].id as string;
-  await vendas.fill('12345');
+  // Montantes escritos em Kz com cêntimos; o modelo guarda milhões de Kz.
+  await vendas.fill('12 345 000 000,50');
   await vendas.press('Tab');
   await expect(page.locator('#valoraSave')).toHaveText(/Gravad/, { timeout: 15_000 });
   const saved = await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}`);
-  expect(saved.body.data.orc.vendas).toBe(12345);
+  expect(saved.body.data.orc.vendas).toBeCloseTo(12345.0000005, 9);
   expect(saved.body.revision).toBeGreaterThan(before.body[0].revision);
   await page.screenshot({ path: '/tmp/e2e/valora-02-orcamento.png', fullPage: false });
 
   await page.reload();
   await valoraGo(page, 'orcamento');
-  await expect(page.locator('input[data-orc="vendas"]')).toHaveValue(/^12\s345,00$/);
+  await expect(page.locator('input[data-orc="vendas"]')).toHaveValue(/^12\s345\s000\s000,50$/);
+
+  // Balancete mensal: unidade obrigatória, valores ao cêntimo, controlo antes de aplicar e desfazer.
+  await valoraGo(page, 'dados');
+  await page.locator('#paste').fill('conta;descricao;Jan\n61;Vendas;-1 000 000,25\n72;Pessoal;400 000,00\n43;Bancos;1 600 000,25\n51;Capital;-1 000 000,00');
+  await page.locator('#btnParse').click();
+  await expect(page.locator('#imp-prev')).toContainText('Indique a unidade');
+  await page.locator('#impUnit').selectOption('kz');
+  await expect(page.locator('#imp-prev')).toContainText('4 contas mapeadas');
+  await expect(page.locator('#imp-prev')).toContainText(/1\s000\s000,25/);
+  await page.locator('#btnApply').click();
+  await expect(page.locator('#imp-prev')).toContainText('ao cêntimo');
+  await expect.poll(async () => (await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}`)).body.data.real.v61[0], { timeout: 15_000 }).toBeCloseTo(1.00000025, 10);
+  expect((await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}`)).body.data.fecho).toBe(1);
+  await page.locator('#btnUndoImp').click();
+  await expect(page.locator('#imp-prev')).toContainText('Importação desfeita');
+
+  // Activos reais: editar um valor em Kz guarda o mesmo valor (sem multiplicar por um milhão).
+  await valoraGo(page, 'ativos');
+  const vc = page.locator('input[data-arr="imo"][data-i="0"][data-k="vc"]');
+  await vc.fill('2 500 000,00');
+  await vc.press('Tab');
+  await expect.poll(async () => (await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}`)).body.data.imo[0].vc, { timeout: 15_000 }).toBeCloseTo(2.5, 10);
+  await expect(page.locator('input[data-arr="imo"][data-i="0"][data-k="vc"]')).toHaveValue(/^2\s500\s000,00$/);
+  // A análise aberta fica identificada no cabeçalho mesmo em ecrãs de portátil.
+  await expect(page.locator('#hdrEnt')).toBeVisible();
 
   // Avaliação e relatórios abrem sem erros; no período experimental não exporta.
   for (const view of ['demonstracoes', 'racios', 'dcf', 'sintese']) {

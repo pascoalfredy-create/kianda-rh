@@ -108,3 +108,12 @@ input.cell,input.kianda-number{font-variant-numeric:proportional-nums;text-align
 .kpi .val,.big,.pp-kpis b,#tip b,.heat td,.dev td.c{font-variant-numeric:proportional-nums}
 /* Algarismos proporcionais em todo o lado: com este tipo de letra os tabulares afastam a vírgula («64 ,9%»). */
 *{font-variant-numeric:proportional-nums!important}
+
+/* Montantes introduzidos em Kz com cêntimos: campos largos o bastante para «1 234 567 890,00». */
+input.cell.kz{width:150px;font-variant-numeric:tabular-nums}
+.ctrl input.kz{width:160px;font-family:var(--mono);font-size:12.5px;padding:4px 6px;border:1px solid var(--line-2);border-radius:6px;background:var(--surface);color:var(--ink);text-align:right}
+.ctrl input.kz:focus,input.cell.kz:focus{outline:none;border-color:var(--accent)}
+/* A análise aberta fica sempre identificada no cabeçalho (o protótipo escondia o nome abaixo de 1560 px). */
+@media(max-width:1560px){.entity b{display:inline-block}}
+.entity b{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
+@media(max-width:760px){.entity b{max-width:150px}}

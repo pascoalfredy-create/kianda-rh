@@ -119,14 +119,75 @@ replace("CTL_ROWS.map(([l,g,type,b])=>{const a=g(r),c=g(o),d=a-c;return `<tr cla
   "CTL_ROWS.map(([l,g,type,b,ff=f0])=>{const a=g(r),c=g(o),d=a-c;return `<tr class=\"${b?'tot':''}\"><td>${l}</td><td class=\"num\">${ff(a)}</td><td class=\"num\">${ff(c)}</td><td class=\"num\">${d>=0?'+':''}${ff(d)}</td>");
 replace("function calcRow(lbl,arr,cls='',fmt=f0)", "function calcRow(lbl,arr,cls='',fmt=fd)");
 replace("f1(payD)} Mkz/dia", "f0(payD)} Kz/dia");
-// Grelhas de introdução continuam em milhões de Kz (é assim que se escrevem os valores).
-replace("<thead><tr><th>Mkz</th>${D.years.map(y=>", "<thead><tr><th>Milhões de Kz</th>${D.years.map(y=>");
-replace("<table class=\"sticky1\"><thead><tr><th>Mkz</th>${MES.map(", "<table class=\"sticky1\"><thead><tr><th>Milhões de Kz</th>${MES.map(");
-replace("<p class=\"sub\">Mkz · alterações recalculam todo o modelo", "<p class=\"sub\">Valores em milhões de Kz · alterações recalculam todo o modelo");
-replace("<th>Mês</th><th>Valor</th><th>Vida útil (anos)</th><th>Amortização anual</th>", "<th>Mês</th><th>Valor (milhões Kz)</th><th>Vida útil (anos)</th><th>Amortização anual (Kz)</th>");
-replace("<th>Mês</th><th>Valor</th><th>Prazo (meses)</th><th>Prestação de capital</th>", "<th>Mês</th><th>Valor (milhões Kz)</th><th>Prazo (meses)</th><th>Prestação de capital (Kz)</th>");
-replace("<th>Activo</th><th>Valor contabilístico</th><th>Renda líquida anual</th><th>Taxa capitalização (%)</th><th>Justo valor</th><th>Diferença</th>", "<th>Activo</th><th>Valor contabilístico (milhões Kz)</th><th>Renda líquida anual (milhões Kz)</th><th>Taxa capitalização (%)</th><th>Justo valor (Kz)</th><th>Diferença (Kz)</th>");
-replace("<th>Activo</th><th>Valor contabilístico</th><th>Custo reposição novo</th>", "<th>Activo</th><th>Valor contabilístico (milhões Kz)</th><th>Custo reposição novo (milhões Kz)</th>");
+/* ---------- Introdução de montantes em Kz com cêntimos (o modelo guarda milhões de Kz; a conversão é feita aqui) ---------- */
+replace("<thead><tr><th>Mkz</th>${D.years.map(y=>", "<thead><tr><th>Kz</th>${D.years.map(y=>");
+replace("<table class=\"sticky1\"><thead><tr><th>Mkz</th>${MES.map(", "<table class=\"sticky1\"><thead><tr><th>Kz</th>${MES.map(");
+replace("<p class=\"sub\">Mkz · alterações recalculam todo o modelo", "<p class=\"sub\">Montantes em Kz · alterações recalculam todo o modelo");
+replace("<th>Mês</th><th>Valor</th><th>Vida útil (anos)</th><th>Amortização anual</th>", "<th>Mês</th><th>Valor (Kz)</th><th>Vida útil (anos)</th><th>Amortização anual (Kz)</th>");
+replace("<th>Mês</th><th>Valor</th><th>Prazo (meses)</th><th>Prestação de capital</th>", "<th>Mês</th><th>Valor (Kz)</th><th>Prazo (meses)</th><th>Prestação de capital (Kz)</th>");
+replace("<td class=\"num\">${f1(c.v/c.prazo)}</td>", "<td class=\"num\">${f0(c.v/c.prazo)}</td>");
+replace("<th>Activo</th><th>Valor contabilístico</th><th>Renda líquida anual</th><th>Taxa capitalização (%)</th><th>Justo valor</th><th>Diferença</th>", "<th>Activo</th><th>Valor contabilístico (Kz)</th><th>Renda líquida anual (Kz)</th><th>Taxa capitalização (%)</th><th>Justo valor (Kz)</th><th>Diferença (Kz)</th>");
+replace("<th>Activo</th><th>Valor contabilístico</th><th>Custo reposição novo</th>", "<th>Activo</th><th>Valor contabilístico (Kz)</th><th>Custo reposição novo (Kz)</th>");
+replace("const f0=v=>v==null||!isFinite(v)?'—'", "const kzOut=v=>v==null||!isFinite(v)?'':nfK.format(Math.round(v*1e8)/100);\nconst kzIn=v=>{const n=parseNumberInput(String(v??''));return isFinite(n)?n/1e6:0};\nconst fx=v=>v==null||!isFinite(v)?'':String(+v).replace('.',',');\nconst f0=v=>v==null||!isFinite(v)?'—'");
+// Histórico anual e grelha real mensal.
+replace('<input class="cell" data-o="${obj}" data-k="${key}" data-i="${i}" value="${nf0.format(D[obj][key][i])}">', '<input class="cell kz" inputmode="decimal" data-kz="1" data-o="${obj}" data-k="${key}" data-i="${i}" value="${kzOut(D[obj][key][i])}">');
+replace('<input class="cell" style="width:70px" data-real="${k}" data-i="${m}" value="${D.real[k][m]==null?\'\':nf0.format(D.real[k][m])}">', '<input class="cell kz" inputmode="decimal" data-kz="1" data-real="${k}" data-i="${m}" value="${D.real[k][m]==null?\'\':kzOut(D.real[k][m])}">');
+replace("if(ds.o){D[ds.o][ds.k][+ds.i]=num(el.value);return refresh()}", "if(ds.o){D[ds.o][ds.k][+ds.i]=kzIn(el.value);return refresh()}");
+replace("if(ds.real){D.real[ds.real][+ds.i]=el.value.trim()===''?null:num(el.value);return refresh()}", "if(ds.real){D.real[ds.real][+ds.i]=el.value.trim()===''?null:kzIn(el.value);return refresh()}");
+// Pressupostos do orçamento: montantes em Kz; percentagens, dias e meses como estão.
+replace("function fld(k,l,step=1,hint=''){return `<div class=\"ctrl\" style=\"grid-template-columns:1fr 90px\"><label>${l}</label><input type=\"number\" data-orc=\"${k}\" value=\"${D.orc[k]}\" step=\"${step}\">",
+  "const ORC_KZ=['vendas','p63','salBase','fseFix','amortBase','amortMLP','cxMin','linhaLim','ivaAb','iiV','divV'];\nfunction fld(k,l,step=1,hint=''){const kz=ORC_KZ.includes(k);return `<div class=\"ctrl\" style=\"grid-template-columns:1fr ${kz?160:90}px\"><label>${l}${kz?' (Kz)':''}</label>${kz?`<input class=\"kz\" inputmode=\"decimal\" autocomplete=\"off\" data-kz=\"1\" data-orc=\"${k}\" value=\"${kzOut(D.orc[k])}\">`:`<input type=\"number\" data-orc=\"${k}\" value=\"${D.orc[k]}\" step=\"${step}\">`}");
+replace("if(ds.orc){D.orc[ds.orc]=el.type==='checkbox'?el.checked:num(el.value);return refresh()}", "if(ds.orc){D.orc[ds.orc]=el.type==='checkbox'?el.checked:ds.kz?kzIn(el.value):num(el.value);return refresh()}");
+replace("const ci=(arr,i,k,w,t)=>`<input class=\"${t?'t':''}\" style=\"width:${w}px\" data-${arr}=\"${i}\" data-k=\"${k}\" value=\"${esc(D.orc[arr][i][k])}\">`;",
+  "const ci=(arr,i,k,w,t)=>k==='v'?`<input class=\"kz\" style=\"width:150px\" inputmode=\"decimal\" data-kz=\"1\" data-${arr}=\"${i}\" data-k=\"v\" value=\"${kzOut(D.orc[arr][i].v)}\">`:`<input class=\"${t?'t':''}\" style=\"width:${w}px\" data-${arr}=\"${i}\" data-k=\"${k}\" value=\"${esc(D.orc[arr][i][k])}\">`;");
+replace("ds.k==='d'?el.value:num(el.value)", "ds.k==='d'?el.value:ds.kz?kzIn(el.value):num(el.value)");
+// Activos reais: montantes em Kz (corrige a edição que multiplicava por um milhão); anos e percentagens sem formato monetário.
+replace("cell=(arr,i,k,w=70,f=f0)=>`<input class=\"cell\" style=\"width:${w}px\" data-arr=\"${arr}\" data-i=\"${i}\" data-k=\"${k}\" value=\"${f(D[arr][i][k])}\">`;",
+  "cell=(arr,i,k,w=70,f=null)=>f?`<input class=\"cell\" style=\"width:${w}px\" inputmode=\"decimal\" data-arr=\"${arr}\" data-i=\"${i}\" data-k=\"${k}\" value=\"${f(D[arr][i][k])}\">`:`<input class=\"cell kz\" inputmode=\"decimal\" data-kz=\"1\" data-arr=\"${arr}\" data-i=\"${i}\" data-k=\"${k}\" value=\"${kzOut(D[arr][i][k])}\">`;");
+replace("${cell('eq',i,'id',50)}</td><td>${cell('eq',i,'vu',50)}</td><td>${cell('eq',i,'ob',50)}", "${cell('eq',i,'id',50,fx)}</td><td>${cell('eq',i,'vu',50,fx)}</td><td>${cell('eq',i,'ob',50,fx)}");
+// Ao sair de um campo em Kz, o valor fica escrito com separadores e cêntimos.
+replace("document.addEventListener('change',e=>{\n  const el=e.target,ds=el.dataset;", "document.addEventListener('change',e=>{\n  const el=e.target,ds=el.dataset;\n  if(ds.kz&&el.value.trim()!=='')el.value=kzOut(kzIn(el.value));\n  if(['impUnit','impCum','signConv'].includes(el.id)){if(IMP_ROWS)showPreview(parseRows(IMP_ROWS));return}\n  if(el.id==='impSheetSel'&&IMP_FILE){readFile(IMP_FILE,+el.value).then(r=>showPreview(parseRows(r))).catch(err=>showPreview({err:'Erro ao ler o ficheiro: '+err.message}));return}");
+replace("e.target.matches('input.cell,.mini input,[data-orc],[data-saz],[data-var],[data-w]')", "e.target.matches('input.cell,.mini input,[data-orc],[data-saz],[data-var],[data-w],[data-kz]')");
+
+/* ---------- Importação de balancetes: unidade, precisão, hierarquia, sinais, exercício, acumulado, folhas, PDF/Word, controlo e desfazer ---------- */
+replaceShell('importar um balancete (Excel ou CSV) com uma coluna de conta', 'importar um balancete (Excel, CSV, PDF com texto ou Word) com uma coluna de conta');
+replaceShell('<p class="sub">.xlsx, .xls ou .csv · ou cole o conteúdo</p>', '<p class="sub">Excel (.xlsx), CSV, PDF com texto ou Word (.docx) · ou cole o conteúdo</p>');
+replaceShell('<input type="file" id="file" accept=".xlsx,.xls,.csv,.txt">', '<input type="file" id="file" accept=".xlsx,.csv,.txt,.pdf,.docx"><div id="impSheet" hidden style="margin-top:8px"><label class="hint">Folha do Excel <select class="sel" id="impSheetSel"></select></label></div>');
+replaceShell('<input type="checkbox" id="signConv" checked> Saldos credores vêm com sinal negativo (convenção de balancete)</label>',
+  '<input type="checkbox" id="signConv" checked> Saldos credores vêm com sinal negativo (convenção de balancete)</label>\n      <label class="hint" style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="impCum"> Classes 6 e 7 em acumulado do ano (converter em movimentos do mês)</label>\n      <div class="ctrl" style="grid-template-columns:1fr 190px"><label for="impUnit">Unidade dos valores no ficheiro</label><select class="sel" id="impUnit" required><option value="">Escolha a unidade…</option><option value="kz">Kz</option><option value="mil">Milhares de Kz</option><option value="milhoes">Milhões de Kz</option></select></div>');
+span('function mapAcc(code,val,signed){', 'function splitCSV(txt){', `let IMP=null,IMP_ROWS=null,IMP_FILE=null,IMP_UNDO=null;
+function parseRows(rows){const r=parseBalance(rows,{unit:$('#impUnit').value,signed:$('#signConv').checked,cumulative:$('#impCum').checked,year:EX});return r.error?{err:r.error}:r}
+`);
+span('async function readFile(file){', 'function showPreview(res){', `async function readFile(file,sheet=0){IMP_FILE=file;const doc=await readBalanceDocument(file,sheet),box=$('#impSheet');
+  if(doc.sheets.length>1){$('#impSheetSel').innerHTML=doc.sheets.map((s,i)=>\`<option value="\${i}" \${i===sheet?'selected':''}>\${esc(s)}</option>\`).join('');box.hidden=false}else box.hidden=true;
+  IMP_ROWS=doc.rows;return doc.rows}
+`);
+span('function showPreview(res){', 'function renderDados(){', `function showPreview(res){
+  if(res.err){$('#imp-prev').innerHTML=\`<div class="note" style="border-color:var(--crit)">\${esc(res.err)}</div>\`;IMP=null;return}
+  IMP=res;const maxM=Math.max(...res.months),bad=res.control.filter(c=>Math.abs(c.differenceKz)>=.01);
+  const byK=Object.entries(res.acc).map(([k,v])=>\`<tr><td><span class="code">\${LBL[k][0]}</span>\${LBL[k][1]}</td>\${res.months.map(m=>\`<td class="num">\${v[m]==null?'—':f0(v[m])}</td>\`).join('')}</tr>\`).join('');
+  const ctl=\`<tr><td>Resultado do mês (classes 6 e 7)</td>\${res.control.map(c=>\`<td class="num">\${f0(c.resultKz/1e6)}</td>\`).join('')}</tr><tr><td>Activo − passivo − capital próprio</td>\${res.control.map(c=>\`<td class="num">\${Math.abs(c.differenceKz)<.01?badge('good')+' 0,00':chk(c.differenceKz/1e6)}</td>\`).join('')}</tr>\`;
+  $('#imp-prev').innerHTML=\`<h3 class="mt" style="font-size:13px">Pré-visualização — \${res.lines.length} contas mapeadas, \${res.ignored.length} ignoradas · valores em Kz</h3>
+   <div class="tbl-scroll"><table><thead><tr><th>Rubrica</th>\${res.months.map(m=>\`<th>\${MES[m]}</th>\`).join('')}</tr></thead><tbody>\${byK}<tr class="sec"><td colspan="\${res.months.length+1}">Controlo antes de aplicar</td></tr>\${ctl}</tbody></table></div>
+   \${bad.length?\`<div class="note" style="border-color:var(--warn)">O balanço importado não fecha em \${bad.map(c=>MES[c.month]).join(', ')}. Confirme a unidade, a convenção de sinal e se faltam contas antes de aplicar.</div>\`:''}
+   \${res.warnings.map(w=>\`<p class="hint">\${esc(w)}</p>\`).join('')}
+   \${res.ignored.length?\`<p class="hint">Ignoradas (provisões, resultados, não operacionais, linhas sem conta): \${esc(res.ignored.slice(0,12).join(' · '))}\${res.ignored.length>12?' …':''}</p>\`:''}
+   <label class="hint" style="display:flex;gap:6px;align-items:center;margin:6px 0"><input type="checkbox" id="impFecho" checked> Actualizar o mês de fecho para \${MES[maxM]}</label>
+   <div class="row-actions" style="justify-content:flex-start"><button class="btn pri" id="btnApply">Aplicar importação</button><button class="btn" id="btnCancelImp">Cancelar</button></div>\`;
+}
+`);
+replace("showPreview(parseRows(splitCSV(txt)))", "IMP_ROWS=splitCSV(txt);IMP_FILE=null;$('#impSheet').hidden=true;showPreview(parseRows(IMP_ROWS))");
+replace("if(t.id==='btnApply'&&IMP){Object.entries(IMP.acc).forEach(([k,v])=>Object.entries(v).forEach(([m,x])=>D.real[k][+m]=Math.round(x*10)/10));",
+  "if(t.id==='btnUndoImp'&&IMP_UNDO){D.real=IMP_UNDO.real;D.fecho=IMP_UNDO.fecho;IMP_UNDO=null;refresh();$('#imp-prev').innerHTML='<div class=\"note\">Importação desfeita: os dados reais e o mês de fecho anteriores foram repostos.</div>';return}\n  if(t.id==='btnApply'&&IMP){IMP_UNDO={real:JSON.parse(JSON.stringify(D.real)),fecho:D.fecho};Object.entries(IMP.acc).forEach(([k,v])=>Object.entries(v).forEach(([m,x])=>D.real[k][+m]=x));");
+replace("$('#imp-prev').innerHTML=`<div class=\"note\">Importação aplicada: ${n} contas. Todas as análises foram recalculadas.</div>`}",
+  "$('#imp-prev').innerHTML=`<div class=\"note\">Importação aplicada: ${n} contas, ao cêntimo. Todas as análises foram recalculadas. <button class=\"btn\" id=\"btnUndoImp\">Desfazer importação</button></div>`}");
+// Tema: o botão diz para onde muda e expõe o estado aos leitores de ecrã.
+replace("function setTheme(t){document.documentElement.dataset.theme=t;try{localStorage.setItem('valora-theme',t)}catch(e){}}",
+  "function setTheme(t){document.documentElement.dataset.theme=t;const b=document.getElementById('btnTheme');if(b){b.textContent=t==='dark'?'Tema claro':'Tema escuro';b.setAttribute('aria-pressed',String(t==='dark'))}try{localStorage.setItem('valora-theme',t)}catch(e){}}");
+// Modelo para copiar: em Kz, com a convenção de sinal (créditos negativos), pronto a reimportar.
+replace("L.push([code,LBL[k][1],...MES.map((_,m)=>D.real[k][m]==null?'':String(D.real[k][m]).replace('.',','))].join(';'))});return L.join('\\n')}",
+  "const neg=['v61','v62','v63','p66','amort','fornec','empMLP','estado','outcred','capital','reservas'].includes(k);L.push([code,LBL[k][1],...MES.map((_,m)=>D.real[k][m]==null?'':((neg?-1:1)*D.real[k][m]*1e6).toFixed(2).replace('.',','))].join(';'))});return L.join('\\n')}");
+replace("$('#tplMsg').textContent='Modelo copiado — cole no Excel.'", "$('#tplMsg').textContent='Modelo copiado (Kz, créditos negativos) — cole no Excel.'");
 replace("Valores expressos em milhões de Kwanzas (Mkz).", "Valores expressos em Kwanzas.");
 // Restantes unidades de saída: Mkz → Kz.
 source = source.replaceAll('Mkz', 'Kz'); shell = shell.replaceAll('Mkz', 'Kz');
@@ -148,7 +209,8 @@ replace("const pct=v=>v==null||!isFinite(v)?'—':nf1.format(v*100)+'%';", "cons
 
 const adapter = await readFile(new URL('valuation/adapter.js', web), 'utf8');
 const imports = [
-  `import {setupNumberFields} from '${fileURLToPath(new URL('lib/number-fields.ts', web))}';`,
+  `import {setupNumberFields,parseNumberInput} from '${fileURLToPath(new URL('lib/number-fields.ts', web))}';`,
+  `import {parseBalance,readBalanceDocument} from '${fileURLToPath(new URL('valuation/balance-import.ts', web))}';`,
   `import {readXlsxRows,utils as xlsxUtils,write as xlsxWrite} from '${fileURLToPath(new URL('valuation/xlsx.ts', web))}';`,
   `import {blankValuationData,valuationDataIssue} from '${fileURLToPath(new URL('packages/core/src/valuation.ts', root))}';`,
   `import {endSession,reloadPrivatePageOnRestore} from '${fileURLToPath(new URL('lib/session-client.ts', web))}';`,
