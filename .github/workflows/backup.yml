@@ -15,6 +15,9 @@ jobs:
     if: vars.KIANDA_DEPLOY == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # Só para decidir se a cópia do R2 corre (os condicionais dos passos não lêem secrets directamente).
+      R2_ACCESS_KEY_ID: ${{ secrets.KIANDA_R2_ACCESS_KEY_ID }}
     steps:
       - name: Verificar secrets
         run: |
@@ -43,21 +46,59 @@ jobs:
 
       # Prova, em cada cópia, que o ficheiro cifrado se decifra com a frase gravada e contém a base completa.
       # Se falhar, a execução fica vermelha: uma cópia que não se restaura não conta como cópia.
-      - name: Teste de restauro (decifrar e ler a cópia)
+      - name: Teste de restauro (decifrar, reconstruir numa base isolada e consultar)
         run: |
           set -euo pipefail
           fail() { echo "::error title=Cópia de segurança::$1"; exit 1; }
           gpg --batch --quiet --pinentry-mode loopback --passphrase "$PASSPHRASE" -d "/tmp/kianda-$STAMP.dump.gpg" > /tmp/check.dump || fail "A cópia não se decifra com a frase gravada"
           docker run --rm -v /tmp:/w postgres:18 pg_restore --list /w/check.dump > /tmp/check.list || fail "A cópia decifrada não é legível pelo pg_restore"
-          shred -u /tmp/check.dump
           tables=$(grep -c " TABLE DATA public " /tmp/check.list || true)
           [ "$tables" -ge 20 ] || fail "A cópia tem apenas $tables tabelas com dados"
           for t in companies users subscriptions financial_models; do grep -q " TABLE DATA public $t " /tmp/check.list || fail "Falta a tabela $t na cópia"; done
           rm -f /tmp/check.list
-          echo "Restauro verificado: $tables tabelas com dados."
+          # Restauro real numa base Postgres isolada (contentor efémero, sem rede para fora do runner):
+          # a cópia só conta se se reconstrói e responde às consultas essenciais.
+          docker network create kianda-restore >/dev/null
+          docker run -d --name kianda-restore --network kianda-restore -e POSTGRES_PASSWORD=restore -e POSTGRES_DB=kianda postgres:18 >/dev/null
+          for i in $(seq 1 30); do docker exec kianda-restore pg_isready -U postgres -d kianda >/dev/null 2>&1 && break; sleep 2; done
+          docker exec kianda-restore psql -U postgres -d kianda -qc "CREATE ROLE kianda_app NOLOGIN" >/dev/null
+          docker run --rm --network kianda-restore -v /tmp:/w -e PGPASSWORD=restore postgres:18 \
+            pg_restore --no-owner --no-privileges -h kianda-restore -U postgres -d kianda /w/check.dump > /tmp/restore.log 2>&1 || true
+          # Só se toleram avisos benignos do ambiente gerido (esquema/extensão já existentes); qualquer outro erro falha.
+          if grep "pg_restore: error:" /tmp/restore.log | grep -vE "already exists|must be owner of (extension|schema)" ; then fail "O pg_restore falhou ao reconstruir a base"; fi
+          rm -f /tmp/restore.log
+          shred -u /tmp/check.dump
+          q() { docker exec kianda-restore psql -U postgres -d kianda -tAc "$1"; }
+          companies=$(q "select count(*) from companies"); users=$(q "select count(*) from users"); migrations=$(q "select count(*) from drizzle.__drizzle_migrations" 2>/dev/null || echo 0)
+          [ "$companies" -ge 1 ] || fail "Base restaurada sem empresas"
+          [ "$users" -ge 1 ] || fail "Base restaurada sem utilizadores"
+          [ "$migrations" -ge 50 ] || fail "Base restaurada sem o registo de migrações ($migrations)"
+          q "select count(*) from pg_policies where policyname = 'empresa'" | grep -qv '^0$' || fail "Base restaurada sem as políticas RLS por empresa"
+          docker rm -f kianda-restore >/dev/null; docker network rm kianda-restore >/dev/null
+          echo "Restauro verificado: $tables tabelas com dados; base reconstruída com $companies empresa(s), $users utilizador(es) e $migrations migrações."
           # Identifica a frase usada sem a revelar: compare com a da sua cópia guardada (docs/DEPLOY.md).
           echo "Impressão digital da frase (SHA-256, 8 caracteres): $(printf %s "$PASSPHRASE" | sha256sum | cut -c1-8)"
         env:
+          PASSPHRASE: ${{ secrets.KIANDA_BACKUP_PASSPHRASE }}
+
+      # Ficheiros anexados no R2 (opcional): só corre se os secrets da chave S3 do R2 existirem.
+      # Sem eles, o R2 fica coberto apenas pela durabilidade do próprio Cloudflare (ver docs/DEPLOY.md).
+      - name: Cópia dos ficheiros do R2 (opcional, cifrada)
+        if: env.R2_ACCESS_KEY_ID != ''
+        run: |
+          set -euo pipefail
+          export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" AWS_DEFAULT_REGION=auto
+          aws s3 sync "s3://${R2_BUCKET:-kianda-files}" /tmp/r2 --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" --only-show-errors
+          count=$(find /tmp/r2 -type f | wc -l)
+          tar -C /tmp -czf /tmp/r2.tgz r2 && rm -rf /tmp/r2
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$PASSPHRASE" --symmetric --cipher-algo AES256 -o "/tmp/kianda-r2-$STAMP.tgz.gpg" /tmp/r2.tgz
+          shred -u /tmp/r2.tgz
+          sha256sum "/tmp/kianda-r2-$STAMP.tgz.gpg" >> "/tmp/kianda-$STAMP.sha256"
+          echo "R2: $count ficheiro(s) copiados e cifrados."
+        env:
+          R2_SECRET_ACCESS_KEY: ${{ secrets.KIANDA_R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.KIANDA_R2_BUCKET }}
           PASSPHRASE: ${{ secrets.KIANDA_BACKUP_PASSPHRASE }}
 
       - uses: actions/upload-artifact@v4
@@ -65,6 +106,7 @@ jobs:
           name: kianda-db-${{ env.STAMP }}
           path: |
             /tmp/kianda-${{ env.STAMP }}.dump.gpg
+            /tmp/kianda-r2-${{ env.STAMP }}.tgz.gpg
             /tmp/kianda-${{ env.STAMP }}.sha256
           retention-days: 30
           if-no-files-found: error

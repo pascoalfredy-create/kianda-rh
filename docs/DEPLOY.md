@@ -128,6 +128,8 @@ O workflow **Cópia de segurança** (`.github/workflows/backup.yml`) corre todos
 
 - **Secret obrigatório:** `KIANDA_BACKUP_PASSPHRASE` — frase longa (20+ caracteres), gerada e guardada fora do GitHub (gestor de palavras-passe). Sem ela não há cópia (nunca se guardam dados de clientes sem cifra). **Perder a frase = perder as cópias.**
 - **Teste de restauro em cada cópia:** depois de cifrar, o workflow decifra o ficheiro com a frase gravada e lê-o com `pg_restore --list` (mínimo de 20 tabelas com dados, incluindo `companies`, `users`, `subscriptions`, `financial_models`). Se falhar, a execução fica vermelha. O registo mostra a impressão digital da frase (8 primeiros caracteres do SHA-256) para confirmar que coincide com a guardada: `printf %s 'FRASE' | sha256sum | cut -c1-8`.
+- **Restauro real em cada cópia:** além de ler a lista, o workflow reconstrói a cópia numa base Postgres 18 isolada (contentor efémero no runner) e consulta empresas, utilizadores, o registo de migrações (≥ 50) e as políticas RLS `empresa`. Erros do `pg_restore` que não sejam avisos benignos do ambiente gerido falham a execução.
+- **Ficheiros no R2:** o R2 não entra no `pg_dump`. Com os secrets `KIANDA_R2_ACCESS_KEY_ID` e `KIANDA_R2_SECRET_ACCESS_KEY` (chave S3 do R2 só de leitura, criada em R2 → Manage API tokens) e o `CLOUDFLARE_ACCOUNT_ID`, o mesmo workflow copia o bucket (`kianda-files`, ou a variável `KIANDA_R2_BUCKET`), cifra-o com a mesma frase e junta-o ao artefacto (`kianda-r2-….tgz.gpg`). Sem esses secrets, os ficheiros do R2 ficam cobertos apenas pela durabilidade do Cloudflare (sem cópia independente nem protecção contra apagamento acidental).
 - **Restaurar:** descarregar o artefacto → `gpg --decrypt kianda-AAAA-MM-DD_HHMM.dump.gpg > kianda.dump` → criar um ramo (branch) novo no Neon → `pg_restore --no-owner --no-privileges -d "<ligação do ramo>" kianda.dump` → validar → apontar o Hyperdrive para o ramo restaurado (ou copiar só as tabelas necessárias).
 
 ## Domínio próprio
@@ -148,3 +150,7 @@ Cópias de documentos, justificativos de ausências e comprovativos de despesas.
 A consola da plataforma mostra o modo em uso, o número de ficheiros e o espaço ocupado. A cópia de segurança diária da base de dados inclui os ficheiros guardados na base de dados, mas não o R2 (o R2 tem a sua própria durabilidade).
 
 A recuperação de palavra-passe por email (`/recuperar`) só funciona com o Resend configurado (secção Integrações); sem ele, a página indica que se peça a ligação ao RH.
+
+## Alertas de erro da API
+
+Quando a API devolve um erro interno (500), os administradores da plataforma (tabela `platform_admins`) recebem um email «Kianda · erro interno em MÉTODO /rota». Cada erro (tipo + rota sem identificadores) gera no máximo um email por hora, com um teto global de 10 alertas por hora. O email não leva dados de clientes: rota, tipo, a primeira linha da mensagem e a assinatura para procurar nos registos do Worker. Requer o Resend configurado (secção Integrações); sem ele, os alertas ficam só registados em `outbound_emails`.

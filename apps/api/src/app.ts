@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { ZodError } from 'zod';
 import { setRateLimitEnabled, type AppEnv } from './plugins/tenant.js';
+import { alertServerError } from './services/error-alerts.js';
 import { absenceRoutes } from './routes/absences.js';
 import { attendanceRoutes } from './routes/attendance.js';
 import { kioskRoutes, workplaceRoutes } from './routes/workplaces.js';
@@ -67,6 +68,11 @@ export function buildApp(opts: { logger?: boolean; rateLimit?: boolean } = {}) {
     const e = err as { code?: string; cause?: { code?: string } };
     if (e.code === '23505' || e.cause?.code === '23505') return c.json({ error: 'duplicado', message: 'Registo duplicado' }, 409);
     console.error(err);
+    // Alerta aos administradores da plataforma (agrupado e limitado), depois da resposta.
+    if (process.env.NODE_ENV !== 'test') {
+      const alert = alertServerError({ method: c.req.method, path: c.req.path, error: err });
+      try { c.executionCtx.waitUntil(alert); } catch { void alert; }
+    }
     return c.json({ error: 'erro_interno', message: 'Erro interno. Tente novamente.' }, 500);
   });
   app.notFound((c) => c.json({ error: 'nao_encontrado', message: 'Rota inexistente' }, 404));
