@@ -80,16 +80,23 @@ export function PrepareButton({ period, prepared, people, payrollPeople, process
   );
 }
 
-export function CloseButton({ runId, period, selfPrepared }: { runId: string; period: string; selfPrepared: boolean }) {
+export function CloseButton({ runId, period, selfPrepared, manualWarnings = 0 }: { runId: string; period: string; selfPrepared: boolean; manualWarnings?: number }) {
   const { busy, error, run } = useMutation();
   const [confirm, setConfirm] = useState(false);
+  const [review, setReview] = useState('');
+  const needsReview = manualWarnings > 0;
+  const reviewOk = !needsReview || review.trim().length >= 10;
   if (!confirm) return <button className="btn" onClick={() => setConfirm(true)}>Fechar processamento</button>;
   return (
-    <span className="actions" style={{ justifyContent: 'flex-start' }}>
-      <span className="muted">Fechar {period}? Gera o lançamento PGC e os recibos; deixa de ser possível alterar.{selfPrepared ? ' (Preparado por si: só o proprietário pode fechar o que preparou.)' : ''}</span>
-      <button className="btn" disabled={busy} onClick={() => run(`/v1/payroll-runs/${runId}/close`, 'POST')}>Confirmar fecho</button>
+    <span className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>
+      <span className="muted">Fechar {period}? Gera o lançamento PGC e os recibos; deixa de ser possível alterar. O fecho confirma que a folha corresponde aos dados actuais: se algo mudou depois do último cálculo, terá de recalcular.{selfPrepared ? ' (Preparado por si: só o proprietário pode fechar o que preparou.)' : ''}</span>
+      {needsReview && <label style={{ flexBasis: '100%', display: 'grid', gap: 4 }}>
+        <span><b>{manualWarnings} aviso(s) de cálculo manual.</b> Descreva o que reviu e lançou (fica no registo de auditoria).</span>
+        <textarea aria-label="Revisão dos cálculos manuais" rows={2} maxLength={2000} value={review} onChange={e => setReview(e.target.value)} placeholder="ex.: acréscimo do feriado lançado em Outro abono e conferido" />
+      </label>}
+      <button className="btn" disabled={busy || !reviewOk} onClick={() => run(`/v1/payroll-runs/${runId}/close`, 'POST', needsReview ? { manualReview: review.trim() } : {})}>Confirmar fecho</button>
       <button className="btn ghost sm" onClick={() => setConfirm(false)}>Cancelar</button>
-      {error && <span style={{ color: 'var(--red)' }}>{error}</span>}
+      {error && <span role="alert" style={{ color: 'var(--red)', flexBasis: '100%' }}>{error}</span>}
     </span>
   );
 }
