@@ -6,10 +6,10 @@ describe('formatação de montantes e percentagens', () => {
     expect(formatAmount(550000000).replace(/\s/g, ' ')).toBe('5 500 000,00');
     expect(formatAmount(123456).replace(/\s/g, ' ')).toBe('1 234,56');
   });
-  it('percentagens com vírgula, milhares e sem «-0,0%»', () => {
-    expect(formatPercent(45.25)).toBe('45,3%');
-    expect(formatPercent(-0.04)).toBe('0,0%');
-    expect(formatPercent(1234.5).replace(/\s/g, ' ')).toBe('1 234,5%');
+  it('percentagens com vírgula, milhares, duas casas por omissão e sem «-0,00%»', () => {
+    expect(formatPercent(45.256)).toBe('45,26%');
+    expect(formatPercent(-0.004)).toBe('0,00%');
+    expect(formatPercent(1234.5).replace(/\s/g, ' ')).toBe('1 234,50%');
     expect(formatPercent(2.5, 1, true)).toBe('+2,5%');
     expect(formatPercent(-2.5, 1, true)).toBe('-2,5%');
     expect(formatPercent(null)).toBe('—');

@@ -54,7 +54,7 @@ export function reportRoutes() {
       periods: [...periods],
       lines: lines.map((l) => ({
         period: runPeriod.get(l.runId)!, employeeId: l.employeeId, grossMinor: l.grossMinor, inssEmployerMinor: l.inssEmployerMinor,
-        overtimeHours: Number(l.overtimeHours), absenceDays: l.absenceDays, breakdown: l.breakdown as { code: string; kind: string; amountMinor: number }[],
+        overtimeHours: Number(l.overtimeHours), absenceDays: l.absenceDays, breakdown: l.breakdown as { code: string; kind: string; amountMinor: number }[], departmentId: l.departmentId,
       })),
       employees: emps.map((e) => ({ id: e.id, departmentId: e.departmentId, hireDate: firstContract.get(e.id) ?? null, exitDate: exits.get(e.id) ?? null })),
       departments: deps.map((d) => ({ id: d.id, name: d.name, costCenter: d.costCenter })),

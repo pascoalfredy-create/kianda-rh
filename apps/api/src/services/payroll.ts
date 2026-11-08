@@ -5,11 +5,18 @@ import {
   payrollJournal, yearServiceFraction, type EarningInput, type PayrollResult, type PayrollTotals, type PgcAccountMap,
 } from '@kianda/core';
 import {
-  absences, accountMappings, allowanceTypes, and, asc, employeeAllowances, isNull, or, workSchedules, attendanceEntries, attendanceMonths, auditLogs, companies, compensationChanges, contracts, departments, desc, employees, eq,
+  absences, accountMappings, allowanceTypes, and, asc, employeeAllowances, isNull, or, shiftAssignments, workSchedules, attendanceEntries, attendanceMonths, auditLogs, companies, compensationChanges, contracts, departments, desc, employees, eq,
   gte, inArray, sql, journalEntries, journalLines, lte, ne, payrollLines, payrollRuns, payrollVariables, type Db,
 } from '@kianda/db';
 import { notifyEmployees } from './push.js';
 import { eligiblePayrollStaff } from './payroll-roster.js';
+
+/** Minutos de trabalho de um turno publicado (atravessa a meia-noite quando o fim é anterior ao início), sem o intervalo. */
+export function shiftMinutes(start: string, end: string, breakMinutes = 0): number {
+  const m = (t: string) => { const [h, mm] = t.split(':').map(Number); return h! * 60 + (mm ?? 0); };
+  const span = m(end) - m(start);
+  return Math.max(0, (span <= 0 ? span + 1440 : span) - breakMinutes);
+}
 
 export class DomainError extends Error {
   constructor(public readonly code: string, message: string, public readonly status = 409) { super(message); }
@@ -59,6 +66,15 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
     const periodStart = `${period}-01`;
     const periodEnd = lastDayOfMonth(period);
     const eligible = await eligiblePayrollStaff(tx as unknown as Db, companyId, period);
+    // Escala publicada do mês: quando existe, manda nos dias de trabalho (faltas e subsídios por dia); sem ela, vale o regime.
+    const publishedByEmployee = new Map<string, Map<string, number>>();
+    for (const a of await tx.select({ employeeId: shiftAssignments.employeeId, workDate: shiftAssignments.workDate, kind: shiftAssignments.pubKind, start: shiftAssignments.pubStartTime, end: shiftAssignments.pubEndTime, breakMinutes: shiftAssignments.pubBreakMinutes })
+      .from(shiftAssignments).where(and(eq(shiftAssignments.companyId, companyId), gte(shiftAssignments.workDate, `${period}-01`), lte(shiftAssignments.workDate, lastDayOfMonth(period)), sql`${shiftAssignments.pubKind} is not null`))) {
+      const days = publishedByEmployee.get(a.employeeId) ?? new Map<string, number>();
+      days.set(a.workDate, a.kind === 'shift' && a.start && a.end ? shiftMinutes(a.start, a.end, a.breakMinutes ?? 0) : 0);
+      publishedByEmployee.set(a.employeeId, days);
+    }
+    const costCenterOf = new Map((await tx.select({ id: departments.id, cc: departments.costCenter }).from(departments).where(eq(departments.companyId, companyId))).map(d => [d.id, d.cc]));
     if (selected && employeeIds!.some(id => !eligible.some(s => s.e.id === id))) throw new DomainError('lote_colaboradores_invalidos', 'O lote contém colaboradores de outra empresa, sem contrato elegível ou fora do mês. Nenhum salário foi processado.', 400);
     const staff = selected ? eligible.filter(s => selected.has(s.e.id)) : eligible;
     const firstContract = new Map<string, string>();
@@ -142,20 +158,29 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       const sched = e.scheduleId ? schedules.get(e.scheduleId) : undefined;
       const regime: Schedule = sched ? { kind: sched.kind as Schedule['kind'], pattern: sched.pattern, anchorDate: sched.anchorDate } : companyWeek;
       const anchor = e.scheduleAnchor ?? sched?.anchorDate ?? null;
+      const roster = publishedByEmployee.get(e.id);
+      const minutesOn = (d: string) => roster?.has(d) ? roster.get(d)! : scheduledMinutes(regime, d, anchor);
+      const daysIn = (from: string, to: string, exclude?: ReadonlySet<string>) => {
+        if (!roster) return scheduledDays(regime, from, to, anchor, exclude);
+        let n = 0;
+        for (let t = Date.parse(from); t <= Date.parse(to); t += 86_400_000) { const d = new Date(t).toISOString().slice(0, 10); if (!exclude?.has(d) && minutesOn(d) > 0) n++; }
+        return n;
+      };
+      const planned = !!sched || !!roster;
       if (sched?.kind === 'cycle' && !anchor) warnings.push({ employeeId: e.id, message: `${e.name}: regime "${sched.name}" sem data de início do ciclo — faltas e subsídios por dia não calculados` });
       // Faltas injustificadas: dias de trabalho previstos (regime) dentro da falta, sem feriados.
       const myAbsences = (absencesByEmployee.get(e.id) ?? []).map((a) => ({ from: a.startDate < periodStart ? periodStart : a.startDate, to: a.endDate > periodEnd ? periodEnd : a.endDate }));
-      const absenceDays = myAbsences.reduce((s, a) => s + (sched ? scheduledDays(regime, a.from, a.to, anchor, holidaySet) : businessDays(a.from, a.to, [labourRules('AO', year)])), 0);
+      const absenceDays = myAbsences.reduce((s, a) => s + (planned ? daysIn(a.from, a.to, holidaySet) : businessDays(a.from, a.to, [labourRules('AO', year)])), 0);
       // Horas de falta pelo regime (valor-hora × horas, arts. 237.º e 240.º); sem regime: dias × 8 h.
       const minutesIn = (from: string, to: string) => {
         let m = 0;
         for (let t = Date.parse(from); t <= Date.parse(to); t += 86_400_000) {
           const d = new Date(t).toISOString().slice(0, 10);
-          if (!holidaySet.has(d)) m += scheduledMinutes(regime, d, anchor);
+          if (!holidaySet.has(d)) m += minutesOn(d);
         }
         return m;
       };
-      const absenceHours = sched ? Math.round((myAbsences.reduce((s, a) => s + minutesIn(a.from, a.to), 0) / 60) * 100) / 100 : undefined;
+      const absenceHours = planned ? Math.round((myAbsences.reduce((s, a) => s + minutesIn(a.from, a.to), 0) / 60) * 100) / 100 : undefined;
       const unjustifiedThisMonth = absenceDays;
       const unjustifiedThisYear = (unjustifiedYearByEmployee.get(e.id) ?? []).reduce((s, a) => {
         const f = a.startDate < `${year}-01-01` ? `${year}-01-01` : a.startDate;
@@ -187,7 +212,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       // Férias no mês: alimentação e transporte não são devidos nesses dias, salvo acordo (art. 213.º, n.º 2).
       let vacationAllowanceCut: { fraction: number; days: number } | undefined;
       if (!company?.allowancesOnVacation) {
-        const dayCount = (from: string, to: string) => (sched ? scheduledDays(regime, from, to, anchor, holidaySet) : businessDays(from, to, [labourRules('AO', year)]));
+        const dayCount = (from: string, to: string) => (planned ? daysIn(from, to, holidaySet) : businessDays(from, to, [labourRules('AO', year)]));
         const vacDays = (leavesByEmployee.get(e.id) ?? []).filter((x) => x.type === 'vacation').reduce((s, a) => s + dayCount(a.startDate < periodStart ? periodStart : a.startDate, a.endDate > periodEnd ? periodEnd : a.endDate), 0);
         const monthDays = dayCount(periodStart, periodEnd);
         if (vacDays > 0 && monthDays > 0) vacationAllowanceCut = { fraction: Math.min(1, vacDays / monthDays), days: vacDays };
@@ -217,11 +242,11 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
         const full = aFrom === periodStart && aTo === periodEnd;
         let days = 0;
         if (t.calc === 'per_day') {
-          days = scheduledDays(regime, aFrom, aTo, anchor);
+          days = daysIn(aFrom, aTo);
           for (const ab of myAbsences) {
             const f = ab.from > aFrom ? ab.from : aFrom;
             const l = ab.to < aTo ? ab.to : aTo;
-            if (f <= l) days -= scheduledDays(regime, f, l, anchor, holidaySet);
+            if (f <= l) days -= daysIn(f, l, holidaySet);
           }
         }
         const amount = allowanceAmount({
@@ -282,13 +307,14 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
         throw err;
       }
       const hash = createHash('sha256').update(JSON.stringify({
-        company: companyId, period, packVersion: r.packVersion, employee: e.id, contract: c.id,
+        company: companyId, period, packVersion: r.packVersion, employee: e.id, contract: c.id, department: e.departmentId,
         pay: { base: pay.baseMinor, meal: pay.mealMinor, transport: pay.transportMinor, ...(indexed ? { usd: indexed, fx: run.fxRate, fxDate: run.fxDate } : {}) }, lines: r.lines, net: r.netMinor,
       })).digest('hex');
       const values = {
         overtimeHours: String(overtimeHours), absenceDays, bonusMinor: variableEarnings.reduce((s, x) => s + x.amountMinor, 0), advancesMinor,
         grossMinor: r.grossMinor, inssBaseMinor: r.inssBaseMinor, irtTaxableMinor: r.irtTaxableMinor, inssEmployeeMinor: r.inssEmployeeMinor, irtMinor: r.irtMinor, netMinor: r.netMinor,
         inssEmployerMinor: r.inssEmployerMinor, irtBracket: r.irtBracket, breakdown: r.lines, calculationHash: hash,
+        departmentId: e.departmentId, costCenter: e.departmentId ? costCenterOf.get(e.departmentId) ?? null : null,
       };
       pendingLines.push({ runId: run.id, employeeId: e.id, ...values });
       keep.push(e.id);
@@ -312,6 +338,8 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
         irtBracket: sql`excluded.irt_bracket`,
         breakdown: sql`excluded.breakdown`,
         calculationHash: sql`excluded.calculation_hash`,
+        departmentId: sql`excluded.department_id`,
+        costCenter: sql`excluded.cost_center`,
       } });
     }
     // Colaboradores que já não entram (cessados, suspensos) saem do rascunho.
@@ -396,7 +424,8 @@ export async function closePayroll(db: Db, companyId: string, runId: string, act
     const byCc = new Map<string, PayrollTotals['byCostCenter'][number]>();
     const totals: PayrollTotals = { byCostCenter: [], irtMinor: 0, inssEmployeeMinor: 0, inssEmployerMinor: 0, advancesMinor: 0, otherDeductionsMinor: 0, netMinor: 0 };
     for (const { l, cc } of lines) {
-      const key = cc ?? 'SEM-CC';
+      // Centro de custo do momento do cálculo (fotografia na linha); linhas antigas sem fotografia usam o actual.
+      const key = l.costCenter ?? cc ?? 'SEM-CC';
       const t = byCc.get(key) ?? { costCenter: key, baseMinor: 0, allowancesMinor: 0, overtimeAndBonusMinor: 0, holidayChristmasMinor: 0, employerInssMinor: 0, terminationMinor: 0 };
       for (const item of linesOf(l)) {
         if (item.kind !== 'earning') continue;

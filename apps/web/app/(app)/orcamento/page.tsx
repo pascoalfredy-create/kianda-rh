@@ -20,7 +20,7 @@ interface Data {
   };
 }
 
-const pctFmt = (v: number | null) => formatPercent(v, 1, true);
+const pctFmt = (v: number | null) => formatPercent(v, 2, true);
 const tone = (v: number | null) => (v === null || Math.abs(v) < 0.5 ? undefined : v > 0 ? 'var(--red)' : 'var(--brand)');
 
 function scale(v: number) {

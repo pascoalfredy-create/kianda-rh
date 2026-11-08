@@ -161,7 +161,7 @@ export function CompensationForm({ p }: { p: Profile }) {
           <p className="muted wide">Corrige os valores digitados no registo de {source ? dateLabel(source.effectiveDate) : '—'}. Mantém a data e o motivo original; a justificação fica na auditoria. Não cria uma nova alteração salarial.</p>
         </> : <label>Data de efeito<input type="date" name="effectiveDate" required value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} /></label>}
         <SalaryBaseFields key={`${mode}:${source ? JSON.stringify(paySnapshot(source)) : ''}`} currency={source?.salaryCurrency} baseKz={kzValue(source?.baseMinor)} baseUsd={kzValue(source?.baseForeignMinor)} />
-        {!correcting && delta !== null && Number.isFinite(delta) && <span className="delta" style={{ alignSelf: 'end', paddingBottom: 8 }}>{formatPercent(delta / 100, 1, true)} face ao actual, na moeda do salário</span>}
+        {!correcting && delta !== null && Number.isFinite(delta) && <span className="delta" style={{ alignSelf: 'end', paddingBottom: 8 }}>{formatPercent(delta / 100, 2, true)} face ao actual, na moeda do salário</span>}
         <label>Subsídio de alimentação (Kz)<input key={`meal:${source?.id}`} name="meal" inputMode="decimal" defaultValue={kzValue(source?.mealMinor)} /></label>
         <label>Subsídio de transporte (Kz)<input key={`transport:${source?.id}`} name="transport" inputMode="decimal" defaultValue={kzValue(source?.transportMinor)} /></label>
         <label className="wide">{correcting ? 'Justificação da correcção' : 'Motivo'}<input name="reason" required minLength={3} maxLength={300} placeholder={correcting ? 'Ex.: salário digitado com zeros a mais na admissão' : 'Actualização anual, promoção, revisão de função…'} /></label>

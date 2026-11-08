@@ -123,7 +123,7 @@ export default async function Relatorios({ searchParams }: { searchParams: Promi
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))' }}>
         {kpi('Custo com pessoal', formatKz(t.costMinor), `ilíquido ${formatKz(t.grossMinor)} + INSS ${formatKz(t.employerInssMinor)}`)}
         {kpi('Custo médio mensal por pessoa', formatKz(t.avgMonthlyCostPerHeadMinor))}
-        {kpi('Efectivo', String(t.headcountEnd), `média ${String(t.avgHeadcount).replace('.', ',')} · +${t.hires} admissões · −${t.exits} saídas`)}
+        {kpi('Efectivo', String(t.headcountEnd), `média ${String(t.avgHeadcount).replace('.', ',')} · ${t.hires} ${t.hires === 1 ? 'admissão' : 'admissões'} · ${t.exits} ${t.exits === 1 ? 'saída' : 'saídas'}`)}
         {kpi('Rotatividade', pctFmt(t.turnoverPct), 'saídas / efectivo médio', t.turnoverPct > 15 ? 'var(--amber)' : undefined)}
         {kpi('Absentismo', pctFmt(t.absenteeismPct), 'faltas e ausências (sem férias nem licenças parentais)', t.absenteeismPct > 5 ? 'var(--amber)' : undefined)}
         {kpi('Horas extra', formatKz(t.overtimeMinor), `${String(t.overtimeHours).replace('.', ',')} h · ${pctFmt(t.overtimeSharePct)} do ilíquido`, t.overtimeSharePct > 10 ? 'var(--amber)' : undefined)}
@@ -158,7 +158,7 @@ export default async function Relatorios({ searchParams }: { searchParams: Promi
           <tbody>
             {r.months.map((m) => (
               <tr key={m.period}>
-                <td><Link href={`/processamento?mes=${m.period}`}>{monthLabel(m.period)}</Link></td><td className="num">{m.headcount}</td><td className="num">+{m.hires} / −{m.exits}</td>
+                <td><Link href={`/processamento?mes=${m.period}`}>{monthLabel(m.period)}</Link></td><td className="num">{m.headcount}</td><td className="num">{m.hires ? `+${m.hires}` : "0"} / {m.exits ? `−${m.exits}` : "0"}</td>
                 <td className="num">{formatKz(m.grossMinor)}</td><td className="num">{formatKz(m.employerInssMinor)}</td><td className="num"><b>{formatKz(m.costMinor)}</b></td>
                 <td className="num">{formatKz(m.overtimeMinor)}<div className="muted">{String(m.overtimeHours).replace('.', ',')} h</div></td><td className="num">{pctFmt(m.absenteeismPct)}</td>
               </tr>

@@ -1,6 +1,7 @@
 import { MODELING_ASSET_HASH, MODELING_SHELL, MODELING_SUFFIX, MODELING_SPACE_CSS } from './generated';
 import type { ModelingSession } from '../../modeling/store';
-import { luandaDate, trialDaysRemaining } from '@kianda/core';
+import { luandaDate } from '@kianda/core';
+import { trialBannerText } from '../trial-banner';
 const escape = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 export function modelingPage(session: ModelingSession | null, nonce: string, error?: string): string {
   let shell = error ? MODELING_SHELL.replace('<main class="content" id="view"></main>', `<main class="content" id="view"><div class="alert r" role="alert">${escape(error)}</div></main>`) : MODELING_SHELL;
@@ -15,9 +16,8 @@ export function modelingPage(session: ModelingSession | null, nonce: string, err
   shell = shell.replace('</header>', '<button type="button" class="btn" id="integra-logout" data-act="logout">Terminar sessão</button></header><div id="integra-session-status" class="network-status" role="alert" hidden></div>');
   shell = shell.replace('</header>', '<a class="btn" id="integra-copilot" data-act="openCopilot" href="/copiloto?modulo=modeling">Copiloto</a></header>');
   if (session?.licence?.status === 'trial' && session.licence.trialEndsAt) {
-    const until = session.licence.trialEndsAt, days = trialDaysRemaining(until, luandaDate(new Date()));
-    const remaining = days === 1 ? 'Último dia de avaliação' : `Avaliação gratuita · ${days} dias de calendário, incluindo hoje`;
-    shell = shell.replace('</header>', `</header><div class="network-status" role="status">${remaining} · até ${escape(until.split('-').reverse().join('/'))} inclusive, pela hora de Angola. Documentos apenas em pré-visualização; active uma subscrição paga para exportar ou imprimir. <a class="modules-link" href="/modulos">Ver licença</a></div>`);
+    const remaining = trialBannerText('Integra', session.licence.trialEndsAt, luandaDate(new Date()));
+    shell = shell.replace('</header>', `</header><div class="network-status" role="status">${escape(remaining)} <a class="modules-link" href="/modulos">Ver licença</a></div>`);
   } else if (session?.licence && ['suspended', 'cancelled'].includes(session.licence.status)) {
     shell = shell.replace('</header>', '</header><div class="network-status" role="status">Módulo em consulta. Os dados guardados e a pré-visualização continuam disponíveis; para criar, alterar, exportar ou imprimir, regularize a licença com o proprietário da conta. <a class="modules-link" href="/modulos">Ver licença</a></div>');
   }

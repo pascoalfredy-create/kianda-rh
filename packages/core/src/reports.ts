@@ -53,6 +53,8 @@ export const ABSENTEEISM_TYPES = new Set(['sick', 'justified', 'unjustified', 'm
 export interface ReportLine {
   period: string; employeeId: string; grossMinor: Minor; inssEmployerMinor: Minor; overtimeHours: number; absenceDays: number;
   breakdown: { code: string; kind: string; amountMinor: number }[];
+  /** Departamento no momento do cálculo da folha (fotografia); sem ele, usa-se o departamento actual da ficha. */
+  departmentId?: string | null;
 }
 export interface ReportInput {
   periods: string[];
@@ -119,12 +121,12 @@ export function peopleReport(input: ReportInput): PeopleReport {
   const groups = emptyGroups();
   for (const m of months) for (const g of Object.keys(groups) as CostGroup[]) groups[g] += m.groups[g];
 
-  // Por departamento (departamento actual da ficha).
+  // Por departamento: o do momento de cada folha (fotografia na linha) ou, nas linhas antigas, o actual da ficha.
   const deptRows = new Map<string | null, { cost: number; headMonths: number; head: Set<string>; overtime: number; absence: number }>();
   const row = (id: string | null) => deptRows.get(id) ?? (deptRows.set(id, { cost: 0, headMonths: 0, head: new Set(), overtime: 0, absence: 0 }), deptRows.get(id)!);
   for (const l of input.lines) {
     if (!periods.includes(l.period)) continue;
-    const r = row(deptOf.get(l.employeeId) ?? null);
+    const r = row(l.departmentId !== undefined && l.departmentId !== null ? l.departmentId : deptOf.get(l.employeeId) ?? null);
     r.cost += l.grossMinor + l.inssEmployerMinor;
     r.headMonths += 1;
     if (l.period === lastPeriod) r.head.add(l.employeeId);

@@ -41,3 +41,21 @@ describe('relatórios de gestão de pessoas', () => {
     expect(r.departments.map((d) => [d.name, d.headcount, d.costMinor, d.avgMonthlyCostMinor, d.absenceDays])).toEqual([['Operações', 1, 216_000, 108_000, 3], ['Finanças', 1, 138_000, 69_000, 0]]);
   });
 });
+
+describe('atribuição histórica por departamento', () => {
+  it('cada mês fica no departamento do momento do cálculo, mesmo depois de a ficha mudar', () => {
+    const line = (period: string, departmentId?: string | null) => ({ period, employeeId: 'e1', grossMinor: 100_000, inssEmployerMinor: 8_000, overtimeHours: 0, absenceDays: 0, breakdown: [], departmentId });
+    const r = peopleReport({
+      periods: ['2026-01', '2026-02', '2026-03'],
+      lines: [line('2026-01', 'vendas'), line('2026-02', 'vendas'), line('2026-03', 'logistica')],
+      employees: [{ id: 'e1', departmentId: 'logistica', hireDate: null, exitDate: null }],
+      departments: [{ id: 'vendas', name: 'Vendas', costCenter: 'CC-V' }, { id: 'logistica', name: 'Logística', costCenter: 'CC-L' }],
+      leaveDays: [],
+    });
+    expect(r.departments.find(d => d.id === 'vendas')!.costMinor).toBe(216_000);
+    expect(r.departments.find(d => d.id === 'logistica')!.costMinor).toBe(108_000);
+    // Linhas antigas sem fotografia: departamento actual da ficha.
+    const legacy = peopleReport({ periods: ['2026-01'], lines: [line('2026-01')], employees: [{ id: 'e1', departmentId: 'logistica', hireDate: null, exitDate: null }], departments: [{ id: 'logistica', name: 'Logística', costCenter: 'CC-L' }], leaveDays: [] });
+    expect(legacy.departments[0]!.id).toBe('logistica');
+  });
+});

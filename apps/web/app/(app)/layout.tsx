@@ -4,10 +4,11 @@ import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/api';
 import { Suspense } from 'react';
 import { AppShell } from '@/components/app-shell';
-import { canExportDocuments, luandaDate, trialDaysRemaining } from '@kianda/core';
+import { canExportDocuments, luandaDate } from '@kianda/core';
 import { DocumentExportAccess } from '@/components/document-export';
 import { WorkspaceState } from '@/components/workspace-state';
 import { workspaceScope } from '@/lib/workspace-memory';
+import { trialBannerText } from '@/lib/trial-banner';
 
 /** Área autenticada: sem sessão válida (verificada pela API), redirecciona para o login. */
 /** Aviso de licença: experimental a terminar, pagamento em atraso ou só consulta. */
@@ -19,8 +20,7 @@ function LicenceBanner({ me }: { me: NonNullable<Awaited<ReturnType<typeof curre
   if (!l.canWrite) return <div className="alert no-print">O RH está só para consulta ({l.label.toLowerCase()}). Pode ver tudo, mas não gravar, exportar nem imprimir. {manage ? 'Regularize a licença para voltar ao normal.' : 'Fale com quem gere a conta da empresa.'}{link}</div>;
   if (l.status === 'past_due') return <div className="warn no-print">O pagamento da licença está em atraso. Daqui a poucos dias a conta fica só para consulta.{link}</div>;
   if (l.status === 'trial' && l.trialEndsAt) {
-    const days = trialDaysRemaining(l.trialEndsAt, luandaDate(new Date()));
-    return <div className="trial-note no-print">{days === 1 ? 'Hoje é o último dia de experiência.' : `Está a experimentar o Kianda até ${longDate(l.trialEndsAt)}.`} Pode usar tudo; para exportar e imprimir, escolha um plano.{link}</div>;
+    return <div className="trial-note no-print">{trialBannerText('Kianda', l.trialEndsAt, luandaDate(new Date()))}{link}</div>;
   }
   return null;
 }

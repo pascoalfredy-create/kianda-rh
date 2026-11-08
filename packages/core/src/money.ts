@@ -55,7 +55,7 @@ const percentFormats = new Map<number, Intl.NumberFormat>();
  * Percentagem já em pontos percentuais (45.2 → "45,2%"), com separador de milhares e vírgula decimal.
  * Nunca mostra "-0,0%"; `signed` acrescenta "+" aos valores positivos (variações).
  */
-export function formatPercent(points: number | null | undefined, digits = 1, signed = false): string {
+export function formatPercent(points: number | null | undefined, digits = 2, signed = false): string {
   if (points === null || points === undefined || !Number.isFinite(points)) return '—';
   let f = percentFormats.get(digits);
   if (!f) { f = new Intl.NumberFormat('pt-PT', { minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: 'always' } as Intl.NumberFormatOptions); percentFormats.set(digits, f); }
