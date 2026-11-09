@@ -4,7 +4,7 @@ import { formatMinutes } from '@kianda/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { send } from '@/lib/client';
 import { enqueuePunch, flushPunches, isNetworkError, pendingPunches } from '@/lib/offline-punch';
-import { canScanQr, currentFix, describeLocation } from '@/lib/punch-location';
+import { canScanQr, currentFix, describeLocation, deviceId } from '@/lib/punch-location';
 import type { PunchLocation } from '@/lib/types';
 
 const ME_CACHE = 'kianda_me_cache';
@@ -85,7 +85,8 @@ export function ClockCard({ compact, inline }: { compact?: boolean; inline?: boo
     if (needsLocation) setInfo('A obter a localização…');
     const location = needsLocation ? await currentFix() : null;
     if (needsLocation) setInfo('');
-    const extra = { ...(location ? { location } : {}), ...(code ? { kiosk: code } : {}) };
+    const device = me?.location && me.location.mode !== 'off' ? deviceId() : undefined;
+    const extra = { ...(location ? { location } : {}), ...(code ? { kiosk: code } : {}), ...(device ? { device } : {}) };
     try {
       if (!navigator.onLine) throw new TypeError('offline');
       const r = await send('/v1/attendance/clock', 'POST', { action, ...extra });

@@ -386,6 +386,13 @@
       "when": 1793910000000,
       "tag": "0054_payroll_line_department_snapshot",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1793920000000,
+      "tag": "0055_punch_location_default_record",
+      "breakpoints": true
     }
   ]
 }

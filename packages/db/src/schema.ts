@@ -51,7 +51,7 @@ export const companies = pgTable('companies', {
   /** Portal: declarações pedidas pelo colaborador emitidas automaticamente (sem passar pelo RH). */
   autoIssueDeclarations: boolean('auto_issue_declarations').notNull().default(false),
   /** Ponto com localização: off | record | alert | block (ver core/geofence.ts). */
-  punchLocationMode: text('punch_location_mode').notNull().default('off'),
+  punchLocationMode: text('punch_location_mode').notNull().default('record'),
   /** Planeamento de turnos: intervalo mínimo entre o fim de um turno e o início do seguinte (minutos). */
   shiftMinRestMinutes: integer('shift_min_rest_minutes').notNull().default(600),
   /** Pagar alimentação e transporte nos dias de férias (por acordo; a regra legal é não pagar — LGT, art. 213.º, n.º 2). */
@@ -555,6 +555,12 @@ export interface PunchLocationRecord {
   workplaceId: string | null; workplaceName: string | null; distance: number | null;
   mode: 'record' | 'alert' | 'block';
   capturedAt: string;
+  /** Identificador aleatório do telemóvel/navegador (não pessoal): detecta um aparelho a marcar por vários colegas. */
+  device?: string;
+  /** País da rede (Cloudflare), para detectar marcações a partir do estrangeiro/VPN. */
+  country?: string;
+  /** Sinais de fraude: shared_device (aparelho usado por outro colaborador no mesmo dia), foreign_network. */
+  signals?: ('shared_device' | 'foreign_network')[];
 }
 
 export const attendanceEntries = pgTable('attendance_entries', {

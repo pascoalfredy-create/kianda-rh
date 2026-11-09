@@ -163,7 +163,7 @@ export interface DayRow {
   flags: string[];
 }
 /** Localização gravada numa marcação (ver core/geofence.ts). */
-export interface PunchLocation { status: 'ok' | 'outside' | 'unavailable' | 'no_workplace'; method: 'gps' | 'kiosk' | 'none'; lat?: number; lng?: number; accuracy?: number; workplaceId: string | null; workplaceName: string | null; distance: number | null; mode: 'record' | 'alert' | 'block'; capturedAt: string }
+export interface PunchLocation { status: 'ok' | 'outside' | 'unavailable' | 'no_workplace'; method: 'gps' | 'kiosk' | 'none'; lat?: number; lng?: number; accuracy?: number; workplaceId: string | null; workplaceName: string | null; distance: number | null; mode: 'record' | 'alert' | 'block'; capturedAt: string; device?: string; country?: string; signals?: ('shared_device' | 'foreign_network')[] }
 /** Excepção de localização para a lista da chefia. */
 export interface LocationIssueRow { id: string; employee: { id: string; name: string; number: string }; workDate: string; clockIn: string; clockOut: string | null; clockInLocation: PunchLocation | null; clockOutLocation: PunchLocation | null }
 export interface EntryRow { id: string; workDate: string; in: string; out: string | null; source: 'web' | 'manual' | 'offline'; note: string | null; offlineOut?: boolean; clockInLocation?: PunchLocation | null; clockOutLocation?: PunchLocation | null; locationIssue?: boolean }
