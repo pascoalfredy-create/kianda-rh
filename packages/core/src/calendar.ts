@@ -74,11 +74,18 @@ export function contractAlerts(
   if (c.endDate) {
     const left = daysBetween(today, c.endDate);
     if (left < 0) out.push({ kind: 'fixed-term-expired', daysLeft: left, message: `Contrato expirou há ${-left} dia(s)` });
-    else if (left <= windowDays) out.push({ kind: 'fixed-term-ending', daysLeft: left, message: `Contrato termina em ${left} dia(s)` });
+    else if (left <= windowDays) {
+      // LGT, art. 17.º, n.os 3 e 4: aviso prévio de 30 dias para não renovar; sem aviso, compensação de 30 dias.
+      const [y, m, d] = c.endDate.split('-').map(Number);
+      const limit = new Date(Date.UTC(y!, m! - 1, d! - 30)).toISOString().slice(0, 10).split('-').reverse().join('/');
+      out.push({ kind: 'fixed-term-ending', daysLeft: left, message: left >= 30
+        ? `Contrato termina em ${left} dia(s): se não for renovar, avise até ${limit} (30 dias, art. 17.º da LGT)`
+        : `Contrato termina em ${left} dia(s): já passou o prazo do aviso de não renovação (30 dias); sem aviso há compensação de 30 dias (art. 17.º, n.º 4)` });
+    }
   }
-  if (c.type === 'indefinite') {
+  if (c.type === 'indefinite' || c.type === 'fixed-term') {
     const elapsed = daysBetween(c.startDate, today);
-    const p = pack.labour.probationDaysIndefinite;
+    const p = c.type === 'indefinite' ? pack.labour.probationDaysIndefinite : pack.labour.probationDaysFixedTerm;
     if (elapsed >= 0 && elapsed < p) out.push({ kind: 'probation', daysLeft: p - elapsed, message: `Período experimental: faltam ${p - elapsed} dia(s)` });
   }
   return out;
