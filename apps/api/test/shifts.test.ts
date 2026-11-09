@@ -131,7 +131,7 @@ describe.skipIf(!process.env.DATABASE_URL)('planeamento de turnos', () => {
     await getDb().update(subscriptions).set({ status: 'active', paidUntil: '2099-12-31' }).where(eq(subscriptions.companyId, companyId));
     const x = await req(finance, 'GET', '/v1/shifts/export?from=2026-10-12&to=2026-10-18');
     expect(x.statusCode).toBe(200); expect(x.headers['content-type']).toContain('spreadsheetml');
-    expect((await req(chief, 'POST', '/v1/attendance/approve', { employeeId: workerId, period: '2026-10' })).statusCode).toBe(201);
+    expect((await req(chief, 'POST', '/v1/attendance/approve', { employeeId: workerId, period: '2026-10', noRecord: 'present', note: 'Turnos confirmados pela chefia' })).statusCode).toBe(201);
     expect((await put(chief, [{ employeeId: workerId, date: '2026-10-20', value: types.M! }])).json().error).toBe('bloqueado');
     const locked = await roster(chief, '2026-10-12', '2026-10-18');
     expect(locked.employees.find((e: { id: string }) => e.id === workerId).lockedDays).toHaveLength(7);

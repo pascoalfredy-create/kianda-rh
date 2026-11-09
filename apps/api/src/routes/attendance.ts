@@ -347,6 +347,8 @@ export function attendanceRoutes() {
       employeeId: z.string(), period: periodSchema,
       approvedOvertimeMinutes: z.number().int().min(0).optional(),
       note: z.string().trim().max(500).optional(),
+      /** Dias úteis sem registo nem ausência: falta injustificada (desconta na folha) ou presença confirmada (com motivo). */
+      noRecord: z.enum(['absent', 'present']).optional(),
     }).parse(await body(c));
     const db = getDb();
     const emp = await loadEmployee(db, actor, b.employeeId);
@@ -355,6 +357,10 @@ export function attendanceRoutes() {
     const { summary, approval } = await monthSheet(db, actor.companyId, emp, b.period);
     if (approval) throw new DomainError('ja_aprovado', 'Este mês já está aprovado');
     if (summary.openDays) throw new DomainError('saidas_em_falta', `Há ${summary.openDays} dia(s) com saída por registar. Corrija antes de aprovar.`);
+    // Como no Primavera: o mês só fecha com todos os dias classificados.
+    const missing = summary.days.filter((d) => d.flags.includes('no_record')).map((d) => d.date);
+    if (missing.length && !b.noRecord) throw new DomainError('dias_sem_registo', `Há ${missing.length} dia(s) útil(eis) sem registo de ponto nem ausência. Classifique-os como falta injustificada ou como presença confirmada antes de aprovar.`, 400);
+    if (missing.length && b.noRecord === 'present' && !b.note) throw new DomainError('motivo_obrigatorio', 'Indique o motivo para considerar presentes os dias sem registo (ex.: esqueceu-se de marcar, trabalho externo)', 400);
     const approved = b.approvedOvertimeMinutes ?? summary.overtimeMinutes;
     if (approved > summary.overtimeMinutes) throw new DomainError('extra_acima', `Não pode aprovar mais horas extra do que as registadas (${summary.overtimeMinutes} min)`, 400);
     if (approved < summary.overtimeMinutes && !b.note) throw new DomainError('motivo_obrigatorio', 'Indique o motivo para aprovar menos horas extra do que as registadas', 400);
@@ -377,7 +383,22 @@ export function attendanceRoutes() {
       restDayPaidMinutes: restHoliday < summary.restOrHolidayOvertimeMinutes ? Math.min(summary.restDayPaidMinutes, restHoliday) : summary.restDayPaidMinutes,
       holidayWorkDays: restHoliday < summary.restOrHolidayOvertimeMinutes ? 0 : summary.holidayWorkDays,
     }).returning();
-    await audit(db, actor, 'approve', 'attendance_month', row!.id, null, { ...row, employeeId: emp.id });
+    await audit(db, actor, 'approve', 'attendance_month', row!.id, null, { ...row, employeeId: emp.id, noRecord: missing.length ? { days: missing, as: b.noRecord } : undefined });
+    // Faltas injustificadas: uma ausência aprovada por cada sequência de dias seguidos, que a folha desconta.
+    if (missing.length && b.noRecord === 'absent') {
+      const runs: string[][] = [];
+      for (const d of missing) {
+        const last = runs.at(-1);
+        const prev = last?.at(-1);
+        const contiguous = prev && summary.days.filter((x) => x.date > prev && x.date < d).every((x) => x.kind !== 'workday');
+        if (last && contiguous) last.push(d); else runs.push([d]);
+      }
+      const created = await db.insert(absences).values(runs.map((r) => ({
+        companyId: actor.companyId, employeeId: emp.id, type: 'unjustified' as const, startDate: r[0]!, endDate: r.at(-1)!, workingDays: r.length,
+        reason: `Sem registo de ponto (fecho da assiduidade de ${b.period})`, status: 'approved' as const, requestedBy: actor.actorId, decidedBy: actor.actorId, decidedAt: new Date(),
+      }))).returning();
+      for (const a of created) await audit(db, actor, 'create', 'absence', a.id, null, a);
+    }
     return c.json(row, 201);
   });
 

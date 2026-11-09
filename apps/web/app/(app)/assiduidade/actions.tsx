@@ -58,23 +58,30 @@ export function EntryChip({ e, editable }: { e: { id: string; in: string; out: s
 }
 
 /** Aprovar o mês (com possibilidade de aprovar menos horas extra, com motivo). */
-export function ApproveMonth({ employeeId, period, overtimeMinutes, openDays }: { employeeId: string; period: string; overtimeMinutes: number; openDays: number }) {
+export function ApproveMonth({ employeeId, period, overtimeMinutes, openDays, noRecordDays = 0 }: { employeeId: string; period: string; overtimeMinutes: number; openDays: number; noRecordDays?: number }) {
   const { busy, error, run } = useMutation();
   const [hours, setHours] = useState(String(overtimeMinutes / 60));
   const [note, setNote] = useState('');
+  const [noRecord, setNoRecord] = useState<'' | 'absent' | 'present'>('');
   const approved = Math.round(Number(hours.replace(',', '.')) * 60);
   const cut = approved < overtimeMinutes;
+  const needsNote = cut || noRecord === 'present';
   return (
     <div className="form card cols4" style={{ marginTop: 16 }}>
       <h3>Aprovar assiduidade de {period}</h3>
       <label>Horas extra registadas<input disabled value={formatMinutes(overtimeMinutes)} /></label>
       <label>Horas extra a pagar<input inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} /></label>
-      <label className="span2">Observações{cut ? ' (obrigatório: aprova menos horas)' : ''}<input value={note} onChange={(e) => setNote(e.target.value)} placeholder={cut ? 'Ex.: horas de sábado sem autorização prévia' : 'Opcional'} /></label>
-      {openDays > 0 && <div className="preview bad">Há {openDays} dia(s) com saída por registar. Corrija-os na tabela antes de aprovar.</div>}
+      <label className="span2">Observações{needsNote ? ' (obrigatório)' : ''}<input value={note} onChange={(e) => setNote(e.target.value)} placeholder={cut ? 'Ex.: horas de sábado sem autorização prévia' : 'Opcional'} /></label>
+      {noRecordDays > 0 && <fieldset className="wide" style={{ border: 0, padding: 0, margin: 0 }}>
+        <legend style={{ fontWeight: 600, marginBottom: 6 }}>{noRecordDays} dia(s) útil(eis) sem registo de ponto nem ausência — como classificar?</legend>
+        <label style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><input type="radio" name="noRecord" checked={noRecord === 'absent'} onChange={() => setNoRecord('absent')} /> Falta injustificada (desconta salário e subsídios na folha)</label>
+        <label style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><input type="radio" name="noRecord" checked={noRecord === 'present'} onChange={() => setNoRecord('present')} /> Esteve a trabalhar (esqueceu-se de marcar, serviço externo) — indique o motivo</label>
+      </fieldset>}
+            {openDays > 0 && <div className="preview bad">Há {openDays} dia(s) com saída por registar. Corrija-os na tabela antes de aprovar.</div>}
       <div className="form-actions">
         {error && <span className="err">{error}</span>}
-        <button className="btn" disabled={busy || openDays > 0 || !Number.isFinite(approved) || (cut && note.trim().length < 3)}
-          onClick={() => run('/v1/attendance/approve', 'POST', { employeeId, period, approvedOvertimeMinutes: approved, note: note || undefined })}>
+        <button className="btn" disabled={busy || openDays > 0 || !Number.isFinite(approved) || (needsNote && note.trim().length < 3) || (noRecordDays > 0 && !noRecord)}
+          onClick={() => run('/v1/attendance/approve', 'POST', { employeeId, period, approvedOvertimeMinutes: approved, note: note || undefined, noRecord: noRecordDays > 0 ? noRecord : undefined })}>
           Aprovar mês
         </button>
       </div>

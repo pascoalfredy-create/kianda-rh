@@ -347,9 +347,12 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect((await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09' })).json().error).toBe('saidas_em_falta');
       const fix = await app.inject({ method: 'PATCH', url: `/v1/attendance/entries/${openId}`, headers: as(manager), payload: { end: '17:00', note: 'Saída confirmada pela chefia' } });
       expect(fix.json().out).toBe('17:00');
-      expect((await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09', approvedOvertimeMinutes: 60 })).json().error).toBe('motivo_obrigatorio');
-      expect((await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09', approvedOvertimeMinutes: 9999, note: 'x' })).json().error).toBe('extra_acima');
-      const ok = await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09', approvedOvertimeMinutes: 60, note: 'Sábado não autorizado previamente' });
+      // Dias úteis sem registo têm de ser classificados antes de fechar o mês (falta ou presença com motivo).
+      expect((await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09', note: 'x' })).json().error).toBe('dias_sem_registo');
+      expect((await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09', noRecord: 'present' })).json().error).toBe('motivo_obrigatorio');
+      expect((await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09', approvedOvertimeMinutes: 60, noRecord: 'present' })).json().error).toBe('motivo_obrigatorio');
+      expect((await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09', approvedOvertimeMinutes: 9999, note: 'x', noRecord: 'present' })).json().error).toBe('extra_acima');
+      const ok = await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09', approvedOvertimeMinutes: 60, note: 'Sábado não autorizado previamente', noRecord: 'present' });
       expect(ok.statusCode).toBe(201);
       expect(ok.json()).toMatchObject({ overtimeMinutes: 300, approvedOvertimeMinutes: 60 });
       const again = await app.inject({ method: 'PATCH', url: `/v1/attendance/entries/${openId}`, headers: as(manager), payload: { end: '18:00', note: 'tentativa' } });
