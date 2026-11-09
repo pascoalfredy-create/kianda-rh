@@ -8,7 +8,7 @@ import { AGT_MUNICIPALITIES, formatAmount, parseAmount } from '@kianda/core';
 const kzField = (v: FormDataEntryValue | null) => parseAmount(String(v ?? ''));
 const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
-export function SettingsForm({ s }: { s: { inssNumber: string | null; address: string | null; workdayMinutes: number; christmasSubsidyMonth: number; holidaySubsidyMonth: number | null; perDiemNationalMinor: number | null; perDiemInternationalMinor: number | null; autoIssueDeclarations: boolean; allowancesOnVacation: boolean; province: string | null; municipality: string | null; bankFileProfile: string } }) {
+export function SettingsForm({ s }: { s: { inssNumber: string | null; address: string | null; workdayMinutes: number; christmasSubsidyMonth: number; holidaySubsidyMonth: number | null; perDiemNationalMinor: number | null; perDiemInternationalMinor: number | null; autoIssueDeclarations: boolean; allowancesOnVacation: boolean; allowancesOnAbsence?: boolean; province: string | null; municipality: string | null; bankFileProfile: string } }) {
   const { busy, error, run } = useMutation();
   const [ok, setOk] = useState('');
   return (
@@ -29,6 +29,7 @@ export function SettingsForm({ s }: { s: { inssNumber: string | null; address: s
           perDiemInternationalMinor: kzField(f.get('perDiemInternational')),
           autoIssueDeclarations: f.get('autoIssueDeclarations') === 'on',
           allowancesOnVacation: f.get('allowancesOnVacation') === 'on',
+          allowancesOnAbsence: f.get('allowancesOnAbsence') === 'on',
           province: String(f.get('province') || '') || null,
           municipality: String(f.get('municipality') || '').trim() || null,
           bankFileProfile: String(f.get('bankFileProfile') || 'nib'),
@@ -65,6 +66,7 @@ export function SettingsForm({ s }: { s: { inssNumber: string | null; address: s
       </label>
       <p className="muted wide">Ambos os subsídios correspondem a 50% do salário base; sem um ano completo de serviço são proporcionais aos meses completos trabalhados. Nenhum subsídio é pago duas vezes no mesmo ano. A gratificação de férias deve ser paga até 15 dias antes do início das férias.</p>
       <label className="wide" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><input type="checkbox" name="allowancesOnVacation" defaultChecked={s.allowancesOnVacation} /> Pagar subsídios de alimentação e de transporte também nos dias de férias (por acordo — a regra da LGT, art. 213.º, n.º 2, é não pagar)</label>
+      <label className="wide" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><input type="checkbox" name="allowancesOnAbsence" defaultChecked={!!s.allowancesOnAbsence} /> Pagar subsídios de alimentação e de transporte também nos dias de falta injustificada (por omissão, só se pagam os dias trabalhados)</label>
       <h3>Ajudas de custo</h3>
       <label className="span2">Diária — território nacional (Kz)<input name="perDiemNational" inputMode="decimal" placeholder="Sem limite" defaultValue={s.perDiemNationalMinor ? formatAmount(s.perDiemNationalMinor) : ''} /></label>
       <label className="span2">Diária — estrangeiro (Kz)<input name="perDiemInternational" inputMode="decimal" placeholder="Sem limite" defaultValue={s.perDiemInternationalMinor ? formatAmount(s.perDiemInternationalMinor) : ''} /></label>

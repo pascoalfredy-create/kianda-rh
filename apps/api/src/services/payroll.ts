@@ -249,12 +249,15 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       }
       // Férias no mês: alimentação e transporte não são devidos nesses dias, salvo acordo (art. 213.º, n.º 2).
       let vacationAllowanceCut: { fraction: number; days: number } | undefined;
+      let absenceAllowanceCut: { fraction: number; days: number } | undefined;
+      const dayCount = (from: string, to: string) => (planned ? daysIn(from, to, holidaySet) : businessDays(from, to, [labourRules('AO', year)]));
+      const monthDays = dayCount(periodStart, periodEnd);
       if (!company?.allowancesOnVacation) {
-        const dayCount = (from: string, to: string) => (planned ? daysIn(from, to, holidaySet) : businessDays(from, to, [labourRules('AO', year)]));
         const vacDays = (leavesByEmployee.get(e.id) ?? []).filter((x) => x.type === 'vacation').reduce((s, a) => s + dayCount(a.startDate < periodStart ? periodStart : a.startDate, a.endDate > periodEnd ? periodEnd : a.endDate), 0);
-        const monthDays = dayCount(periodStart, periodEnd);
         if (vacDays > 0 && monthDays > 0) vacationAllowanceCut = { fraction: Math.min(1, vacDays / monthDays), days: vacDays };
       }
+      // Faltas injustificadas: por regra da empresa (como no Primavera), alimentação e transporte só nos dias trabalhados.
+      if (!company?.allowancesOnAbsence && absenceDays > 0 && monthDays > 0) absenceAllowanceCut = { fraction: Math.min(1, absenceDays / monthDays), days: absenceDays };
 
       // Variáveis do mês
       const mine = variablesByEmployee.get(e.id) ?? [];
@@ -329,7 +332,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
           period, pack, baseMinor: pay.baseMinor, baseLabel, mealMinor: pay.mealMinor, transportMinor: pay.transportMinor,
           overtimeHours, absenceDays, absenceHours, otherEarnings, advancesMinor, otherDeductionsMinor, otherDeductions, noticeDeductionMinor, holidaySubsidy, christmasSubsidy, workedDays,
           restDayHours, unpaidLeaveHours, unpaidLeaveLabel: unpaidLeaveHours ? `${unpaidLabel.charAt(0).toUpperCase()}${unpaidLabel.slice(1)} (${unpaidLeaveHours} h)` : undefined,
-          vacationAllowanceCut,
+          vacationAllowanceCut, absenceAllowanceCut,
         });
         // Casos sem regra fechada na LGT: o motor não calcula — avisa e o valor é lançado à mão nas variáveis.
         if (maternityDays) warnings.push({ employeeId: e.id, message: `${e.name}: ${maternityDays} dia(s) de licença de maternidade em ${period} — CÁLCULO MANUAL: o salário está suspenso (arts. 267.º, c) e 268.º) e o motor pagou o mês por inteiro; lance "Desconto na remuneração" com o valor a retirar (base, alimentação, transporte)` });

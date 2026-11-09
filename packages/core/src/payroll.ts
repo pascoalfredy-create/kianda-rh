@@ -39,6 +39,8 @@ export interface PayrollInput {
   suspendedLabel?: string;
   /** Alimentação e transporte não são devidos nos dias de férias, salvo acordo (art. 213.º, n.º 2): fracção a retirar (0–1). */
   vacationAllowanceCut?: { fraction: number; days: number };
+  /** Faltas injustificadas no mês: alimentação e transporte não pagos nesses dias (regra da empresa). */
+  absenceAllowanceCut?: { fraction: number; days: number };
   advancesMinor?: Minor;
   otherDeductionsMinor?: Minor;
   /** Descontos discriminados (cada um com a sua rubrica no recibo). Se indicados, substituem otherDeductionsMinor. */
@@ -145,7 +147,9 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   const partial = input.workedDays !== undefined && input.workedDays < pack.labour.dailyRateDivisor;
   const part = (v: Minor) => (partial ? prorate(v, Math.max(0, input.workedDays!), pack.labour.dailyRateDivisor) : v);
   const base = part(fullBase);
-  const cut = input.vacationAllowanceCut && input.vacationAllowanceCut.fraction > 0 ? Math.min(1, input.vacationAllowanceCut.fraction) : 0;
+  const vacCut = input.vacationAllowanceCut && input.vacationAllowanceCut.fraction > 0 ? input.vacationAllowanceCut.fraction : 0;
+  const absCut = input.absenceAllowanceCut && input.absenceAllowanceCut.fraction > 0 ? input.absenceAllowanceCut.fraction : 0;
+  const cut = Math.min(1, vacCut + absCut);
   const susp = Math.min(pack.labour.dailyRateDivisor, Math.max(0, input.suspendedDays ?? 0));
   const lessVacation = (v: Minor) => {
     const afterSusp = susp ? v - prorate(v, susp, pack.labour.dailyRateDivisor) : v;
@@ -153,7 +157,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   };
   const meal = lessVacation(part(assertMinor(input.mealMinor ?? 0, 'subsídio de alimentação')));
   const transport = lessVacation(part(assertMinor(input.transportMinor ?? 0, 'subsídio de transporte')));
-  const vacationNote = `${partial ? ` (${input.workedDays} dia(s))` : ''}${cut ? ` (sem ${input.vacationAllowanceCut!.days} dia(s) de férias)` : ''}`;
+  const vacationNote = `${partial ? ` (${input.workedDays} dia(s))` : ''}${vacCut ? ` (sem ${input.vacationAllowanceCut!.days} dia(s) de férias)` : ''}${absCut ? ` (sem ${input.absenceAllowanceCut!.days} dia(s) de falta)` : ''}`;
   const lines: PayrollLine[] = [];
   let inssBase = 0;
   let irtBase = 0;
