@@ -196,7 +196,9 @@ jobs:
           RESEND_API_KEY: ${{ secrets.KIANDA_RESEND_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.KIANDA_OPENAI_API_KEY }}
           KIANDA_AI_MODEL: ${{ vars.KIANDA_AI_MODEL }}
-          KIANDA_COPILOT_AI_ENABLED: ${{ vars.KIANDA_COPILOT_AI_ENABLED || 'false' }}
+          # IA desligada por decisão do dono (09/11/2026): o custo por cliente não compensa. Para voltar a ligar,
+          # repor a variável KIANDA_COPILOT_AI_ENABLED e carregar crédito na OpenAI.
+          KIANDA_COPILOT_AI_ENABLED: 'false'
           KIANDA_COPILOT_DAILY_LIMIT: ${{ vars.KIANDA_COPILOT_DAILY_LIMIT || '100' }}
           MAIL_FROM: ${{ vars.KIANDA_MAIL_FROM }}
           VENDUS_API_KEY: ${{ secrets.KIANDA_VENDUS_API_KEY }}
