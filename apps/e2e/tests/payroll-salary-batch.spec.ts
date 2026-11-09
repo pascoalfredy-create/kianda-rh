@@ -18,7 +18,7 @@ test('lotes de salários na Folha incluem novos colaboradores e preservam os lot
   const { owner, people, add, sheet } = await fixture(); await signIn(context, owner.token);
   const errors = watchErrors(page);
   await page.goto('/processamento?mes=2026-09');
-  await page.getByRole('button', { name: 'Processar em lote', exact: true }).click();
+  await page.getByRole('button', { name: 'Processar salários', exact: true }).click(); await page.getByRole('radio', { name: 'Escolher colaboradores', exact: true }).check();
   const selection = page.getByRole('region', { name: 'Colaboradores do processamento em lote', exact: true });
   await selection.getByRole('button', { name: 'Limpar selecção', exact: true }).click();
   for (const p of people.slice(0, 2)) await selection.getByRole('checkbox', { name: `Processar ${p.name}`, exact: true }).check();
@@ -27,7 +27,7 @@ test('lotes de salários na Folha incluem novos colaboradores e preservam os lot
   const before = (await sheet()).run.lines; expect(before).toHaveLength(2);
   expect((await apiAs(owner.token, 'GET', '/v1/payroll-variables?period=2026-09')).body).toEqual([]);
   const newcomer = await add('Diana Nova Admissão'); await page.reload();
-  await page.getByRole('button', { name: 'Processar em lote', exact: true }).click();
+  await page.getByRole('button', { name: 'Rever ou processar mais', exact: true }).click(); await page.getByRole('radio', { name: 'Escolher colaboradores', exact: true }).check();
   await expect(selection.getByRole('checkbox', { name: `Processar ${newcomer.name}`, exact: true })).toBeChecked();
   await expect(selection.getByRole('checkbox', { name: `Processar ${people[0]!.name}`, exact: true })).not.toBeChecked();
   await page.getByRole('button', { name: /^Processar seleccionados/ }).click();
@@ -41,7 +41,7 @@ test('no telefone a selecção cabe no ecrã e cancelar não calcula salários',
   const { owner, sheet } = await fixture(); await signIn(context, owner.token);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/processamento?mes=2026-09');
-  await page.getByRole('button', { name: 'Processar em lote', exact: true }).click();
+  await page.getByRole('button', { name: 'Processar salários', exact: true }).click(); await page.getByRole('radio', { name: 'Escolher colaboradores', exact: true }).check();
   await expect(page.getByRole('checkbox', { name: 'Processar Amélia Folha', exact: true })).toBeChecked();
   expect(await page.evaluate<number>('document.documentElement.scrollWidth - window.innerWidth')).toBeLessThanOrEqual(1);
   await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
@@ -52,7 +52,7 @@ test('lote de alterações vazio não bloqueia a remuneração habitual nem os m
   const { owner, sheet } = await fixture(); await signIn(context, owner.token);
   const errors = watchErrors(page);
   await page.goto('/processamento?mes=2026-09');
-  await page.getByRole('button', { name: 'Preparar processamento', exact: true }).click();
+  await page.getByRole('button', { name: 'Processar salários', exact: true }).click();
   const preparation = page.getByRole('region', { name: 'Preparação do processamento' });
   await expect(preparation.getByRole('region', { name: 'Remunerações habituais do mês' })).toBeVisible();
   await expect(preparation.getByRole('form', { name: 'Variável do processamento' })).toHaveCount(0);
@@ -65,7 +65,7 @@ test('lote de alterações vazio não bloqueia a remuneração habitual nem os m
   const september = (await sheet()).run.lines;
   expect((await apiAs(owner.token, 'GET', '/v1/payroll-variables?period=2026-09')).body).toEqual([]);
   await page.goto('/processamento?mes=2026-10');
-  await page.getByRole('button', { name: 'Processar em lote', exact: true }).click();
+  await page.getByRole('button', { name: 'Processar salários', exact: true }).click(); await page.getByRole('radio', { name: 'Escolher colaboradores', exact: true }).check();
   await page.getByRole('button', { name: /^Processar seleccionados/ }).click();
   await expect(page.getByRole('status')).toContainText('Lote concluído: 3');
   const october = (await apiAs(owner.token, 'GET', '/v1/payroll-runs/opening?period=2026-10')).body;
@@ -88,7 +88,7 @@ test('edita alterações guardadas e descarta ou cancela alterações incompleta
   await page.getByRole('button', { name: 'Recalcular', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Folha calculada: 3');
   expect((await sheet()).run.lines.find((l: any) => l.employeeId === people[0]!.id).grossMinor).toBe(10200000);
-  await page.getByRole('button', { name: 'Rever preparação', exact: true }).click();
+  await page.getByRole('button', { name: 'Rever ou processar mais', exact: true }).click();
   const preparation = page.getByRole('region', { name: 'Preparação do processamento' });
   await expect(preparation.getByRole('button', { name: 'Lançar em lote' })).toHaveCount(0);
   await expect(preparation.getByRole('button', { name: 'Calcular folha', exact: true })).toBeEnabled();
@@ -106,6 +106,6 @@ test('apagar o rascunho do processamento permite recomeçar do zero', async ({ p
   await page.getByRole('button', { name: 'Apagar rascunho', exact: true }).click();
   await page.getByRole('button', { name: 'Sim, apagar', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Rascunho apagado');
-  await expect(page.getByRole('button', { name: 'Preparar processamento', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Processar salários', exact: true })).toBeVisible();
   expect((await sheet()).run).toBeNull(); expect(errors).toEqual([]);
 });

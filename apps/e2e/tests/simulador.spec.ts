@@ -46,7 +46,7 @@ test('Salário indexado: o processamento pede o câmbio do dia e o recibo mostra
   await expect(page.locator('.facts')).toContainText(/USD 1.500,00/);
   await page.goto('/processamento?mes=2026-10');
   await expect(page.getByText('1 colaborador(es) com salário indexado ao dólar')).toBeVisible();
-  await page.getByRole('button', { name: 'Preparar processamento' }).click();
+  await page.getByRole('button', { name: 'Processar salários', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Calcular folha', exact: true })).toBeDisabled();
   await page.getByLabel('Câmbio USD→Kz').fill('912,50');
   await page.getByLabel('Data do câmbio').fill('2026-10-30');

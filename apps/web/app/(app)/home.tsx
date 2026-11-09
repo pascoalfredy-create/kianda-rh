@@ -62,8 +62,8 @@ export default async function Home() {
   ].filter(s => s.trim() && s !== '.').join(' ');
   const corrections = [
     ...alerts.slice(0, 7).map((a, i) => <Link href={`/colaboradores/${a.id}`} key={`${a.id}-${i}`} className="rh-alert" style={{ display: 'block' }}><b>{a.name}</b>: {a.message}</Link>),
-    late.length > 0 && <Link key="late" className="rh-alert" style={{ display: 'block' }} href="/obrigacoes">{plural(late.length, 'pagamento ao Estado está', 'pagamentos ao Estado estão')} em atraso</Link>,
-    soon.length > 0 && <Link key="soon" className="rh-alert" style={{ display: 'block' }} href="/obrigacoes">{plural(soon.length, 'pagamento ao Estado vence', 'pagamentos ao Estado vencem')} nos próximos dias</Link>,
+    late.length > 0 && <Link key="late" className="rh-alert" style={{ display: 'block' }} href="/obrigacoes">{capitalise(plural(late.length, 'pagamento ao Estado está', 'pagamentos ao Estado estão'))} em atraso</Link>,
+    soon.length > 0 && <Link key="soon" className="rh-alert" style={{ display: 'block' }} href="/obrigacoes">{capitalise(plural(soon.length, 'pagamento ao Estado vence', 'pagamentos ao Estado vencem'))} nos próximos dias</Link>,
     noProof.length > 0 && <Link key="proof" className="rh-alert" style={{ display: 'block' }} href="/conciliacao">Falta o comprovativo bancário de {plural(noProof.length, 'pagamento', 'pagamentos')}</Link>,
   ].filter(Boolean);
   const teamNote = overview ? (overview.fixedTerm || overview.interns ? joinPt([overview.fixedTerm ? `${overview.fixedTerm} a termo` : '', overview.interns ? `${overview.interns} em estágio` : '']) : 'todos sem termo') : '';

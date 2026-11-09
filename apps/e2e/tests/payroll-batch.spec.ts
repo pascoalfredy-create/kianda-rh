@@ -28,7 +28,7 @@ test('lote de prémios calcula a equipa e distingue INSS do trabalhador e da emp
   await expect(page.getByRole('status')).toContainText('Lote guardado: 2');
   expect(await vars(owner)).toHaveLength(2);
   await page.goto('/processamento?mes=2026-10');
-  await page.getByRole('button', { name: 'Preparar processamento', exact: true }).click();
+  await page.getByRole('button', { name: 'Processar salários', exact: true }).click();
   await page.getByRole('button', { name: 'Calcular folha', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Recalcular', exact: true })).toBeVisible();
   await expect(page.locator('.kpi').filter({ hasText: 'INSS do trabalhador' })).toContainText(/9[\s.]900,00/);

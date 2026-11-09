@@ -691,3 +691,10 @@ details.optional-changes[open]>summary{margin-bottom:10px}
   .content table:not(.sheet) th, .content table:not(.sheet) td { padding: 3px 4px; white-space: normal; }
   .content [style*="overflow"] { overflow: visible !important; }
 }
+
+/* Escolha em botões segmentados (ex.: âmbito do processamento). */
+.segmented { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 3px; margin: 6px 0 4px; background: #fafbfc; flex-wrap: wrap; }
+.segmented label { display: flex; flex-direction: row; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13.5px; color: var(--ink2); }
+.segmented label:has(input:checked) { background: #fff; color: var(--brand); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.segmented input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.segmented label:has(input:focus-visible) { outline: 2px solid var(--brand); outline-offset: 1px; }
