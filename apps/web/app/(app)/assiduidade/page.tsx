@@ -55,7 +55,7 @@ function Overview({ period, rows }: { period: string; rows: OverviewRow[] }) {
           <tbody>
             {rows.map((r) => (
               <tr key={r.employee.id}>
-                <td><Link href={`/assiduidade/${r.employee.id}?mes=${period}`}><b>{r.employee.name}</b></Link>{r.locationIssues ? <span className="flag" title="Marcações fora do local ou sem localização (ver lista abaixo)">fora do local: {r.locationIssues}</span> : null}<div className="muted">{r.employee.department ?? '—'}</div></td>
+                <td><Link href={`/assiduidade/${r.employee.id}?mes=${period}`}><b>{r.employee.name}</b></Link>{r.locationIssues ? <span className="flag" title="Marcações fora do local ou sem localização (ver lista abaixo)">fora do local: {r.locationIssues}</span> : null}{r.employee.department && <div className="muted">{r.employee.department}</div>}</td>
                 <td className="num">{formatMinutes(r.workedMinutes)}</td>
                 <td className="num">{formatMinutes(r.expectedMinutes)}</td>
                 <td className="num">{r.overtimeMinutes ? <b style={{ color: 'var(--brand)' }}>{formatMinutes(r.overtimeMinutes)}</b> : '—'}</td>

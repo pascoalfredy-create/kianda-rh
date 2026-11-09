@@ -89,8 +89,8 @@ function AbsenceTable({ rows, highlight }: { rows: AbsenceRow[]; highlight?: boo
       <tbody>
         {rows.map((a) => (
           <tr key={a.id} style={highlight ? { background: '#fffdf6' } : undefined}>
-            <td><Link href={`/colaboradores/${a.employee.id}?s=ausencias`}><b>{a.employee.name}</b></Link><div className="muted">{a.employee.department ?? '—'}</div></td>
-            <td><span className="dot" style={{ background: policy(a.type)?.color }} />{policy(a.type)?.label ?? a.type}{a.reason && <div className="muted">{a.reason}</div>}<AbsenceFiles id={a.id} count={a.fileCount ?? 0} canAttach={!!a.canAttach} /></td>
+            <td><Link href={`/colaboradores/${a.employee.id}?s=ausencias`}><b>{a.employee.name}</b></Link>{a.employee.department && <div className="muted">{a.employee.department}</div>}</td>
+            <td><span className="dot" style={{ background: policy(a.type)?.color }} />{policy(a.type)?.label ?? a.type}{a.reason && <div className="muted">{a.reason}</div>}{(a.type !== 'vacation' || (a.fileCount ?? 0) > 0) && <AbsenceFiles id={a.id} count={a.fileCount ?? 0} canAttach={!!a.canAttach} />}</td>
             <td>{pt(a.startDate)}{a.endDate !== a.startDate ? ` – ${pt(a.endDate)}` : ''}</td>
             <td className="num">{a.workingDays}</td>
             <td>
@@ -209,7 +209,7 @@ function Balances({ rows, year }: { rows: BalanceRow[]; year: number }) {
               const cap = Math.max(1, r.entitlement + r.carriedOver);
               return (
                 <tr key={r.employee.id}>
-                  <td><Link href={`/colaboradores/${r.employee.id}?s=ausencias`}><b>{r.employee.name}</b></Link><div className="muted">{r.employee.department ?? '—'}</div></td>
+                  <td><Link href={`/colaboradores/${r.employee.id}?s=ausencias`}><b>{r.employee.name}</b></Link>{r.employee.department && <div className="muted">{r.employee.department}</div>}</td>
                   <td>{!r.eligibleFrom ? '—' : r.eligibleFrom <= `${year}-01-01` ? <span className="muted">Já elegível</span> : pt(r.eligibleFrom)}</td>
                   <td className="num">{r.entitlement}</td>
                   <td className="num">{r.carriedOver || '—'}</td>
