@@ -44,7 +44,13 @@ describe.skipIf(!process.env.DATABASE_URL)('ponto com localização', () => {
   });
   beforeEach(async () => { await getDb().execute(sql`delete from attendance_entries where employee_id = ${employeeId}`); });
 
-  it('por omissão está desligado: a marcação não guarda posição mesmo que o telemóvel a envie', async () => {
+  it('por omissão regista a posição (antifraude); desligado não guarda nada mesmo que o telemóvel a envie', async () => {
+    expect((await req(worker, 'GET', '/v1/attendance/me')).json().location).toEqual({ mode: 'record', workplace: null, kiosk: false });
+    const recorded = await clock({ action: 'in', location: FAR });
+    expect(recorded.statusCode).toBe(201);
+    expect(recorded.json().clockInLocation).toMatchObject({ status: 'no_workplace', method: 'gps', lat: FAR.lat, lng: FAR.lng, mode: 'record' });
+    await getDb().execute(sql`delete from attendance_entries where employee_id = ${employeeId}`);
+    expect((await req(owner, 'PUT', '/v1/workplaces/settings', { mode: 'off' })).statusCode).toBe(200);
     const r = await clock({ action: 'in', location: FAR });
     expect(r.statusCode).toBe(201);
     expect(r.json()).toMatchObject({ clockInLocation: null, locationIssue: false });
@@ -69,6 +75,21 @@ describe.skipIf(!process.env.DATABASE_URL)('ponto com localização', () => {
     expect(r.statusCode).toBe(201);
     expect(r.json().clockInLocation).toMatchObject({ status: 'ok', method: 'gps', workplaceName: SEDE.name, distance: 0, lat: NEAR_SEDE.lat, lng: NEAR_SEDE.lng, accuracy: 20, mode: 'record' });
     expect(r.json().locationIssue).toBe(false);
+  });
+
+  it('antifraude: o mesmo telemóvel a marcar por outro colega no mesmo dia, e rede fora de Angola, ficam assinalados', async () => {
+    const e = await req(owner, 'POST', '/v1/employees', { number: '8', name: 'Joana Colega', gender: 'F', jobTitle: 'Servente', province: 'Luanda', nif: '0000000888', contract: { type: 'indefinite', startDate: '2026-01-05', base: 150000 } });
+    expect(e.statusCode).toBe(201);
+    expect((await req(owner, 'POST', '/v1/users', { name: 'Joana', email: `${stamp}.joana@ponto.test`, password, role: 'employee', employeeId: e.json().id })).statusCode).toBe(201);
+    const joana = cookieOf(await app.inject({ method: 'POST', url: '/v1/auth/login', payload: { email: `${stamp}.joana@ponto.test`, password } }));
+    const device = 'aparelho-partilhado-01';
+    const first = await clock({ action: 'in', location: NEAR_SEDE, device });
+    expect(first.json().clockInLocation).toMatchObject({ device }); expect(first.json().locationIssue).toBe(false);
+    const buddy = await app.inject({ method: 'POST', url: '/v1/attendance/clock', headers: { cookie: joana, 'cf-ipcountry': 'pt' }, payload: { action: 'in', location: NEAR_SEDE, device } });
+    expect(buddy.statusCode).toBe(201);
+    expect(buddy.json().clockInLocation).toMatchObject({ device, country: 'PT', signals: ['shared_device', 'foreign_network'] });
+    expect(buddy.json().locationIssue).toBe(true);
+    await getDb().execute(sql`delete from attendance_entries where employee_id = ${e.json().id}`);
   });
 
   it('alertar: aceita fora do local e põe na lista de excepções (chefia/RH, não o próprio)', async () => {

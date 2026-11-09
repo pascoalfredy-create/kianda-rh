@@ -3,7 +3,7 @@ import {
   type AbsenceType, type LocationMode,
 } from '@kianda/core';
 import {
-  absences, and, asc, attendanceEntries, workSchedules, attendanceMonths, auditLogs, companies, contracts, departments, desc, eq, employees, getDb, gte, inArray, isNull, lte, payrollRuns, users, workplaces,
+  absences, and, asc, attendanceEntries, workSchedules, attendanceMonths, auditLogs, companies, contracts, departments, desc, eq, employees, getDb, gte, inArray, isNull, lte, payrollRuns, sql, users, workplaces,
   type Db, type PunchLocationRecord,
 } from '@kianda/db';
 import { Hono } from 'hono';
@@ -195,6 +195,8 @@ export function attendanceRoutes() {
       location: z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180), accuracy: z.number().min(0).max(100_000) }).nullable().optional(),
       /** Código do quiosque à entrada: conteúdo do QR ou os 6 dígitos. */
       kiosk: z.string().trim().min(6).max(120).optional(),
+      /** Identificador aleatório do aparelho (gerado no navegador), para detectar marcações por colegas. */
+      device: z.string().trim().regex(/^[A-Za-z0-9-]{8,64}$/).optional(),
     }).refine((x) => !x.at === !x.clientRef, { message: 'Registo offline incompleto' }).parse(await body(c));
     const db = getDb();
     const serverNow = new Date();
@@ -234,6 +236,17 @@ export function attendanceRoutes() {
         location = { status: r.status as PunchLocationRecord['status'], method: r.method, workplaceId: r.workplaceId, workplaceName: r.workplaceName, distance: r.distance, mode, capturedAt: now.toISOString(),
           ...(r.method === 'gps' && b.location ? { lat: Math.round(b.location.lat * 1e6) / 1e6, lng: Math.round(b.location.lng * 1e6) / 1e6, accuracy: Math.round(b.location.accuracy) } : {}) };
         locationIssue = r.issue;
+        // Sinais antifraude: o mesmo aparelho a marcar por outro colaborador no mesmo dia, ou rede fora de Angola.
+        const signals: NonNullable<PunchLocationRecord['signals']> = [];
+        if (b.device) {
+          location.device = b.device;
+          const [other] = await db.select({ id: attendanceEntries.id }).from(attendanceEntries).where(and(eq(attendanceEntries.companyId, actor.companyId), eq(attendanceEntries.workDate, today),
+            sql`${attendanceEntries.employeeId} <> ${emp.id}`, sql`(${attendanceEntries.clockInLocation}->>'device' = ${b.device} or ${attendanceEntries.clockOutLocation}->>'device' = ${b.device})`)).limit(1);
+          if (other) signals.push('shared_device');
+        }
+        const country = c.req.header('cf-ipcountry')?.toUpperCase();
+        if (country && /^[A-Z]{2}$/.test(country)) { location.country = country; if (country !== 'AO' && !offline) signals.push('foreign_network'); }
+        if (signals.length) { location.signals = signals; locationIssue = true; }
       }
     }
     // O ponto regista factos: nunca é bloqueado por processamento fechado (é comum fechar a 20–25 do mês);

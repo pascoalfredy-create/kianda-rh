@@ -20,6 +20,15 @@ export function currentFix(timeoutMs = 12_000): Promise<Fix | null> {
   });
 }
 
+/** Identificador aleatório deste telemóvel/navegador (não pessoal), enviado em cada marcação para detectar um aparelho a marcar por colegas. */
+export function deviceId(): string | undefined {
+  try {
+    let id = localStorage.getItem('kianda-device');
+    if (!id) { id = crypto.randomUUID(); localStorage.setItem('kianda-device', id); }
+    return id;
+  } catch { return undefined; }
+}
+
 /** Leitura do QR do quiosque com a câmara, quando o navegador tem BarcodeDetector (Chrome/Android). */
 export const canScanQr = () => typeof window !== 'undefined' && 'BarcodeDetector' in window;
 

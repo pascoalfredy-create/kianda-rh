@@ -5,6 +5,11 @@ const metres = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1).replace('.',
 /** Texto curto para a chefia/colaborador. */
 export function describeLocation(l: PunchLocation | null | undefined): string {
   if (!l) return '';
+  const base = describePlace(l);
+  const flags = [l.signals?.includes('shared_device') ? 'telemóvel usado hoje por outro colaborador' : '', l.signals?.includes('foreign_network') ? `rede fora de Angola${l.country ? ` (${l.country})` : ''}` : ''].filter(Boolean);
+  return flags.length ? `${base} · ATENÇÃO: ${flags.join('; ')}` : base;
+}
+function describePlace(l: PunchLocation): string {
   const how = l.method === 'kiosk' ? 'código do quiosque' : l.method === 'gps' ? `GPS${l.accuracy !== undefined ? ` ±${metres(l.accuracy)}` : ''}` : 'sem localização';
   switch (l.status) {
     case 'ok': return `No local «${l.workplaceName ?? '—'}» (${how})`;
