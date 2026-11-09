@@ -14,14 +14,8 @@ export function PrepareButton({ period, prepared, people, payrollPeople, process
   const { busy, error, run } = useMutation();
   const draftKey = `payroll:${period}:preparation:`;
   const clearPreparation = useClearWorkspace(draftKey);
-  const clearVariables = useClearWorkspace(`${draftKey}variables:`);
   const [open, setOpen] = useWorkspaceState(`${draftKey}open`, false);
-  const [pendingVariable, setPendingVariable] = useState(false);
-  const [savingVariable, setSavingVariable] = useState(false);
-  const [variableVersion, setVariableVersion] = useState(0);
   const [batchMode, setBatchMode] = useWorkspaceState(`${draftKey}batch`, false);
-  // No lote, as alterações pontuais ficam recolhidas: processar não depende de variáveis.
-  const [changesOpen, setChangesOpen] = useWorkspaceState(`${draftKey}changesOpen`, false);
   const [chosen, setSelected] = useWorkspaceState<string[]>(`${draftKey}selected`, []);
   const eligibleIds = new Set(payrollPeople.map(person => person.id));
   const selected = chosen.filter(id => typeof id === 'string' && eligibleIds.has(id));
@@ -33,9 +27,9 @@ export function PrepareButton({ period, prepared, people, payrollPeople, process
   const indexedInScope = open && batchMode ? payrollPeople.filter(p => selected.includes(p.id) && p.salaryCurrency === 'USD' && !!p.baseForeignMinor).length : indexed;
   const needsFx = indexedInScope > 0;
   const body = { period, ...(needsFx && rate.trim() ? { fx: { rate, date, source } } : {}), ...(open && batchMode ? { employeeIds: selected } : {}) };
-  const calculateDisabled = busy || savingVariable || pendingVariable || (needsFx && !rate.trim() && !fx?.rate) || (open && batchMode && (selected.length === 0 || selected.length > 1000));
+  const calculateDisabled = busy || (needsFx && !rate.trim() && !fx?.rate) || (open && batchMode && (selected.length === 0 || selected.length > 1000));
   function prepare(batch: boolean) {
-    clearVariables(); setResult(''); setBatchMode(batch); setPendingVariable(false); setVariableVersion(v => v + 1);
+    setResult(''); setBatchMode(batch);
     const pending = payrollPeople.filter(p => !processedIds.includes(p.id));
     setSelected((pending.length ? pending : payrollPeople).slice(0, 1000).map(p => p.id)); setOpen(true);
   }
@@ -65,29 +59,11 @@ export function PrepareButton({ period, prepared, people, payrollPeople, process
           <Link className="btn ghost sm" href={`/assiduidade?mes=${period}`}>Rever assiduidade</Link>
         </div>
         {fxFields}
-        {batchMode ? <>
         <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', marginTop: 14 }}>
-            <button type="button" className="btn" disabled={calculateDisabled} onClick={calculate}>{busy ? 'A calcular…' : batchMode ? 'Processar seleccionados' : 'Calcular folha'}</button>
-            <button type="button" className="btn ghost" disabled={busy || savingVariable} onClick={() => { clearPreparation(); setOpen(false); setBatchMode(false); setPendingVariable(false); }}>Cancelar preparação</button>
-            {pendingVariable && <><span className="muted" role="status">Existe uma alteração por guardar. Guarde-a ou descarte-a para calcular com os dados já registados.</span><button type="button" className="btn ghost sm" disabled={busy || savingVariable} onClick={() => { clearVariables(); setPendingVariable(false); setVariableVersion(v => v + 1); }}>Descartar alteração por guardar</button></>}
-          </div>
-          <details className="optional-changes" open={changesOpen || pendingVariable} onToggle={e => setChangesOpen(e.currentTarget.open)}>
-            <summary>Alterações pontuais deste mês (opcional) — prémios, abonos ou descontos{variableCount ? ` · ${variableCount} guardada(s)` : ''}</summary>
-        <p className="muted">Pode calcular directamente com os valores habituais. Registe aqui apenas prémios, abonos ou descontos pontuais. {variableCount} {variableCount === 1 ? 'variável guardada' : 'variáveis guardadas'} para este mês.</p>
-            {variableCount > 0 && <p><Link href={`/processamento?mes=${period}&s=variaveis`}>Rever e editar alterações guardadas ({variableCount})</Link></p>}
-            {people.length > 0 && <VariableEntry key={variableVersion} draftKey={`${draftKey}variables:`} period={period} people={people} preparing disabled={busy} onPendingChange={setPendingVariable} onSavingChange={setSavingVariable} />}
-          </details>
-        </> : <>
-        <h3>Alterações deste mês (opcional)</h3>
-        <p className="muted">Pode calcular directamente com os valores habituais. Registe aqui apenas prémios, abonos ou descontos pontuais. {variableCount} {variableCount === 1 ? 'variável guardada' : 'variáveis guardadas'} para este mês.</p>
-        {variableCount > 0 && <p><Link href={`/processamento?mes=${period}&s=variaveis`}>Rever e editar alterações guardadas ({variableCount})</Link></p>}
-        {people.length > 0 && <VariableEntry key={variableVersion} draftKey={`${draftKey}variables:`} period={period} people={people} preparing disabled={busy} onPendingChange={setPendingVariable} onSavingChange={setSavingVariable} />}
-        <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', marginTop: 14 }}>
-          <button type="button" className="btn" disabled={calculateDisabled} onClick={calculate}>{busy ? 'A calcular…' : batchMode ? 'Processar seleccionados' : 'Calcular folha'}</button>
-          <button type="button" className="btn ghost" disabled={busy || savingVariable} onClick={() => { clearPreparation(); setOpen(false); setBatchMode(false); setPendingVariable(false); }}>Cancelar preparação</button>
-          {pendingVariable && <><span className="muted" role="status">Existe uma alteração por guardar. Guarde-a ou descarte-a para calcular com os dados já registados.</span><button type="button" className="btn ghost sm" disabled={busy || savingVariable} onClick={() => { clearVariables(); setPendingVariable(false); setVariableVersion(v => v + 1); }}>Descartar alteração por guardar</button></>}
+          <button type="button" className="btn" disabled={calculateDisabled} onClick={calculate}>{busy ? 'A calcular…' : batchMode ? `Processar seleccionados (${selected.length})` : 'Calcular folha'}</button>
+          <button type="button" className="btn ghost" disabled={busy} onClick={() => { clearPreparation(); setOpen(false); setBatchMode(false); }}>Cancelar</button>
         </div>
-        </>}
+        <p className="muted" style={{ marginTop: 10 }}>Prémios, abonos ou descontos pontuais lançam-se à parte, no separador <Link href={`/processamento?mes=${period}&s=variaveis`}>Variáveis ({variableCount})</Link>, e entram no cálculo seguinte. Sem variáveis, a folha é calculada com a remuneração habitual.</p>
       </section>}
       {needsFx && <span className="muted" style={{ fontSize: 12.5, flexBasis: '100%' }}>{indexedInScope} colaborador(es) com salário indexado ao dólar: a base é convertida a este câmbio no recibo.</span>}
       {error && <span role="alert" style={{ color: 'var(--red)' }}>{error}</span>}
