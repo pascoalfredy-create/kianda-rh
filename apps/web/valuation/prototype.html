@@ -208,7 +208,6 @@ td.fut{color:var(--ink-3);background:var(--surface-2)}
     </select>
   </div>
   <div class="entity"><b id="hdrEnt">Kalunga Distribuição, S.A.</b><span class="pill" id="pillFecho">Fecho: Out 2026</span></div>
-  <button class="btn" id="btnData">JSON</button>
   <button class="btn" id="btnTheme" title="Alternar tema claro/escuro">Tema</button>
 </header>
 <div class="wrap">
@@ -1148,7 +1147,6 @@ function setTheme(t){document.documentElement.dataset.theme=t;try{localStorage.s
 (()=>{let t;try{t=localStorage.getItem('valora-theme')}catch(e){};setTheme(t||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'))})();
 $('#btnTheme').onclick=()=>{setTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');renderView(current())};
 const modal=$('#modal');
-$('#btnData').onclick=()=>{$('#json').value=JSON.stringify(D,null,1);$('#jsonMsg').textContent='';modal.classList.add('on')};
 $('#jClose').onclick=()=>modal.classList.remove('on');
 $('#jCopy').onclick=async()=>{try{await navigator.clipboard.writeText($('#json').value);$('#jsonMsg').textContent='Copiado.'}catch(e){$('#json').select();$('#jsonMsg').textContent='Selecionado — use Ctrl+C.'}};
 $('#jApply').onclick=()=>{try{const x=JSON.parse($('#json').value);if(!x.years||!x.dr||!x.bal||!x.orc||!x.real)throw 0;D=x;if(!D.bal.reservas)deriveHistReserves();refresh();modal.classList.remove('on')}catch(e){$('#jsonMsg').textContent='JSON inválido ou incompleto.'}};

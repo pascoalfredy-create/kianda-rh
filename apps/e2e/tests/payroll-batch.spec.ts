@@ -16,8 +16,7 @@ const vars = async (owner: Company) => (await apiAs(owner.token, 'GET', '/v1/pay
 test('lote de prémios calcula a equipa e distingue INSS do trabalhador e da empresa na folha e no recibo', async ({ page, context }) => {
   const { owner, people } = await team(); await signIn(context, owner.token);
   const errors = watchErrors(page);
-  await page.goto('/processamento?mes=2026-10');
-  await page.getByRole('button', { name: 'Preparar processamento', exact: true }).click();
+  await page.goto('/processamento?mes=2026-10&s=variaveis');
   await page.getByRole('button', { name: 'Lançar em lote', exact: true }).click();
   const form = page.getByRole('form', { name: 'Variáveis em lote', exact: true });
   await form.getByLabel('Descrição do lote', { exact: true }).fill('Prémio da equipa');
@@ -25,10 +24,11 @@ test('lote de prémios calcula a equipa e distingue INSS do trabalhador e da emp
   await form.getByLabel('Valor comum (Kz)', { exact: true }).fill('10000');
   await form.getByRole('button', { name: 'Aplicar valor aos seleccionados', exact: true }).click();
   await form.getByRole('textbox', { name: `Valor de ${people[1]!.name}`, exact: true }).fill('20000');
-  await expect(page.getByRole('button', { name: 'Calcular folha', exact: true })).toBeDisabled();
   await form.getByRole('button', { name: 'Guardar lote', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Lote guardado: 2');
   expect(await vars(owner)).toHaveLength(2);
+  await page.goto('/processamento?mes=2026-10');
+  await page.getByRole('button', { name: 'Preparar processamento', exact: true }).click();
   await page.getByRole('button', { name: 'Calcular folha', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Recalcular', exact: true })).toBeVisible();
   await expect(page.locator('.kpi').filter({ hasText: 'INSS do trabalhador' })).toContainText(/9[\s.]900,00/);
@@ -50,15 +50,13 @@ test('lote de prémios calcula a equipa e distingue INSS do trabalhador e da emp
 
 test('cancelar um lote por guardar deixa as variáveis e o processamento intactos', async ({ page, context }) => {
   const { owner, people } = await team(); await signIn(context, owner.token);
-  await page.goto('/processamento?mes=2026-10');
-  await page.getByRole('button', { name: 'Preparar processamento', exact: true }).click();
+  await page.goto('/processamento?mes=2026-10&s=variaveis');
   await page.getByRole('button', { name: 'Lançar em lote', exact: true }).click();
   const form = page.getByRole('form', { name: 'Variáveis em lote', exact: true });
   await form.getByRole('checkbox', { name: `Seleccionar ${people[0]!.name}`, exact: true }).check();
   await form.getByRole('textbox', { name: `Valor de ${people[0]!.name}`, exact: true }).fill('5000');
-  await expect(page.getByRole('button', { name: 'Calcular folha', exact: true })).toBeDisabled();
   await form.getByRole('button', { name: 'Cancelar lote', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Calcular folha', exact: true })).toBeEnabled();
+  await expect(form).toHaveCount(0);
   expect(await vars(owner)).toEqual([]);
   expect((await apiAs(owner.token, 'GET', '/v1/payroll-runs?period=2026-10')).body).toEqual([]);
 });
@@ -68,8 +66,7 @@ test('selecção e valores de colaboradores noutras páginas pertencem ao mesmo 
   await sql(`insert into employees(company_id,number,name,job_title) select $1, g::text, 'Pessoa '||g, 'Técnico' from generate_series(1,51) g`, [owner.id]);
   await sql(`insert into contracts(employee_id,type,start_date,base_minor) select id,'indefinite','2026-01-01',10000000 from employees where company_id=$1`, [owner.id]);
   await signIn(context, owner.token);
-  await page.goto('/processamento?mes=2026-10');
-  await page.getByRole('button', { name: 'Preparar processamento', exact: true }).click();
+  await page.goto('/processamento?mes=2026-10&s=variaveis');
   await page.getByRole('button', { name: 'Lançar em lote', exact: true }).click();
   const form = page.getByRole('form', { name: 'Variáveis em lote', exact: true });
   await form.getByLabel('Descrição do lote', { exact: true }).fill('Prémios em duas páginas');
