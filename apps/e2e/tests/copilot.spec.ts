@@ -3,7 +3,7 @@ import { blankValuationData, financialTemplate } from '../../../packages/core/sr
 import { apiAs, closePool, registerCompany, signIn, watchErrors } from './support.js';
 
 test.afterAll(closePool);
-test('copiloto RH abre os guias com INSS correcto e distingue a conversa que aguarda activação', async ({ page, context }) => {
+test('copiloto RH abre os guias com INSS correcto e, sem IA activa, não mostra conversa', async ({ page, context }) => {
   const owner = await registerCompany(); await signIn(context, owner.token); const errors = watchErrors(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/copiloto?modulo=hr');
@@ -11,8 +11,8 @@ test('copiloto RH abre os guias com INSS correcto e distingue a conversa que agu
   await page.getByRole('textbox', { name: 'Pesquisar orientação do copiloto', exact: true }).fill('INSS do trabalhador');
   await page.getByText('INSS do trabalhador e da empresa', { exact: true }).click();
   await expect(page.getByRole('region', { name: 'Guias especializados', exact: true })).toContainText('a empresa 8%');
-  await expect(page.getByRole('region', { name: 'Conversa com o copiloto', exact: true })).toContainText('aguarda activação');
-  await expect(page.getByRole('button', { name: 'Perguntar ao copiloto', exact: true })).toBeDisabled();
+  await expect(page.getByRole('region', { name: 'Conversa com o copiloto', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Perguntar ao copiloto', exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Kianda Integra', exact: true })).toHaveCount(0);
   expect(await page.evaluate<number>('document.documentElement.scrollWidth - window.innerWidth')).toBeLessThanOrEqual(1);
   expect(errors).toEqual([]);
@@ -29,7 +29,7 @@ test('Integra e Valora abrem o seu especialista, sem enviar o resumo financeiro 
   await page.getByRole('link', { name: 'Copiloto', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Copiloto Kianda Integra', exact: true })).toBeVisible();
   const summary = page.getByRole('region', { name: 'Contexto financeiro do copiloto', exact: true });
-  await expect(summary.getByRole('checkbox', { name: 'Autorizar resumo financeiro na IA', exact: true })).not.toBeChecked();
+  await expect(summary.getByRole('checkbox', { name: 'Autorizar resumo financeiro na IA', exact: true })).toHaveCount(0);
   await summary.getByText(/Ver resumo · revisão/).click();
   await expect(summary).toContainText('VAL do projecto'); expect(calls).toBe(0);
   await page.goto('/valora');

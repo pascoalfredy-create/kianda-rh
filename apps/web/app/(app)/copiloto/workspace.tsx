@@ -29,21 +29,21 @@ export function CopilotWorkspace({ setup, initialEntity }: { setup: CopilotSetup
   const filtered = setup.guides.filter(g => normalize(`${g.title} ${g.tags.join(' ')} ${g.text}`).includes(normalize(search.trim())));
   return <div style={{ minWidth: 0 }}>
     <section className="card section" aria-label="Guias especializados"><h2>Guias do módulo</h2><div style={{ padding: '0 16px 16px' }}>
-      <p className="muted">Orientações disponíveis na plataforma, sem serviço de IA. No RH, os cálculos referem-se ao pacote AO 2026; diplomas, regimes especiais e alterações posteriores precisam de confirmação.</p>
+      <p className="muted">Orientações disponíveis na plataforma. No RH, os cálculos referem-se ao pacote AO 2026; diplomas, regimes especiais e alterações posteriores precisam de confirmação.</p>
       <label>Pesquisar orientação<input aria-label="Pesquisar orientação do copiloto" value={search} onChange={e => setSearch(e.target.value)} placeholder="Ex.: INSS, proposta, VAL, caixa…" style={{ width: '100%', maxWidth: 520 }} /></label>
       <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>{filtered.map(g => <details key={g.id} style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 12 }}><summary>{g.title}</summary><p style={{ marginTop: 10 }}>{g.text}</p>{g.sources.map(s => <p key={s.url}><a href={s.url} target="_blank" rel="noopener noreferrer">{s.title} ↗</a></p>)}<a className="btn ghost sm" href={g.screen}>Abrir ecrã relacionado</a></details>)}</div>
       {!filtered.length && <p className="muted">Não foi encontrada uma orientação com esse termo. Experimente uma palavra mais simples ou escolha outro tema.</p>}
     </div></section>
     {setup.module !== 'hr' && <section className="card section" aria-label="Contexto financeiro do copiloto" style={{ marginTop: 16 }}><h2>Resumo financeiro opcional</h2><div style={{ padding: '0 16px 16px' }}>
-      <p className="muted">Escolha um projecto ou análise para rever os números guardados. O envio à IA exige a sua autorização. Nomes, NIF, notas e documentos ficam fora deste resumo.</p>
+      <p className="muted">Escolha um projecto ou análise para rever os números guardados.{setup.aiReady ? ' O envio à IA exige a sua autorização. Nomes, NIF, notas e documentos ficam fora deste resumo.' : ''}</p>
       <label>{setup.module === 'modeling' ? 'Projecto' : 'Análise'}<select aria-label="Contexto financeiro" value={entity} disabled={busy} onChange={e => { setContextBusy(false); setEntity(e.target.value); }} style={{ width: '100%', maxWidth: 520 }}><option value="">Sem dados da empresa</option>{entity && !setup.entities.some(e => e.id === entity) && <option value={entity}>Selecção da ligação do módulo</option>}{setup.entities.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select></label>
       <small className="muted">Mostra até 200 registos activos recentes a que tem acesso.</small>
       {contextBusy && <p role="status">A calcular o resumo guardado…</p>}{contextError && <p role="alert" className="err">{contextError}</p>}
       {context && <><details className="map-disclosure" style={{ marginTop: 12 }}><summary>Ver resumo · revisão {context.revision} · {context.unit}</summary><div style={{ overflowX: 'auto' }}><table className="dense"><tbody>{Object.entries(context.figures).map(([k, v]) => <tr key={k}><th>{figureLabels[k] ?? k}</th><td style={{ overflowWrap: 'anywhere' }}>{value(k, v)}</td></tr>)}</tbody></table></div>{context.notes.map(n => <p key={n} className="muted">{n}</p>)}</details>
-      <label style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 }}><input type="checkbox" aria-label="Autorizar resumo financeiro na IA" checked={contextConsent} disabled={!setup.aiReady || busy} onChange={e => setContextConsent(e.target.checked)} /> Autorizar o envio deste resumo financeiro nas próximas perguntas deste projecto.</label></>}
+      {setup.aiReady && <label style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 }}><input type="checkbox" aria-label="Autorizar resumo financeiro na IA" checked={contextConsent} disabled={!setup.aiReady || busy} onChange={e => setContextConsent(e.target.checked)} /> Autorizar o envio deste resumo financeiro nas próximas perguntas deste projecto.</label>}</>}
     </div></section>}
-    <section className="card section" aria-label="Conversa com o copiloto" style={{ marginTop: 16 }}><h2>Conversa com IA</h2><div style={{ padding: '0 16px 16px' }}>
-      {!setup.aiReady && <p className="warn">A conversa com IA aguarda activação pela plataforma. Os guias especializados e o resumo financeiro continuam disponíveis.</p>}
+    {/* Sem serviço de IA activo (decisão de 09/11/2026: a IA fica de fora), a conversa não aparece; ficam os guias e o resumo. */}
+    {setup.aiReady && <section className="card section" aria-label="Conversa com o copiloto" style={{ marginTop: 16 }}><h2>Conversa com IA</h2><div style={{ padding: '0 16px 16px' }}>
       {!setup.canAsk && <p className="warn">O módulo está em consulta. Os guias continuam disponíveis; a conversa com IA exige uma licença activa.</p>}
       <p className="muted">O copiloto explica e sugere passos. As decisões e alterações ficam consigo. Não tem pesquisa de legislação ou de mercado em tempo real.</p>
       <div aria-live="polite" style={{ display: 'grid', gap: 12 }}>{messages.map((m, i) => <article key={i} style={{ padding: 12, borderRadius: 10, border: '1px solid var(--line)', background: m.role === 'user' ? 'var(--brand-soft)' : undefined }}><b>{m.role === 'user' ? 'A sua pergunta' : 'Resposta do copiloto · IA'}</b><p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{m.content}</p>{m.response?.usedContext && <small>Inclui o resumo financeiro que autorizou.</small>}{!!m.response?.sources.length && <details><summary>Referências fornecidas ao copiloto</summary>{m.response.sources.map(s => <p key={s.url}><a href={s.url} target="_blank" rel="noopener noreferrer">{s.title}</a></p>)}</details>}</article>)}</div>
@@ -65,6 +65,6 @@ export function CopilotWorkspace({ setup, initialEntity }: { setup: CopilotSetup
         <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', marginTop: 12 }}><button className="btn" disabled={!setup.aiReady || !setup.canAsk || busy || !consent || (contextConsent && contextBusy)}>{busy ? 'A preparar resposta…' : 'Perguntar ao copiloto'}</button><button type="button" className="btn ghost" disabled={busy || !messages.length} onClick={() => { setMessages([]); setQuestion(''); setError(''); setConsent(false); setContextConsent(false); }}>Limpar conversa</button><Link href="/modulos" className="btn ghost">Módulos e licenças</Link></div>
         {error && <p className="err" role="alert">{error}</p>}
       </form>
-    </div></section>
+    </div></section>}
   </div>;
 }
