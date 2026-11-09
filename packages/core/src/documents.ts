@@ -47,58 +47,198 @@ export const BUILTIN_TEMPLATES: DocumentTemplate[] = [
   {
     key: 'contrato_indeterminado', title: 'Contrato de trabalho por tempo indeterminado', category: 'contract',
     description: 'Contrato por tempo indeterminado, com período experimental, remuneração e férias.',
-    inputs: [{ key: 'pedido.local_trabalho', label: 'Local de trabalho', placeholder: 'Ex.: Luanda, instalações da empresa', required: true }],
-    body: `# Contrato de trabalho por tempo indeterminado
+    inputs: [{ key: 'pedido.local_trabalho', label: 'Local de trabalho', placeholder: 'Ex.: Luanda, instalações da empresa', required: true }, { key: 'pedido.representante', label: 'Representante da empresa', placeholder: 'Ex.: o gerente, Sr. João Silva', required: false }],
+    body: `# CONTRATO DE TRABALHO
 
-Entre **{{empresa.nome}}**, contribuinte n.º {{empresa.nif}}, com sede em {{empresa.morada}}, adiante designada por Empregador, e **{{colaborador.nome}}**, portador(a) do Bilhete de Identidade n.º {{colaborador.bi}}{{#se colaborador.nif}}, contribuinte n.º {{colaborador.nif}}{{/se}}{{#se colaborador.morada}}, residente em {{colaborador.morada}}{{/se}}, adiante designado(a) por Trabalhador, é celebrado o presente contrato de trabalho, nos termos da Lei Geral do Trabalho (Lei n.º 12/23, de 27 de Dezembro), que se rege pelas cláusulas seguintes:
+Pelo presente instrumento, **{{empresa.nome}}**, com sede em {{empresa.morada}}, titular do número de identificação fiscal {{empresa.nif}}{{#se pedido.representante}}, representada neste acto por {{pedido.representante}}{{/se}}, adiante designada EMPRESA (empregador), e **{{colaborador.nome}}**{{#se colaborador.nacionalidade}}, de nacionalidade {{colaborador.nacionalidade}}{{/se}}, portador(a) do Bilhete de Identidade n.º {{colaborador.bi}}{{#se colaborador.nif}}, contribuinte n.º {{colaborador.nif}}{{/se}}{{#se colaborador.morada}}, residente em {{colaborador.morada}}{{/se}}, adiante designado(a) TRABALHADOR, celebram o presente contrato de trabalho, nos termos da Lei Geral do Trabalho (Lei n.º 12/23, de 27 de Dezembro), que se rege pelas cláusulas e condições seguintes:
 
-**Cláusula 1.ª (Funções)** — O Trabalhador é admitido para exercer as funções de {{colaborador.funcao}}{{#se colaborador.departamento}}, no departamento de {{colaborador.departamento}}{{/se}}, obrigando-se a desempenhá-las com zelo, diligência e lealdade.
+## 1. OBJECTO
 
-**Cláusula 2.ª (Início e duração)** — O contrato produz efeitos a partir de {{contrato.inicio}} e é celebrado por tempo indeterminado.
+1.1. O presente contrato tem por objecto a prestação, pelo TRABALHADOR à EMPRESA, de trabalho subordinado na função de **{{colaborador.funcao}}**{{#se colaborador.departamento}}, no departamento de {{colaborador.departamento}}{{/se}}.
 
-**Cláusula 3.ª (Período experimental)** — Os primeiros {{pacote.periodo_experimental}} dias de execução do contrato constituem período experimental, durante o qual qualquer das partes o pode fazer cessar sem aviso prévio, indemnização ou justificação.
+1.2. A EMPRESA pode atribuir ao TRABALHADOR funções diferentes das referidas no número anterior, desde que compatíveis com a sua qualificação e formação profissional e sem prejuízo dos seus direitos contratuais, nos limites da Lei Geral do Trabalho.
 
-**Cláusula 4.ª (Local e horário)** — O trabalho é prestado em {{pedido.local_trabalho}}, com o período normal de trabalho de {{empresa.jornada_horas}} horas diárias e {{pacote.horas_semanais}} horas semanais, segundo o horário em vigor na empresa.
+1.3. O trabalho é prestado em {{pedido.local_trabalho}}, sem prejuízo das deslocações exigidas pelo serviço.
 
-**Cláusula 5.ª (Remuneração)** — O Trabalhador aufere o salário base mensal de {{remuneracao.base}} ({{remuneracao.base_extenso}}){{#se remuneracao.alimentacao}}, acrescido de subsídio de alimentação de {{remuneracao.alimentacao}}{{/se}}{{#se remuneracao.transporte}} e de subsídio de transporte de {{remuneracao.transporte}}{{/se}}, pagos mensalmente por transferência bancária, deduzidos os descontos legais (IRT e Segurança Social).
+## 2. OBRIGAÇÕES
 
-**Cláusula 6.ª (Férias e subsídios)** — O Trabalhador tem direito a {{pacote.dias_ferias}} dias úteis de férias remuneradas por ano civil, bem como aos subsídios de férias e de Natal, nos termos da lei.
+2.1. São obrigações do TRABALHADOR, além das que decorrem do objecto do contrato e da lei:
 
-**Cláusula 7.ª (Cessação)** — A cessação do contrato rege-se pelo disposto na Lei Geral do Trabalho.
+a. prestar o trabalho com zelo, diligência e disciplina;
 
-**Cláusula 8.ª (Disposições finais)** — Em tudo o que não estiver expressamente previsto aplica-se a Lei Geral do Trabalho e demais legislação aplicável. O presente contrato é feito em dois exemplares, ficando um em poder de cada parte.
+b. comparecer ao trabalho com assiduidade e pontualidade;
+
+c. cumprir as ordens e instruções dos responsáveis da EMPRESA em tudo o que respeite à execução e disciplina do trabalho;
+
+d. guardar sigilo profissional sobre a actividade da EMPRESA, durante a vigência do contrato e após o seu termo;
+
+e. respeitar os colegas de trabalho, os superiores hierárquicos e as pessoas que se relacionem com a EMPRESA;
+
+f. cumprir o regulamento interno e as normas de higiene e segurança no trabalho.
+
+2.2. São obrigações da EMPRESA, além das que decorrem do objecto do contrato e da lei:
+
+a. tratar e respeitar o TRABALHADOR e proporcionar-lhe boas condições de trabalho;
+
+b. pagar pontualmente a remuneração acordada;
+
+c. proporcionar formação e aperfeiçoamento profissional;
+
+d. adoptar as medidas adequadas de higiene e segurança no trabalho;
+
+e. inscrever o TRABALHADOR na Segurança Social e efectuar as retenções e entregas legais.
+
+## 3. VIGÊNCIA
+
+3.1. O presente contrato entra em vigor em {{contrato.inicio}} e é celebrado por tempo indeterminado.
+
+3.2. O contrato tem um período experimental de {{pacote.periodo_experimental}} dias, durante o qual qualquer das partes o pode fazer cessar sem aviso prévio, indemnização ou justificação.
+
+## 4. REMUNERAÇÃO
+
+4.1. Pela prestação do trabalho, a EMPRESA paga ao TRABALHADOR o salário base mensal de **{{remuneracao.base}}** ({{remuneracao.base_extenso}}){{#se remuneracao.alimentacao}}, acrescido de subsídio de alimentação de {{remuneracao.alimentacao}}{{/se}}{{#se remuneracao.transporte}} e de subsídio de transporte de {{remuneracao.transporte}}{{/se}}.
+
+4.2. A remuneração é paga até ao último dia do mês a que respeita, por transferência para a conta bancária do TRABALHADOR.
+
+4.3. À remuneração são deduzidos os descontos legais (IRT e Segurança Social) e, nos termos da lei:
+
+a. as faltas injustificadas;
+
+b. os adiantamentos e outros valores devidos pelo TRABALHADOR à EMPRESA, nos limites legais.
+
+## 5. HORÁRIO, FÉRIAS E SUBSÍDIOS
+
+5.1. O período normal de trabalho é de {{empresa.jornada_horas}} horas diárias e {{pacote.horas_semanais}} horas semanais, segundo o horário em vigor na EMPRESA.
+
+5.2. O TRABALHADOR tem direito a {{pacote.dias_ferias}} dias úteis de férias remuneradas por ano, marcadas por acordo entre as partes ou, na falta de acordo, pela EMPRESA no mapa de férias.
+
+5.3. O TRABALHADOR tem direito aos subsídios de férias e de Natal, nos termos da Lei Geral do Trabalho.
+
+## 6. CESSAÇÃO DO CONTRATO
+
+6.1. O contrato pode cessar por acordo das partes, por caducidade, por despedimento ou por demissão do TRABALHADOR, nos termos e com os avisos prévios previstos na Lei Geral do Trabalho.
+
+6.2. A falta de aviso prévio obriga a parte faltosa a indemnizar a outra nos termos da lei.
+
+## 7. DISPOSIÇÕES GERAIS
+
+7.1. No momento da celebração do presente contrato, o TRABALHADOR tomou conhecimento do horário de trabalho e do regulamento interno em vigor na EMPRESA.
+
+7.2. Em tudo o que não estiver expressamente previsto aplica-se a Lei Geral do Trabalho e demais legislação aplicável.
+
+## 8. LEI APLICÁVEL E FORO
+
+8.1. O presente contrato rege-se pela lei angolana, sendo competente para dirimir os litígios dele emergentes o tribunal da comarca de {{empresa.cidade}}.
+
+E, por assim estarem justos e acordados, as partes assinam o presente contrato em 2 (dois) exemplares de igual teor e forma.
 
 {{empresa.cidade}}, {{data.hoje}}
 
-${ASSINATURAS('O Empregador', 'O Trabalhador')}`,
+${ASSINATURAS('TRABALHADOR // {{colaborador.nome}}', 'PELA EMPRESA // {{empresa.nome}}')}
+
+**TESTEMUNHAS:**
+
+${ASSINATURAS('1.ª testemunha', '2.ª testemunha')}`,
   },
   {
     key: 'contrato_termo', title: 'Contrato de trabalho por tempo determinado', category: 'contract',
     description: 'Só nas situações excepcionais da lei: o fundamento do termo é obrigatório e tem de constar do contrato.',
-    inputs: [{ key: 'pedido.local_trabalho', label: 'Local de trabalho', placeholder: 'Ex.: Luanda, instalações da empresa', required: true }],
-    body: `# Contrato de trabalho por tempo determinado
+    inputs: [{ key: 'pedido.local_trabalho', label: 'Local de trabalho', placeholder: 'Ex.: Luanda, instalações da empresa', required: true }, { key: 'pedido.representante', label: 'Representante da empresa', placeholder: 'Ex.: o gerente, Sr. João Silva', required: false }],
+    body: `# CONTRATO DE TRABALHO POR TEMPO DETERMINADO
 
-Entre **{{empresa.nome}}**, contribuinte n.º {{empresa.nif}}, com sede em {{empresa.morada}}, adiante designada por Empregador, e **{{colaborador.nome}}**, portador(a) do Bilhete de Identidade n.º {{colaborador.bi}}{{#se colaborador.nif}}, contribuinte n.º {{colaborador.nif}}{{/se}}{{#se colaborador.morada}}, residente em {{colaborador.morada}}{{/se}}, adiante designado(a) por Trabalhador, é celebrado o presente contrato de trabalho por tempo determinado, nos termos da Lei Geral do Trabalho (Lei n.º 12/23, de 27 de Dezembro), que se rege pelas cláusulas seguintes:
+Pelo presente instrumento, **{{empresa.nome}}**, com sede em {{empresa.morada}}, titular do número de identificação fiscal {{empresa.nif}}{{#se pedido.representante}}, representada neste acto por {{pedido.representante}}{{/se}}, adiante designada EMPRESA (empregador), e **{{colaborador.nome}}**{{#se colaborador.nacionalidade}}, de nacionalidade {{colaborador.nacionalidade}}{{/se}}, portador(a) do Bilhete de Identidade n.º {{colaborador.bi}}{{#se colaborador.nif}}, contribuinte n.º {{colaborador.nif}}{{/se}}{{#se colaborador.morada}}, residente em {{colaborador.morada}}{{/se}}, adiante designado(a) TRABALHADOR, celebram o presente contrato de trabalho, nos termos da Lei Geral do Trabalho (Lei n.º 12/23, de 27 de Dezembro), que se rege pelas cláusulas e condições seguintes:
 
-**Cláusula 1.ª (Funções)** — O Trabalhador é admitido para exercer as funções de {{colaborador.funcao}}{{#se colaborador.departamento}}, no departamento de {{colaborador.departamento}}{{/se}}.
+## 1. OBJECTO
 
-**Cláusula 2.ª (Duração e fundamento)** — O contrato tem início em {{contrato.inicio}} e termo em {{contrato.fim}}, sendo celebrado com o seguinte fundamento: {{contrato.fundamento}}.
+1.1. O presente contrato tem por objecto a prestação, pelo TRABALHADOR à EMPRESA, de trabalho subordinado na função de **{{colaborador.funcao}}**{{#se colaborador.departamento}}, no departamento de {{colaborador.departamento}}{{/se}}.
 
-**Cláusula 3.ª (Renovação)** — A parte que não pretenda a renovação deve comunicá-lo à outra por escrito com a antecedência mínima de 30 dias (art. 17.º, n.º 3, da Lei Geral do Trabalho).
+1.2. A EMPRESA pode atribuir ao TRABALHADOR funções diferentes das referidas no número anterior, desde que compatíveis com a sua qualificação e formação profissional e sem prejuízo dos seus direitos contratuais, nos limites da Lei Geral do Trabalho.
 
-**Cláusula 4.ª (Período experimental)** — Os primeiros {{pacote.periodo_experimental_termo}} dias de execução do contrato constituem período experimental.
+1.3. O trabalho é prestado em {{pedido.local_trabalho}}, sem prejuízo das deslocações exigidas pelo serviço.
 
-**Cláusula 5.ª (Local e horário)** — O trabalho é prestado em {{pedido.local_trabalho}}, com o período normal de trabalho de {{empresa.jornada_horas}} horas diárias e {{pacote.horas_semanais}} horas semanais.
+## 2. OBRIGAÇÕES
 
-**Cláusula 6.ª (Remuneração)** — O Trabalhador aufere o salário base mensal de {{remuneracao.base}} ({{remuneracao.base_extenso}}){{#se remuneracao.alimentacao}}, acrescido de subsídio de alimentação de {{remuneracao.alimentacao}}{{/se}}{{#se remuneracao.transporte}} e de subsídio de transporte de {{remuneracao.transporte}}{{/se}}, deduzidos os descontos legais.
+2.1. São obrigações do TRABALHADOR, além das que decorrem do objecto do contrato e da lei:
 
-**Cláusula 7.ª (Férias e subsídios)** — O Trabalhador tem direito a férias e aos subsídios de férias e de Natal proporcionais à duração do contrato, nos termos da lei.
+a. prestar o trabalho com zelo, diligência e disciplina;
 
-**Cláusula 8.ª (Disposições finais)** — Aplica-se subsidiariamente a Lei Geral do Trabalho. Feito em dois exemplares, ficando um em poder de cada parte.
+b. comparecer ao trabalho com assiduidade e pontualidade;
+
+c. cumprir as ordens e instruções dos responsáveis da EMPRESA em tudo o que respeite à execução e disciplina do trabalho;
+
+d. guardar sigilo profissional sobre a actividade da EMPRESA, durante a vigência do contrato e após o seu termo;
+
+e. respeitar os colegas de trabalho, os superiores hierárquicos e as pessoas que se relacionem com a EMPRESA;
+
+f. cumprir o regulamento interno e as normas de higiene e segurança no trabalho.
+
+2.2. São obrigações da EMPRESA, além das que decorrem do objecto do contrato e da lei:
+
+a. tratar e respeitar o TRABALHADOR e proporcionar-lhe boas condições de trabalho;
+
+b. pagar pontualmente a remuneração acordada;
+
+c. proporcionar formação e aperfeiçoamento profissional;
+
+d. adoptar as medidas adequadas de higiene e segurança no trabalho;
+
+e. inscrever o TRABALHADOR na Segurança Social e efectuar as retenções e entregas legais.
+
+## 3. VIGÊNCIA
+
+3.1. O presente contrato entra em vigor em {{contrato.inicio}} e é celebrado por tempo determinado, com termo em {{contrato.fim}}.
+
+3.2. O contrato é celebrado com o seguinte fundamento, nos termos da Lei Geral do Trabalho: {{contrato.fundamento}}.
+
+3.3. O contrato tem um período experimental de {{pacote.periodo_experimental_termo}} dias, durante o qual qualquer das partes o pode fazer cessar sem aviso prévio nem indemnização.
+
+3.4. A parte que não pretenda a renovação deve comunicá-lo à outra, por escrito, com a antecedência mínima de 30 (trinta) dias (art. 17.º, n.º 3, da Lei Geral do Trabalho).
+
+## 4. REMUNERAÇÃO
+
+4.1. Pela prestação do trabalho, a EMPRESA paga ao TRABALHADOR o salário base mensal de **{{remuneracao.base}}** ({{remuneracao.base_extenso}}){{#se remuneracao.alimentacao}}, acrescido de subsídio de alimentação de {{remuneracao.alimentacao}}{{/se}}{{#se remuneracao.transporte}} e de subsídio de transporte de {{remuneracao.transporte}}{{/se}}.
+
+4.2. A remuneração é paga até ao último dia do mês a que respeita, por transferência para a conta bancária do TRABALHADOR.
+
+4.3. À remuneração são deduzidos os descontos legais (IRT e Segurança Social) e, nos termos da lei:
+
+a. as faltas injustificadas;
+
+b. os adiantamentos e outros valores devidos pelo TRABALHADOR à EMPRESA, nos limites legais.
+
+## 5. HORÁRIO, FÉRIAS E SUBSÍDIOS
+
+5.1. O período normal de trabalho é de {{empresa.jornada_horas}} horas diárias e {{pacote.horas_semanais}} horas semanais, segundo o horário em vigor na EMPRESA.
+
+5.2. O TRABALHADOR tem direito a {{pacote.dias_ferias}} dias úteis de férias remuneradas por ano, marcadas por acordo entre as partes ou, na falta de acordo, pela EMPRESA no mapa de férias.
+
+5.3. O TRABALHADOR tem direito aos subsídios de férias e de Natal, nos termos da Lei Geral do Trabalho.
+
+## 6. CESSAÇÃO DO CONTRATO
+
+6.1. O contrato pode cessar por acordo das partes, por caducidade, por despedimento ou por demissão do TRABALHADOR, nos termos e com os avisos prévios previstos na Lei Geral do Trabalho.
+
+6.2. A falta de aviso prévio obriga a parte faltosa a indemnizar a outra nos termos da lei.
+
+## 7. DISPOSIÇÕES GERAIS
+
+7.1. No momento da celebração do presente contrato, o TRABALHADOR tomou conhecimento do horário de trabalho e do regulamento interno em vigor na EMPRESA.
+
+7.2. Em tudo o que não estiver expressamente previsto aplica-se a Lei Geral do Trabalho e demais legislação aplicável.
+
+## 8. LEI APLICÁVEL E FORO
+
+8.1. O presente contrato rege-se pela lei angolana, sendo competente para dirimir os litígios dele emergentes o tribunal da comarca de {{empresa.cidade}}.
+
+E, por assim estarem justos e acordados, as partes assinam o presente contrato em 2 (dois) exemplares de igual teor e forma.
 
 {{empresa.cidade}}, {{data.hoje}}
 
-${ASSINATURAS('O Empregador', 'O Trabalhador')}`,
+${ASSINATURAS('TRABALHADOR // {{colaborador.nome}}', 'PELA EMPRESA // {{empresa.nome}}')}
+
+**TESTEMUNHAS:**
+
+${ASSINATURAS('1.ª testemunha', '2.ª testemunha')}`,
   },
   {
     key: 'declaracao_servico', title: 'Declaração de serviço', category: 'declaration',
@@ -240,18 +380,65 @@ export function unknownFields(body: string): string[] {
 
 export type DocBlock =
   | { type: 'title'; text: string }
-  | { type: 'paragraph'; spans: { text: string; bold: boolean }[] }
-  | { type: 'signatures'; labels: string[] };
+  | { type: 'heading'; text: string }
+  | { type: 'paragraph'; spans: { text: string; bold: boolean }[]; indent?: 1 | 2 | 3 }
+  | { type: 'signatures'; labels: string[]; names?: string[] };
 
-/** Texto composto → blocos para apresentar/imprimir sem HTML arbitrário. */
+/** Marcadores de alínea: «1.1.» (nível 1), «a.»/«a)» (nível 2), «b1.» (nível 3). */
+const ITEM_RE = /^(?:\d+\.\d+(?:\.\d+)*\.?|[a-z]\)|[a-z]\.|[a-z]\d+[.)])\s/;
+function itemIndent(p: string): 1 | 2 | 3 | undefined {
+  if (/^\d+\.\d+(?:\.\d+)*\.?\s/.test(p)) return 1;
+  if (/^[a-z][.)]\s/.test(p)) return 2;
+  if (/^[a-z]\d+[.)]\s/.test(p)) return 3;
+  return undefined;
+}
+const spansOf = (p: string) => p.split(/(\*\*[^*]+\*\*)/g).filter(Boolean).map((s) => (s.startsWith('**') && s.endsWith('**') ? { text: s.slice(2, -2), bold: true } : { text: s.replace(/\n/g, ' '), bold: false }));
+
+/**
+ * Converte o texto de um modelo em blocos. «# » título, «## » secção (ex.: «## 1. OBJECTO»),
+ * alíneas numeradas (1.1., a., b1.) em linhas próprias, «--- assinaturas: Função // Nome | …».
+ */
 export function documentBlocks(text: string): DocBlock[] {
-  return text.split(/\n\s*\n/).map((raw) => raw.trim()).filter(Boolean).map((p): DocBlock => {
+  const raw = text.split(/\n\s*\n/).map((r) => r.trim()).filter(Boolean)
+    // Alíneas seguidas numa só linha de parágrafo passam a blocos próprios.
+    .flatMap((p) => (p.split('\n').slice(1).some((l) => ITEM_RE.test(l.trim())) ? p.split(/\n(?=\s*(?:\d+\.\d+|[a-z]\d*[.)])\s)/).map((x) => x.trim()) : [p]));
+  return raw.map((p): DocBlock => {
+    if (p.startsWith('## ')) return { type: 'heading', text: p.slice(3).trim() };
     if (p.startsWith('# ')) return { type: 'title', text: p.slice(2).trim() };
     const sig = /^---\s*assinaturas:\s*(.*)$/i.exec(p);
-    if (sig) return { type: 'signatures', labels: sig[1]!.split('|').map((s) => s.trim()) };
-    const spans = p.split(/(\*\*[^*]+\*\*)/g).filter(Boolean).map((s) => (s.startsWith('**') && s.endsWith('**') ? { text: s.slice(2, -2), bold: true } : { text: s.replace(/\n/g, ' '), bold: false }));
-    return { type: 'paragraph', spans };
+    if (sig) {
+      const parts = sig[1]!.split('|').map((s) => s.split('//').map((x) => x.trim()));
+      const names = parts.map((x) => x[1] ?? '');
+      return { type: 'signatures', labels: parts.map((x) => x[0]!), ...(names.some(Boolean) ? { names } : {}) };
+    }
+    const indent = itemIndent(p);
+    return { type: 'paragraph', spans: spansOf(p), ...(indent ? { indent } : {}) };
   });
+}
+
+/**
+ * Reconstrói a estrutura de um modelo importado (Word ou PDF): retira cabeçalhos/rodapés repetidos
+ * e numeração de página, junta as linhas partidas do PDF em parágrafos e marca título, secções e alíneas.
+ */
+export function structureImportedText(lines: string[], source: 'pdf' | 'word'): string {
+  const clean = lines.map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const count = new Map<string, number>();
+  for (const l of clean) count.set(l, (count.get(l) ?? 0) + 1);
+  const body = clean.filter((l) => !/^(?:p[áa]gina\s*)?\d+\s*(?:\/|de)\s*\d+$/i.test(l) && !(source === 'pdf' && (count.get(l) ?? 0) > 1 && l.length > 25));
+  const blocks: string[] = [];
+  let titled = false;
+  for (const l of body) {
+    if (/^#{1,2} /.test(l) || /^---\s*assinaturas:/i.test(l)) { blocks.push(l); titled ||= l.startsWith('# '); continue; }
+    const upper = l === l.toLocaleUpperCase('pt') && /[A-ZÀ-Ú]{3}/.test(l);
+    if (!titled && upper && /CONTRATO|DECLARA|ACORDO|CERTIFICADO|ADENDA|TERMO|AVISO|NOTA|CARTA|REGULAMENTO/.test(l) && l.length < 120) { blocks.push(`# ${l}`); titled = true; continue; }
+    if (/^\d+\.\s+\S/.test(l) && upper && l.length < 90) { blocks.push(`## ${l}`); continue; }
+    const prev = blocks.at(-1);
+    const startsNew = ITEM_RE.test(l) || /^_{3,}/.test(l) || !prev || prev.startsWith('#') || /^_{3,}/.test(prev);
+    const joins = source === 'pdf' && !startsNew && !(/[.:;!?]$/.test(prev!) && /^[A-ZÀ-Ú"«(]/.test(l));
+    if (joins) blocks[blocks.length - 1] = `${prev} ${l}`;
+    else blocks.push(l);
+  }
+  return blocks.join('\n\n');
 }
 
 // ——— Valores por extenso ———

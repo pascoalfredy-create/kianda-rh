@@ -1,8 +1,9 @@
 'use client';
+import { DocView } from '@/components/doc-view';
 import { DocumentPrintButton } from '@/components/document-export';
 
 
-import { DOCUMENT_CATEGORY, documentBlocks, renderTemplate, type DocumentCategory } from '@kianda/core';
+import { DOCUMENT_CATEGORY, renderTemplate, type DocumentCategory } from '@kianda/core';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { send, useMutation } from '@/lib/client';
@@ -12,13 +13,7 @@ import { useClearWorkspace, useWorkspaceState } from '@/components/workspace-sta
 interface Tpl { key: string; title: string; category: DocumentCategory; description: string; inputs: { key: string; label: string; placeholder?: string; required: boolean }[]; source: string; version: string; body: string }
 
 function Preview({ text }: { text: string }) {
-  return (
-    <div style={{ padding: '20px 26px', fontSize: 13.5 }}>
-      {documentBlocks(text).map((b, i) => b.type === 'title' ? <h3 key={i} style={{ textAlign: 'center', textTransform: 'uppercase' }}>{b.text}</h3>
-        : b.type === 'signatures' ? <div key={i} className="muted" style={{ marginTop: 20 }}>Assinaturas: {b.labels.filter(Boolean).join(' · ')}</div>
-          : <p key={i} style={{ lineHeight: 1.6 }}>{b.spans.map((s, j) => s.bold ? <b key={j}>{s.text}</b> : <span key={j} style={/\[[\w.]+\]/.test(s.text) ? undefined : undefined}>{s.text}</span>)}</p>)}
-    </div>
-  );
+  return <div className="doc" style={{ padding: '20px 26px', fontSize: 13.5, maxWidth: 'none', margin: 0 }}><DocView text={text} /></div>;
 }
 
 export function IssueForm({ templates, employees, initialEmployee, initialTemplate }: { initialTemplate?: string; templates: Tpl[]; employees: { id: string; name: string; number: string }[]; initialEmployee?: string }) {

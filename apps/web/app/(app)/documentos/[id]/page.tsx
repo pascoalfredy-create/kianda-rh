@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
 import { DocView } from '@/components/doc-view';
-import { Letterhead } from '@/components/letterhead';
+import { PrintSheet } from '@/components/print-sheet';
 import { api, currentUser } from '@/lib/api';
 import { PrintBtn, RevokeButton } from '../forms';
 
@@ -25,14 +25,10 @@ export default async function Documento({ params }: { params: Promise<{ id: stri
         {['owner', 'hr_admin'].includes(me.user.role) && !d.revokedAt && <RevokeButton id={d.id} />}
       </div>
       {d.revokedAt && <div className="alert">Documento anulado em {new Date(d.revokedAt).toLocaleDateString('pt-PT')}: {d.revokeNote}</div>}
-      <div className="card doc">
-        <Letterhead />
+      <PrintSheet footer={<><span>{d.number} · emitido em {new Date(d.issuedAt).toLocaleDateString('pt-PT', { timeZone: 'Africa/Luanda' })}</span>
+          <span>Verificar: {verifyUrl}</span></>}>
         <DocView text={d.body} />
-        <div style={{ marginTop: 40, paddingTop: 10, borderTop: '1px solid #e5e7eb', fontSize: 11.5, color: '#6b7280', display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-          <span>{d.number} · emitido em {new Date(d.issuedAt).toLocaleDateString('pt-PT', { timeZone: 'Africa/Luanda' })}</span>
-          <span>Verificar: {verifyUrl}</span>
-        </div>
-      </div>
+      </PrintSheet>
     </>
   );
 }
