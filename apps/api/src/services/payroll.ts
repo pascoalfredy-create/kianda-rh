@@ -51,7 +51,7 @@ export type SubsidyOverrides = Record<string, { holiday?: boolean; christmas?: b
 type Line = { code: string; kind: string; amountMinor: number };
 const linesOf = (l: { breakdown: unknown }) => l.breakdown as Line[];
 /** Rubrica do fecho de contas com o pressuposto do cálculo (ex.: «Férias não gozadas — 12 dia(s) úteis × base/22»). */
-const withBasis = (v: { label: string; note: string | null; terminationId: string | null }) => (v.terminationId && v.note && !v.label.includes(v.note) ? `${v.label} — ${v.note}` : v.label);
+const withBasis = (v: { label: string }) => v.label;
 const amountOf = (l: { breakdown: unknown }, code: string) => linesOf(l).filter((x) => x.code === code).reduce((s, x) => s + x.amountMinor, 0);
 
 /**
@@ -220,7 +220,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       }, 0);
       const disc = pack.labour.unjustifiedDisciplinary;
       if (unjustifiedThisMonth > disc.perMonth || unjustifiedThisYear > disc.perYear) {
-        warnings.push({ employeeId: e.id, message: `${e.name}: ${unjustifiedThisMonth > disc.perMonth ? `${unjustifiedThisMonth} faltas injustificadas no mês` : `${unjustifiedThisYear} faltas injustificadas no ano`} — constitui infracção disciplinar (LGT, art. 230.º)` });
+        warnings.push({ employeeId: e.id, message: `${e.name}: ${unjustifiedThisMonth > disc.perMonth ? `${unjustifiedThisMonth} faltas injustificadas no mês` : `${unjustifiedThisYear} faltas injustificadas no ano`} — constitui infracção disciplinar` });
       }
       // Paternidade: 1 dia pago e o restante não remunerado (art. 218.º).
       const workMinutesIn = (from: string, to: string) => (sched ? minutesIn(from, to) : businessDays(from, to, [labourRules('AO', year)]) * pack.labour.dailyHours * 60);
@@ -245,7 +245,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
         const from = unpaidFrom > periodStart ? unpaidFrom : periodStart, to = chain.to < periodEnd ? chain.to : periodEnd;
         if (from > to) continue;
         sickUnpaidHours += workMinutesIn(from, to) / 60;
-        warnings.push({ employeeId: e.id, message: `${e.name}: doença desde ${chain.from.split('-').reverse().join('/')} — passados 6 meses (art. 226.º, n.º 1) o contrato fica suspenso sem salário (art. 268.º, n.º 1); os dias desde ${unpaidFrom.split('-').reverse().join('/')} foram descontados. O subsídio passa a ser pago pela segurança social.` });
+        warnings.push({ employeeId: e.id, message: `${e.name}: doença desde ${chain.from.split('-').reverse().join('/')} — passados 6 meses o contrato fica suspenso sem salário; os dias desde ${unpaidFrom.split('-').reverse().join('/')} foram descontados. O subsídio passa a ser pago pela segurança social.` });
       }
       unpaidLeaveHours = Math.round((unpaidLeaveHours + sickUnpaidHours) * 100) / 100;
       const unpaidLabel = [unpaidLeaveHours - sickUnpaidHours > 0.001 ? 'licença de paternidade não remunerada' : '', sickUnpaidHours ? 'doença além de 6 meses (contrato suspenso)' : ''].filter(Boolean).join(' e ');
@@ -345,16 +345,16 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
           vacationAllowanceCut, absenceAllowanceCut, latenessHours,
         });
         // Casos sem regra fechada na LGT: o motor não calcula — avisa e o valor é lançado à mão nas variáveis.
-        if (maternityDays) warnings.push({ employeeId: e.id, message: `${e.name}: ${maternityDays} dia(s) de licença de maternidade em ${period} — CÁLCULO MANUAL: o salário está suspenso (arts. 267.º, c) e 268.º) e o motor pagou o mês por inteiro; lance "Desconto na remuneração" com o valor a retirar (base, alimentação, transporte)` });
-        if (holidayWorkDays) warnings.push({ employeeId: e.id, message: `${e.name}: ${holidayWorkDays} feriado(s) trabalhado(s) — CÁLCULO MANUAL do acréscimo do art. 200.º, n.º 2 ("mais um dia de salário normal"): lance em "Outro abono"` });
-        if (period.endsWith('-12') && att && sched?.kind !== 'cycle') warnings.push({ employeeId: e.id, message: `${e.name}: 24 e 31 de Dezembro com paragem às 12h30 (art. 199.º) — CÁLCULO MANUAL: horas trabalhadas depois das 12h30 não entram como extraordinárias; lance-as em "Outro abono" se forem devidas` });
+        if (maternityDays) warnings.push({ employeeId: e.id, message: `${e.name}: ${maternityDays} dia(s) de licença de maternidade em ${period} — CÁLCULO MANUAL: o salário está suspenso e o motor pagou o mês por inteiro; lance "Desconto na remuneração" com o valor a retirar (base, alimentação, transporte)` });
+        if (holidayWorkDays) warnings.push({ employeeId: e.id, message: `${e.name}: ${holidayWorkDays} feriado(s) trabalhado(s) — CÁLCULO MANUAL do acréscimo por feriado trabalhado ("mais um dia de salário normal"): lance em "Outro abono"` });
+        if (period.endsWith('-12') && att && sched?.kind !== 'cycle') warnings.push({ employeeId: e.id, message: `${e.name}: 24 e 31 de Dezembro com paragem às 12h30 — CÁLCULO MANUAL: horas trabalhadas depois das 12h30 não entram como extraordinárias; lance-as em "Outro abono" se forem devidas` });
         if (maternityYear.has(e.id) && (holidaySubsidy || christmasSubsidy)) {
-          warnings.push({ employeeId: e.id, message: `${e.name}: subsídio pago num ano com licença de maternidade — o art. 238.º, n.º 3 manda pagar proporcional aos meses completos de serviço efectivo; CÁLCULO MANUAL: confirme e ajuste o valor` });
+          warnings.push({ employeeId: e.id, message: `${e.name}: subsídio pago num ano com licença de maternidade — a lei manda pagar proporcional aos meses completos de serviço efectivo; CÁLCULO MANUAL: confirme e ajuste o valor` });
         }
         // Descontos a crédito (adiantamentos e outros) até 25% do líquido (LGT, art. 248.º, n.º 7).
         const credit = advancesMinor + otherDeductionsMinor;
         const cap = monthlyDeductionCap(r.netMinor + credit + noticeDeductionMinor, pack);
-        if (credit > cap) warnings.push({ employeeId: e.id, message: `${e.name}: adiantamentos e outros descontos (${(credit / 100).toLocaleString('pt-PT')} Kz) acima de 25% do salário líquido (${(cap / 100).toLocaleString('pt-PT')} Kz) — LGT, art. 248.º, n.º 7` });
+        if (credit > cap) warnings.push({ employeeId: e.id, message: `${e.name}: adiantamentos e outros descontos (${(credit / 100).toLocaleString('pt-PT')} Kz) acima de 25% do salário líquido (${(cap / 100).toLocaleString('pt-PT')} Kz)` });
       } catch (err) {
         if (err instanceof NegativeNetError) throw new DomainError('liquido_negativo', `${e.name}: os descontos (adiantamentos e outros) excedem o ilíquido do mês. Reduza ou reparta pelos meses seguintes.`, 422);
         throw err;

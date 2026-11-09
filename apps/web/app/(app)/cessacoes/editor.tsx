@@ -101,12 +101,11 @@ export function TerminationEditor({ init, employees }: { init: EditorInit; emplo
         <div className="card section">
           <h2>Fecho de contas {edited && <span className="tag" style={{ marginLeft: 8 }}>ajustado manualmente</span>}</h2>
           <table className="dense">
-            <thead><tr><th>Rubrica</th><th>Base de cálculo</th><th>INSS</th><th>IRT</th><th className="num">Abono</th><th className="num">Desconto</th><th /></tr></thead>
+            <thead><tr><th>Rubrica</th><th>INSS</th><th>IRT</th><th className="num">Abono</th><th className="num">Desconto</th><th /></tr></thead>
             <tbody>
               {items.map((x, i) => (
                 <tr key={i}>
                   <td><input value={x.label} onChange={(e) => setItem(i, { label: e.target.value })} style={{ width: '100%', minWidth: 220 }} /></td>
-                  <td className="muted" style={{ fontSize: 12.5 }}>{x.basis}</td>
                   <td><input type="checkbox" checked={x.inInss} onChange={(e) => setItem(i, { inInss: e.target.checked })} disabled={x.kind === 'deduction'} /></td>
                   <td><input type="checkbox" checked={x.inIrt} onChange={(e) => setItem(i, { inIrt: e.target.checked })} disabled={x.kind === 'deduction'} /></td>
                   <td className="num">{x.kind === 'earning' && <input defaultValue={dec(x.amountMinor)} key={`${i}-${x.amountMinor}`} onBlur={(e) => setItem(i, { amountMinor: toKz(e.target.value) ?? 0 })} style={{ width: 130, textAlign: 'right' }} />}</td>

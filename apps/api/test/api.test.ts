@@ -970,7 +970,8 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(codes).toEqual(expect.arrayContaining(['BASE', 'COMP', 'AVISO', 'FERNG', 'OUTDESC']));
       expect(line.breakdown.find((b: { code: string }) => b.code === 'BASE').amountMinor).toBe(15_000_000);
       // Pressupostos do fecho de contas visíveis no recibo (rubrica — base de cálculo).
-      expect(line.breakdown.find((b: { code: string }) => b.code === 'FERNG').name).toContain(' — ');
+      // Recibo sem fórmulas nem artigos: só o nome da rubrica.
+      expect(line.breakdown.find((b: { code: string }) => b.code === 'FERNG').name).not.toContain('×');
       expect(line.breakdown.filter((b: { code: string }) => b.code === 'OUTDESC').map((b: { name: string }) => b.name)).toEqual([expect.stringContaining('Devolução de telemóvel')]);
       const dec = (await get(payrollUser, '/v1/payroll-runs?period=2026-12')).json()[0];
       if (dec) expect((await get(payrollUser, `/v1/payroll-runs/${dec.id}`)).json().lines.some((l: { employeeId: string }) => l.employeeId === leaverId)).toBe(false);
@@ -1358,7 +1359,7 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(s.profile.schedules.every((x: { applied: boolean }) => x.applied)).toBe(true);
       const rot = s.schedules.find((x: { presetKey: string }) => x.presetKey === 'rotation_28');
       expect(rot.stats.avgWeeklyMinutes).toBe(2520);
-      expect(rot.stats.problems.join()).toMatch(/art\. 161\.º/); // 12 h em turnos rotativos: excepção do art. 161.º, n.º 3
+      expect(rot.stats.problems.join()).not.toMatch(/art\./); // 12 h em turnos rotativos: excepção do art. 161.º, n.º 3
       rotationId = rot.id;
       // Aplicar outra vez não duplica nada.
       expect((await send('POST', mine, '/v1/sector/apply')).json()).toEqual({ schedules: 0, allowances: 0 });

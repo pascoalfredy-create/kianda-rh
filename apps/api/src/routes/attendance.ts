@@ -373,7 +373,7 @@ export function attendanceRoutes() {
       .where(and(eq(attendanceMonths.employeeId, emp.id), gte(attendanceMonths.period, `${b.period.slice(0, 4)}-01`), lte(attendanceMonths.period, `${b.period.slice(0, 4)}-12`)));
     const yearTotal = yearRows.reduce((s, r) => s + r.m, 0) + approved;
     if ((approved > limits.perMonth * 60 || yearTotal > limits.perYear * 60) && !b.note) {
-      throw new DomainError('limite_extra', `${approved > limits.perMonth * 60 ? `Mais de ${limits.perMonth} h extra no mês` : `Mais de ${limits.perYear} h extra no ano (${Math.round(yearTotal / 60)} h)`}: só com consentimento do trabalhador e autorização da Inspecção Geral do Trabalho (LGT, art. 185.º). Indique a autorização na nota.`, 400);
+      throw new DomainError('limite_extra', `${approved > limits.perMonth * 60 ? `Mais de ${limits.perMonth} h extra no mês` : `Mais de ${limits.perYear} h extra no ano (${Math.round(yearTotal / 60)} h)`}: só com consentimento do trabalhador e autorização da Inspecção Geral do Trabalho. Indique a autorização na nota.`, 400);
     }
     // Descanso semanal e feriados são pagos à parte (arts. 194.º e 200.º). Ao aprovar menos do que o registado, o corte vai
     // primeiro ao trabalho em descanso/feriado (normalmente o não autorizado) e só depois aos dias normais.

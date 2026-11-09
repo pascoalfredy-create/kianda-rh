@@ -85,7 +85,7 @@ async function context(db: Db, companyId: string, employeeId: string, effectiveD
     .where(and(eq(payrollVariables.employeeId, emp.id), sql`${payrollVariables.advanceId} is not null`, sql`${payrollVariables.period} > ${period}`));
   if (later.length) {
     const total = later.reduce((s, v) => s + v.amount, 0);
-    warnings.push(`Adiantamento salarial com ${later.length} prestação(ões) depois de ${period.slice(5)}/${period.slice(0, 4)} (${(total / 100).toLocaleString('pt-PT', { minimumFractionDigits: 2 })} Kz em dívida): acerte no fecho de contas (outro desconto) — descontos a crédito até 25% do líquido (LGT, art. 248.º, n.º 7).`);
+    warnings.push(`Adiantamento salarial com ${later.length} prestação(ões) depois de ${period.slice(5)}/${period.slice(0, 4)} (${(total / 100).toLocaleString('pt-PT', { minimumFractionDigits: 2 })} Kz em dívida): acerte no fecho de contas (outro desconto) — descontos a crédito até 25% do líquido.`);
   }
   return {
     emp, contract, hire, pay, pack, period, run, warnings,
