@@ -28,7 +28,7 @@ describe('regimes de horário', () => {
   it('estatísticas e avisos', () => {
     const r = scheduleStats(rot, 44);
     expect(r).toMatchObject({ cycleDays: 56, workDays: 28, avgWeeklyMinutes: 2520 });
-    expect(r.problems).toEqual([expect.stringMatching(/turnos rotativos o limite é 8 h por dia.*art\. 161\.º/)]); // média 42 h cumpre o art. 148.º
+    expect(r.problems).toEqual([expect.stringMatching(/turnos rotativos o limite é 8 h por dia/)]); // média 42 h cumpre o art. 148.º
     expect(scheduleStats(SCHEDULE_PRESETS.shift_3x8!, 44).problems).toEqual([]);
     expect(scheduleStats(SCHEDULE_PRESETS.shift_12x2!, 44).avgWeeklyMinutes).toBe(2520);
     expect(scheduleStats(SCHEDULE_PRESETS.rotation_42_21!, 44).problems[0]).toMatch(/acima de 44 h: só admissível em turnos.*até 54 h/);

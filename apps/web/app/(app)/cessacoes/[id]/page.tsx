@@ -38,8 +38,8 @@ export default async function Cessacao({ params }: { params: Promise<{ id: strin
         <div className="card section">
           <h2>Fecho de contas</h2>
           <table className="dense">
-            <thead><tr><th>Rubrica</th><th>Base de cálculo</th><th className="num">Abono</th><th className="num">Desconto</th></tr></thead>
-            <tbody>{d.items.map((x, i) => <tr key={i}><td>{x.label}</td><td className="muted">{x.basis}</td><td className="num">{x.kind === 'earning' ? formatKz(x.amountMinor) : ''}</td><td className="num">{x.kind === 'deduction' ? formatKz(x.amountMinor) : ''}</td></tr>)}</tbody>
+            <thead><tr><th>Rubrica</th><th className="num">Abono</th><th className="num">Desconto</th></tr></thead>
+            <tbody>{d.items.map((x, i) => <tr key={i}><td>{x.label}</td><td className="num">{x.kind === 'earning' ? formatKz(x.amountMinor) : ''}</td><td className="num">{x.kind === 'deduction' ? formatKz(x.amountMinor) : ''}</td></tr>)}</tbody>
             <tfoot><tr><td colSpan={2}><b>Totais</b></td><td className="num"><b>{formatKz(d.totals.earningsMinor)}</b></td><td className="num"><b>{formatKz(d.totals.deductionsMinor)}</b></td></tr></tfoot>
           </table>
           {d.payslip && <p style={{ padding: '10px 16px' }}>Líquido estimado do recibo final: <b>{formatKz(d.payslip.netMinor)}</b></p>}

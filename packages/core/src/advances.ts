@@ -60,12 +60,12 @@ export function checkAdvance(i: AdvanceCheckInput): AdvanceCheck {
   const problems: string[] = [];
   if (i.amountMinor <= 0) problems.push('Indique o valor do adiantamento');
   if (i.amountMinor > maxAmountMinor) {
-    problems.push(`O total de adiantamentos não pode exceder ${maxBaseSalaries} salários base (${fmt(i.baseMinor * maxBaseSalaries)})${i.outstandingMinor ? `; já estão em dívida ${fmt(i.outstandingMinor)}` : ''} — máximo agora: ${fmt(maxAmountMinor)} (LGT, art. 248.º, n.º 6)`);
+    problems.push(`O total de adiantamentos não pode exceder ${maxBaseSalaries} salários base (${fmt(i.baseMinor * maxBaseSalaries)})${i.outstandingMinor ? `; já estão em dívida ${fmt(i.outstandingMinor)}` : ''} — máximo agora: ${fmt(maxAmountMinor)}`);
   }
   if (!maxInstallmentMinor) {
-    problems.push(`Os descontos a crédito já atingem ${maxNetShareBps / 100}% do salário líquido: não há margem para novas prestações (LGT, art. 248.º, n.º 7)`);
+    problems.push(`Os descontos a crédito já atingem ${maxNetShareBps / 100}% do salário líquido: não há margem para novas prestações`);
   } else if (i.amountMinor > 0 && Math.ceil(i.amountMinor / Math.max(1, i.installments)) > maxInstallmentMinor) {
-    problems.push(`Cada prestação não pode passar de ${fmt(maxInstallmentMinor)} (${maxNetShareBps / 100}% do líquido${i.otherMonthlyDeductionsMinor ? ', descontados outros descontos a crédito' : ''}) — são precisas pelo menos ${minInstallments} prestações (LGT, art. 248.º, n.º 7)`);
+    problems.push(`Cada prestação não pode passar de ${fmt(maxInstallmentMinor)} (${maxNetShareBps / 100}% do líquido${i.otherMonthlyDeductionsMinor ? ', descontados outros descontos a crédito' : ''}) — são precisas pelo menos ${minInstallments} prestações`);
   }
   return { maxAmountMinor, maxInstallmentMinor, minInstallments: Number.isFinite(minInstallments) ? minInstallments : 0, problems };
 }

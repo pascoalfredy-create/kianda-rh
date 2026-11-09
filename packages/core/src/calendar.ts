@@ -79,8 +79,8 @@ export function contractAlerts(
       const [y, m, d] = c.endDate.split('-').map(Number);
       const limit = new Date(Date.UTC(y!, m! - 1, d! - 30)).toISOString().slice(0, 10).split('-').reverse().join('/');
       out.push({ kind: 'fixed-term-ending', daysLeft: left, message: left >= 30
-        ? `Contrato termina em ${left} dia(s): se não for renovar, avise até ${limit} (30 dias, art. 17.º da LGT)`
-        : `Contrato termina em ${left} dia(s): já passou o prazo do aviso de não renovação (30 dias); sem aviso há compensação de 30 dias (art. 17.º, n.º 4)` });
+        ? `Contrato termina em ${left} dia(s): se não for renovar, avise até ${limit} (30 dias)`
+        : `Contrato termina em ${left} dia(s): já passou o prazo do aviso de não renovação (30 dias); sem aviso há compensação de 30 dias` });
     }
   }
   if (c.type === 'indefinite' || c.type === 'fixed-term') {

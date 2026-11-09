@@ -57,7 +57,7 @@ export function RequestForm({ employees }: { employees?: { id: string; name: str
       )}
       <label className="wide" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, fontWeight: 400 }}>
         <input type="checkbox" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} style={{ height: 'auto', marginTop: 3 }} />
-        <span>{employees ? 'Tenho em arquivo o pedido escrito e assinado do colaborador, com a autorização de desconto no salário (LGT, art. 248.º, n.º 6).' : 'Peço por escrito este adiantamento e autorizo o desconto das prestações no meu salário (LGT, art. 248.º, n.º 6).'}</span>
+        <span>{employees ? 'Tenho em arquivo o pedido escrito e assinado do colaborador, com a autorização de desconto no salário.' : 'Peço por escrito este adiantamento e autorizo o desconto das prestações no meu salário.'}</span>
       </label>
       <div className="form-actions">
         {error ? <span className="err">{error}</span> : ok ? <span className="ok">{ok}</span> : null}

@@ -29,7 +29,7 @@ export default async function PlanoFerias({ searchParams }: { searchParams: Prom
       <div className="page-head no-print">
         <div>
           <h1>Plano de férias {year}</h1>
-          <p className="sub">Para afixar no centro de trabalho até 31 de Janeiro (art. 206.º da LGT).</p>
+          <p className="sub">Para afixar no centro de trabalho até 31 de Janeiro.</p>
         </div>
         <div className="actions">
           <Link className="btn ghost sm" href={`?ano=${year - 1}`}>← {year - 1}</Link>
@@ -38,7 +38,7 @@ export default async function PlanoFerias({ searchParams }: { searchParams: Prom
         </div>
       </div>
       {pending && <div className="warn no-print">Há períodos ainda por aprovar — aparecem marcados «por aprovar». Aprove-os antes de afixar o plano.</div>}
-      <PrintSheet footer={<><span>Plano de férias de {year} · art. 206.º da Lei Geral do Trabalho</span><span>Emitido em {pt(new Date().toISOString().slice(0, 10))}</span></>}>
+      <PrintSheet footer={<><span>Plano de férias de {year}</span><span>Emitido em {pt(new Date().toISOString().slice(0, 10))}</span></>}>
         <h2 className="doc-title">Plano de férias de {year}</h2>
         <table className="vacation-plan">
           <colgroup><col style={{ width: '6%' }} /><col style={{ width: '25%' }} /><col style={{ width: '15%' }} /><col style={{ width: '34%' }} /><col style={{ width: '10%' }} /><col style={{ width: '10%' }} /></colgroup>
@@ -60,7 +60,7 @@ export default async function PlanoFerias({ searchParams }: { searchParams: Prom
             })}
           </tbody>
         </table>
-        <p>A marcação foi feita, na medida do possível, por acordo entre o empregador e cada trabalhador (art. 206.º, n.º 2). Alterações posteriores são comunicadas e reflectidas neste plano.</p>
+        <p>A marcação foi feita, na medida do possível, por acordo entre o empregador e cada trabalhador. Alterações posteriores são comunicadas e reflectidas neste plano.</p>
         <div className="doc-signatures" style={{ gridTemplateColumns: '1fr 1fr' }}>
           <div><b>O EMPREGADOR</b><div className="doc-sign-line" /></div>
           <div><b>AFIXADO EM</b><div className="doc-sign-line" /><div className="doc-sign-name">___/___/{year}</div></div>

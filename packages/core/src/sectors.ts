@@ -63,10 +63,10 @@ export function scheduleStats(s: Schedule, weeklyHoursLimit: number, extendedWee
   if (s.kind === 'cycle' && s.pattern.length < 2) problems.push('O ciclo tem de ter pelo menos 2 dias');
   if (s.pattern.some((m) => m < 0 || m > 24 * 60)) problems.push('Cada dia tem entre 0 e 24 horas');
   const extended = extendedWeeklyHours ?? 54;
-  if (avgWeeklyMinutes > extended * 60) problems.push(`Média de ${hours(avgWeeklyMinutes)} por semana acima do máximo de ${extended} h, mesmo em turnos ou horário modulado (art. 148.º, n.º 2) — o excesso é trabalho extraordinário`);
-  else if (avgWeeklyMinutes > weeklyHoursLimit * 60) problems.push(`Média de ${hours(avgWeeklyMinutes)} por semana acima de ${weeklyHoursLimit} h: só admissível em turnos, horário modulado ou de recuperação, até ${extended} h (art. 148.º, n.º 2)`);
-  if (s.kind === 'cycle' && maxDailyMinutes > 8 * 60) problems.push(`Turnos de ${hours(maxDailyMinutes)}: em turnos rotativos o limite é 8 h por dia, salvo quando a natureza da actividade não o permita (art. 161.º, n.º 1 e 3)`);
-  else if (maxDailyMinutes > 10 * 60) problems.push(`Jornadas de ${hours(maxDailyMinutes)}: acima de 10 h por dia só em trabalho intermitente ou de simples presença (art. 148.º, n.º 3)`);
+  if (avgWeeklyMinutes > extended * 60) problems.push(`Média de ${hours(avgWeeklyMinutes)} por semana acima do máximo de ${extended} h, mesmo em turnos ou horário modulado — o excesso é trabalho extraordinário`);
+  else if (avgWeeklyMinutes > weeklyHoursLimit * 60) problems.push(`Média de ${hours(avgWeeklyMinutes)} por semana acima de ${weeklyHoursLimit} h: só admissível em turnos, horário modulado ou de recuperação, até ${extended} h`);
+  if (s.kind === 'cycle' && maxDailyMinutes > 8 * 60) problems.push(`Turnos de ${hours(maxDailyMinutes)}: em turnos rotativos o limite é 8 h por dia, salvo quando a natureza da actividade não o permita`);
+  else if (maxDailyMinutes > 10 * 60) problems.push(`Jornadas de ${hours(maxDailyMinutes)}: acima de 10 h por dia só em trabalho intermitente ou de simples presença`);
   if (s.kind === 'weekly' && s.pattern.length === 7 && s.pattern.every((m) => m > 0)) problems.push('Sem dia de descanso semanal');
   return { cycleDays, workDays, restDays: cycleDays - workDays, maxDailyMinutes, avgWeeklyMinutes, problems };
 }
@@ -156,7 +156,7 @@ export const SECTOR_PROFILES: Record<Sector, SectorProfile> = {
   security: {
     schedules: ['shift_12x2', 'six_days', 'standard'], allowances: ['shift', 'night', 'risk'],
     requiredDocuments: [{ type: 'professional_card', label: 'Cartão profissional de vigilante', reason: 'A actividade de segurança privada exige pessoal habilitado com cartão profissional válido', appliesTo: ['vigilante', 'seguranca', 'guarda', 'agente de protec', 'supervisor de seguranca'], appliesToLabel: 'vigilantes e agentes de segurança' }],
-    notes: ['Formação e cartão profissional válidos para todos os vigilantes (lei da segurança privada)', 'Uso de arma: licença de uso e porte e formação específica', 'Turnos de 12 h: só quando a natureza da actividade não permite turnos de 8 h, com média até 54 h semanais (LGT, arts. 148.º e 161.º), e com acordo escrito', 'Trabalhadores nocturnos: exame de saúde antes do início e anual (LGT, art. 181.º)'],
+    notes: ['Formação e cartão profissional válidos para todos os vigilantes (lei da segurança privada)', 'Uso de arma: licença de uso e porte e formação específica', 'Turnos de 12 h: só quando a natureza da actividade não permite turnos de 8 h, com média até 54 h semanais, e com acordo escrito', 'Trabalhadores nocturnos: exame de saúde antes do início e anual'],
   },
   mining: {
     schedules: ['rotation_28', 'rotation_21', 'standard'], allowances: ['isolation', 'field', 'risk', 'housing'], requiredDocuments: [],

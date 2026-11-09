@@ -192,7 +192,7 @@ e. inscrever o TRABALHADOR na Segurança Social e efectuar as retenções e entr
 
 3.3. O contrato tem um período experimental de {{pacote.periodo_experimental_termo}} dias, durante o qual qualquer das partes o pode fazer cessar sem aviso prévio nem indemnização.
 
-3.4. A parte que não pretenda a renovação deve comunicá-lo à outra, por escrito, com a antecedência mínima de 30 (trinta) dias (art. 17.º, n.º 3, da Lei Geral do Trabalho).
+3.4. A parte que não pretenda a renovação deve comunicá-lo à outra, por escrito, com a antecedência mínima de 30 (trinta) dias.
 
 ## 4. REMUNERAÇÃO
 
@@ -288,13 +288,13 @@ ${ASSINATURAS('A Direcção / Recursos Humanos', '')}`,
   },
   {
     key: 'aviso_nao_renovacao', title: 'Comunicação de não renovação do contrato a termo', category: 'communication',
-    description: 'Aviso escrito com 30 dias de antecedência (art. 17.º, n.º 3); sem aviso, a empresa paga 30 dias.',
+    description: 'Aviso escrito com 30 dias de antecedência; sem aviso, a empresa paga 30 dias.',
     inputs: [],
     body: `# Comunicação de não renovação do contrato
 
 Exmo(a). Senhor(a) **{{colaborador.nome}}**,
 
-Nos termos do n.º 3 do artigo 17.º da Lei Geral do Trabalho (Lei n.º 12/23, de 27 de Dezembro), comunicamos que o contrato de trabalho por tempo determinado celebrado consigo com início em {{contrato.inicio}} não será renovado, cessando os seus efeitos no seu termo, em {{contrato.fim}}.
+Nos termos da Lei Geral do Trabalho (Lei n.º 12/23, de 27 de Dezembro), comunicamos que o contrato de trabalho por tempo determinado celebrado consigo com início em {{contrato.inicio}} não será renovado, cessando os seus efeitos no seu termo, em {{contrato.fim}}.
 
 Os créditos emergentes do contrato e da sua cessação serão pagos no fecho de contas, sendo-lhe entregue o respectivo certificado de trabalho.
 

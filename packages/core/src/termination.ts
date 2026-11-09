@@ -154,20 +154,20 @@ export function terminationProposal(i: TerminationInput): TerminationProposal {
   // Compensação legal
   let legal = 0;
   const years = compensationYears(sen, pack);
-  const yearsNote = years !== sen.years ? ` (${sen.label}: fracção ≥ ${t.seniorityFractionMonths} meses conta 1 ano, art. 311.º)` : '';
+  const yearsNote = years !== sen.years ? ` (${sen.label}: fracção ≥ ${t.seniorityFractionMonths} meses conta 1 ano)` : '';
   if (def.compensation === 'objective') {
     legal = objectiveCompensation(i.baseMinor, years, pack);
     const over = Math.max(0, years - t.compensationFullYears);
     add('COMP', `Base ${kz(i.baseMinor)} × ${Math.min(years, t.compensationFullYears)} ano(s)${over ? ` + ${t.compensationExtraYearBps / 100}% × ${over} ano(s)` : ''}${yearsNote}`, legal, 'earning', false, false);
-    if (!years) notes.push(`Antiguidade inferior a ${t.seniorityFractionMonths} meses: sem compensação (art. 311.º).`);
+    if (!years) notes.push(`Antiguidade inferior a ${t.seniorityFractionMonths} meses: sem compensação.`);
   } else if (def.compensation === 'just_cause') {
     const byYears = Math.round(applyBps(i.baseMinor, t.justCauseYearBps) * years);
     const min = i.baseMinor * t.justCauseMinBaseSalaries;
     legal = Math.max(byYears, min);
-    add('COMP', byYears >= min ? `Base ${kz(i.baseMinor)} × ${years} ano(s) de antiguidade${yearsNote}` : `Mínimo legal de ${t.justCauseMinBaseSalaries} salários base (art. 310.º, n.º 3)`, legal, 'earning', false, false);
+    add('COMP', byYears >= min ? `Base ${kz(i.baseMinor)} × ${years} ano(s) de antiguidade${yearsNote}` : `Mínimo legal de ${t.justCauseMinBaseSalaries} salários base`, legal, 'earning', false, false);
   } else if (def.compensation === 'extinction') {
     legal = Math.round(applyBps(i.baseMinor, t.employerExtinctionYearBps) * years);
-    add('COMP', `${t.employerExtinctionYearBps / 100}% da base ${kz(i.baseMinor)} × ${years} ano(s) (art. 307.º)${yearsNote}`, legal, 'earning', false, false);
+    add('COMP', `${t.employerExtinctionYearBps / 100}% da base ${kz(i.baseMinor)} × ${years} ano(s)${yearsNote}`, legal, 'earning', false, false);
   }
   const agreed = i.agreedCompensationMinor ?? 0;
   if (def.compensation === 'agreed' && agreed > 0) {
@@ -185,10 +185,10 @@ export function terminationProposal(i: TerminationInput): TerminationProposal {
   }
   if (i.reason === 'death') notes.push('Os créditos são pagos aos herdeiros, mediante habilitação.');
   if (i.reason === 'objective_dismissal' || i.reason === 'collective_dismissal') {
-    notes.push(`Durante o aviso prévio o trabalhador tem ${t.noticeJobSearchDays} dias de dispensa remunerada para procurar emprego, se os motivos não forem económicos (art. 287.º). A compensação e os créditos têm de estar à disposição até ao fim do aviso (art. 288.º, n.º 2).`);
+    notes.push(`Durante o aviso prévio o trabalhador tem ${t.noticeJobSearchDays} dias de dispensa remunerada para procurar emprego, se os motivos não forem económicos. A compensação e os créditos têm de estar à disposição até ao fim do aviso.`);
   }
-  if (i.reason === 'mutual_agreement') notes.push('O acordo é escrito, em duplicado, com a data de efeito e a data de pagamento da compensação (art. 280.º).');
-  notes.push(`Prazo de pagamento do fecho de contas: ${t.settlementPaymentDays} dias após a cessação (art. 245.º, n.º 4).`);
+  if (i.reason === 'mutual_agreement') notes.push('O acordo é escrito, em duplicado, com a data de efeito e a data de pagamento da compensação.');
+  notes.push(`Prazo de pagamento do fecho de contas: ${t.settlementPaymentDays} dias após a cessação.`);
   return { seniority: sen, notice: { requiredDays: required, givenDays: Math.min(given, required || given), missingDays: missing, by: def.notice }, legalCompensationMinor: legal, items, notes };
 }
 
