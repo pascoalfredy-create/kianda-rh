@@ -400,6 +400,13 @@
       "when": 1794006400000,
       "tag": "0056_allowances_on_absence",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1794092800000,
+      "tag": "0057_lateness",
+      "breakpoints": true
     }
   ]
 }

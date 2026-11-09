@@ -361,6 +361,9 @@ export function attendanceRoutes() {
     const missing = summary.days.filter((d) => d.flags.includes('no_record')).map((d) => d.date);
     if (missing.length && !b.noRecord) throw new DomainError('dias_sem_registo', `Há ${missing.length} dia(s) útil(eis) sem registo de ponto nem ausência. Classifique-os como falta injustificada ou como presença confirmada antes de aprovar.`, 400);
     if (missing.length && b.noRecord === 'present' && !b.note) throw new DomainError('motivo_obrigatorio', 'Indique o motivo para considerar presentes os dias sem registo (ex.: esqueceu-se de marcar, trabalho externo)', 400);
+    // Atrasos/saídas antecipadas: falta de minutos nos dias úteis com registo, acima da tolerância diária da empresa.
+    const [co] = await db.select({ tol: companies.latenessToleranceMinutes }).from(companies).where(eq(companies.id, actor.companyId));
+    const shortfall = summary.days.filter((d) => d.kind === 'workday' && d.workedMinutes > 0).reduce((s, d) => s + Math.max(0, d.expectedMinutes - d.workedMinutes - (co?.tol ?? 0)), 0);
     const approved = b.approvedOvertimeMinutes ?? summary.overtimeMinutes;
     if (approved > summary.overtimeMinutes) throw new DomainError('extra_acima', `Não pode aprovar mais horas extra do que as registadas (${summary.overtimeMinutes} min)`, 400);
     if (approved < summary.overtimeMinutes && !b.note) throw new DomainError('motivo_obrigatorio', 'Indique o motivo para aprovar menos horas extra do que as registadas', 400);
@@ -378,7 +381,7 @@ export function attendanceRoutes() {
     const restHoliday = approved - workdayPart;
     const [row] = await db.insert(attendanceMonths).values({
       companyId: actor.companyId, employeeId: emp.id, period: b.period, workedMinutes: summary.workedMinutes, expectedMinutes: summary.expectedMinutes,
-      overtimeMinutes: summary.overtimeMinutes, approvedOvertimeMinutes: approved, note: b.note ?? null, approvedBy: actor.actorId,
+      overtimeMinutes: summary.overtimeMinutes, approvedOvertimeMinutes: approved, note: b.note ?? null, approvedBy: actor.actorId, shortfallMinutes: shortfall,
       restHolidayOvertimeMinutes: restHoliday,
       restDayPaidMinutes: restHoliday < summary.restOrHolidayOvertimeMinutes ? Math.min(summary.restDayPaidMinutes, restHoliday) : summary.restDayPaidMinutes,
       holidayWorkDays: restHoliday < summary.restOrHolidayOvertimeMinutes ? 0 : summary.holidayWorkDays,

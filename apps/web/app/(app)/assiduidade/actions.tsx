@@ -85,7 +85,7 @@ export function ApproveMonth({ employeeId, period, overtimeMinutes, openDays, no
           Aprovar mês
         </button>
       </div>
-      <p className="muted wide">Depois de aprovado, o mês fica fechado a correcções e as horas extra aprovadas entram no processamento salarial (+50% até 30 h/mês, +75% acima).</p>
+      <p className="muted wide">Depois de aprovado, o mês fica fechado a correcções. As horas extra aprovadas entram no processamento salarial (+50% até 30 h/mês, +75% acima) e, se a empresa os descontar, os atrasos e saídas antecipadas entram como faltas em horas.</p>
     </div>
   );
 }

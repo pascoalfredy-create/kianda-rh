@@ -26,6 +26,8 @@ export interface PayrollInput {
   absenceHours?: number;
   /** Licença não remunerada (ex.: paternidade complementar, art. 218.º): horas a descontar ao valor-hora. */
   unpaidLeaveHours?: number;
+  /** Atrasos e saídas antecipadas (faltas em horas), descontados ao valor-hora. */
+  latenessHours?: number;
   unpaidLeaveLabel?: string;
   /** Dia de descanso semanal trabalhado: horas a pagar com +75% (art. 194.º; o mínimo de 3 h já vem aplicado). */
   restDayHours?: number;
@@ -211,6 +213,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   }
   if (input.absenceDays) deductHours('FALTAS', `Faltas injustificadas (${input.absenceDays} dia(s))`, input.absenceHours ?? input.absenceDays * pack.labour.dailyHours);
   if (input.unpaidLeaveHours) deductHours('LICNR', input.unpaidLeaveLabel ?? 'Licença não remunerada', input.unpaidLeaveHours);
+  if (input.latenessHours) deductHours('ATRASOS', `Atrasos e saídas antecipadas (${String(input.latenessHours).replace('.', ',')} h)`, input.latenessHours);
 
   const gross = sum(...lines.filter((l) => l.kind === 'earning').map((l) => l.amountMinor));
   const inssEmployee = applyBps(Math.max(0, inssBase), pack.inss.employeeBps);
