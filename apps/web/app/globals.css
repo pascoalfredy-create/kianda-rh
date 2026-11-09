@@ -224,7 +224,7 @@ table.dense th, table.dense td { padding: 8px 8px; font-size: 13px; }
 .doc.a4 .sheet > thead { display: table-header-group; } .doc.a4 .sheet > tfoot { display: table-footer-group; }
 .doc.a4 p { margin: 6px 0; line-height: 1.5; }
 .doc .doc-title { text-align: center; margin: 14px 0 22px; font-size: 13.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; }
-.doc .doc-section { break-after: avoid; page-break-after: avoid; margin: 16px 0 6px; font-size: 12pt; font-weight: 700; text-transform: uppercase; }
+.doc .doc-section { text-align: center; break-after: avoid; page-break-after: avoid; margin: 18px 0 8px; font-size: 12pt; font-weight: 700; text-transform: uppercase; }
 .doc p.doc-i2 { padding-left: 2.4em; text-indent: -1.3em; }
 .doc p.doc-i3 { padding-left: 4em; text-indent: -1.6em; }
 .doc .doc-signatures { display: grid; gap: 48px; margin-top: 44px; text-align: center; break-inside: avoid; }
