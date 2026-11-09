@@ -44,11 +44,11 @@ describe('feriados gerados e regras laborais por ano', async () => {
     expect(angolaHolidays(2026)).toEqual([...AO_2026.holidays]);
     expect(angolaHolidays(2027).find((h) => h.name === 'Carnaval')?.date).toBe('2027-02-09');
   });
-  it('2027: férias planeáveis, regras fiscais continuam bloqueadas', () => {
+  it('2027: férias planeáveis e regras de 2026 em vigor até haver pacote próprio', () => {
     const r = labourRules('AO', 2027);
     expect(r.year).toBe(2027);
     expect(r.holidays[0]!.date).toBe('2027-01-01');
-    expect(() => getPack('AO', 2027)).toThrow();
+    expect(getPack('AO', 2027).irt).toEqual(getPack('AO', 2026).irt);
     expect(packOrLatest('AO', 2027).version).toBe('AO-2026.2');
     // férias de 21/12/2026 a 08/01/2027: 8 dias úteis em 2026 (25/12 feriado) + 5 em 2027 (01/01 feriado)
     expect(workingDaysByYear('2026-12-21', '2027-01-08', (y) => labourRules('AO', y))).toEqual({ 2026: 8, 2027: 5 });

@@ -110,4 +110,6 @@ export interface CountryPack {
   toValidate: readonly string[];
   /** Regras confirmadas no texto legal, com o artigo. */
   confirmed?: readonly string[];
+  /** Preenchido quando o ano não tem pacote próprio e continua com as regras deste pacote. */
+  carriedFrom?: string;
 }

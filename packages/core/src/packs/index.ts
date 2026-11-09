@@ -13,11 +13,18 @@ export class PackNotFoundError extends Error {
   }
 }
 
-/** Devolve o pacote de regras do ano. Nunca reutiliza silenciosamente o ano anterior. */
+/**
+ * Pacote de regras do ano. Decisão do dono (09/11/2026): a folha não fica à espera do OGE. Sem pacote
+ * publicado para o ano, continuam em vigor as regras do pacote mais recente (IRT, INSS, salário mínimo,
+ * LGT), com os feriados do ano pedido; uma regra nova entra publicando o pacote desse ano (registerPack
+ * ou um ficheiro ao-AAAA.ts). Antes do primeiro pacote publicado não há regras: erro.
+ */
 export function getPack(country: 'AO', year: number): CountryPack {
-  const pack = PACKS[`${country}-${year}`];
-  if (!pack) throw new PackNotFoundError(country, year);
-  return pack;
+  const exact = PACKS[`${country}-${year}`];
+  if (exact) return exact;
+  const prior = Object.values(PACKS).filter((p) => p.country === country && p.year < year).sort((a, b) => a.year - b.year).at(-1);
+  if (!prior) throw new PackNotFoundError(country, year);
+  return { ...prior, year, version: `${country}-${year} (regras ${prior.version})`, holidays: angolaHolidays(year), carriedFrom: prior.version };
 }
 
 /**

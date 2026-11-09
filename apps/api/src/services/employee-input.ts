@@ -58,7 +58,7 @@ export const createBody = z.object({ number: z.string().trim().min(1), ...person
 /**
  * Salário mínimo do ano da data de efeito. Datas passadas sem pacote registado (ex.: migração de histórico de 2023–2025)
  * não são verificadas — a remuneração em vigor hoje continua a ser verificada nos alertas da ficha.
- * Datas futuras sem pacote são recusadas (422) até o pacote do ano ser publicado.
+ * Datas futuras usam o pacote do ano ou, sem ele, as regras do último publicado (getPack continua as regras).
  */
 export function assertMinimumWage(baseMinor: number, type: string, date: string, microOrStartup = false) {
   let pack: CountryPack;
