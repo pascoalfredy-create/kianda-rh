@@ -61,8 +61,7 @@ test('RH no telemóvel: lote de variáveis mantém os campos utilizáveis e grav
   const owner = await registerCompany();
   const employee = await apiAs(owner.token, 'POST', '/v1/employees', { number: '1', name: 'Pessoa do lote móvel', jobTitle: 'Técnico', contract: { type: 'indefinite', startDate: '2026-01-01', base: 100000 } });
   expect(employee.status).toBe(201); await signIn(context, owner.token);
-  await page.goto('/processamento?mes=2026-10');
-  await page.getByRole('button', { name: 'Preparar processamento', exact: true }).click();
+  await page.goto('/processamento?mes=2026-10&s=variaveis');
   await page.getByRole('button', { name: 'Lançar em lote', exact: true }).click();
   const form = page.getByRole('form', { name: 'Variáveis em lote', exact: true });
   await form.getByLabel('Descrição do lote', { exact: true }).fill('Prémio no telefone');
@@ -72,6 +71,7 @@ test('RH no telemóvel: lote de variáveis mantém os campos utilizáveis e grav
   expect(await page.evaluate<number>('document.documentElement.scrollWidth - window.innerWidth')).toBeLessThanOrEqual(1);
   await form.getByRole('button', { name: 'Guardar lote', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Lote guardado: 1');
+  await page.getByRole('button', { name: 'Preparar processamento', exact: true }).click();
   await page.getByRole('button', { name: 'Calcular folha', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Recalcular', exact: true })).toBeVisible();
 });

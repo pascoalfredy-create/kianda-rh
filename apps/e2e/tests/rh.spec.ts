@@ -64,7 +64,7 @@ test('colaboradores: lista e ficha com contrato', async ({ page, context }) => {
   expect(errors).toEqual([]);
 });
 
-test('processamento salarial: preparar abre os campos, guarda um prémio e só depois calcula a folha', async ({ page, context }) => {
+test('processamento salarial: preparar calcula sem variáveis; prémio lançado no separador Variáveis entra na folha', async ({ page, context }) => {
   await signIn(context, company.token);
   const errors = watchErrors(page);
   await page.goto('/processamento?mes=2026-10');
@@ -74,17 +74,20 @@ test('processamento salarial: preparar abre os campos, guarda um prémio e só d
   await expect(preparation).toBeVisible();
   await expect(page.getByRole('button', { name: 'Recalcular', exact: true })).toBeHidden();
   expect((await apiAs(company.token, 'GET', '/v1/payroll-runs?period=2026-10')).body).toEqual([]);
-  await preparation.getByRole('button', { name: 'Lançar variável', exact: true }).click();
-  const variable = preparation.getByRole('form', { name: 'Variável do processamento' });
-  await expect(variable.getByLabel('Colaborador')).toBeVisible();
+  await expect(preparation.getByRole('form', { name: 'Variável do processamento' })).toHaveCount(0);
+  await expect(preparation.getByRole('button', { name: 'Calcular folha', exact: true })).toBeEnabled();
+  await preparation.getByRole('link', { name: /^Variáveis \(0\)/ }).click();
+  await page.getByRole('button', { name: 'Lançar variável', exact: true }).click();
+  const variable = page.getByRole('form', { name: 'Variável do processamento' });
   await variable.getByLabel('Colaborador').selectOption({ label: people[0]!.name });
   await variable.getByLabel('Valor (Kz)').fill('12000');
   await variable.getByLabel('Descrição').fill('Prémio do mês');
-  await expect(preparation.getByRole('button', { name: 'Calcular folha', exact: true })).toBeDisabled();
   await variable.getByRole('button', { name: 'Lançar', exact: true }).click();
-  await expect(preparation.getByRole('button', { name: 'Calcular folha', exact: true })).toBeEnabled();
+  await expect(variable).toHaveCount(0);
+  await expect(preparation).toBeVisible();
   await preparation.getByRole('button', { name: 'Calcular folha', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Recalcular' })).toBeVisible();
+  await page.goto('/processamento?mes=2026-10');
   await expect(page.locator('details.map-disclosure').filter({ hasText: 'Mapa de processamento salarial' })).toBeVisible();
   await openMaps(page);
   for (const p of people) await expect(page.getByText(p.name).first()).toBeVisible();
@@ -94,7 +97,7 @@ test('processamento salarial: preparar abre os campos, guarda um prémio e só d
   await page.getByRole('button', { name: 'Rever preparação', exact: true }).click();
   await expect(preparation.getByRole('form', { name: 'Variável do processamento' })).toHaveCount(0);
   await expect(preparation.getByRole('button', { name: 'Calcular folha', exact: true })).toBeEnabled();
-  await expect(preparation).toContainText('1 variável guardada');
+  await expect(preparation.getByRole('link', { name: /^Variáveis \(1\)/ })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -103,12 +106,8 @@ test('cancelar a preparação não cria uma folha nem guarda variáveis por pree
   await page.goto('/processamento?mes=2026-09');
   await page.getByRole('button', { name: 'Preparar processamento' }).click();
   const preparation = page.getByRole('region', { name: 'Preparação do processamento' });
-  await preparation.getByRole('button', { name: 'Lançar variável', exact: true }).click();
-  const variable = preparation.getByRole('form', { name: 'Variável do processamento' });
-  await variable.getByLabel('Valor (Kz)').fill('9000');
-  await expect(preparation.getByRole('button', { name: 'Calcular folha', exact: true })).toBeDisabled();
-  await variable.getByRole('button', { name: 'Cancelar', exact: true }).click();
-  await preparation.getByRole('button', { name: 'Cancelar preparação', exact: true }).click();
+  await expect(preparation.getByRole('button', { name: 'Calcular folha', exact: true })).toBeEnabled();
+  await preparation.getByRole('button', { name: 'Cancelar', exact: true }).click();
   await expect(preparation).toBeHidden();
   expect((await apiAs(company.token, 'GET', '/v1/payroll-runs?period=2026-09')).body).toEqual([]);
   expect((await apiAs(company.token, 'GET', '/v1/payroll-variables?period=2026-09')).body).toEqual([]);
