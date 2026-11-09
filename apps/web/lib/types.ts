@@ -247,6 +247,10 @@ export interface PayrollVariableRow {
 }
 export interface JournalRow { id: string; reference: string; date: string; description: string; lines: { account: string; description: string; costCenter: string | null; debitMinor: number; creditMinor: number }[] }
 export interface Payslip {
+  leave?: { type: string; label: string; startDate: string; endDate: string; workingDays: number }[];
+  absenceDays?: number;
+  overtimeHours?: number;
+  termination?: { reasonLabel: string; hireDate: string | null; noticeDate: string | null; effectiveDate: string; seniority: string | null } | null;
   id: string;
   period: string;
   status: 'draft' | 'closed';

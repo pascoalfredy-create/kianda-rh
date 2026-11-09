@@ -50,6 +50,8 @@ export type SubsidyOverrides = Record<string, { holiday?: boolean; christmas?: b
 
 type Line = { code: string; kind: string; amountMinor: number };
 const linesOf = (l: { breakdown: unknown }) => l.breakdown as Line[];
+/** Rubrica do fecho de contas com o pressuposto do cálculo (ex.: «Férias não gozadas — 12 dia(s) úteis × base/22»). */
+const withBasis = (v: { label: string; note: string | null; terminationId: string | null }) => (v.terminationId && v.note && !v.label.includes(v.note) ? `${v.label} — ${v.note}` : v.label);
 const amountOf = (l: { breakdown: unknown }, code: string) => linesOf(l).filter((x) => x.code === code).reduce((s, x) => s + x.amountMinor, 0);
 
 /**
@@ -257,8 +259,10 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       // Variáveis do mês
       const mine = variablesByEmployee.get(e.id) ?? [];
       const variableEarnings: EarningInput[] = mine.filter((v) => v.kind === 'bonus' || v.kind === 'other_earning').map((v) => ({
-        code: v.code ?? (v.kind === 'bonus' ? 'BONUS' : 'OUTABON'), name: v.label, amountMinor: v.amountMinor, inInss: v.inInss, inIrt: v.inIrt,
+        code: v.code ?? (v.kind === 'bonus' ? 'BONUS' : 'OUTABON'), name: withBasis(v), amountMinor: v.amountMinor, inInss: v.inInss, inIrt: v.inIrt,
       }));
+      // Cada desconto com a sua rubrica (e a base de cálculo, no fecho de contas).
+      const otherDeductions = mine.filter((v) => v.kind === 'other_deduction' && v.code !== 'AVISODESC').map((v) => ({ name: withBasis(v), amountMinor: v.amountMinor }));
       const advancesMinor = mine.filter((v) => v.kind === 'advance').reduce((s, v) => s + v.amountMinor, 0);
       const otherDeductionsMinor = mine.filter((v) => v.kind === 'other_deduction' && v.code !== 'AVISODESC').reduce((s, v) => s + v.amountMinor, 0);
       const noticeDeductionMinor = mine.filter((v) => v.kind === 'other_deduction' && v.code === 'AVISODESC').reduce((s, v) => s + v.amountMinor, 0);
@@ -323,7 +327,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       try {
         r = calculatePayroll({
           period, pack, baseMinor: pay.baseMinor, baseLabel, mealMinor: pay.mealMinor, transportMinor: pay.transportMinor,
-          overtimeHours, absenceDays, absenceHours, otherEarnings, advancesMinor, otherDeductionsMinor, noticeDeductionMinor, holidaySubsidy, christmasSubsidy, workedDays,
+          overtimeHours, absenceDays, absenceHours, otherEarnings, advancesMinor, otherDeductionsMinor, otherDeductions, noticeDeductionMinor, holidaySubsidy, christmasSubsidy, workedDays,
           restDayHours, unpaidLeaveHours, unpaidLeaveLabel: unpaidLeaveHours ? `${unpaidLabel.charAt(0).toUpperCase()}${unpaidLabel.slice(1)} (${unpaidLeaveHours} h)` : undefined,
           vacationAllowanceCut,
         });

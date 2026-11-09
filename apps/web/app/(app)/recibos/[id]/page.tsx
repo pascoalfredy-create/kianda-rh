@@ -18,9 +18,17 @@ export default async function Recibo({ params }: { params: Promise<{ id: string 
     throw e;
   }
   const logo = (await api<{ logo: string | null } | null>('/v1/company/branding').catch(() => null))?.logo ?? null;
-  const earnings = p.lines.filter((l) => l.kind === 'earning');
-  const deductions = p.lines.filter((l) => l.kind === 'deduction');
-  const employer = p.lines.filter((l) => l.kind === 'employer');
+  // Só o que foi processado no mês: rubricas a zero não aparecem no recibo.
+  const processed = p.lines.filter((l) => l.amountMinor !== 0);
+  const earnings = processed.filter((l) => l.kind === 'earning');
+  const deductions = processed.filter((l) => l.kind === 'deduction');
+  const employer = processed.filter((l) => l.kind === 'employer');
+  const d = (iso: string) => iso.split('-').reverse().join('/');
+  const occurrences = [
+    ...(p.leave ?? []).map((a) => `${a.label}: ${a.workingDays} dia(s) útil(eis), de ${d(a.startDate)} a ${d(a.endDate)}`),
+    ...(p.absenceDays ? [`Faltas injustificadas: ${p.absenceDays} dia(s)`] : []),
+    ...(p.overtimeHours ? [`Horas extraordinárias: ${String(p.overtimeHours).replace('.', ',')} h`] : []),
+  ];
   const iban = p.employee.iban ? p.employee.iban.replace(/(.{4})/g, '$1 ').trim() : '—';
   return (
     <>
@@ -53,6 +61,11 @@ export default async function Recibo({ params }: { params: Promise<{ id: string 
           <div>Banco: <b>{p.employee.bank ?? '—'}</b></div>
           <div>IBAN: <b>{iban}</b></div>
         </div>
+        {p.termination && <div className="payslip-box" aria-label="Fecho de contas">
+          <b>Fecho de contas</b> — {p.termination.reasonLabel}.
+          {p.termination.hireDate && <> Admissão em {d(p.termination.hireDate)};</>} cessação em {d(p.termination.effectiveDate)}{p.termination.noticeDate ? `; aviso em ${d(p.termination.noticeDate)}` : ''}{p.termination.seniority ? `; antiguidade ${p.termination.seniority}` : ''}. As rubricas do fecho estão discriminadas abaixo, com a base de cálculo.
+        </div>}
+        {occurrences.length > 0 && <div className="payslip-box" aria-label="Ocorrências do mês"><b>Ocorrências do mês</b><ul>{occurrences.map((o, i) => <li key={i}>{o}</li>)}</ul></div>}
         <table>
           <thead><tr><th>Abonos</th><th className="num">Valor</th></tr></thead>
           <tbody>{earnings.map((l, i) => <tr key={i}><td>{l.name}</td><td className="num" style={{ color: l.amountMinor < 0 ? 'var(--red)' : undefined }}>{formatKz(l.amountMinor)}</td></tr>)}</tbody>
@@ -64,9 +77,9 @@ export default async function Recibo({ params }: { params: Promise<{ id: string 
           <tfoot><tr><td><b>Total descontos</b></td><td className="num"><b>{formatKz(deductions.reduce((s, l) => s + l.amountMinor, 0))}</b></td></tr></tfoot>
         </table>
         <div className="net"><span>Líquido a receber</span><span>{formatKz(p.netMinor)}</span></div>
-        <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+        {employer.length > 0 && <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
           Encargos da entidade empregadora (não descontados): {employer.map((l) => `${l.name} ${formatKz(l.amountMinor)}`).join(' · ')}
-        </div>
+        </div>}
         <footer>
           <span>IRT Grupo A, escalão {p.irtBracket}{p.closedAt ? ` · emitido em ${new Date(p.closedAt).toLocaleDateString('pt-PT')}` : ''}</span>
           <span>Código de verificação: <code>{p.hash.slice(0, 16).toUpperCase()}</code></span>

@@ -966,6 +966,9 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       const codes = line.breakdown.map((b: { code: string }) => b.code);
       expect(codes).toEqual(expect.arrayContaining(['BASE', 'COMP', 'AVISO', 'FERNG', 'OUTDESC']));
       expect(line.breakdown.find((b: { code: string }) => b.code === 'BASE').amountMinor).toBe(15_000_000);
+      // Pressupostos do fecho de contas visíveis no recibo (rubrica — base de cálculo).
+      expect(line.breakdown.find((b: { code: string }) => b.code === 'FERNG').name).toContain(' — ');
+      expect(line.breakdown.filter((b: { code: string }) => b.code === 'OUTDESC').map((b: { name: string }) => b.name)).toEqual([expect.stringContaining('Devolução de telemóvel')]);
       const dec = (await get(payrollUser, '/v1/payroll-runs?period=2026-12')).json()[0];
       if (dec) expect((await get(payrollUser, `/v1/payroll-runs/${dec.id}`)).json().lines.some((l: { employeeId: string }) => l.employeeId === leaverId)).toBe(false);
     });

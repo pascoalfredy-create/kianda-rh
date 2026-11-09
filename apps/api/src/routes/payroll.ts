@@ -1,7 +1,7 @@
-import { kz, lastDayOfMonth, parseFxRate } from '@kianda/core';
+import { ABSENCE_POLICIES, kz, labourRules, lastDayOfMonth, parseFxRate, TERMINATION_REASONS, workingDaysByYear, type AbsenceType, type TerminationReason } from '@kianda/core';
 import { createHash, randomUUID } from 'node:crypto';
 import {
-  and, asc, auditLogs, companies, contracts, departments, desc, employees, eq, getDb, inArray, journalEntries, lte, payrollLines, payrollRuns, payrollVariables, sql, users, type Db,
+  absences, and, asc, auditLogs, companies, contracts, departments, desc, employees, eq, getDb, inArray, gte, journalEntries, lte, payrollLines, terminations, payrollRuns, payrollVariables, sql, users, type Db,
 } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -296,7 +296,20 @@ export function payrollRoutes() {
     const staff = ['owner', ...READERS].includes(actor.role);
     if (!staff && (row.e.id !== actor.employeeId || row.run.status !== 'closed')) return c.json({ error: 'nao_encontrado', message: 'Recibo inexistente' }, 404);
     const [co] = await db.select().from(companies).where(eq(companies.id, actor.companyId));
+    // Ocorrências do mês: ausências aprovadas (férias, doença…) dentro do período, e o fecho de contas se houver.
+    const from = `${row.run.period}-01`, to = lastDayOfMonth(row.run.period);
+    const leave = (await db.select().from(absences).where(and(eq(absences.companyId, actor.companyId), eq(absences.employeeId, row.e.id), eq(absences.status, 'approved'), lte(absences.startDate, to), gte(absences.endDate, from))).orderBy(asc(absences.startDate)))
+      .map((a) => {
+        const start = a.startDate < from ? from : a.startDate, end = a.endDate > to ? to : a.endDate;
+        const days = Object.values(workingDaysByYear(start, end, (y) => labourRules('AO', y))).reduce((x, d) => x + d, 0);
+        return { type: a.type, label: ABSENCE_POLICIES[a.type as AbsenceType]?.label ?? a.type, startDate: start, endDate: end, workingDays: days };
+      });
+    const [term] = await db.select().from(terminations).where(and(eq(terminations.companyId, actor.companyId), eq(terminations.employeeId, row.e.id), eq(terminations.period, row.run.period), eq(terminations.status, 'confirmed')));
+    const [termContract] = term ? await db.select({ startDate: contracts.startDate }).from(contracts).where(eq(contracts.id, term.contractId)) : [];
+    const proposal = (term?.proposal ?? {}) as { seniority?: { label?: string } };
     return c.json({
+      leave,
+      termination: term ? { reasonLabel: TERMINATION_REASONS[term.reason as TerminationReason]?.label ?? term.reason, hireDate: termContract?.startDate ?? null, noticeDate: term.noticeDate, effectiveDate: term.effectiveDate, seniority: proposal.seniority?.label ?? null } : null,
       id: row.l.id, period: row.run.period, status: row.run.status, packVersion: row.run.packVersion, closedAt: row.run.closedAt,
       company: { name: co!.name, nif: co!.nif, inssNumber: co!.inssNumber, address: co!.address },
       employee: { name: row.e.name, number: row.e.number, jobTitle: row.e.jobTitle, department: row.department, nif: row.e.nif ?? row.e.biNumber, inssNumber: row.e.inssNumber, iban: row.e.iban, bank: row.e.bank },
