@@ -30,14 +30,8 @@ export default async function Recibo({ params }: { params: Promise<{ id: string 
     ...(p.overtimeHours ? [`Horas extraordinárias: ${String(p.overtimeHours).replace('.', ',')} h`] : []),
   ];
   const iban = p.employee.iban ? p.employee.iban.replace(/(.{4})/g, '$1 ').trim() : '—';
-  return (
-    <>
-      <div className="no-print page-head">
-        <Link href="/recibos" className="crumb">← Recibos</Link>
-        <PrintButton />
-      </div>
-      {p.status === 'draft' && <div className="warn no-print">Pré-visualização: o processamento de {monthLabel(p.period)} ainda está em rascunho. O recibo só é definitivo depois do fecho.</div>}
-      <article className="card payslip">
+  const slip = (copy: 'Original' | 'Duplicado') => (
+      <article className="card payslip" key={copy}>
         <header>
           <div>
             {logo && <img src={logo} alt="" style={{ maxHeight: 52, maxWidth: 160, objectFit: 'contain', marginBottom: 6, display: 'block' }} />}
@@ -48,7 +42,7 @@ export default async function Recibo({ params }: { params: Promise<{ id: string 
           <div style={{ textAlign: 'right' }}>
             <h2>Recibo de vencimento</h2>
             <div><b>{monthLabel(p.period)}</b></div>
-            <div className="muted">{p.status === 'closed' ? 'Original' : 'RASCUNHO'}</div>
+            <div className="muted">{p.status === 'closed' ? copy : 'RASCUNHO'}</div>
           </div>
         </header>
         <div className="meta">
@@ -85,6 +79,17 @@ export default async function Recibo({ params }: { params: Promise<{ id: string 
           <span>Código de verificação: <code>{p.hash.slice(0, 16).toUpperCase()}</code></span>
         </footer>
       </article>
+  );
+  return (
+    <>
+      <div className="no-print page-head">
+        <Link href="/recibos" className="crumb">← Recibos</Link>
+        <PrintButton />
+      </div>
+      {p.status === 'draft' && <div className="warn no-print">Pré-visualização: o processamento de {monthLabel(p.period)} ainda está em rascunho. O recibo só é definitivo depois do fecho.</div>}
+      {slip('Original')}
+      {/* Duas vias: o duplicado só sai na impressão, em página própria. */}
+      <div className="payslip-copy">{slip('Duplicado')}</div>
     </>
   );
 }
