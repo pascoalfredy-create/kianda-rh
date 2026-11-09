@@ -17,4 +17,3 @@ test('plano de férias (art. 206.º): todos os trabalhadores, períodos marcados
   await expect(page.locator('table.vacation-plan tbody tr')).toHaveCount(4);
   expect(errors).toEqual([]);
 });
-});
