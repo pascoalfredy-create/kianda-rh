@@ -2,7 +2,7 @@ import {
   ABSENCE_POLICIES, businessDays, checkAbsenceLimit, labourRules, vacationBalance, vacationEligibleFrom, vacationEntitlement, workingDaysByYear,
   type AbsenceType,
 } from '@kianda/core';
-import { absences, and, asc, auditLogs, contracts, departments, eq, files, getDb, gte, inArray, lte, employees, sql, users, type Db } from '@kianda/db';
+import { absences, and, asc, desc, auditLogs, contracts, departments, eq, files, getDb, gte, inArray, lte, employees, sql, users, type Db } from '@kianda/db';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { body as readBody, requireCompany, type Actor, type AppEnv } from '../plugins/tenant.js';
@@ -51,22 +51,34 @@ function daysInYear(a: Pick<Absence, 'startDate' | 'endDate'>, year: number): nu
   return businessDays(from, to, [labourRules('AO', year)]);
 }
 
-async function balanceFor(db: Db, emp: Employee, year: number, excludeId?: string) {
-  const hire = await hireDate(db, emp.id);
-  const rows = await db.select().from(absences).where(and(
-    eq(absences.employeeId, emp.id), eq(absences.type, 'vacation'), inArray(absences.status, ['pending', 'approved']),
-    lte(absences.startDate, `${year}-12-31`), gte(absences.endDate, `${year}-01-01`),
-  ));
-  return balanceFromRows(emp, year, hire, rows, excludeId);
+async function currentContract(db: Db, employeeId: string) {
+  // Art. 205.º só para quem foi contratado a termo (nunca teve contrato sem termo).
+  const all = await db.select({ type: contracts.type, startDate: contracts.startDate, endDate: contracts.endDate }).from(contracts).where(eq(contracts.employeeId, employeeId)).orderBy(desc(contracts.startDate));
+  return all.some((c) => c.type === 'indefinite') ? null : all[0] ?? null;
 }
 
-function balanceFromRows(emp: Employee, year: number, hire: string | null, rows: Absence[], excludeId?: string) {
+async function balanceFor(db: Db, emp: Employee, year: number, excludeId?: string) {
+  const hire = await hireDate(db, emp.id);
+  const contract = await currentContract(db, emp.id);
+  const rows = await db.select().from(absences).where(and(
+    eq(absences.employeeId, emp.id), inArray(absences.type, ['vacation', 'sick']), inArray(absences.status, ['pending', 'approved']),
+    lte(absences.startDate, `${year}-12-31`), gte(absences.endDate, `${year}-01-01`),
+  ));
+  return balanceFromRows(emp, year, hire, rows, excludeId, contract);
+}
+
+function balanceFromRows(emp: Employee, year: number, hire: string | null, rows: Absence[], excludeId?: string, contract?: { type: string; startDate: string; endDate: string | null } | null) {
   const pack = labourRules('AO', year);
   let approved = 0;
   let pending = 0;
+  const sick = rows.filter((r) => r.type === 'sick' && r.status === 'approved');
   for (const a of rows) {
-    if (a.id === excludeId) continue;
-    const d = daysInYear(a, year);
+    if (a.id === excludeId || a.type !== 'vacation') continue;
+    // Dias de baixa médica dentro das férias não contam como férias gozadas (art. 210.º).
+    const d = daysInYear(a, year) - sick.reduce((s, k) => {
+      const from = a.startDate > k.startDate ? a.startDate : k.startDate, to = a.endDate < k.endDate ? a.endDate : k.endDate;
+      return to < from ? s : s + daysInYear({ startDate: from, endDate: to }, year);
+    }, 0);
     if (a.status === 'approved') approved += d; else pending += d;
   }
   // Dias transitados do ano anterior contam no ano corrente.
@@ -74,7 +86,7 @@ function balanceFromRows(emp: Employee, year: number, hire: string | null, rows:
   return {
     hireDate: hire,
     eligibleFrom: hire ? vacationEligibleFrom(hire, pack) : null,
-    ...vacationBalance({ year, entitlement: hire ? vacationEntitlement(hire, year, pack) : 0, carriedOver, approvedDays: approved, pendingDays: pending }),
+    ...vacationBalance({ year, entitlement: hire ? vacationEntitlement(hire, year, pack, contract) : 0, carriedOver, approvedDays: approved, pendingDays: pending }),
   };
 }
 
@@ -128,7 +140,9 @@ export function absenceRoutes() {
     if (limitError) return c.json({ error: 'limite_legal', message: limitError }, 422);
 
     const overlap = await db.select().from(absences).where(and(eq(absences.employeeId, b.employeeId), lte(absences.startDate, b.endDate), gte(absences.endDate, b.startDate), inArray(absences.status, ['pending', 'approved'])));
-    if (overlap.length) return c.json({ error: 'sobreposicao', message: `Já existe uma ausência de ${pt(overlap[0]!.startDate)} a ${pt(overlap[0]!.endDate)}` }, 409);
+    // Art. 210.º: doença durante as férias suspende-as — a baixa pode sobrepor-se às férias e esses dias voltam ao saldo.
+    const blocking = overlap.filter((o) => !(b.type === 'sick' && o.type === 'vacation'));
+    if (blocking.length) return c.json({ error: 'sobreposicao', message: `Já existe uma ausência de ${pt(blocking[0]!.startDate)} a ${pt(blocking[0]!.endDate)}` }, 409);
     if (b.type === 'vacation') await assertVacation(db, emp, b.startDate, b.endDate);
 
     const approved = !!b.approve;
@@ -231,14 +245,17 @@ export function absenceRoutes() {
     if (!list.length) return c.json([]);
     const ids = list.map(({ e }) => e.id);
     // Duas leituras para toda a lista, em vez de duas por colaborador.
-    const [firstContracts, vacationRows] = await Promise.all([
-      db.select({ employeeId: contracts.employeeId, date: sql<string>`min(${contracts.startDate})` }).from(contracts).where(inArray(contracts.employeeId, ids)).groupBy(contracts.employeeId),
-      db.select().from(absences).where(and(eq(absences.companyId, actor.companyId), inArray(absences.employeeId, ids), eq(absences.type, 'vacation'), inArray(absences.status, ['pending', 'approved']), lte(absences.startDate, `${year}-12-31`), gte(absences.endDate, `${year}-01-01`))),
+    const [firstContracts, latestContracts, vacationRows] = await Promise.all([
+      db.select({ employeeId: contracts.employeeId, date: sql<string>`min(${contracts.startDate})`, everIndefinite: sql<boolean>`bool_or(${contracts.type} = 'indefinite')` }).from(contracts).where(inArray(contracts.employeeId, ids)).groupBy(contracts.employeeId),
+      db.selectDistinctOn([contracts.employeeId], { employeeId: contracts.employeeId, type: contracts.type, startDate: contracts.startDate, endDate: contracts.endDate }).from(contracts).where(inArray(contracts.employeeId, ids)).orderBy(contracts.employeeId, desc(contracts.startDate)),
+      db.select().from(absences).where(and(eq(absences.companyId, actor.companyId), inArray(absences.employeeId, ids), inArray(absences.type, ['vacation', 'sick']), inArray(absences.status, ['pending', 'approved']), lte(absences.startDate, `${year}-12-31`), gte(absences.endDate, `${year}-01-01`))),
     ]);
     const hireDates = new Map(firstContracts.map(c => [c.employeeId, c.date]));
+    const permanent = new Set(firstContracts.filter(c => c.everIndefinite).map(c => c.employeeId));
+    const current = new Map(latestContracts.filter(c => !permanent.has(c.employeeId)).map(c => [c.employeeId, c]));
     const byEmployee = new Map<string, Absence[]>();
     for (const a of vacationRows) { const rows = byEmployee.get(a.employeeId) ?? []; rows.push(a); byEmployee.set(a.employeeId, rows); }
-    return c.json(list.map(({ e, department }) => ({ employee: { id: e.id, name: e.name, number: e.number, department }, ...balanceFromRows(e, year, hireDates.get(e.id) ?? null, byEmployee.get(e.id) ?? []) })));
+    return c.json(list.map(({ e, department }) => ({ employee: { id: e.id, name: e.name, number: e.number, department }, ...balanceFromRows(e, year, hireDates.get(e.id) ?? null, byEmployee.get(e.id) ?? [], undefined, current.get(e.id) ?? null) })));
   });
 
   return app;
