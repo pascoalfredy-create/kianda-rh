@@ -93,7 +93,7 @@ test('mapas começam recolhidos e Ver abre a tabela no RH, Integra e Valora', as
   const person = await apiAs(owner.token, 'POST', '/v1/employees', { number: '301', name: 'Pessoa do mapa', jobTitle: 'Técnica', contract: { type: 'indefinite', startDate: '2026-01-01', base: 200000 } });
   expect(person.status, JSON.stringify(person.body)).toBe(201);
   await page.goto('/processamento?mes=2026-10');
-  await page.getByRole('button', { name: 'Preparar processamento' }).click();
+  await page.getByRole('button', { name: 'Processar salários', exact: true }).click();
   await page.getByRole('button', { name: 'Calcular folha', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Recalcular' })).toBeVisible();
   let map = page.locator('details.map-disclosure').first();

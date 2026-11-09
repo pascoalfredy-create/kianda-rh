@@ -9,7 +9,7 @@ test('ficha salarial e assiduidade regressam à preparação, com rascunho e sal
   const person = await apiAs(owner.token, 'POST', '/v1/employees', { number: '1', name: 'Amélia Navegação', jobTitle: 'Técnica', contract: { type: 'indefinite', startDate: '2026-01-01', base: 2856000, currency: 'USD', baseUsd: 3000 } });
   expect(person.status).toBe(201); await signIn(context, owner.token); const errors = watchErrors(page);
   await page.goto('/processamento?mes=2026-09');
-  await page.getByRole('button', { name: 'Processar em lote', exact: true }).click();
+  await page.getByRole('button', { name: 'Processar salários', exact: true }).click(); await page.getByRole('radio', { name: 'Escolher colaboradores', exact: true }).check();
   const preparation = page.getByRole('region', { name: 'Preparação do processamento', exact: true });
   const search = preparation.getByRole('textbox', { name: 'Pesquisar colaborador do lote', exact: true });
   await search.fill('Amélia');

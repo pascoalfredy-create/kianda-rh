@@ -57,7 +57,7 @@ export default async function Processamento({ searchParams }: { searchParams: Pr
         {run?.status === 'closed' && <Link href="/obrigacoes" className="btn ghost">Pagamentos e mapas →</Link>}
         {canClose && draft && <CloseButton runId={run!.id} period={period} selfPrepared={run!.preparedBy === actor.sub} manualWarnings={run!.warnings.filter(w => /CÁLCULO MANUAL/.test(w.message)).length} />}
       </div>
-      {draft && missing > 0 && <p className="warn">{missing} colaborador(es) elegível(eis) ainda por processar neste mês. Use Processar em lote para completar a folha.</p>}
+      {draft && missing > 0 && <p className="warn">{missing} colaborador(es) elegível(eis) ainda por processar neste mês. Use «Rever ou processar mais» e escolha os colaboradores em falta.</p>}
 
       {run && run.warnings.length > 0 && (
         <div className="warn"><b>{run.warnings.length} aviso(s)</b><ul>{run.warnings.map((w, i) => <li key={i}>{w.message}</li>)}</ul></div>

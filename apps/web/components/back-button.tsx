@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { returnPath } from '../lib/return-path';
 
 /** Regressa na navegação da plataforma; uma entrada directa tem sempre um destino útil. */
@@ -9,13 +9,19 @@ export function BackButton() {
   const path = usePathname(), search = useSearchParams(), router = useRouter();
   const current = `${path}${search.size ? `?${search}` : ''}`;
   const visited = useRef<string[]>([]);
+  const [hasHistory, setHasHistory] = useState(false);
   useEffect(() => {
     const stack = visited.current;
-    if (stack[stack.length - 1] === current) return;
-    if (stack[stack.length - 2] === current) stack.pop();
-    else stack.push(current);
+    if (stack[stack.length - 1] !== current) {
+      if (stack[stack.length - 2] === current) stack.pop();
+      else stack.push(current);
+    }
+    let sameSite = false;
+    try { const ref = new URL(document.referrer); sameSite = ref.origin === location.origin && !/^\/(login|registo|acesso|recuperar)(?:\/|$)/.test(ref.pathname); } catch { /* entrada directa */ }
+    setHasHistory(stack.length > 1 || sameSite);
   }, [current]);
-  if (path === '/') return null;
+  // Páginas principais têm o menu ao lado: aí o «Voltar» só aparece quando há uma página anterior na plataforma.
+  if (path === '/' || (path.split('/').filter(Boolean).length === 1 && !search.get('voltar') && !hasHistory)) return null;
   const back = () => {
     const origin = returnPath(search.get('voltar'), '');
     if (origin && origin !== current) {

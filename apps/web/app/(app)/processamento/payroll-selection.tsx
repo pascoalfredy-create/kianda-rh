@@ -14,7 +14,7 @@ export function PayrollSelection({ people, selected, onChange, processedIds, dis
   const pages = Math.max(1, Math.ceil(filtered.length / 50)), current = Math.min(page, pages - 1), visible = filtered.slice(current * 50, current * 50 + 50);
   function select(ids: string[], checked: boolean) { const next = new Set(selected); for (const id of ids) checked ? next.add(id) : next.delete(id); onChange([...next]); }
   return <section aria-label={selectable ? 'Colaboradores do processamento em lote' : 'Remunerações habituais do mês'} style={{ margin: '12px 0', minWidth: 0 }}>
-    <h3>{selectable ? 'Seleccionar colaboradores do mês' : 'Remunerações habituais do mês'}</h3><p className="muted">A base e os subsídios vêm da remuneração em vigor. {selectable ? 'Os salários seleccionados são calculados juntos; quem já foi processado noutro lote mantém-se na folha.' : 'Estes valores são carregados automaticamente em cada mês.'} Para uma alteração permanente, reveja a ficha salarial e a sua data de efeito.</p>
+    <h3>{selectable ? 'Seleccionar colaboradores do mês' : 'Remunerações habituais do mês'}</h3><p className="muted">Valores da ficha salarial em vigor. Para uma alteração permanente, use a ficha salarial do colaborador.</p>
     {selectable && <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', margin: '10px 0' }}>
       <label>Pesquisar colaborador<input aria-label="Pesquisar colaborador do lote" value={search} onChange={e => { setSearch(e.target.value); setPage(0); }} /></label>
       <label>Departamento<select aria-label="Departamento do lote" value={department} onChange={e => { setDepartment(e.target.value); setPage(0); }}><option value="">Todos</option>{departments.map(d => <option key={d}>{d}</option>)}</select></label>

@@ -47,9 +47,8 @@ export function PrepareButton({ period, prepared, runId, people, payrollPeople, 
     <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', ...(open ? { flexBasis: '100%', minWidth: 0 } : {}) }}>
       {!open && <>
         {prepared && fxFields}
-        <button type="button" className="btn" disabled={busy || (prepared && calculateDisabled)} onClick={() => prepared ? calculate() : prepare(false)}>{busy ? 'A calcular…' : prepared ? 'Recalcular' : 'Preparar processamento'}</button>
-        <button type="button" className="btn ghost" disabled={busy} onClick={() => prepare(true)}>Processar em lote</button>
-        {prepared && <button type="button" className="btn ghost" disabled={busy} onClick={() => prepare(false)}>Rever preparação</button>}
+        <button type="button" className="btn" disabled={busy || (prepared && calculateDisabled)} onClick={() => prepared ? calculate() : prepare(false)}>{busy ? 'A calcular…' : prepared ? 'Recalcular' : 'Processar salários'}</button>
+        {prepared && <button type="button" className="btn ghost" disabled={busy} onClick={() => prepare(false)}>Rever ou processar mais</button>}
         {prepared && runId && (confirmDelete
           ? <span className="actions" role="group" aria-label="Confirmar apagar rascunho" style={{ gap: 6 }}><span className="muted">Apagar o rascunho de {monthLabel(period)}? As variáveis lançadas mantêm-se.</span>
               <button type="button" className="btn danger sm" disabled={busy} onClick={async () => { if (await run(`/v1/payroll-runs/${runId}`, 'DELETE', undefined, () => setResult('Rascunho apagado. Pode preparar o processamento de novo.'))) { clearPreparation(); setConfirmDelete(false); } }}>Sim, apagar</button>
@@ -57,8 +56,12 @@ export function PrepareButton({ period, prepared, runId, people, payrollPeople, 
           : <button type="button" className="btn ghost" disabled={busy} onClick={() => setConfirmDelete(true)}>Apagar rascunho</button>)}
       </>}
       {open && <section aria-label="Preparação do processamento" style={{ width: '100%', minWidth: 0 }}>
-        <h2>{batchMode ? 'Processar em lote — ' : 'Preparar '}{monthLabel(period)}</h2>
-        <p className="muted">{batchMode ? 'Seleccione os colaboradores deste lote. Os lotes juntam-se na mesma folha mensal e o fecho faz-se após processar toda a equipa elegível.' : 'A folha calcula toda a equipa elegível do mês.'} O salário base e os subsídios fixos são reutilizados da remuneração em vigor. As faltas e horas extra vêm dos registos aprovados.</p>
+        <h2>Processar salários — {monthLabel(period)}</h2>
+        <div className="segmented" role="radiogroup" aria-label="Quem processar">
+          <label><input type="radio" name="payroll-scope" checked={!batchMode} onChange={() => prepare(false)} disabled={busy} /> Toda a equipa elegível</label>
+          <label><input type="radio" name="payroll-scope" checked={batchMode} onChange={() => prepare(true)} disabled={busy} /> Escolher colaboradores</label>
+        </div>
+        <p className="muted">{batchMode ? 'Escolha quem processar agora; os lotes juntam-se na mesma folha do mês.' : 'Calcula toda a equipa com a remuneração em vigor, as faltas e as horas extra aprovadas.'}</p>
         <PayrollSelection draftKey={`${draftKey}roster:`} people={payrollPeople} selected={selected} onChange={setSelected} processedIds={processedIds} disabled={busy} mode={batchMode ? 'selected' : 'all'} />
         <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', margin: '12px 0' }}>
           <Link className="btn ghost sm" href="/colaboradores">Rever salários e contratos</Link>

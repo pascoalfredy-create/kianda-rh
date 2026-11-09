@@ -45,7 +45,7 @@ test('RH no telemóvel: preparar mostra os campos e calcula sem alargar o ecrã'
   await signIn(context, company.token);
   const errors = watchErrors(page);
   await page.goto('/processamento?mes=2026-10');
-  await page.getByRole('button', { name: 'Preparar processamento' }).click();
+  await page.getByRole('button', { name: 'Processar salários', exact: true }).click();
   const preparation = page.getByRole('region', { name: 'Preparação do processamento' });
   await expect(preparation.getByRole('region', { name: 'Remunerações habituais do mês' })).toBeVisible();
   await expect(preparation.getByLabel('Valor (Kz)')).toHaveCount(0);
@@ -71,7 +71,7 @@ test('RH no telemóvel: lote de variáveis mantém os campos utilizáveis e grav
   expect(await page.evaluate<number>('document.documentElement.scrollWidth - window.innerWidth')).toBeLessThanOrEqual(1);
   await form.getByRole('button', { name: 'Guardar lote', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Lote guardado: 1');
-  await page.getByRole('button', { name: 'Preparar processamento', exact: true }).click();
+  await page.getByRole('button', { name: 'Processar salários', exact: true }).click();
   await page.getByRole('button', { name: 'Calcular folha', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Recalcular', exact: true })).toBeVisible();
 });
