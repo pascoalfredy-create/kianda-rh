@@ -183,6 +183,8 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       const overtimeHours = att ? overtimeHoursFromMinutes(Math.max(0, att.approvedOvertimeMinutes - att.restHolidayOvertimeMinutes)) : 0;
       const restDayHours = att ? overtimeHoursFromMinutes(att.restDayPaidMinutes) : 0;
       const holidayWorkDays = att?.holidayWorkDays ?? 0;
+      // Atrasos e saídas antecipadas aprovados no fecho do ponto: faltas em horas (regra da empresa, como no Primavera).
+      const latenessHours = att && company?.discountLateness !== false && att.shortfallMinutes > 0 ? Math.round((att.shortfallMinutes / 60) * 100) / 100 : 0;
       // Regime do colaborador (turnos/rotação) ou o horário normal da empresa.
       const sched = e.scheduleId ? schedules.get(e.scheduleId) : undefined;
       const regime: Schedule = sched ? { kind: sched.kind as Schedule['kind'], pattern: sched.pattern, anchorDate: sched.anchorDate } : companyWeek;
@@ -332,7 +334,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
           period, pack, baseMinor: pay.baseMinor, baseLabel, mealMinor: pay.mealMinor, transportMinor: pay.transportMinor,
           overtimeHours, absenceDays, absenceHours, otherEarnings, advancesMinor, otherDeductionsMinor, otherDeductions, noticeDeductionMinor, holidaySubsidy, christmasSubsidy, workedDays,
           restDayHours, unpaidLeaveHours, unpaidLeaveLabel: unpaidLeaveHours ? `${unpaidLabel.charAt(0).toUpperCase()}${unpaidLabel.slice(1)} (${unpaidLeaveHours} h)` : undefined,
-          vacationAllowanceCut, absenceAllowanceCut,
+          vacationAllowanceCut, absenceAllowanceCut, latenessHours,
         });
         // Casos sem regra fechada na LGT: o motor não calcula — avisa e o valor é lançado à mão nas variáveis.
         if (maternityDays) warnings.push({ employeeId: e.id, message: `${e.name}: ${maternityDays} dia(s) de licença de maternidade em ${period} — CÁLCULO MANUAL: o salário está suspenso (arts. 267.º, c) e 268.º) e o motor pagou o mês por inteiro; lance "Desconto na remuneração" com o valor a retirar (base, alimentação, transporte)` });

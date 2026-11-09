@@ -58,6 +58,9 @@ export const companies = pgTable('companies', {
   allowancesOnVacation: boolean('allowances_on_vacation').notNull().default(false),
   /** Pagar alimentação e transporte nos dias de falta injustificada (por omissão não: só dias trabalhados). */
   allowancesOnAbsence: boolean('allowances_on_absence').notNull().default(false),
+  /** Atrasos e saídas antecipadas descontados como faltas em horas (como no Primavera), com tolerância diária. */
+  discountLateness: boolean('discount_lateness').notNull().default(true),
+  latenessToleranceMinutes: integer('lateness_tolerance_minutes').notNull().default(0),
   /** Sector de actividade (registo) — pré-configurações por sector. */
   sector: text('sector'),
   /** Logotipo para o papel timbrado (data URL PNG/JPEG, até 300 KB). */
@@ -603,6 +606,8 @@ export const attendanceMonths = pgTable('attendance_months', {
   restHolidayOvertimeMinutes: integer('rest_holiday_overtime_minutes').notNull().default(0),
   restDayPaidMinutes: integer('rest_day_paid_minutes').notNull().default(0),
   holidayWorkDays: integer('holiday_work_days').notNull().default(0),
+  /** Atrasos e saídas antecipadas do mês (minutos, já descontada a tolerância diária): faltas em horas. */
+  shortfallMinutes: integer('shortfall_minutes').notNull().default(0),
   note: text('note'),
   approvedBy: text('approved_by').notNull(),
   approvedAt: timestamp('approved_at', { withTimezone: true }).notNull().defaultNow(),
