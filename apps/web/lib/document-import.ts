@@ -1,4 +1,4 @@
-import { DOCUMENT_LIMIT, DOCUMENT_XML_LIMIT, documentCrc32, documentRowsCsv, guessMapping, mappingProblem, parseDate, parseHistoricalTrialBalance, parseStatement, wordArchive, wordDocumentRows, type DocumentZipEntry } from '@kianda/core';
+import { structureImportedText, DOCUMENT_LIMIT, DOCUMENT_XML_LIMIT, documentCrc32, documentRowsCsv, guessMapping, mappingProblem, parseDate, parseHistoricalTrialBalance, parseStatement, wordArchive, wordDocumentRows, type DocumentZipEntry } from '@kianda/core';
 import { extractPdfContent, pdfPageRows, type PdfReadOptions, type PdfTextItem } from '../modeling/pdf-import';
 
 const problem = (message: string): never => { throw new Error(message); };
@@ -52,12 +52,12 @@ export async function readTemplateDocument(file: File, options: PdfReadOptions =
   const buffer = await file.arrayBuffer(); options.signal?.throwIfAborted();
   const format = documentFormat(file);
   let text: string;
-  if (format === 'word') text = (await extractWordRows(buffer, options.signal)).map(row => row.join(' | ')).join('\n\n');
+  if (format === 'word') text = structureImportedText((await extractWordRows(buffer, options.signal)).map(row => row.join(' | ')), 'word');
   else if (format === 'pdf') text = await extractPdfContent(buffer, pages => pages.map((page, i) => {
     const rows = pdfPageRows(page);
     if (!rows.length) return problem(`A página ${i + 1} do modelo não contém texto extraível. Use Word ou um PDF com texto seleccionável.`);
-    return rows.map(row => row.map(cell => cell.text).join(' ')).join('\n\n');
-  }).join('\n\n'), options);
+    return rows.map(row => row.map(cell => cell.text).join(' '));
+  }), options).then(pages => structureImportedText(pages.flat(), 'pdf'));
   else text = decodeDocumentText(buffer);
   text = text.replace(/\r\n?/g, '\n').trim();
   if (text.length < 20 || text.length > 30_000 || text.includes('\u0000')) return problem('O modelo deve conter entre 20 e 30.000 caracteres de texto.');

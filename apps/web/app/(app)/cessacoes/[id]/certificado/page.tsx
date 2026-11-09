@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Letterhead } from '@/components/letterhead';
+import { PrintSheet } from '@/components/print-sheet';
 import { api } from '@/lib/api';
 import type { TerminationDetail } from '../../types';
 import { PrintButton } from '../../print';
@@ -14,8 +14,7 @@ export default async function Certificado({ params }: { params: Promise<{ id: st
   return (
     <>
       <div className="crumb no-print"><Link href={`/cessacoes/${d.id}`}>← Cessação</Link> <PrintButton /></div>
-      <div className="card doc">
-        <Letterhead />
+      <PrintSheet footer={<span>{d.company.name} · NIF {d.company.nif}</span>}>
         <p><b>{d.company.name}</b><br />NIF {d.company.nif}{d.company.address ? <><br />{d.company.address}</> : null}</p>
         <h2 style={{ textAlign: 'center', margin: '40px 0 30px' }}>Certificado de trabalho</h2>
         <p style={{ lineHeight: 1.9 }}>
@@ -24,7 +23,7 @@ export default async function Certificado({ params }: { params: Promise<{ id: st
         <p style={{ lineHeight: 1.9 }}>Por ser verdade e a pedido do(a) interessado(a), passa-se o presente certificado, que vai assinado e carimbado.</p>
         <p style={{ marginTop: 30 }}>Luanda, {long(d.effectiveDate)}</p>
         <div style={{ width: 300, marginTop: 70, borderTop: '1px solid #333', paddingTop: 6, textAlign: 'center' }}>A Direcção / Recursos Humanos</div>
-      </div>
+      </PrintSheet>
     </>
   );
 }

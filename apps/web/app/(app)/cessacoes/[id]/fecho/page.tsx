@@ -1,6 +1,6 @@
 import { formatKz } from '@kianda/core';
 import Link from 'next/link';
-import { Letterhead } from '@/components/letterhead';
+import { PrintSheet } from '@/components/print-sheet';
 import { api } from '@/lib/api';
 import type { TerminationDetail } from '../../types';
 import { PrintButton } from '../../print';
@@ -15,8 +15,7 @@ export default async function Fecho({ params }: { params: Promise<{ id: string }
   return (
     <>
       <div className="crumb no-print"><Link href={`/cessacoes/${d.id}`}>← Cessação</Link> <PrintButton /></div>
-      <div className="card doc">
-        <Letterhead />
+      <PrintSheet footer={<span>{d.company.name} · NIF {d.company.nif}</span>}>
         <h2 style={{ textAlign: 'center' }}>Fecho de contas</h2>
         <p><b>{d.company.name}</b> · NIF {d.company.nif}{d.company.address ? ` · ${d.company.address}` : ''}</p>
         <p>Trabalhador: <b>{d.employee.name}</b> (n.º {d.employee.number}){d.employee.biNumber ? `, BI ${d.employee.biNumber}` : ''}, {d.employee.jobTitle}.</p>
@@ -35,7 +34,7 @@ export default async function Fecho({ params }: { params: Promise<{ id: string }
           <div style={{ borderTop: '1px solid #333', paddingTop: 6, textAlign: 'center' }}>O trabalhador</div>
           <div style={{ borderTop: '1px solid #333', paddingTop: 6, textAlign: 'center' }}>Pela entidade empregadora</div>
         </div>
-      </div>
+      </PrintSheet>
     </>
   );
 }
