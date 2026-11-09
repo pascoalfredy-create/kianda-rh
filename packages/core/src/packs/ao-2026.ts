@@ -89,7 +89,7 @@ export const AO_2026: CountryPack = {
     { title: 'Decreto Presidencial n.º 227/18 — regime de contribuições INSS' },
   ],
   toValidate: [
-    'Doença (art. 226.º): paga pela empresa até 6 meses, com direito de regresso sobre a protecção social — o motor não regista o reembolso do INSS',
+    'Doença (art. 226.º): paga pela empresa até 6 meses seguidos, com direito de regresso sobre a protecção social; depois o contrato fica suspenso sem salário (art. 268.º, n.º 1) e a folha desconta os dias — o motor não regista o reembolso do INSS',
     'CÁLCULO MANUAL — Trabalho em feriado (art. 200.º, n.º 2): "mais um dia de salário normal" sem definição na LGT; o motor conta os feriados trabalhados e avisa, o valor é lançado em "Outro abono"',
     'CÁLCULO MANUAL — Vésperas de 24 e 31 de Dezembro (art. 199.º): paragem às 12h30; o motor avisa em Dezembro, as horas devidas depois das 12h30 são lançadas à mão',
     'CÁLCULO MANUAL — Licença de maternidade: suspende o salário (arts. 267.º, c) e 268.º); o motor conta os dias e avisa, o valor a retirar é lançado em "Desconto na remuneração"',

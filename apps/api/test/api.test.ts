@@ -25,9 +25,10 @@ describe('rotas públicas', () => {
     const r = await app.inject({ method: 'POST', url: '/v1/payroll/simulate', payload: { period: '2026-10', base: 420000, meal: 30000, transport: 25000 } });
     expect(r.json().netMinor).toBe(39_274_400);
   });
-  it('ano sem pacote devolve 422 com explicação', async () => {
-    const r = await app.inject({ method: 'POST', url: '/v1/payroll/simulate', payload: { period: '2027-01', base: 200000 } });
+  it('ano anterior ao primeiro pacote devolve 422; anos seguintes continuam com as regras em vigor', async () => {
+    const r = await app.inject({ method: 'POST', url: '/v1/payroll/simulate', payload: { period: '2025-01', base: 200000 } });
     expect(r.statusCode).toBe(422);
+    expect((await app.inject({ method: 'POST', url: '/v1/payroll/simulate', payload: { period: '2027-01', base: 200000 } })).statusCode).toBe(200);
   });
   it('rotas da empresa exigem sessão', async () => {
     expect((await app.inject({ method: 'GET', url: '/v1/employees' })).statusCode).toBe(401);

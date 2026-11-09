@@ -57,9 +57,13 @@ describe('processamento salarial', () => {
     const n = calculatePayroll({ period: '2026-12', baseMinor: kz(200_000), christmasSubsidy: true });
     expect(n.inssBaseMinor).toBe(kz(300_000));
   });
-  it('recusa um ano sem pacote publicado em vez de reutilizar o anterior', () => {
-    expect(() => calculatePayroll({ period: '2027-01', baseMinor: kz(100_000) })).toThrow(PackNotFoundError);
-    expect(() => getPack('AO', 2027)).toThrow(/2027/);
+  it('um ano sem pacote próprio continua com as regras do último publicado (sem esperar pelo OGE)', () => {
+    const jan = calculatePayroll({ period: '2027-01', baseMinor: kz(300_000) }), dez = calculatePayroll({ period: '2026-12', baseMinor: kz(300_000) });
+    expect(jan.netMinor).toBe(dez.netMinor);
+    expect(jan.packVersion).toBe('AO-2027 (regras AO-2026.2)');
+    expect(getPack('AO', 2027).holidays[0]!.date).toBe('2027-01-01');
+    expect(getPack('AO', 2027).carriedFrom).toBe('AO-2026.2');
+    expect(() => getPack('AO', 2025)).toThrow(PackNotFoundError);
   });
   it('encontra o base para um líquido pretendido', () => {
     const r = solveBaseForNet(kz(392_744), { period: '2026-10', mealMinor: kz(30_000), transportMinor: kz(25_000) });

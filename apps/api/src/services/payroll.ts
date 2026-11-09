@@ -11,6 +11,27 @@ import {
 import { notifyEmployees } from './push.js';
 import { eligiblePayrollStaff } from './payroll-roster.js';
 
+/** Meses de doença pagos pela empresa (LGT, art. 226.º, n.º 1). */
+export const SICK_PAID_MONTHS = 6;
+export function addMonths(date: string, months: number): string {
+  const [y, m, d] = date.split('-').map(Number);
+  const t = new Date(Date.UTC(y!, m! - 1 + months, 1));
+  const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
+  t.setUTCDate(Math.min(d!, last));
+  return t.toISOString().slice(0, 10);
+}
+/** Ausências por doença seguidas (sem dias de intervalo) contam como um só período para o limite de 6 meses. */
+export function sickChains(rows: { startDate: string; endDate: string }[]): { from: string; to: string }[] {
+  const out: { from: string; to: string }[] = [];
+  for (const r of [...rows].sort((a, b) => a.startDate.localeCompare(b.startDate))) {
+    const last = out.at(-1);
+    const next = last ? new Date(Date.parse(`${last.to}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10) : '';
+    if (last && r.startDate <= next) { if (r.endDate > last.to) last.to = r.endDate; }
+    else out.push({ from: r.startDate, to: r.endDate });
+  }
+  return out;
+}
+
 /** Minutos de trabalho de um turno publicado (atravessa a meia-noite quando o fim é anterior ao início), sem o intervalo. */
 export function shiftMinutes(start: string, end: string, breakMinutes = 0): number {
   const m = (t: string) => { const [h, mm] = t.split(':').map(Number); return h! * 60 + (mm ?? 0); };
@@ -96,6 +117,12 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
     const monthLeaves = await tx.select().from(absences).where(and(
       eq(absences.companyId, companyId), inArray(absences.type, ['paternity', 'vacation', 'maternity']), eq(absences.status, 'approved'),
       lte(absences.startDate, periodEnd), gte(absences.endDate, periodStart),
+    ));
+    // Doença: paga pela empresa até 6 meses seguidos (art. 226.º, n.º 1); depois o contrato fica suspenso sem salário (art. 268.º, n.º 1).
+    const sickFrom = new Date(Date.parse(`${periodStart}T00:00:00Z`) - 400 * 86_400_000).toISOString().slice(0, 10);
+    const sickLeaves = await tx.select().from(absences).where(and(
+      eq(absences.companyId, companyId), eq(absences.type, 'sick'), eq(absences.status, 'approved'),
+      lte(absences.startDate, periodEnd), gte(absences.endDate, sickFrom),
     ));
     const maternityYear = new Set((await tx.select({ id: absences.employeeId }).from(absences).where(and(
       eq(absences.companyId, companyId), eq(absences.type, 'maternity'), eq(absences.status, 'approved'),
@@ -201,7 +228,16 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
         if (a.startDate >= periodStart) mins -= Math.min(mins, pack.leave.paternityPaidDays * pack.labour.dailyHours * 60); // dia pago
         unpaidLeaveHours += mins / 60;
       }
-      unpaidLeaveHours = Math.round(unpaidLeaveHours * 100) / 100;
+      let sickUnpaidHours = 0;
+      for (const chain of sickChains(sickLeaves.filter((a) => a.employeeId === e.id))) {
+        const unpaidFrom = addMonths(chain.from, SICK_PAID_MONTHS);
+        const from = unpaidFrom > periodStart ? unpaidFrom : periodStart, to = chain.to < periodEnd ? chain.to : periodEnd;
+        if (from > to) continue;
+        sickUnpaidHours += workMinutesIn(from, to) / 60;
+        warnings.push({ employeeId: e.id, message: `${e.name}: doença desde ${chain.from.split('-').reverse().join('/')} — passados 6 meses (art. 226.º, n.º 1) o contrato fica suspenso sem salário (art. 268.º, n.º 1); os dias desde ${unpaidFrom.split('-').reverse().join('/')} foram descontados. O subsídio passa a ser pago pela segurança social.` });
+      }
+      unpaidLeaveHours = Math.round((unpaidLeaveHours + sickUnpaidHours) * 100) / 100;
+      const unpaidLabel = [unpaidLeaveHours - sickUnpaidHours > 0.001 ? 'licença de paternidade não remunerada' : '', sickUnpaidHours ? 'doença além de 6 meses (contrato suspenso)' : ''].filter(Boolean).join(' e ');
       // Licença de maternidade: suspende o contrato e o salário (arts. 267.º, c) e 268.º) — cálculo manual, só se contam os dias.
       let maternityDays = 0;
       for (const a of (leavesByEmployee.get(e.id) ?? []).filter((x) => x.type === 'maternity')) {
@@ -288,7 +324,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
         r = calculatePayroll({
           period, pack, baseMinor: pay.baseMinor, baseLabel, mealMinor: pay.mealMinor, transportMinor: pay.transportMinor,
           overtimeHours, absenceDays, absenceHours, otherEarnings, advancesMinor, otherDeductionsMinor, noticeDeductionMinor, holidaySubsidy, christmasSubsidy, workedDays,
-          restDayHours, unpaidLeaveHours, unpaidLeaveLabel: unpaidLeaveHours ? `Licença de paternidade não remunerada (${unpaidLeaveHours} h)` : undefined,
+          restDayHours, unpaidLeaveHours, unpaidLeaveLabel: unpaidLeaveHours ? `${unpaidLabel.charAt(0).toUpperCase()}${unpaidLabel.slice(1)} (${unpaidLeaveHours} h)` : undefined,
           vacationAllowanceCut,
         });
         // Casos sem regra fechada na LGT: o motor não calcula — avisa e o valor é lançado à mão nas variáveis.
