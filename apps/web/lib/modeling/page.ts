@@ -14,7 +14,6 @@ export function modelingPage(session: ModelingSession | null, nonce: string, err
   shell = shell.replace('<header class="top">', '<header class="top"><button class="menu-toggle btn" id="integra-menu-toggle" data-act="toggleMenu" aria-label="Abrir menu" aria-expanded="false" aria-controls="integra-side">☰</button><a class="btn modules-link" href="/modulos">Módulos e licenças</a><button type="button" class="btn" id="integra-install" hidden>Instalar Kianda</button>');
   if (session && !session.formats?.pdf) shell = shell.replace('</head>', '<style>@media print{body>*{display:none!important}body::after{display:block!important;content:"Pré-visualização Kianda Integra. Active uma subscrição paga para imprimir ou exportar documentos.";padding:40px;font:18px sans-serif}}</style></head>');
   shell = shell.replace('</header>', '<button type="button" class="btn" id="integra-logout" data-act="logout">Terminar sessão</button></header><div id="integra-session-status" class="network-status" role="alert" hidden></div>');
-  shell = shell.replace('</header>', '<a class="btn" id="integra-copilot" data-act="openCopilot" href="/copiloto?modulo=modeling">Copiloto</a></header>');
   if (session?.licence?.status === 'trial' && session.licence.trialEndsAt) {
     const remaining = trialBannerText('Integra', session.licence.trialEndsAt, luandaDate(new Date()));
     shell = shell.replace('</header>', `</header><div class="network-status" role="status">${escape(remaining)} <a class="modules-link" href="/modulos">Ver licença</a></div>`);

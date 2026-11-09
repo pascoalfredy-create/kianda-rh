@@ -97,3 +97,15 @@ test('edita alterações guardadas e descarta ou cancela alterações incompleta
   const saved = (await apiAs(owner.token, 'GET', '/v1/payroll-variables?period=2026-09')).body;
   expect(saved).toHaveLength(1); expect(saved[0].amountMinor).toBe(200000); expect(errors).toEqual([]);
 });
+
+test('apagar o rascunho do processamento permite recomeçar do zero', async ({ page, context }) => {
+  const { owner, sheet } = await fixture();
+  expect((await apiAs(owner.token, 'POST', '/v1/payroll-runs', { period: '2026-09' })).status).toBe(201);
+  await signIn(context, owner.token); const errors = watchErrors(page);
+  await page.goto('/processamento?mes=2026-09');
+  await page.getByRole('button', { name: 'Apagar rascunho', exact: true }).click();
+  await page.getByRole('button', { name: 'Sim, apagar', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Rascunho apagado');
+  await expect(page.getByRole('button', { name: 'Preparar processamento', exact: true })).toBeVisible();
+  expect((await sheet()).run).toBeNull(); expect(errors).toEqual([]);
+});

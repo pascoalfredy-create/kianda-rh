@@ -62,41 +62,9 @@ test('simulador e orçamento conservam pressupostos ao visitar documentos', asyn
   expect(errors).toEqual([]);
 });
 
-test('Integra regressa do copiloto ao projecto e pressupostos que estavam abertos', async ({ page, context }) => {
-  const owner = await registerCompany({ modules: ['hr', 'modeling'] }), template = financialTemplate('servicos');
-  const models: string[] = [];
-  for (const name of ['Primeiro projecto', 'Projecto a rever']) {
-    const created = await apiAs(owner.token, 'POST', '/v1/modeling/models', { name, sector: 'servicos', currency: template.currency, assumptions: template.assumptions });
-    expect(created.status).toBe(201); models.push(created.body.id);
-  }
-  await signIn(context, owner.token); const errors = watchErrors(page);
-  await page.goto('/modelagem'); await page.locator('#mSel').selectOption(models[1]!);
-  const costs = page.locator('#nav [data-go="pressupostos"]');
-  if (!(await costs.isVisible())) await page.locator('#nav .nav-group', { has: costs }).locator('.nav-group-toggle').click();
-  await costs.click(); await page.locator('[data-act="sub"][data-k="pt"][data-v="custos"]').click();
-  await page.getByRole('link', { name: 'Copiloto', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Copiloto Kianda Integra', exact: true })).toBeVisible();
-  const detail = (await apiAs(owner.token, 'GET', `/v1/modeling/models/${models[1]}`)).body;
-  expect((await apiAs(owner.token, 'PUT', `/v1/modeling/models/${models[1]}`, { name: detail.name, sector: detail.sector, currency: detail.currency, revision: detail.revision, assumptions: { ...detail.assumptions, pessoal: 1234567 } })).status).toBe(200);
-  await page.getByRole('link', { name: '← Voltar ao módulo', exact: true }).click();
-  await expect(page.locator('#mSel')).toHaveValue(models[1]!);
-  await expect(page.locator('#assumption-pessoal')).toHaveValue(/1[\s.]234[\s.]567,00/);
-  await page.reload(); await expect(page.locator('#assumption-pessoal')).toBeVisible();
-  expect(errors).toEqual([]);
-});
-
-test('Valora regressa do copiloto ao balanço e à vista anual', async ({ page, context }) => {
-  const owner = await registerCompany({ modules: ['valuation'] });
-  const created = await apiAs(owner.token, 'POST', '/v1/valuation/analyses', { name: 'Análise em revisão', data: blankValuationData({ entity: 'Empresa Navegação', lastClosedYear: 2025 }) });
-  expect(created.status).toBe(201); await signIn(context, owner.token); const errors = watchErrors(page);
-  await page.goto('/valora'); await valoraGo(page, 'demonstracoes');
-  await page.locator('#segMode button[data-m="A"]').click();
-  await page.locator('#dtabs button[data-t="bal"]').click();
-  await page.getByRole('link', { name: 'Copiloto', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Copiloto Kianda Valora', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: '← Voltar ao módulo', exact: true }).click();
-  await expect(page.locator('#v-demonstracoes')).toHaveClass(/on/);
-  await expect(page.locator('#dtabs button[data-t="bal"]')).toHaveClass(/on/);
-  await expect(page.locator('#segMode button[data-m="A"]')).toHaveClass(/on/);
-  expect(errors).toEqual([]);
+test('copiloto retirado: o endereço antigo leva ao início e não há atalho no menu', async ({ page, context }) => {
+  const owner = await registerCompany({ modules: ['hr', 'modeling', 'valuation'] }); await signIn(context, owner.token);
+  await page.goto('/copiloto?modulo=valuation');
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('link', { name: /Copiloto/ })).toHaveCount(0);
 });
