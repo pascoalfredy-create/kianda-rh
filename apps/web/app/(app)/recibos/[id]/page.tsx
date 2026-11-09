@@ -19,16 +19,10 @@ export default async function Recibo({ params }: { params: Promise<{ id: string 
   }
   const logo = (await api<{ logo: string | null } | null>('/v1/company/branding').catch(() => null))?.logo ?? null;
   // Só o que foi processado no mês: rubricas a zero não aparecem no recibo.
-  const processed = p.lines.filter((l) => l.amountMinor !== 0);
+  // Só rubricas: nome sem notas entre parênteses (dias, motivos) — os valores dizem o resto.
+  const processed = p.lines.filter((l) => l.amountMinor !== 0).map((l) => ({ ...l, name: l.name.replace(/\s*\([^)]*\)/g, '').trim() }));
   const earnings = processed.filter((l) => l.kind === 'earning');
   const deductions = processed.filter((l) => l.kind === 'deduction');
-  const employer = processed.filter((l) => l.kind === 'employer');
-  const d = (iso: string) => iso.split('-').reverse().join('/');
-  const occurrences = [
-    ...(p.leave ?? []).map((a) => `${a.label}: ${a.workingDays} dia(s) útil(eis), de ${d(a.startDate)} a ${d(a.endDate)}`),
-    ...(p.absenceDays ? [`Faltas injustificadas: ${p.absenceDays} dia(s)`] : []),
-    ...(p.overtimeHours ? [`Horas extraordinárias: ${String(p.overtimeHours).replace('.', ',')} h`] : []),
-  ];
   const iban = p.employee.iban ? p.employee.iban.replace(/(.{4})/g, '$1 ').trim() : '—';
   const slip = (copy: 'Original' | 'Duplicado') => (
       <article className="card payslip" key={copy}>
@@ -55,11 +49,6 @@ export default async function Recibo({ params }: { params: Promise<{ id: string 
           <div>Banco: <b>{p.employee.bank ?? '—'}</b></div>
           <div>IBAN: <b>{iban}</b></div>
         </div>
-        {p.termination && <div className="payslip-box" aria-label="Fecho de contas">
-          <b>Fecho de contas</b> — {p.termination.reasonLabel}.
-          {p.termination.hireDate && <> Admissão em {d(p.termination.hireDate)};</>} cessação em {d(p.termination.effectiveDate)}{p.termination.noticeDate ? `; aviso em ${d(p.termination.noticeDate)}` : ''}{p.termination.seniority ? `; antiguidade ${p.termination.seniority}` : ''}. As rubricas do fecho estão discriminadas abaixo, com a base de cálculo.
-        </div>}
-        {occurrences.length > 0 && <div className="payslip-box" aria-label="Ocorrências do mês"><b>Ocorrências do mês</b><ul>{occurrences.map((o, i) => <li key={i}>{o}</li>)}</ul></div>}
         <div className="payslip-tables">
         <table>
           <thead><tr><th>Abonos</th><th className="num">Valor</th></tr></thead>
@@ -73,11 +62,8 @@ export default async function Recibo({ params }: { params: Promise<{ id: string 
         </table>
         </div>
         <div className="net"><span>Líquido a receber</span><span>{formatKz(p.netMinor)}</span></div>
-        {employer.length > 0 && <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-          Encargos da entidade empregadora (não descontados): {employer.map((l) => `${l.name} ${formatKz(l.amountMinor)}`).join(' · ')}
-        </div>}
         <footer>
-          <span>IRT Grupo A, escalão {p.irtBracket}{p.closedAt ? ` · emitido em ${new Date(p.closedAt).toLocaleDateString('pt-PT')}` : ''}</span>
+          <span>{p.closedAt ? `Emitido em ${new Date(p.closedAt).toLocaleDateString('pt-PT')}` : ''}</span>
           <span>Código de verificação: <code>{p.hash.slice(0, 16).toUpperCase()}</code></span>
         </footer>
       </article>
