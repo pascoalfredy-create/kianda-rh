@@ -1024,6 +1024,14 @@ export const issuedDocuments = pgTable('issued_documents', {
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
   revokedBy: text('revoked_by'),
   revokeNote: text('revoke_note'),
+  /** Assinatura electrónica simples do colaborador: pedido pelo RH, aceite no portal com nome, data, IP e hash do texto. */
+  signatureRequestedAt: timestamp('signature_requested_at', { withTimezone: true }),
+  signatureRequestedBy: text('signature_requested_by'),
+  signedAt: timestamp('signed_at', { withTimezone: true }),
+  signedBy: text('signed_by'),
+  signedName: text('signed_name'),
+  signedIp: text('signed_ip'),
+  signedHash: text('signed_hash'),
 }, (t) => [uniqueIndex('issued_documents_company_number').on(t.companyId, t.number), uniqueIndex('issued_documents_code').on(t.verificationCode), index('issued_documents_employee').on(t.employeeId)]);
 
 /** Cessação do contrato: motivo, aviso prévio, fecho de contas proposto/ajustado e confirmação. */

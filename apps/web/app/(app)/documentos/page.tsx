@@ -7,7 +7,7 @@ import { IssueForm } from './forms';
 export const dynamic = 'force-dynamic';
 
 interface Tpl { key: string; title: string; category: DocumentCategory; description: string; inputs: { key: string; label: string; placeholder?: string; required: boolean }[]; source: string; version: string; body: string }
-interface Doc { id: string; number: string; title: string; employeeName: string; employeeNumber: string; issuedAt: string; revokedAt: string | null; templateVersion: string }
+interface Doc { id: string; number: string; title: string; employeeName: string; employeeNumber: string; issuedAt: string; revokedAt: string | null; templateVersion: string; signatureRequestedAt?: string | null; signedAt?: string | null }
 
 export default async function Documentos({ searchParams }: { searchParams: Promise<{ v?: string; colaborador?: string; modelo?: string }> }) {
   const sp = await searchParams;
@@ -42,7 +42,7 @@ export default async function Documentos({ searchParams }: { searchParams: Promi
                   <td><Link href={`/documentos/${d.id}`}><b>{d.number}</b></Link></td><td>{d.title}</td>
                   {staff && <td>{d.employeeNumber} · {d.employeeName}</td>}
                   <td>{new Date(d.issuedAt).toLocaleDateString('pt-PT', { timeZone: 'Africa/Luanda' })}</td>
-                  <td>{d.revokedAt ? <span className="st rejected">Anulado</span> : <span className="st approved">Válido</span>}</td>
+                  <td>{d.revokedAt ? <span className="st rejected">Anulado</span> : <span className="st approved">Válido</span>}{!d.revokedAt && d.signedAt && <> <span className="st approved">Assinado</span></>}{!d.revokedAt && !d.signedAt && d.signatureRequestedAt && <> <span className="st pending">Por assinar</span></>}</td>
                 </tr>
               ))}
             </tbody>

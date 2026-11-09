@@ -36,5 +36,6 @@ export function taskCountColumn(actor: Actor) {
 export function ackCountColumn(actor: Actor) {
   if (!actor.employeeId) return sql<number>`0`.mapWith(Number);
   return sql<number>`(select count(*) from ack_requests r join ack_documents d on d.id = r.document_id
-    where r.company_id = ${actor.companyId} and d.company_id = ${actor.companyId} and r.employee_id = ${actor.employeeId} and r.status = 'pending' and d.status = 'published')`.mapWith(Number);
+    where r.company_id = ${actor.companyId} and d.company_id = ${actor.companyId} and r.employee_id = ${actor.employeeId} and r.status = 'pending' and d.status = 'published')
+    + (select count(*) from issued_documents i where i.company_id = ${actor.companyId} and i.employee_id = ${actor.employeeId} and i.signature_requested_at is not null and i.signed_at is null and i.revoked_at is null)`.mapWith(Number);
 }

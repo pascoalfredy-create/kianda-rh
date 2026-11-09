@@ -153,3 +153,31 @@ export function RevokeButton({ id }: { id: string }) {
 export function PrintBtn() {
   return <DocumentPrintButton className="btn ghost">Imprimir</DocumentPrintButton>;
 }
+
+/** RH: pedir ao colaborador que assine electronicamente no portal. */
+export function RequestSignatureButton({ id }: { id: string }) {
+  const { busy, error, run } = useMutation();
+  return <>
+    <button type="button" className="btn ghost" disabled={busy} onClick={() => run(`/v1/documents/${id}/request-signature`, 'POST', {})}>Pedir assinatura ao colaborador</button>
+    {error && <span className="err">{error}</span>}
+  </>;
+}
+
+/** Colaborador: assinatura electrónica simples (nome completo + confirmação). */
+export function SignForm({ id, employeeName }: { id: string; employeeName: string }) {
+  const { busy, error, run } = useMutation();
+  const [name, setName] = useState('');
+  const [accept, setAccept] = useState(false);
+  return (
+    <section className="card section no-print" aria-label="Assinar documento" style={{ padding: 16, marginBottom: 14 }}>
+      <h2 style={{ marginTop: 0 }}>Assinar electronicamente</h2>
+      <p className="muted">Leia o documento até ao fim. Ao assinar, ficam registados o seu nome, a data e hora, o endereço de rede e uma impressão digital do texto — qualquer alteração posterior ao documento fica detectável.</p>
+      <label style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><input type="checkbox" checked={accept} onChange={e => setAccept(e.target.checked)} /> Li e aceito o conteúdo deste documento</label>
+      <label>Escreva o seu nome completo ({employeeName})<input value={name} onChange={e => setName(e.target.value)} autoComplete="name" /></label>
+      <div className="actions" style={{ justifyContent: 'flex-start', marginTop: 10 }}>
+        <button type="button" className="btn" disabled={busy || !accept || name.trim().length < 3} onClick={() => run(`/v1/documents/${id}/sign`, 'POST', { name, accept: true })}>Assinar documento</button>
+        {error && <span className="err">{error}</span>}
+      </div>
+    </section>
+  );
+}

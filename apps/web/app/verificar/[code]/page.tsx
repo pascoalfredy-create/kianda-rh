@@ -2,7 +2,7 @@ import { upstream } from '@/lib/upstream';
 
 export const dynamic = 'force-dynamic';
 
-interface Result { valid: boolean; revoked?: boolean; number?: string; title?: string; company?: string; companyNif?: string; employee?: string; issuedAt?: string; message?: string }
+interface Result { valid: boolean; revoked?: boolean; number?: string; title?: string; company?: string; companyNif?: string; employee?: string; issuedAt?: string; signedAt?: string | null; signedName?: string | null; message?: string }
 
 /** Verificação pública de documentos emitidos pelo Kianda (sem sessão). */
 export default async function Verificar({ params }: { params: Promise<{ code: string }> }) {
@@ -22,6 +22,7 @@ export default async function Verificar({ params }: { params: Promise<{ code: st
               <div><dt>Emitido por</dt><dd>{r.company} (NIF {r.companyNif})</dd></div>
               <div><dt>Em nome de</dt><dd>{r.employee}</dd></div>
               <div><dt>Data de emissão</dt><dd>{new Date(r.issuedAt!).toLocaleDateString('pt-PT', { timeZone: 'Africa/Luanda' })}</dd></div>
+              <div><dt>Assinatura do colaborador</dt><dd>{r.signedAt ? `Assinado electronicamente por ${r.signedName} em ${new Date(r.signedAt).toLocaleString('pt-PT', { timeZone: 'Africa/Luanda' })}` : 'Sem assinatura electrónica'}</dd></div>
             </dl>
             <p className="muted" style={{ marginTop: 16 }}>Confirme que os dados coincidem com o documento apresentado. O conteúdo não é mostrado aqui por razões de privacidade.</p>
           </>

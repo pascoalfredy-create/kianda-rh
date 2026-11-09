@@ -7,7 +7,8 @@ import {
 } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { body, requireCompany, requireRole, type Actor, type AppEnv } from '../plugins/tenant.js';
+import { createHash } from 'node:crypto';
+import { body, clientIp, requireCompany, requireRole, type Actor, type AppEnv } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
 
 const STAFF = ['owner', 'hr_admin', 'payroll', 'finance'];
@@ -189,7 +190,7 @@ export function documentRoutes() {
     if (employeeId) where.push(eq(issuedDocuments.employeeId, employeeId));
     const rows = await db.select({ d: issuedDocuments, name: employees.name, number: employees.number }).from(issuedDocuments).innerJoin(employees, eq(employees.id, issuedDocuments.employeeId))
       .where(and(...where)).orderBy(desc(issuedDocuments.issuedAt)).limit(300);
-    return c.json(rows.map(({ d, name, number }) => ({ id: d.id, number: d.number, title: d.title, templateKey: d.templateKey, templateVersion: d.templateVersion, employeeId: d.employeeId, employeeName: name, employeeNumber: number, issuedAt: d.issuedAt, revokedAt: d.revokedAt })));
+    return c.json(rows.map(({ d, name, number }) => ({ id: d.id, number: d.number, title: d.title, templateKey: d.templateKey, templateVersion: d.templateVersion, employeeId: d.employeeId, signatureRequestedAt: d.signatureRequestedAt, signedAt: d.signedAt, employeeName: name, employeeNumber: number, issuedAt: d.issuedAt, revokedAt: d.revokedAt })));
   });
 
   app.get('/v1/documents/:id', async (c) => {
@@ -199,6 +200,38 @@ export function documentRoutes() {
       .where(and(eq(issuedDocuments.id, c.req.param('id')), eq(issuedDocuments.companyId, actor.companyId)));
     if (!row || !canSeeDoc(actor, row.d.employeeId)) throw new DomainError('nao_encontrado', 'Documento inexistente', 404);
     return c.json({ ...row.d, employeeName: row.name });
+  });
+
+  // ── Assinatura electrónica do colaborador ──
+  app.post('/v1/documents/:id/request-signature', requireRole('hr_admin'), async (c) => {
+    const actor = c.get('actor');
+    const db = getDb();
+    const [d] = await db.update(issuedDocuments).set({ signatureRequestedAt: new Date(), signatureRequestedBy: actor.actorId })
+      .where(and(eq(issuedDocuments.id, c.req.param('id')), eq(issuedDocuments.companyId, actor.companyId), sql`${issuedDocuments.revokedAt} is null`, sql`${issuedDocuments.signedAt} is null`)).returning();
+    if (!d) throw new DomainError('nao_encontrado', 'Documento inexistente, anulado ou já assinado', 404);
+    await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'request_signature', entity: 'issued_document', entityId: d.id, after: { number: d.number } });
+    return c.json(d);
+  });
+
+  app.post('/v1/documents/:id/sign', async (c) => {
+    const actor = c.get('actor');
+    const b = z.object({ name: z.string().trim().min(3, 'Escreva o seu nome completo'), accept: z.literal(true, { message: 'Confirme que leu e aceita o documento' }) }).parse(await body(c));
+    const db = getDb();
+    const [row] = await db.select({ d: issuedDocuments, name: employees.name }).from(issuedDocuments).innerJoin(employees, eq(employees.id, issuedDocuments.employeeId))
+      .where(and(eq(issuedDocuments.id, c.req.param('id')), eq(issuedDocuments.companyId, actor.companyId)));
+    // Só o próprio colaborador assina o seu documento.
+    if (!row || !actor.employeeId || row.d.employeeId !== actor.employeeId) throw new DomainError('nao_encontrado', 'Documento inexistente', 404);
+    if (row.d.revokedAt) throw new DomainError('documento_anulado', 'Este documento foi anulado', 409);
+    if (row.d.signedAt) throw new DomainError('ja_assinado', 'Este documento já está assinado', 409);
+    if (!row.d.signatureRequestedAt) throw new DomainError('assinatura_nao_pedida', 'A assinatura deste documento não foi pedida', 409);
+    const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+    if (norm(b.name) !== norm(row.name)) throw new DomainError('nome_diferente', `Escreva o nome completo tal como consta da ficha: ${row.name}`, 400);
+    const hash = createHash('sha256').update(row.d.body).digest('hex');
+    const [d] = await db.update(issuedDocuments).set({ signedAt: new Date(), signedBy: actor.actorId, signedName: row.name, signedIp: clientIp(c), signedHash: hash })
+      .where(and(eq(issuedDocuments.id, row.d.id), sql`${issuedDocuments.signedAt} is null`)).returning();
+    if (!d) throw new DomainError('ja_assinado', 'Este documento já está assinado', 409);
+    await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'sign', entity: 'issued_document', entityId: d.id, after: { number: d.number, signedName: d.signedName, signedHash: hash, signedIp: d.signedIp } });
+    return c.json(d);
   });
 
   app.post('/v1/documents/:id/revoke', requireRole('hr_admin'), async (c) => {
@@ -227,7 +260,7 @@ export function documentVerificationRoutes() {
     if (!row) return c.json({ valid: false, message: 'Código não encontrado' }, 404);
     return c.json({
       valid: !row.d.revokedAt, revoked: Boolean(row.d.revokedAt), number: row.d.number, title: row.d.title, company: row.company, companyNif: row.nif,
-      employee: row.name, issuedAt: row.d.issuedAt,
+      employee: row.name, issuedAt: row.d.issuedAt, signedAt: row.d.signedAt, signedName: row.d.signedName,
     });
   });
   return app;
