@@ -26,3 +26,23 @@ describe.skipIf(!process.env.DATABASE_URL)('férias segundo a LGT', () => {
     expect(byName('A Termo')).toMatchObject({ entitlement: 14 });
   });
 });
+
+describe.skipIf(!process.env.DATABASE_URL)('licença sem remuneração', () => {
+  it('desconta na folha e, acima de 30 dias, reduz as férias do ano', async () => {
+    const nif = String(Math.floor(Math.random() * 10_000_000_000)).padStart(10, '0');
+    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Licença', nif }, name: 'Dona', email: `licenca.${Date.now()}@kianda.test`, password: 'LicencaSemRem2026seguro' } });
+    const cookie = `kianda_session=${r.cookies.find(c => c.name === 'kianda_session')!.value}`;
+    const call = (method: string, url: string, payload?: unknown) => app.inject({ method, url, headers: { cookie }, ...(payload === undefined ? {} : { payload }) });
+    const id = (await call('POST', '/v1/employees', { number: '1', name: 'Em Licença', jobTitle: 'Técnico', contract: { type: 'indefinite', startDate: '2024-01-01', base: 300000, meal: 22000 } })).json().id;
+    const l = await call('POST', '/v1/absences', { employeeId: id, type: 'unpaid_leave', startDate: '2026-03-01', endDate: '2026-04-30', reason: 'Assuntos pessoais', approve: true });
+    expect(l.statusCode, l.body).toBe(201);
+    const bal = (await call('GET', '/v1/leave/balances?year=2026')).json().find((x: { employee: { name: string } }) => x.employee.name === 'Em Licença');
+    expect(bal.entitlement).toBe(20);
+    const run = await call('POST', '/v1/payroll-runs', { period: '2026-03' });
+    const line = (await call('GET', `/v1/payroll-runs/${run.json().run.id}`)).json().lines[0];
+    // Mês inteiro de licença: nada a pagar (vencimento e subsídios proporcionais aos dias pagos = 0).
+    expect(line.grossMinor).toBe(0);
+    const apr = await call('POST', '/v1/payroll-runs', { period: '2026-05' });
+    expect((await call('GET', `/v1/payroll-runs/${apr.json().run.id}`)).json().lines[0].grossMinor).toBe(32_200_000);
+  });
+});

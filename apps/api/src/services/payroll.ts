@@ -117,7 +117,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
     ));
     // Licenças não remuneradas no mês (paternidade complementar, art. 218.º) e férias no mês (alimentação/transporte, art. 213.º).
     const monthLeaves = await tx.select().from(absences).where(and(
-      eq(absences.companyId, companyId), inArray(absences.type, ['paternity', 'vacation', 'maternity']), eq(absences.status, 'approved'),
+      eq(absences.companyId, companyId), inArray(absences.type, ['paternity', 'vacation', 'maternity', 'unpaid_leave']), eq(absences.status, 'approved'),
       lte(absences.startDate, periodEnd), gte(absences.endDate, periodStart),
     ));
     // Doença: paga pela empresa até 6 meses seguidos (art. 226.º, n.º 1); depois o contrato fica suspenso sem salário (art. 268.º, n.º 1).
@@ -232,6 +232,13 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
         if (a.startDate >= periodStart) mins -= Math.min(mins, pack.leave.paternityPaidDays * pack.labour.dailyHours * 60); // dia pago
         unpaidLeaveHours += mins / 60;
       }
+      // Licença sem remuneração (art. 216.º): os dias de calendário da licença saem dos dias pagos (vencimento e subsídios proporcionais).
+      let licenceDays = 0;
+      for (const a of (leavesByEmployee.get(e.id) ?? []).filter((x) => x.type === 'unpaid_leave')) {
+        const from = a.startDate < periodStart ? periodStart : a.startDate;
+        const to = a.endDate > periodEnd ? periodEnd : a.endDate;
+        if (to >= from) licenceDays += Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1;
+      }
       let sickUnpaidHours = 0;
       for (const chain of sickChains(sickLeaves.filter((a) => a.employeeId === e.id))) {
         const unpaidFrom = addMonths(chain.from, SICK_PAID_MONTHS);
@@ -276,7 +283,8 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       // Mês incompleto: admissão ou cessação a meio do mês.
       const from = hire > periodStart ? hire : periodStart;
       const to = ended && ended < periodEnd ? ended : periodEnd;
-      const workedDays = from === periodStart && to === periodEnd ? undefined : Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1);
+      const calendarDays = Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1);
+      const workedDays = from === periodStart && to === periodEnd && !licenceDays ? undefined : Math.max(0, Math.min(calendarDays, from === periodStart && to === periodEnd ? pack.labour.dailyRateDivisor : calendarDays) - licenceDays);
 
       // Subsídios recorrentes: vigência ∩ contrato no mês; por dia = dias de escala menos faltas injustificadas.
       const allowanceEarnings: EarningInput[] = [];

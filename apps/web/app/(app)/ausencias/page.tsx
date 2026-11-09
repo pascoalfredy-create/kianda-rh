@@ -29,6 +29,7 @@ export default async function Ausencias({ searchParams }: { searchParams: Promis
           <h1>Férias e ausências</h1>
           <p className="sub">Pedidos, quem está fora e quantos dias cada um ainda tem.</p>
         </div>
+        {me.user.role !== 'employee' && <div className="actions"><Link className="btn ghost sm" href={`/ausencias/plano?ano=${year}`}>Plano de férias (A4)</Link></div>}
       </div>
       <div style={{ marginBottom: 16 }}>
         <NewAbsenceForm

@@ -10,7 +10,7 @@ import { DomainError } from '../services/payroll.js';
 import { canDecideFor, visibleEmployeeIds } from '../services/scope.js';
 import { notifyDeciders, notifyEmployees } from '../services/push.js';
 
-const TYPES = ['vacation', 'sick', 'justified', 'unjustified', 'maternity', 'paternity', 'marriage', 'bereavement', 'training'] as const;
+const TYPES = ['vacation', 'sick', 'justified', 'unjustified', 'maternity', 'paternity', 'marriage', 'bereavement', 'training', 'unpaid_leave'] as const;
 const today = () => new Date().toISOString().slice(0, 10);
 const pt = (d: string) => d.split('-').reverse().join('/');
 
@@ -61,7 +61,7 @@ async function balanceFor(db: Db, emp: Employee, year: number, excludeId?: strin
   const hire = await hireDate(db, emp.id);
   const contract = await currentContract(db, emp.id);
   const rows = await db.select().from(absences).where(and(
-    eq(absences.employeeId, emp.id), inArray(absences.type, ['vacation', 'sick']), inArray(absences.status, ['pending', 'approved']),
+    eq(absences.employeeId, emp.id), inArray(absences.type, ['vacation', 'sick', 'unpaid_leave']), inArray(absences.status, ['pending', 'approved']),
     lte(absences.startDate, `${year}-12-31`), gte(absences.endDate, `${year}-01-01`),
   ));
   return balanceFromRows(emp, year, hire, rows, excludeId, contract);
@@ -86,7 +86,7 @@ function balanceFromRows(emp: Employee, year: number, hire: string | null, rows:
   return {
     hireDate: hire,
     eligibleFrom: hire ? vacationEligibleFrom(hire, pack) : null,
-    ...vacationBalance({ year, entitlement: hire ? vacationEntitlement(hire, year, pack, contract) : 0, carriedOver, approvedDays: approved, pendingDays: pending }),
+    ...vacationBalance({ year, entitlement: hire ? vacationEntitlement(hire, year, pack, contract, rows.filter((r) => r.type === 'unpaid_leave' && r.status === 'approved')) : 0, carriedOver, approvedDays: approved, pendingDays: pending }),
   };
 }
 
@@ -248,7 +248,7 @@ export function absenceRoutes() {
     const [firstContracts, latestContracts, vacationRows] = await Promise.all([
       db.select({ employeeId: contracts.employeeId, date: sql<string>`min(${contracts.startDate})`, everIndefinite: sql<boolean>`bool_or(${contracts.type} = 'indefinite')` }).from(contracts).where(inArray(contracts.employeeId, ids)).groupBy(contracts.employeeId),
       db.selectDistinctOn([contracts.employeeId], { employeeId: contracts.employeeId, type: contracts.type, startDate: contracts.startDate, endDate: contracts.endDate }).from(contracts).where(inArray(contracts.employeeId, ids)).orderBy(contracts.employeeId, desc(contracts.startDate)),
-      db.select().from(absences).where(and(eq(absences.companyId, actor.companyId), inArray(absences.employeeId, ids), inArray(absences.type, ['vacation', 'sick']), inArray(absences.status, ['pending', 'approved']), lte(absences.startDate, `${year}-12-31`), gte(absences.endDate, `${year}-01-01`))),
+      db.select().from(absences).where(and(eq(absences.companyId, actor.companyId), inArray(absences.employeeId, ids), inArray(absences.type, ['vacation', 'sick', 'unpaid_leave']), inArray(absences.status, ['pending', 'approved']), lte(absences.startDate, `${year}-12-31`), gte(absences.endDate, `${year}-01-01`))),
     ]);
     const hireDates = new Map(firstContracts.map(c => [c.employeeId, c.date]));
     const permanent = new Set(firstContracts.filter(c => c.everIndefinite).map(c => c.employeeId));

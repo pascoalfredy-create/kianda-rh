@@ -5,7 +5,7 @@
 import { addDays, businessDays } from './calendar.js';
 import type { CountryPack } from './packs/types.js';
 
-export type AbsenceType = 'vacation' | 'sick' | 'justified' | 'unjustified' | 'maternity' | 'paternity' | 'marriage' | 'bereavement' | 'training';
+export type AbsenceType = 'vacation' | 'sick' | 'justified' | 'unjustified' | 'maternity' | 'paternity' | 'marriage' | 'bereavement' | 'training' | 'unpaid_leave';
 
 export interface AbsencePolicy {
   type: AbsenceType;
@@ -48,6 +48,8 @@ export const ABSENCE_POLICIES: Record<AbsenceType, AbsencePolicy> = {
     limit: (p) => ({ workingDays: p.leave.bereavementWorkingDays }),
   },
   training: { type: 'training', label: 'Formação', deductsVacation: false, paid: true, selfService: true, needsProof: false, color: '#2a8fb0' },
+  // Art. 216.º: autorizada pelo empregador; conta para antiguidade; acima de 30 dias as férias passam a proporcionais.
+  unpaid_leave: { type: 'unpaid_leave', label: 'Licença sem remuneração', deductsVacation: false, paid: false, selfService: true, needsProof: false, color: '#7a6f5b' },
 };
 
 const parse = (d: string) => { const [y, m, day] = d.split('-').map(Number) as [number, number, number]; return { y, m, day }; };
@@ -66,10 +68,22 @@ export function fullMonthsBetween(from: string, to: string): number {
  * Dias de férias a que o colaborador tem direito no ano civil.
  * Ano de admissão: `firstYearDaysPerMonth` por mês completo até 31/12 (limitado ao máximo anual). Anos seguintes: máximo anual.
  */
-export function vacationEntitlement(hireDate: string, year: number, pack: CountryPack, contract?: { type: string; startDate: string; endDate: string | null } | null): number {
+export function vacationEntitlement(hireDate: string, year: number, pack: CountryPack, contract?: { type: string; startDate: string; endDate: string | null } | null, suspensions: { startDate: string; endDate: string }[] = []): number {
   const hireYear = Number(hireDate.slice(0, 4));
   if (year < hireYear) return 0;
   const max = pack.labour.vacationWorkingDays;
+  // Art. 204.º, n.º 3, e art. 216.º, n.º 4: contrato suspenso no ano (licença sem remuneração > 30 dias) —
+  // 2 dias úteis por mês completo de trabalho, com o mínimo de 6.
+  const long = suspensions.filter((x) => (Date.parse(x.endDate) - Date.parse(x.startDate)) / 86_400_000 + 1 > 30 && x.startDate <= `${year}-12-31` && x.endDate >= `${year}-01-01`);
+  if (long.length && !(contract?.type === 'fixed_term')) {
+    const first = year === hireYear ? Number(hireDate.slice(5, 7)) + (hireDate.slice(8) === '01' ? 0 : 1) : 1;
+    let months = 0;
+    for (let m = first; m <= 12; m++) {
+      const a = `${year}-${String(m).padStart(2, '0')}-01`, z = `${year}-${String(m).padStart(2, '0')}-${String(new Date(Date.UTC(year, m, 0)).getUTCDate()).padStart(2, '0')}`;
+      if (!long.some((x) => x.startDate <= z && x.endDate >= a)) months++;
+    }
+    return Math.min(max, Math.max(pack.leave.firstYearMinDays, months * pack.leave.firstYearDaysPerMonth));
+  }
   // Art. 205.º: contrato a termo (ou renovação) até um ano — 2 dias úteis por mês completo no ano, máximo 22, sem mínimo.
   if (contract?.type === 'fixed_term' && contract.endDate && (Date.parse(contract.endDate) - Date.parse(contract.startDate)) / 86_400_000 < 366) {
     const from = contract.startDate > `${year}-01-01` ? contract.startDate : `${year}-01-01`;
