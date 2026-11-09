@@ -393,6 +393,13 @@
       "when": 1793920000000,
       "tag": "0055_punch_location_default_record",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1794006400000,
+      "tag": "0056_allowances_on_absence",
+      "breakpoints": true
     }
   ]
 }

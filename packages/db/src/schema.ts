@@ -56,6 +56,8 @@ export const companies = pgTable('companies', {
   shiftMinRestMinutes: integer('shift_min_rest_minutes').notNull().default(600),
   /** Pagar alimentação e transporte nos dias de férias (por acordo; a regra legal é não pagar — LGT, art. 213.º, n.º 2). */
   allowancesOnVacation: boolean('allowances_on_vacation').notNull().default(false),
+  /** Pagar alimentação e transporte nos dias de falta injustificada (por omissão não: só dias trabalhados). */
+  allowancesOnAbsence: boolean('allowances_on_absence').notNull().default(false),
   /** Sector de actividade (registo) — pré-configurações por sector. */
   sector: text('sector'),
   /** Logotipo para o papel timbrado (data URL PNG/JPEG, até 300 KB). */

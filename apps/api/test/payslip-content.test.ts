@@ -28,6 +28,9 @@ describe.skipIf(!process.env.DATABASE_URL)('recibo: só o processado, discrimina
     const names = slip.lines.map((l: { name: string }) => l.name);
     expect(names).toEqual(expect.arrayContaining(['Devolução de equipamento', 'Quota do refeitório']));
     expect(names).not.toContain('Outros descontos');
+    // Regra da empresa (por omissão): alimentação e transporte só nos dias trabalhados — férias e falta cortam.
+    expect(names).toContain('Subsídio de alimentação (sem 5 dia(s) de férias) (sem 1 dia(s) de falta)');
+    expect(slip.lines.find((l: { name: string }) => l.name.startsWith('Subsídio de alimentação')).amountMinor).toBe(Math.round(2_000_000 - 2_000_000 * 6 / 22));
     expect(names.some((n: string) => n.startsWith('Subsídio de férias'))).toBe(true);
     expect(slip.leave).toEqual([expect.objectContaining({ type: 'vacation', startDate: '2026-10-05', endDate: '2026-10-09', workingDays: 5 }), expect.objectContaining({ type: 'unjustified' })]);
     expect(slip.termination).toBeNull();
