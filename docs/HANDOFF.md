@@ -105,7 +105,12 @@ Plano de acção (19 itens) da auditoria geral, comparada com a do outro agente,
 | #75 | G | Consola com MRR por módulo ao preço do ciclo, sem N+1; avisos de renovação do Integra e Valora; faixa do RH acompanha a equipa durante a avaliação; cadastro pergunta o n.º de colaboradores e guarda o plano das ligações públicas; suporte na página pública. |
 | #76 | H | Folha pela escala publicada; departamento/centro de custo fotografados na linha (migração **0054**); mapas com nome; percentagens com 2 casas; aviso de avaliação único com dd/mm/aaaa. |
 
-Só do dono (não fazer pelo agente): pacote AO-2027 quando o OGE sair; validação jurídica (turnos, cessação, doença, contratos, termos finais); quota OpenAI; ProxyPay/Vendus; reactivar 2FA; secrets do R2 para a cópia dos ficheiros.
+Decisões do dono (09/11/2026, PR #77):
+- A folha **não depende do OGE**: um ano sem pacote próprio continua com as regras do último publicado (`getPack`); regra nova = publicar o pacote desse ano.
+- Validação jurídica feita só com os artigos da LGT citados no código: ver `docs/VALIDACAO-LGT.md` (corrigido: doença paga até 6 meses).
+- ProxyPay e Vendus em pausa (nomes recusados): vendas continuam manuais, a nível pessoal.
+- 2FA reactivada pelo dono; secrets do R2 criados e cópia do R2 verificada.
+- Pendente do dono: crédito/quota da OpenAI para o copiloto com IA.
 
 ## 4. Comercial, avaliação e exportações
 
