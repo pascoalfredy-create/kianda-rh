@@ -53,7 +53,7 @@ export default async function Processamento({ searchParams }: { searchParams: Pr
         <span className="muted" style={{ flex: 1 }}>
           {run ? <>Preparado por {run.preparedByName ?? '—'}{run.closedAt ? ` · fechado por ${run.closedByName ?? '—'} em ${new Date(run.closedAt).toLocaleDateString('pt-PT')}` : ''}{run.fxRate ? ` · câmbio ${formatFxRate(Number(run.fxRate))} Kz/USD de ${run.fxDate!.split('-').reverse().join('/')}${run.fxSource ? ` (${run.fxSource})` : ''}` : ''}</> : 'Ainda não há processamento para este mês.'}
         </span>
-        {editable && <PrepareButton key={period} period={period} prepared={!!run} people={people} payrollPeople={payrollPeople} processedIds={processedIds} variableCount={variables.length} indexed={indexedEmployees} fx={run ? { rate: run.fxRate ?? null, date: run.fxDate ?? null, source: run.fxSource ?? null } : undefined} />}
+        {editable && <PrepareButton key={period} period={period} prepared={!!run} runId={run?.id} people={people} payrollPeople={payrollPeople} processedIds={processedIds} variableCount={variables.length} indexed={indexedEmployees} fx={run ? { rate: run.fxRate ?? null, date: run.fxDate ?? null, source: run.fxSource ?? null } : undefined} />}
         {run?.status === 'closed' && <Link href="/obrigacoes" className="btn ghost">Pagamentos e mapas →</Link>}
         {canClose && draft && <CloseButton runId={run!.id} period={period} selfPrepared={run!.preparedBy === actor.sub} manualWarnings={run!.warnings.filter(w => /CÁLCULO MANUAL/.test(w.message)).length} />}
       </div>

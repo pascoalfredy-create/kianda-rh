@@ -88,6 +88,21 @@ export function payrollRoutes() {
     return c.json(await draftPayroll(getDb(), companyId, period, actorId, fx), 201);
   });
 
+  // Apagar um processamento em rascunho para recomeçar. As variáveis do mês ficam guardadas.
+  app.delete('/v1/payroll-runs/:id', requireRole('payroll'), async (c) => {
+    const { companyId, actorId } = c.get('actor');
+    const db = getDb();
+    await db.transaction(async (tx) => {
+      const [run] = await tx.select().from(payrollRuns).where(and(eq(payrollRuns.id, c.req.param('id')), eq(payrollRuns.companyId, companyId))).for('update');
+      if (!run) throw new DomainError('nao_encontrado', 'Processamento não encontrado', 404);
+      if (run.status === 'closed') throw new DomainError('processamento_fechado', 'Um processamento fechado não pode ser apagado.', 409);
+      await tx.delete(payrollLines).where(eq(payrollLines.runId, run.id));
+      await tx.delete(payrollRuns).where(eq(payrollRuns.id, run.id));
+      await tx.insert(auditLogs).values({ companyId, actorId, action: 'delete', entity: 'payroll_run', entityId: run.id, before: { period: run.period, status: run.status } });
+    });
+    return c.json({ ok: true });
+  });
+
   /** Calcula salários da selecção; os lotes acumulam-se na mesma folha mensal. */
   app.post('/v1/payroll-runs/batch', requireRole('payroll'), async c => {
     const b = z.object({ period: periodSchema, employeeIds: z.array(z.string().min(1).max(128)).min(1).max(1000), fx: fxSchema.optional() })

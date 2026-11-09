@@ -10,7 +10,7 @@ import { BatchVariables, type BatchResult } from './batch-variables';
 import { PayrollSelection } from './payroll-selection';
 import type { PayrollBatchPerson } from '@/lib/types';
 
-export function PrepareButton({ period, prepared, people, payrollPeople, processedIds, variableCount, indexed = 0, fx }: { period: string; prepared: boolean; people: { id: string; name: string }[]; payrollPeople: PayrollBatchPerson[]; processedIds: string[]; variableCount: number; indexed?: number; fx?: { rate: string | null; date: string | null; source: string | null } }) {
+export function PrepareButton({ period, prepared, runId, people, payrollPeople, processedIds, variableCount, indexed = 0, fx }: { period: string; prepared: boolean; runId?: string; people: { id: string; name: string }[]; payrollPeople: PayrollBatchPerson[]; processedIds: string[]; variableCount: number; indexed?: number; fx?: { rate: string | null; date: string | null; source: string | null } }) {
   const { busy, error, run } = useMutation();
   const draftKey = `payroll:${period}:preparation:`;
   const clearPreparation = useClearWorkspace(draftKey);
@@ -20,6 +20,7 @@ export function PrepareButton({ period, prepared, people, payrollPeople, process
   const eligibleIds = new Set(payrollPeople.map(person => person.id));
   const selected = chosen.filter(id => typeof id === 'string' && eligibleIds.has(id));
   const [result, setResult] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
   const [rate, setRate] = useWorkspaceState(`${draftKey}rate`, fx?.rate ? String(Number(fx.rate)).replace('.', ',') : '');
   const [date, setDate] = useWorkspaceState(`${draftKey}date`, fx?.date ?? today);
@@ -49,6 +50,11 @@ export function PrepareButton({ period, prepared, people, payrollPeople, process
         <button type="button" className="btn" disabled={busy || (prepared && calculateDisabled)} onClick={() => prepared ? calculate() : prepare(false)}>{busy ? 'A calcular…' : prepared ? 'Recalcular' : 'Preparar processamento'}</button>
         <button type="button" className="btn ghost" disabled={busy} onClick={() => prepare(true)}>Processar em lote</button>
         {prepared && <button type="button" className="btn ghost" disabled={busy} onClick={() => prepare(false)}>Rever preparação</button>}
+        {prepared && runId && (confirmDelete
+          ? <span className="actions" role="group" aria-label="Confirmar apagar rascunho" style={{ gap: 6 }}><span className="muted">Apagar o rascunho de {monthLabel(period)}? As variáveis lançadas mantêm-se.</span>
+              <button type="button" className="btn danger sm" disabled={busy} onClick={async () => { if (await run(`/v1/payroll-runs/${runId}`, 'DELETE', undefined, () => setResult('Rascunho apagado. Pode preparar o processamento de novo.'))) { clearPreparation(); setConfirmDelete(false); } }}>Sim, apagar</button>
+              <button type="button" className="btn ghost sm" onClick={() => setConfirmDelete(false)}>Não</button></span>
+          : <button type="button" className="btn ghost" disabled={busy} onClick={() => setConfirmDelete(true)}>Apagar rascunho</button>)}
       </>}
       {open && <section aria-label="Preparação do processamento" style={{ width: '100%', minWidth: 0 }}>
         <h2>{batchMode ? 'Processar em lote — ' : 'Preparar '}{monthLabel(period)}</h2>

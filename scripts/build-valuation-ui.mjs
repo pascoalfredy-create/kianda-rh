@@ -51,7 +51,7 @@ replaceShell('<div class="side-foot">Protótipo · dados fictícios<br>Valores e
   '<div class="side-foot"><span id="valoraFoot"></span>Valores em Kz<br><a href="/modulos" class="valora-link">Módulos e licenças</a> · <button type="button" class="valora-link" id="valoraLogout">Terminar sessão</button></div>');
 // Sair do Valora para os outros módulos: sempre à vista no cabeçalho (como no Integra), também no telemóvel.
 replaceShell('<button class="btn" id="btnTheme" title="Alternar tema claro/escuro">Tema</button>\n</header>',
-  '<button class="btn" id="btnTheme" title="Alternar tema claro/escuro">Tema</button>\n  <a class="btn" id="valoraCopilot" href="/copiloto?modulo=valuation">Copiloto</a><a class="btn valora-modules" href="/modulos" id="valoraModules">Módulos e licenças</a><button type="button" class="btn" id="valoraLogoutTop">Terminar sessão</button>\n</header>');
+  '<button class="btn" id="btnTheme" title="Alternar tema claro/escuro">Tema</button><a class="btn valora-modules" href="/modulos" id="valoraModules">Módulos e licenças</a><button type="button" class="btn" id="valoraLogoutTop">Terminar sessão</button>\n</header>');
 replaceShell('<p class="intro">Demonstrações por natureza (PGC Angola: <b>', '<p class="intro">Demonstrações por natureza (<b>');
 replace(' segundo o PGC Angola, com exercício comparativo', ', com exercício comparativo');
 replaceShell('<div class="entity"><b id="hdrEnt">Kalunga Distribuição, S.A.</b><span class="pill" id="pillFecho">Fecho: Out 2026</span></div>',
