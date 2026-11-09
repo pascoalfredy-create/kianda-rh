@@ -15,7 +15,7 @@ const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull(
 export const roleEnum = pgEnum('role', ['owner', 'hr_admin', 'payroll', 'finance', 'manager', 'employee']);
 export const contractTypeEnum = pgEnum('contract_type', ['indefinite', 'fixed_term', 'internship']);
 export const employeeStatusEnum = pgEnum('employee_status', ['active', 'suspended', 'terminated']);
-export const absenceTypeEnum = pgEnum('absence_type', ['vacation', 'sick', 'justified', 'unjustified', 'maternity', 'paternity', 'marriage', 'bereavement', 'training']);
+export const absenceTypeEnum = pgEnum('absence_type', ['vacation', 'sick', 'justified', 'unjustified', 'maternity', 'paternity', 'marriage', 'bereavement', 'training', 'unpaid_leave']);
 export const requestStatusEnum = pgEnum('request_status', ['pending', 'approved', 'rejected', 'cancelled']);
 export const payrollStatusEnum = pgEnum('payroll_status', ['draft', 'closed']);
 export const terminationStatusEnum = pgEnum('termination_status', ['draft', 'confirmed', 'cancelled']);

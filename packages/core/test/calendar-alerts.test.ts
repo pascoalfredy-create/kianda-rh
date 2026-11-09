@@ -26,3 +26,12 @@ describe('férias (LGT, arts. 204.º e 205.º)', () => {
     expect(vacationEntitlement('2024-01-01', 2026, pack, { type: 'fixed_term', startDate: '2024-01-01', endDate: '2026-12-31' })).toBe(22);
   });
 });
+
+describe('férias com licença sem remuneração (arts. 204.º, n.º 3, e 216.º)', () => {
+  const pack = getPack('AO', 2026);
+  it('até 30 dias conta como trabalho; acima disso 2 dias por mês completo, mínimo 6', () => {
+    expect(vacationEntitlement('2024-01-01', 2026, pack, null, [{ startDate: '2026-03-01', endDate: '2026-03-30' }])).toBe(22);
+    expect(vacationEntitlement('2024-01-01', 2026, pack, null, [{ startDate: '2026-03-01', endDate: '2026-04-30' }])).toBe(20);
+    expect(vacationEntitlement('2024-01-01', 2026, pack, null, [{ startDate: '2026-02-15', endDate: '2026-11-15' }])).toBe(6);
+  });
+});
