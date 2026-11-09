@@ -60,6 +60,7 @@ export default async function Recibo({ params }: { params: Promise<{ id: string 
           {p.termination.hireDate && <> Admissão em {d(p.termination.hireDate)};</>} cessação em {d(p.termination.effectiveDate)}{p.termination.noticeDate ? `; aviso em ${d(p.termination.noticeDate)}` : ''}{p.termination.seniority ? `; antiguidade ${p.termination.seniority}` : ''}. As rubricas do fecho estão discriminadas abaixo, com a base de cálculo.
         </div>}
         {occurrences.length > 0 && <div className="payslip-box" aria-label="Ocorrências do mês"><b>Ocorrências do mês</b><ul>{occurrences.map((o, i) => <li key={i}>{o}</li>)}</ul></div>}
+        <div className="payslip-tables">
         <table>
           <thead><tr><th>Abonos</th><th className="num">Valor</th></tr></thead>
           <tbody>{earnings.map((l, i) => <tr key={i}><td>{l.name}</td><td className="num" style={{ color: l.amountMinor < 0 ? 'var(--red)' : undefined }}>{formatKz(l.amountMinor)}</td></tr>)}</tbody>
@@ -70,6 +71,7 @@ export default async function Recibo({ params }: { params: Promise<{ id: string 
           <tbody>{deductions.map((l, i) => <tr key={i}><td>{l.name}</td><td className="num">{formatKz(l.amountMinor)}</td></tr>)}</tbody>
           <tfoot><tr><td><b>Total descontos</b></td><td className="num"><b>{formatKz(deductions.reduce((s, l) => s + l.amountMinor, 0))}</b></td></tr></tfoot>
         </table>
+        </div>
         <div className="net"><span>Líquido a receber</span><span>{formatKz(p.netMinor)}</span></div>
         {employer.length > 0 && <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
           Encargos da entidade empregadora (não descontados): {employer.map((l) => `${l.name} ${formatKz(l.amountMinor)}`).join(' · ')}
