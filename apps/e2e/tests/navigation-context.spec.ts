@@ -16,6 +16,8 @@ test('ficha salarial e assiduidade regressam à preparação, com rascunho e sal
   await preparation.getByLabel('Câmbio USD→Kz', { exact: true }).fill('952');
   await preparation.getByLabel('Data do câmbio', { exact: true }).fill('2026-09-30');
   await preparation.getByLabel('Fonte do câmbio', { exact: true }).fill('Referência do teste');
+  // No lote, as alterações pontuais estão recolhidas (opcionais).
+  await preparation.getByText('Alterações pontuais deste mês (opcional)').click();
   await preparation.getByRole('button', { name: 'Lançar variável', exact: true }).click();
   await preparation.getByLabel('Valor (Kz)', { exact: true }).fill('7000');
   await preparation.getByLabel('Descrição', { exact: true }).fill('Prémio em revisão');

@@ -637,3 +637,8 @@ tr.total td, tr.tot td, tfoot td { font-weight: 700; background: #fafafa; }
 .password-field input{padding-right:48px;width:100%}
 .password-field button{position:absolute;right:3px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:40px;height:40px;background:transparent;color:var(--ink2);border:0;border-radius:6px;cursor:pointer}
 .password-field button:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
+
+/* Processamento em lote: alterações pontuais recolhidas (opcionais). */
+details.optional-changes{margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:10px 14px;background:var(--panel)}
+details.optional-changes>summary{cursor:pointer;font-weight:600;list-style-position:inside}
+details.optional-changes[open]>summary{margin-bottom:10px}
