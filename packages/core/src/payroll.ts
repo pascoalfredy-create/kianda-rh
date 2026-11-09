@@ -41,6 +41,8 @@ export interface PayrollInput {
   vacationAllowanceCut?: { fraction: number; days: number };
   advancesMinor?: Minor;
   otherDeductionsMinor?: Minor;
+  /** Descontos discriminados (cada um com a sua rubrica no recibo). Se indicados, substituem otherDeductionsMinor. */
+  otherDeductions?: { name: string; amountMinor: Minor }[];
   /** Compensação por falta de aviso prévio do trabalhador, descontada no fecho de contas (não reduz bases). */
   noticeDeductionMinor?: Minor;
   /** Mês incompleto (admissão ou cessação a meio do mês): dias de calendário trabalhados; base e subsídios ÷ 30 × dias. */
@@ -151,7 +153,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   };
   const meal = lessVacation(part(assertMinor(input.mealMinor ?? 0, 'subsídio de alimentação')));
   const transport = lessVacation(part(assertMinor(input.transportMinor ?? 0, 'subsídio de transporte')));
-  const vacationNote = cut ? ` (sem ${input.vacationAllowanceCut!.days} dia(s) de férias)` : '';
+  const vacationNote = `${partial ? ` (${input.workedDays} dia(s))` : ''}${cut ? ` (sem ${input.vacationAllowanceCut!.days} dia(s) de férias)` : ''}`;
   const lines: PayrollLine[] = [];
   let inssBase = 0;
   let irtBase = 0;
@@ -214,10 +216,12 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   lines.push({ code: 'INSS', name: `Segurança Social (${pack.inss.employeeBps / 100}%)`, kind: 'deduction', amountMinor: inssEmployee });
   lines.push({ code: 'IRT', name: `IRT Grupo A (escalão ${irt.bracket})`, kind: 'deduction', amountMinor: irt.amountMinor });
   const adv = assertMinor(input.advancesMinor ?? 0);
-  const other = assertMinor(input.otherDeductionsMinor ?? 0);
+  const itemized = (input.otherDeductions ?? []).filter((d) => assertMinor(d.amountMinor, d.name) > 0);
+  const other = itemized.length ? sum(...itemized.map((d) => d.amountMinor)) : assertMinor(input.otherDeductionsMinor ?? 0);
   const notice = assertMinor(input.noticeDeductionMinor ?? 0);
   if (adv) lines.push({ code: 'ADIANT', name: 'Adiantamento salarial', kind: 'deduction', amountMinor: adv });
-  if (other) lines.push({ code: 'OUTDESC', name: 'Outros descontos', kind: 'deduction', amountMinor: other });
+  if (itemized.length) for (const d of itemized) lines.push({ code: 'OUTDESC', name: d.name, kind: 'deduction', amountMinor: d.amountMinor });
+  else if (other) lines.push({ code: 'OUTDESC', name: 'Outros descontos', kind: 'deduction', amountMinor: other });
   if (notice) lines.push({ code: 'AVISODESC', name: 'Falta de aviso prévio do trabalhador', kind: 'deduction', amountMinor: notice });
   lines.push({ code: 'INSS_EMP', name: `INSS entidade empregadora (${pack.inss.employerBps / 100}%)`, kind: 'employer', amountMinor: inssEmployer });
 

@@ -202,6 +202,8 @@ table.dense th, table.dense td { padding: 8px 8px; font-size: 13px; }
 .payslip .meta b { font-weight: 600; }
 .payslip table td, .payslip table th { padding: 6px 8px; font-size: 13px; }
 .payslip .net { display: flex; justify-content: space-between; font-size: 18px; font-weight: 700; padding: 12px 8px; border-top: 2px solid var(--ink); margin-top: 6px; }
+.payslip-box { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 10px 0; font-size: 13px; line-height: 1.5; }
+.payslip-box ul { margin: 4px 0 0; padding-left: 18px; }
 .payslip footer { margin-top: 18px; font-size: 11.5px; color: var(--ink3); display: flex; justify-content: space-between; gap: 12px; }
 @media print {
   .side, .mobile-nav, .no-print, .crumb { display: none !important; }
