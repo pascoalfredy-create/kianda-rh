@@ -264,3 +264,18 @@ O core mantém `suspendedDays`, `holidayWorkDays` e `familyEveMinutes` (testados
 - App móvel (entrega 24): `app/manifest.ts`, `public/sw.js` (+ `public/_headers` para não guardar o sw em cache), `public/icons/*`, `components/pwa.tsx` (registo do SW, barra de sem rede, convite a instalar, `clearOfflineData` no logout), `lib/offline-punch.ts` (fila do ponto sem rede). API: `POST /v1/attendance/clock` aceita `at` + `clientRef` (origem `offline`, `offlineOut`), colunas `attendance_entries.client_ref/offline_out`.
 
 - E2E que abrem mapas logo depois de navegar ficavam instáveis: `openMaps` espera `networkidle`, e os testes que dependem de um mapa esperam que ele exista antes de o abrir.
+
+## 15. Programa de maturidade (09/11/2026, PRs #80–#97)
+
+Decisões do dono: Copiloto/IA fora da plataforma; processamento e regras «como no Primavera»; documentos em A4 com timbre, rodapé e paginação; os dados da GREELEO NÃO são usados (o dono é funcionário, não gestor) — validar só com dados fictícios.
+
+- Ponto: localização registada por omissão; sinais anti-fraude (telemóvel partilhado, rede fora de Angola) (#80).
+- Processamento: um só botão «Processar salários» com «Toda a equipa / Escolher colaboradores»; variáveis só no separador Variáveis; «Apagar rascunho» (DELETE /v1/payroll-runs/:id) (#81, #82, #95).
+- Recibo: só rubricas processadas (sem zeros), descontos discriminados, ocorrências do mês (férias, faltas, horas extra), fecho de contas com pressupostos; Original e Duplicado na mesma folha A4 (#85, #91, #92).
+- Regras da empresa: subsídios cortados nas faltas injustificadas (migr. 0056); atrasos/saídas antecipadas como faltas em horas com tolerância diária (migr. 0057) (#86, #90).
+- Fecho da assiduidade: dias úteis sem registo têm de ser classificados (falta injustificada ou presença com motivo) (#89).
+- LGT: alertas de não renovação (art. 17.º) e período experimental a termo; férias art. 205.º (termo ≤ 1 ano, só quem nunca teve contrato sem termo) e art. 210.º (doença suspende férias) (#87, #88).
+- Documentos: A4 (PrintSheet), contratos por secções/alíneas, importação reconstrói a estrutura; assinatura electrónica simples do colaborador (migr. 0058) (#83, #84, #93).
+- Relatórios de RH imprimíveis em A4; Valora: quadros largos do PDF sem números partidos (#94, #97).
+- Por decidir (não iniciado): férias proporcionais com suspensão/licença > 30 dias (arts. 204.º n.º 3 e 216.º); plano de férias em A4 (art. 206.º).
+- Teste local `error-alerts` falha só com a base local poluída; no CI passa (filtro por assunto, #89).
