@@ -43,8 +43,8 @@ test('lote de prémios calcula a equipa e distingue INSS do trabalhador e da emp
   const deductions = page.getByRole('table', { name: 'Descontos do trabalhador', exact: true });
   await expect(deductions).toContainText(/Segurança Social \(3%\)/);
   await expect(deductions).not.toContainText('INSS entidade empregadora');
-  await expect(page.locator('.payslip .net')).toContainText(/106[\s.]700,00/);
-  await expect(page.locator('.payslip')).toContainText(/Encargos da entidade empregadora \(não descontados\)/);
+  await expect(page.locator('.payslip').first().locator('.net')).toContainText(/106[\s.]700,00/);
+  await expect(page.locator('.payslip').first()).toContainText(/Encargos da entidade empregadora \(não descontados\)/);
   expect(errors).toEqual([]);
 });
 
