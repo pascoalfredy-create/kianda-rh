@@ -1,3 +1,4 @@
+import { DocumentPrintButton } from '@/components/document-export';
 
 import { MapDisclosure } from '@/components/map-disclosure';
 
@@ -110,12 +111,13 @@ export default async function Relatorios({ searchParams }: { searchParams: Promi
           <h1>Relatórios</h1>
           <p className="sub">{monthLabel(r.from)} a {monthLabel(r.to)} · meses fechados · custo = salário bruto mais o INSS da empresa</p>
         </div>
-        <form className="actions" style={{ alignItems: 'center' }}>
+        <form className="actions no-print" style={{ alignItems: 'center' }}>
           <select name="de" defaultValue={r.from} aria-label="De">{r.available.map((p) => <option key={p} value={p}>{monthLabel(p)}</option>)}</select>
           <span className="muted">a</span>
           <select name="ate" defaultValue={r.to} aria-label="Até">{r.available.map((p) => <option key={p} value={p}>{monthLabel(p)}</option>)}</select>
           <button className="btn ghost sm">Ver</button>
           <ExportLink className="btn sm" href={xlsxHref}>Exportar Excel</ExportLink>
+          <DocumentPrintButton className="btn ghost sm">Imprimir (A4)</DocumentPrintButton>
         </form>
       </div>
 

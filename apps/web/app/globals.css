@@ -682,3 +682,12 @@ tr.total td, tr.tot td, tfoot td { font-weight: 700; background: #fafafa; }
 details.optional-changes{margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:10px 14px;background:var(--panel)}
 details.optional-changes>summary{cursor:pointer;font-weight:600;list-style-position:inside}
 details.optional-changes[open]>summary{margin-bottom:10px}
+
+/* Impressão A4 dos ecrãs de gestão (relatórios, mapas): quadros compactos, sem cortes nem títulos órfãos. */
+@media print {
+  .content h1, .content h2, .content h3 { break-after: avoid; page-break-after: avoid; }
+  .content .kpi, .content svg { break-inside: avoid; }
+  .content table:not(.sheet) { width: 100%; font-size: 7.5pt; }
+  .content table:not(.sheet) th, .content table:not(.sheet) td { padding: 3px 4px; white-space: normal; }
+  .content [style*="overflow"] { overflow: visible !important; }
+}

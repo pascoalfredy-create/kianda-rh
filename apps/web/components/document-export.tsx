@@ -21,5 +21,12 @@ export function ExportLink({ children, ...props }: AnchorHTMLAttributes<HTMLAnch
 
 export function DocumentPrintButton({ children = 'Imprimir', ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
   const allowed = useContext(ExportAccess);
-  return <button {...props} type="button" disabled={!allowed || props.disabled} title={allowed ? props.title : hint} onClick={() => { if (allowed) window.print(); }}>{children}</button>;
+  return <button {...props} type="button" disabled={!allowed || props.disabled} title={allowed ? props.title : hint} onClick={() => { if (allowed) printWithDetailsOpen(); }}>{children}</button>;
+}
+
+/** Imprime com as secções recolhidas (<details>) abertas, e repõe o estado a seguir. */
+function printWithDetailsOpen() {
+  const closed = [...document.querySelectorAll('details:not([open])')] as HTMLDetailsElement[];
+  closed.forEach(d => { d.open = true; });
+  try { window.print(); } finally { closed.forEach(d => { d.open = false; }); }
 }
