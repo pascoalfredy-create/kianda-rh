@@ -66,10 +66,16 @@ export function fullMonthsBetween(from: string, to: string): number {
  * Dias de férias a que o colaborador tem direito no ano civil.
  * Ano de admissão: `firstYearDaysPerMonth` por mês completo até 31/12 (limitado ao máximo anual). Anos seguintes: máximo anual.
  */
-export function vacationEntitlement(hireDate: string, year: number, pack: CountryPack): number {
+export function vacationEntitlement(hireDate: string, year: number, pack: CountryPack, contract?: { type: string; startDate: string; endDate: string | null } | null): number {
   const hireYear = Number(hireDate.slice(0, 4));
   if (year < hireYear) return 0;
   const max = pack.labour.vacationWorkingDays;
+  // Art. 205.º: contrato a termo (ou renovação) até um ano — 2 dias úteis por mês completo no ano, máximo 22, sem mínimo.
+  if (contract?.type === 'fixed_term' && contract.endDate && (Date.parse(contract.endDate) - Date.parse(contract.startDate)) / 86_400_000 < 366) {
+    const from = contract.startDate > `${year}-01-01` ? contract.startDate : `${year}-01-01`;
+    const to = contract.endDate < `${year}-12-31` ? contract.endDate : `${year}-12-31`;
+    return Math.min(max, fullMonthsBetween(from, to) * pack.leave.firstYearDaysPerMonth);
+  }
   if (year > hireYear) return max;
   // Art. 204.º, n.º 2: 2 dias úteis por mês completo, com o mínimo de 6 dias úteis.
   const months = fullMonthsBetween(hireDate, `${year}-12-31`);
