@@ -21,6 +21,7 @@ import {
 import { dailyReminders } from '../services/jobs.js';
 import { exportCompany, purgeCompany } from '../services/privacy.js';
 import { companyModulesOverview } from '../services/modules.js';
+import { visitsSummary } from '../services/site-visits.js';
 
 const addDays = (d: string, n: number) => new Date(Date.parse(d) + n * 86_400_000).toISOString().slice(0, 10);
 
@@ -253,6 +254,12 @@ export function platformRoutes() {
     const byModule = (m: 'hr' | 'modeling' | 'valuation') => ({ trial: out.filter(x => x.modules[m].subscribed && x.modules[m].status === 'trial').length, active: out.filter(x => x.modules[m].subscribed && x.modules[m].status === 'active').length, pastDue: out.filter(x => x.modules[m].subscribed && x.modules[m].status === 'past_due').length });
     const mrrByModule = { hr: sum('hrMrr'), modeling: sum('modelingMrr'), valuation: sum('valuationMrr') };
     return c.json({ companies: out, summary: { total: out.length, trial: out.filter((x) => x.status === 'trial').length, active: out.filter((x) => x.status === 'active').length, pastDue: out.filter((x) => x.status === 'past_due').length, suspended: out.filter((x) => x.status === 'suspended').length, mrrMinor: mrrByModule.hr + mrrByModule.modeling + mrrByModule.valuation, mrrByModule, modules: { hr: byModule('hr'), modeling: byModule('modeling'), valuation: byModule('valuation') } } });
+  });
+
+  /** Visitas ao site público e o funil até à criação de conta. */
+  app.get('/v1/platform/visits', async (c) => {
+    const days = z.coerce.number().int().min(7).max(90).default(30).parse(c.req.query('days') ?? undefined);
+    return c.json(await visitsSummary(getDb(), days));
   });
 
   app.get('/v1/platform/payment-requests', async (c) => {

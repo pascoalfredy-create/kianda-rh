@@ -1229,6 +1229,31 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(fixed).not.toHaveProperty('extraSeats');
     });
 
+    it('visitas ao site: sem cookies, uma por pessoa/página/dia, robôs ignorados; resumo só para a plataforma', async () => {
+      const visit = (ua: string, ip: string, payload: object, country = 'AO') => app.inject({ method: 'POST', url: '/v1/public/visit', headers: { 'content-type': 'application/json', 'user-agent': ua, 'x-forwarded-for': ip, 'cf-ipcountry': country }, payload });
+      const before = (await get(owner, '/v1/platform/visits?days=7')).json();
+      const phone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148', pc = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0';
+      const ip = `10.${Number(stamp.slice(-3)) % 200}.7.1`;
+      const first = await visit(phone, ip, { path: '/?utm_source=x', referrer: 'https://l.facebook.com/l.php?u=kianda', source: 'Instagram' });
+      expect(first.statusCode).toBe(204);
+      expect(first.headers['set-cookie']).toBeUndefined();
+      await visit(phone, ip, { path: '/' });                                  // mesma pessoa, mesma página, mesmo dia: não conta outra vez
+      await visit('facebookexternalhit/1.1', ip, { path: '/' });                // pré-visualização de link
+      await visit(pc, `10.${Number(stamp.slice(-3)) % 200}.7.2`, { path: '/registo', referrer: 'https://www.linkedin.com/feed/' }, 'PT');
+      expect((await visit(pc, ip, { path: 12 })).statusCode).toBe(204);         // corpo inválido: ignorado em silêncio
+      const r = (await get(owner, '/v1/platform/visits?days=7')).json();
+      expect(r.totals.today - before.totals.today).toBe(2);
+      expect(r.totals.views - before.totals.views).toBe(2);
+      expect(r.series).toHaveLength(7);
+      expect(r.referrers.map((x: { key: string }) => x.key)).toEqual(expect.arrayContaining(['facebook.com', 'linkedin.com']));
+      expect(r.sources.map((x: { key: string }) => x.key)).toContain('instagram');
+      expect(r.devices.map((x: { key: string }) => x.key)).toEqual(expect.arrayContaining(['mobile', 'desktop']));
+      expect(r.pages.map((x: { key: string }) => x.key)).toEqual(expect.arrayContaining(['/', '/registo']));
+      expect((await get(financeUser, '/v1/platform/visits')).statusCode).toBe(403);
+      const stored = (await getDb().execute(sql`select visitor from site_visits where day = ${luandaDate(new Date())} limit 50`)).rows.map((x) => String(x.visitor));
+      expect(stored.some((v) => v.includes(ip))).toBe(false);                  // o IP nunca é guardado
+    });
+
     it('licença suspensa: só consulta (escrever dá 402), mas pode tratar da licença; limite de colaboradores', async () => {
       await patch(owner, `/v1/platform/companies/${companyId}/subscription`, { status: 'suspended' });
       expect((await get(owner, '/v1/employees')).statusCode).toBe(200);
