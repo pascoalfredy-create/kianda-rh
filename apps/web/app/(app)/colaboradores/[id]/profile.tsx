@@ -214,8 +214,8 @@ function ContractTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
 }
 
 function DocumentsTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
-  const t = new Date().toISOString().slice(0, 10);
-  const soon = new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10);
+  const t = luandaDate(new Date());
+  const soon = luandaDate(new Date(Date.now() + 60 * 86_400_000));
   return (
     <>
       {canEdit && <div style={{ marginBottom: 14 }}><DocumentForm employeeId={p.id} /></div>}
@@ -299,7 +299,7 @@ async function RegimeTab({ id, canEdit }: { id: string; canEdit: boolean }) {
 }
 
 async function AbsencesTab({ p }: { p: Profile }) {
-  const year = new Date().getFullYear();
+  const year = Number(luandaDate(new Date()).slice(0, 4));
   const [[b], rows] = await Promise.all([
     api<BalanceRow[]>(`/v1/leave/balances?year=${year}&employeeId=${p.id}`),
     api<AbsenceRow[]>(`/v1/absences?employeeId=${p.id}`),
@@ -315,7 +315,7 @@ async function AbsencesTab({ p }: { p: Profile }) {
           <div className="card kpi"><div className="l">Disponíveis</div><div className="v" style={{ color: 'var(--brand)' }}>{b.available}</div></div>
         </div>
       )}
-      {b?.eligibleFrom && b.eligibleFrom > new Date().toISOString().slice(0, 10) && <div className="warn">Pode gozar férias a partir de {fmtDate(b.eligibleFrom)} (6 meses de serviço).</div>}
+      {b?.eligibleFrom && b.eligibleFrom > luandaDate(new Date()) && <div className="warn">Pode gozar férias a partir de {fmtDate(b.eligibleFrom)} (6 meses de serviço).</div>}
       <div className="card">
         <table>
           <thead><tr><th>Tipo</th><th>Período</th><th className="num">Dias úteis</th><th>Estado</th><th /></tr></thead>

@@ -100,8 +100,8 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
   } catch (e) {
     if (!(e instanceof Rollback)) throw e;
   }
-  // O copiloto prepara permissões/contexto/quota no RLS e só chama a IA depois do commit.
-  // O callback não transporta a ligação transaccional nem pode voltar a usar o db do pedido.
+  // Trabalho a fazer depois do commit (ex.: chamadas externas): o callback não transporta a ligação transaccional
+  // nem pode voltar a usar o db do pedido.
   const afterTenant = c.get('afterTenant');
   if (!c.error && c.res.status < 400 && afterTenant) c.res = await afterTenant();
 };

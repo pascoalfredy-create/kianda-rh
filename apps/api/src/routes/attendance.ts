@@ -245,7 +245,7 @@ export function attendanceRoutes() {
           if (other) signals.push('shared_device');
         }
         const country = c.req.header('cf-ipcountry')?.toUpperCase();
-        if (country && /^[A-Z]{2}$/.test(country)) { location.country = country; if (country !== 'AO' && !offline) signals.push('foreign_network'); }
+        if (country && /^[A-Z]{2}$/.test(country) && country !== 'XX') { location.country = country; if (country !== 'AO' && !offline) signals.push('foreign_network'); }
         if (signals.length) { location.signals = signals; locationIssue = true; }
       }
     }

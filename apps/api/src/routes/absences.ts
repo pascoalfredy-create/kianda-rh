@@ -1,5 +1,5 @@
 import {
-  ABSENCE_POLICIES, businessDays, checkAbsenceLimit, labourRules, vacationBalance, vacationEligibleFrom, vacationEntitlement, workingDaysByYear,
+  ABSENCE_POLICIES, businessDays, luandaDate, checkAbsenceLimit, labourRules, vacationBalance, vacationEligibleFrom, vacationEntitlement, workingDaysByYear,
   type AbsenceType,
 } from '@kianda/core';
 import { absences, and, asc, desc, auditLogs, contracts, departments, eq, files, getDb, gte, inArray, lte, employees, sql, users, type Db } from '@kianda/db';
@@ -11,7 +11,7 @@ import { canDecideFor, visibleEmployeeIds } from '../services/scope.js';
 import { notifyDeciders, notifyEmployees } from '../services/push.js';
 
 const TYPES = ['vacation', 'sick', 'justified', 'unjustified', 'maternity', 'paternity', 'marriage', 'bereavement', 'training', 'unpaid_leave'] as const;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => luandaDate(new Date());
 const pt = (d: string) => d.split('-').reverse().join('/');
 
 const createBody = z.object({

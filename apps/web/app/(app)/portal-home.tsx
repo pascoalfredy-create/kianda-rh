@@ -1,3 +1,4 @@
+import { luandaDate } from '@kianda/core';
 import { formatKz, monthLabelPt } from './portal/format';
 import Link from 'next/link';
 import { ClockCard } from '@/components/clock-card';
@@ -23,7 +24,7 @@ const STATUS: Record<string, [string, string]> = { pending: ['Pendente', 'st pen
 
 /** Início do colaborador: o essencial do dia-a-dia num só ecrã. */
 export async function PortalHome({ name, employeeId }: { name: string; employeeId: string }) {
-  const year = new Date().getFullYear();
+  const year = Number(luandaDate(new Date()).slice(0, 4));
   const [p, balances, profile, tasks, acks, shifts] = await Promise.all([api<Portal>('/v1/portal'), api<BalanceRow[]>(`/v1/leave/balances?year=${year}`).catch(() => []), api<Profile>(`/v1/employees/${employeeId}`).catch(() => null), api<{ id: string; state: string }[]>('/v1/checklists/my-tasks').catch(() => []), api<{ id: string; status: string; state: string }[]>('/v1/acknowledgements').catch(() => []), api<MineData>('/v1/shifts/mine').catch(() => null)]);
   const firstContract = profile?.contracts.at(-1)?.startDate;
   const mine = balances.find((b) => b.employee.id === employeeId);

@@ -1,4 +1,4 @@
-import { ABSENCE_POLICIES, labourRules, type AbsenceType } from '@kianda/core';
+import { ABSENCE_POLICIES, labourRules, luandaDate, type AbsenceType } from '@kianda/core';
 import Link from 'next/link';
 import { api, currentUser } from '@/lib/api';
 import { ABSENCE_STATUS_LABEL, type AbsenceRow, type BalanceRow } from '@/lib/types';
@@ -17,7 +17,7 @@ export default async function Ausencias({ searchParams }: { searchParams: Promis
   const role = me.user.role;
   const isHr = role === 'owner' || role === 'hr_admin';
   const canRegisterOthers = isHr || role === 'manager';
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = luandaDate(new Date());
   const year = /^\d{4}$/.test(sp.ano ?? '') ? Number(sp.ano) : Number(todayIso.slice(0, 4));
   const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.mes ?? '') ? sp.mes! : todayIso.slice(0, 7);
   const balances = await api<BalanceRow[]>(`/v1/leave/balances?year=${year}`);

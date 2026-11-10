@@ -1,6 +1,6 @@
 
 import { MapDisclosure } from '@/components/map-disclosure';
-import { formatKz, formatPercent } from '@kianda/core';
+import { formatKz, formatPercent, luandaDate } from '@kianda/core';
 import { redirect } from 'next/navigation';
 import { api, currentUser } from '@/lib/api';
 import { monthLabel } from '@/lib/format';
@@ -70,7 +70,7 @@ export default async function Orcamento({ searchParams }: { searchParams: Promis
   const isOwner = me.user.role === 'owner';
   const sp = await searchParams;
   const d = await api<Data>(`/v1/budgets${sp.ano ? `?year=${encodeURIComponent(sp.ano)}` : ''}`);
-  const now = new Date().getFullYear();
+  const now = Number(luandaDate(new Date()).slice(0, 4));
   const years = [...new Set([now - 1, now, now + 1, ...d.years, d.year])].sort();
   const dname = (id: string | null) => d.departments.find((x) => x.id === id)?.name ?? 'Sem departamento';
   const b = d.budget;
