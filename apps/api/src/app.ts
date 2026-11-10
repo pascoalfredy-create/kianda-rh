@@ -41,7 +41,6 @@ import { pushRoutes } from './routes/push.js';
 import { runPushInBackground, takePushFlag } from './services/push.js';
 import { runRecruitmentMailInBackground, takeRecruitmentMailFlag } from './services/recruitment-mail.js';
 import { DomainError } from './services/payroll.js';
-import { copilotRoutes } from './routes/copilots.js';
 
 /**
  * API Hono — corre igual em Node (servidor local, testes) e em Cloudflare Workers (produção).
@@ -89,7 +88,6 @@ export function buildApp(opts: { logger?: boolean; rateLimit?: boolean } = {}) {
   });
 
   app.route('/', publicRoutes());
-  app.route('/', copilotRoutes());
   app.route('/', pushRoutes());
   app.route('/', authRoutes());
   app.route('/', employeeRoutes());

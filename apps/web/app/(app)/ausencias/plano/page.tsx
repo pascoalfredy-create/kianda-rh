@@ -1,3 +1,4 @@
+import { luandaDate } from '@kianda/core';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { DocumentPrintButton } from '@/components/document-export';
@@ -14,7 +15,7 @@ export default async function PlanoFerias({ searchParams }: { searchParams: Prom
   const me = (await currentUser())!;
   if (me.user.role === 'employee') redirect('/ausencias');
   const sp = await searchParams;
-  const year = /^\d{4}$/.test(sp.ano ?? '') ? Number(sp.ano) : new Date().getFullYear();
+  const year = /^\d{4}$/.test(sp.ano ?? '') ? Number(sp.ano) : Number(luandaDate(new Date()).slice(0, 4));
   const [balances, absences] = await Promise.all([
     api<BalanceRow[]>(`/v1/leave/balances?year=${year}`),
     api<AbsenceRow[]>(`/v1/absences?from=${year}-01-01&to=${year}-12-31`),
@@ -38,7 +39,7 @@ export default async function PlanoFerias({ searchParams }: { searchParams: Prom
         </div>
       </div>
       {pending && <div className="warn no-print">Há períodos ainda por aprovar — aparecem marcados «por aprovar». Aprove-os antes de afixar o plano.</div>}
-      <PrintSheet footer={<><span>Plano de férias de {year}</span><span>Emitido em {pt(new Date().toISOString().slice(0, 10))}</span></>}>
+      <PrintSheet footer={<><span>Plano de férias de {year}</span><span>Emitido em {pt(luandaDate(new Date()))}</span></>}>
         <h2 className="doc-title">Plano de férias de {year}</h2>
         <table className="vacation-plan">
           <colgroup><col style={{ width: '6%' }} /><col style={{ width: '25%' }} /><col style={{ width: '15%' }} /><col style={{ width: '34%' }} /><col style={{ width: '10%' }} /><col style={{ width: '10%' }} /></colgroup>
