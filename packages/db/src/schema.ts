@@ -5,7 +5,7 @@
 import { relations, sql } from 'drizzle-orm';
 import type { AtsCriterion, CandidateProfile } from '@kianda/core';
 import {
-  bigint, boolean, customType, date, doublePrecision, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex,
+  bigint, boolean, customType, date, doublePrecision, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
 const money = (name: string) => bigint(name, { mode: 'number' }).notNull().default(0);
@@ -816,6 +816,18 @@ export const paymentRequests = pgTable('payment_requests', {
 
 /** Administradores da plataforma (consola Kianda) — definidos pela variável KIANDA_PLATFORM_ADMINS na publicação. */
 export const platformAdmins = pgTable('platform_admins', { email: text('email').primaryKey(), createdAt: createdAt() });
+
+/** Visitas ao site público, sem cookies: «visitor» é um hash diário (IP + navegador + segredo), irreversível e diferente a cada dia. */
+export const siteVisits = pgTable('site_visits', {
+  day: date('day').notNull(),
+  path: text('path').notNull(),
+  visitor: text('visitor').notNull(),
+  referrer: text('referrer'),
+  source: text('source'),
+  country: text('country'),
+  device: text('device').notNull(),
+  createdAt: createdAt(),
+}, (t) => [primaryKey({ columns: [t.day, t.path, t.visitor], name: 'site_visits_pk' }), index('site_visits_day_idx').on(t.day)]);
 
 /** Parâmetros comerciais da plataforma (dados bancários e contactos de suporte). */
 export const platformSettings = pgTable('platform_settings', { key: text('key').primaryKey(), value: jsonb('value').notNull(), updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow() });

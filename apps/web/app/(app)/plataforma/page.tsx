@@ -2,6 +2,7 @@ import { CYCLES, DEFAULT_TIERS, LEGACY_CUSTOM_TIER, MODELING_PLANS, VALUATION_PL
 import { redirect } from 'next/navigation';
 import { api, currentUser } from '@/lib/api';
 import { PurgeCompany } from '@/components/privacy-actions';
+import { Visits, type VisitsSummary } from './visits';
 import { ConfirmPayment, EditSubscription, EditValuation, InvoicingForm, IssueInvoice, JobButtons, MockPayment, SettingsForm } from './forms';
 
 export const dynamic = 'force-dynamic';
@@ -24,11 +25,12 @@ const ST: Record<string, string> = { trial: 'st pending', active: 'st approved',
 export default async function Plataforma() {
   const me = (await currentUser())!;
   if (!me.platformAdmin) redirect('/');
-  const [{ companies, summary }, pays, settings, integ] = await Promise.all([
+  const [{ companies, summary }, pays, settings, integ, visits] = await Promise.all([
     api<{ companies: Co[]; summary: { total: number; trial: number; active: number; pastDue: number; suspended: number; mrrMinor: number; mrrByModule: Record<'hr' | 'modeling' | 'valuation', number>; modules: Record<'hr' | 'modeling' | 'valuation', { trial: number; active: number; pastDue: number }> } }>('/v1/platform/companies'),
     api<Pay[]>('/v1/platform/payment-requests'),
     api<{ bank: { holder: string; bankName: string; iban: string } | null; supportEmail: string | null; supportPhone: string | null; admins: string[] }>('/v1/platform/settings'),
     api<Integrations>('/v1/platform/integrations'),
+    api<VisitsSummary>('/v1/platform/visits?days=30'),
   ]);
   const st = integ.status;
   const sandbox = st.proxypay.enabled && st.proxypay.environment === 'sandbox';
@@ -43,6 +45,7 @@ export default async function Plataforma() {
         <div className="card kpi"><div className="l">Integra e Valora</div><div className="v">{summary.modules.modeling.active + summary.modules.valuation.active}</div><div className="muted">Integra: {summary.modules.modeling.active} pagas, {summary.modules.modeling.trial} em avaliação, {summary.modules.modeling.pastDue} em atraso · Valora: {summary.modules.valuation.active} pagas, {summary.modules.valuation.trial} em avaliação, {summary.modules.valuation.pastDue} em atraso</div></div>
         <div className="card kpi" style={pays.length ? { borderColor: '#f3d9a6' } : undefined}><div className="l">Pagamentos por confirmar</div><div className="v" style={{ color: pays.length ? 'var(--amber)' : undefined }}>{pays.length}</div></div>
       </div>
+      <Visits v={visits} />
       {pays.length > 0 && (
         <div className="card section">
           <h2>Pagamentos por confirmar</h2>

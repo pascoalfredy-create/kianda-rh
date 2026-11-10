@@ -1,7 +1,9 @@
 import { AO_2026, calculatePayroll, getPack, kz, labourRules, listPacks, PackNotFoundError, solveBaseForNet } from '@kianda/core';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { body, type AppEnv } from '../plugins/tenant.js';
+import { body, clientIp, jwtSecret, type AppEnv } from '../plugins/tenant.js';
+import { recordVisit } from '../services/site-visits.js';
+import { appBaseUrl } from '../services/integrations.js';
 import { getDb } from '@kianda/db';
 import { platformSettingsGet } from '../services/licence.js';
 
@@ -26,6 +28,16 @@ export function publicRoutes() {
   app.get('/v1/public/support', async (c) => {
     const { supportEmail, supportPhone } = await platformSettingsGet(getDb());
     return c.json({ email: supportEmail, phone: supportPhone }, 200, { 'cache-control': 'public, max-age=600' });
+  });
+
+  /** Contador de visitas do site público: sem cookies, sem IP guardado; robôs ignorados. Responde sempre 204. */
+  app.post('/v1/public/visit', async (c) => {
+    const v = z.object({ path: z.string().max(300).default('/'), referrer: z.string().max(500).nullish(), source: z.string().max(80).nullish() }).safeParse(await body(c));
+    if (v.success) {
+      const host = appBaseUrl()?.replace(/^https?:\/\//, '') ?? null;
+      await recordVisit(getDb(), v.data, { ip: clientIp(c), ua: c.req.header('user-agent') ?? '', country: c.req.header('cf-ipcountry')?.toUpperCase() ?? null, ownHost: host, secret: jwtSecret() });
+    }
+    return c.body(null, 204, { 'cache-control': 'no-store' });
   });
 
   app.get('/v1/packs/AO/:year', (c) => {

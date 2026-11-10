@@ -17,6 +17,7 @@ export default function Termos() {
       <p>O Valora é licenciado por análises activas, cada uma correspondente a uma entidade analisada, e inclui cinco utilizadores. Os limites, utilizadores adicionais e respectivos valores são apresentados em Módulos e licenças antes do pedido de pagamento. Os relatórios do Valora podem ser exportados em PDF, Word e Excel com uma subscrição paga. A importação de custos com pessoal do RH é opcional.</p>
       <h2>3. Dados pessoais</h2>
       <p>A empresa cliente é a responsável pelo tratamento dos dados dos seus colaboradores; a Kianda RH actua como subcontratante, nos termos da Lei n.º 22/11, de 17 de Junho (Lei da Protecção de Dados Pessoais). Os dados são usados apenas para prestar o serviço, ficam isolados por empresa, são protegidos por controlo de acesso por perfil e auditoria, e podem ser exportados ou eliminados a pedido da empresa no fim do contrato.</p>
+      <p>No site público contamos as visitas sem cookies e sem guardar o endereço IP: cada visita é registada com um código que muda todos os dias e não identifica a pessoa, junto com a página, o país, o tipo de dispositivo e o site de origem. Quem activa «não seguir» no navegador não é contado.</p>
       <h2>4. Candidatos</h2>
       <p>As candidaturas recebidas pela página de carreiras são tratadas apenas para o processo de recrutamento da empresa a que se destinam, com consentimento do candidato.</p>
       <h2>5. Contacto</h2>

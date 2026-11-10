@@ -2,13 +2,14 @@ import { upstream } from '@/lib/upstream';
 
 /**
  * Encaminha /api/* para a API, na mesma origem (o cookie de sessão fica no domínio da web).
- * Só passam os cabeçalhos necessários; o IP real segue para o limite de tentativas.
+ * Só passam os cabeçalhos necessários; o IP real segue para o limite de tentativas,
+ * e o país (cf-ipcountry, escrito pelo Cloudflare) e o navegador seguem para o ponto e as visitas.
  */
 async function forward(req: Request, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params;
   const url = new URL(req.url);
   const headers = new Headers();
-  for (const h of ['content-type', 'cookie', 'authorization', 'accept', 'x-signature']) {
+  for (const h of ['content-type', 'cookie', 'authorization', 'accept', 'x-signature', 'user-agent', 'cf-ipcountry']) {
     const v = req.headers.get(h);
     if (v) headers.set(h, v);
   }
