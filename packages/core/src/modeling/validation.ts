@@ -59,8 +59,10 @@ export function validateFinancialAssumptions(value: unknown): FinancialAssumptio
     }),
     capex: list(o, 'capex', 200).map((v, i) => { const c = obj(v, `capex.${i}`), path = `capex.${i}`; return { nome: text(c, 'nome', `${path}.nome`), ano: n(c, 'ano', `${path}.ano`, 0, horizonte, undefined, true), valor: n(c, 'valor', `${path}.valor`), vida: n(c, 'vida', `${path}.vida`, 1, 100, undefined, true) }; }),
     cenarios, cen: en(o, 'cen', ['base', 'otim', 'pess']),
-    cov: { dscr: n(cov, 'dscr', 'cov.dscr', 0.01, 100), ndEbitda: n(cov, 'ndEbitda', 'cov.ndEbitda', 0, 100, 3.5), icr: n(cov, 'icr', 'cov.icr', 0, 100, 3) }, mult: { lo: n(mult, 'lo', 'mult.lo', 0, 100, 4), hi: n(mult, 'hi', 'mult.hi', 0, 100, 7) }, sens: n(o, 'sens', 'sens', 0, 99, 20), prejuizosAnos: n(o, 'prejuizosAnos', 'prejuizosAnos', 0, 20, 5, true),
+    cov: { dscr: n(cov, 'dscr', 'cov.dscr', 0.01, 100), ndEbitda: n(cov, 'ndEbitda', 'cov.ndEbitda', 0, 100, 3.5), icr: n(cov, 'icr', 'cov.icr', 0, 100, 3) }, mult: { lo: n(mult, 'lo', 'mult.lo', 0, 100, 4), hi: n(mult, 'hi', 'mult.hi', 0, 100, 7), ano: n(mult, 'ano', 'mult.ano', 0, horizonte, 0, true) }, sens: n(o, 'sens', 'sens', 0, 99, 20), prejuizosAnos: n(o, 'prejuizosAnos', 'prejuizosAnos', 0, 20, 5, true),
     capitalAutomatico: bool(o, 'capitalAutomatico', true), valorResidualLiquido: n(o, 'valorResidualLiquido', 'valorResidualLiquido', 0, 1e12, 0), libertarFundoManeio: bool(o, 'libertarFundoManeio', false),
+    reservaLegal: n(o, 'reservaLegal', 'reservaLegal', 0, 100, 5), reservaLegalLimite: n(o, 'reservaLegalLimite', 'reservaLegalLimite', 0, 1000, 20),
+    impostoPagamento: o.impostoPagamento === undefined ? 'mesmo_ano' : en(o, 'impostoPagamento', ['mesmo_ano', 'ano_seguinte']),
   };
   if (m.mult.lo > m.mult.hi) issues.push({ path: 'mult', message: 'O múltiplo mínimo não pode superar o máximo' });
   if (m.divida.montante > 0 && m.divida.carencia >= m.divida.prazo) issues.push({ path: 'divida.carencia', message: 'A carência deve ser inferior ao prazo' });

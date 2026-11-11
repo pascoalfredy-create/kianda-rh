@@ -105,6 +105,11 @@ function calculate(m: FinancialAssumptions, ov: FinancialOverrides): FinancialRe
   }
   k.imp = financialTaxes(k.ebt, m.ii / 100, m.prejuizosAnos);
   k.taxU = financialTaxes(k.ebit, m.ii / 100, m.prejuizosAnos);
+  // Imposto pago no próprio ano ou no seguinte (a dívida ao Estado fica no balanço até ao pagamento).
+  const nextYearTax = m.impostoPagamento === 'ano_seguinte';
+  const lag = (s: number[]) => s.map((v, t) => nextYearTax ? (t ? s[t - 1]! : 0) : v);
+  k.taxPaid = lag(k.imp); k.taxPay = k.imp.map((v) => nextYearTax ? v : 0);
+  const taxUPaid = lag(k.taxU); k.taxUPaid = taxUPaid;
   for (let t = 0; t <= H; t++) {
     set('rl', t, a('ebt', t) - a('imp', t));
     set('ar', t, t === 0 && ex ? amount(ab.clientes) : a('rev', t) * m.dso / 365);
@@ -114,15 +119,18 @@ function calculate(m: FinancialAssumptions, ov: FinancialOverrides): FinancialRe
     set('dnwc', t, t ? a('nwc', t) - a('nwc', t - 1) : ex ? 0 : a('nwc', t));
   }
   const bookEq = ex ? amount(ab.imob) + amount(ab.exist) + amount(ab.clientes) + amount(ab.caixa) - amount(ab.fornec) - amount(ab.divida) : 0;
-  let cash = ex ? amount(ab.caixa) : 0, capital = bookEq, reserves = 0;
+  let cash = ex ? amount(ab.caixa) : 0, capital = bookEq, reserves = 0, legalReserve = 0;
   const minimumCash = amount(m.caixaMin);
   let maxCashFlowDifference = 0;
   for (let t = 0; t <= H; t++) {
     const previousCash = cash;
-    set('cfo', t, a('rl', t) + a('da', t) - a('dnwc', t)); set('cfi', t, -a('capex', t));
+    set('cfo', t, a('rl', t) + a('da', t) - a('dnwc', t) + (a('taxPay', t) - (t ? a('taxPay', t - 1) : 0))); set('cfi', t, -a('capex', t));
     const injected = t === 0 && !ex ? amount(m.capitalInicial) : 0;
     let nextCash = cash + a('cfo', t) + a('cfi', t) + a('draw', t) - a('princ', t) + injected;
-    const distributable = Math.max(0, reserves + a('rl', t));
+    // Reserva legal: parte do lucro retida até ao limite sobre o capital; não é distribuível.
+    const legalTransfer = a('rl', t) > 0 ? Math.max(0, Math.min(minor(a('rl', t) * m.reservaLegal / 100), minor(capital * m.reservaLegalLimite / 100) - legalReserve, reserves - legalReserve + a('rl', t))) : 0;
+    legalReserve += legalTransfer;
+    const distributable = Math.max(0, reserves + a('rl', t) - legalReserve);
     const dividend = t > 0 && a('rl', t) > 0 ? Math.max(0, Math.min(minor(a('rl', t) * m.payout / 100), distributable, nextCash - minimumCash)) : 0;
     nextCash -= dividend;
     const gap = Math.max(0, minimumCash - nextCash), additionalEquity = m.capitalAutomatico ? gap : 0;
@@ -130,25 +138,27 @@ function calculate(m: FinancialAssumptions, ov: FinancialOverrides): FinancialRe
     cash = nextCash + additionalEquity; capital += injected + additionalEquity; reserves += a('rl', t) - dividend;
     set('eqInj', t, injected); set('eqAuto', t, additionalEquity); set('div', t, dividend);
     set('cff', t, a('draw', t) - a('princ', t) + injected + additionalEquity - dividend);
-    set('cash', t, cash); set('cap', t, capital); set('res', t, reserves);
+    set('cash', t, cash); set('cap', t, capital); set('res', t, reserves); set('resLeg', t, legalReserve); set('resFree', t, reserves - legalReserve); set('dtax', t, a('taxPay', t) - (t ? a('taxPay', t - 1) : 0));
     set('imobB', t, (t ? a('imobB', t - 1) : ex ? amount(ab.imob) : 0) + a('capex', t));
     set('depAc', t, (t ? a('depAc', t - 1) : 0) + a('da', t));
     set('imob', t, a('imobB', t) - a('depAc', t));
     set('assets', t, a('imob', t) + a('inv', t) + a('ar', t) + cash);
-    set('le', t, capital + reserves + a('debt', t) + a('ap', t)); set('check', t, a('assets', t) - a('le', t));
-    set('fcff', t, a('ebitda', t) - a('taxU', t) - a('capex', t) - a('dnwc', t));
+    set('le', t, capital + reserves + a('debt', t) + a('ap', t) + a('taxPay', t)); set('check', t, a('assets', t) - a('le', t));
+    set('fcff', t, a('ebitda', t) - taxUPaid[t]! - a('capex', t) - a('dnwc', t));
     set('fcfe', t, a('cfo', t) + a('cfi', t) + a('draw', t) - a('princ', t));
     set('equityCashFlow', t, dividend - injected - additionalEquity);
-    set('cfads', t, a('ebitda', t) - a('imp', t) - a('dnwc', t) - a('capexMan', t));
+    set('cfads', t, a('ebitda', t) - a('taxPaid', t) - a('dnwc', t) - a('capexMan', t));
     if (t > 0 && a('ds', t) > 0) dscr[t] = a('cfads', t) / a('ds', t);
     maxCashFlowDifference = Math.max(maxCashFlowDifference, Math.abs(cash - previousCash - a('cfo', t) - a('cfi', t) - a('cff', t)));
   }
   const tv = m.tv.metodo === 'gordon' ? a('fcff', H) / 100 * (1 + m.tv.g / 100) / (wacc - m.tv.g / 100) : m.tv.metodo === 'multiplo' ? Math.max(0, a('ebitda', H) / 100 * m.tv.mult) : 0;
   const residual = m.valorResidualLiquido, terminalWorkingCapital = m.libertarFundoManeio ? a('nwc', H) / 100 : 0;
-  const terminal = tv + residual + terminalWorkingCapital;
+  // Projecto finito com imposto pago no ano seguinte: o imposto do último ano ainda é pago.
+  const terminalTax = m.tv.metodo === 'nenhum' && nextYearTax ? k.taxU[H]! / 100 : 0;
+  const terminal = tv + residual + terminalWorkingCapital - terminalTax;
   const fcff = k.fcff.map((v) => v / 100), projectFlows = fcff.slice(); projectFlows[H] = projectFlows[H]! + terminal;
   const equityFlows = k.equityCashFlow.map((v) => v / 100);
-  const terminalEquityValue = Math.max(0, terminal + a('cash', H) / 100 - a('debt', H) / 100);
+  const terminalEquityValue = Math.max(0, terminal + terminalTax + a('cash', H) / 100 - a('debt', H) / 100 - a('taxPay', H) / 100);
   equityFlows[H] = equityFlows[H]! + terminalEquityValue;
   // Empresa existente: avaliação DCF, sem inventar um preço de aquisição para calcular TIR/payback.
   const projectIrr = financialIrr(projectFlows), investorIrr = financialIrr(equityFlows);
@@ -176,6 +186,18 @@ function calculate(m: FinancialAssumptions, ov: FinancialOverrides): FinancialRe
   if (tv < 0) warn('negative_terminal_value', 'Gordon produz valor terminal negativo; reveja a viabilidade e o pressuposto de continuidade.');
   if (newDebt && d.ano === 0 && d.jurosDesembolso > 0) warn('initial_interest', 'Juros do desembolso no ano 0 são pagos no financiamento inicial; DSCR considera os períodos anuais 1 em diante.');
   const maxBalanceDifference = Math.max(...k.check.map(Math.abs));
+  // Múltiplos: EBITDA do primeiro ano em velocidade de cruzeiro (fim da rampa de arranque), ou o ano escolhido.
+  const cruise = (() => {
+    if (ex) return 1;
+    const ends = m.receitas.map((r) => {
+      const ramp = r.ramp.trim().split(/[,;\s]+/).map((v) => Number(v));
+      let j = ramp.length;
+      while (j > 0 && ramp[j - 1]! >= 100) j--;
+      return j;
+    });
+    return Math.min(H, st + Math.max(0, ...ends));
+  })();
+  const multipleYear = m.mult.ano || cruise;
   const result: FinancialResult = {
     engineVersion: FINANCIAL_ENGINE_VERSION, H, years: Array.from({ length: T }, (_, t) => m.anoBase + t), scenario, sc: { ...sc },
     k: { ...Object.fromEntries(FINANCIAL_SERIES.map((key) => [key, k[key].map((v) => v / 100)])) as Record<FinancialSeries, number[]>, qty, dscr },
@@ -190,7 +212,7 @@ function calculate(m: FinancialAssumptions, ov: FinancialOverrides): FinancialRe
     hasDebt: newDebt || oldDebt, repY, serviceYears, minDscr: ratios.length ? Math.min(...ratios) : null, avgDscr: ratios.length ? ratios.reduce((s, v) => s + v, 0) / ratios.length : null,
     llcr, debtCap, ndE: k.ebitda.map((v, t) => v > 0 ? (a('debt', t) - a('cash', t)) / v : null), icr: k.ebitda.map((v, t) => a('jur', t) > 0 ? v / a('jur', t) : null),
     covenants: [],
-    multiples: { year: m.anoBase + 1, ebitda: a('ebitda', 1) / 100, enterpriseLow: null, enterpriseHigh: null, equityLow: null, equityHigh: null },
+    multiples: { year: m.anoBase + multipleYear, yearIndex: multipleYear, automatic: !m.mult.ano, ebitda: a('ebitda', multipleYear) / 100, enterpriseLow: null, enterpriseHigh: null, equityLow: null, equityHigh: null },
     checks: { balance: maxBalanceDifference === 0, cashFlow: maxCashFlowDifference === 0, maxBalanceDifference: maxBalanceDifference / 100, maxCashFlowDifference: maxCashFlowDifference / 100 }, warnings,
   };
   result.covenants = result.years.slice(1).map((year, i) => {

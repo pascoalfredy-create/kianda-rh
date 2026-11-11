@@ -2100,7 +2100,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: motor financeiro e modelos 
   it('simula sem gravar e devolve validação financeira estruturada', async () => {
     const r = await req('POST', '/v1/modeling/simulate', { assumptions });
     expect(r.statusCode).toBe(200);
-    expect(r.json()).toMatchObject({ engineVersion: 'integra-1.0.0', checks: { balance: true, cashFlow: true } });
+    expect(r.json()).toMatchObject({ engineVersion: 'integra-1.1.0', checks: { balance: true, cashFlow: true } });
     expect((await req('GET', '/v1/modeling/usage')).json().activeProjects).toBe(0);
     const invalid = await req('POST', '/v1/modeling/simulate', { assumptions: { ...assumptions, tv: { metodo: 'gordon', g: 100, mult: 6 } } });
     expect(invalid.statusCode).toBe(422); expect(invalid.json().error).toBe('pressupostos_invalidos'); expect(invalid.json().issues[0].path).toBe('tv.g');
