@@ -10,6 +10,7 @@ import {
 } from '@kianda/db';
 import { notifyEmployees } from './push.js';
 import { eligiblePayrollStaff } from './payroll-roster.js';
+import { payslipContexts } from './payslip-context.js';
 
 /** Meses de doença pagos pela empresa (LGT, art. 226.º, n.º 1). */
 export const SICK_PAID_MONTHS = 6;
@@ -417,25 +418,26 @@ export async function companyAccounts(db: Db, companyId: string): Promise<PgcAcc
 }
 
 /** Fecha o processamento: bloqueia alterações e gera o lançamento PGC (classe 7 contra 34/36). */
+interface PayrollCheck { hashes: Map<string, string | null>; warnings: PayrollWarning[] }
 /** Sinal interno para desfazer o recálculo de verificação (savepoint) depois de ler os resultados. */
-class PayrollProbe extends Error { constructor(readonly hashes: Map<string, string | null>) { super('verificação do rascunho'); } }
+class PayrollProbe extends Error { constructor(readonly check: PayrollCheck) { super('verificação do rascunho'); } }
 const MANUAL_WARNING = /CÁLCULO MANUAL/;
+const warningKeys = (warnings: PayrollWarning[]) => JSON.stringify([...new Set(warnings.map(w => [w.employeeId ?? '', w.message].join('\0')))].sort());
 
 /**
- * Recalcula a folha dentro de um savepoint e devolve os hashes de cálculo por colaborador, sem gravar nada.
+ * Recalcula a folha dentro de um savepoint e devolve os hashes e os avisos, sem gravar nada.
  * Serve para recusar o fecho de um rascunho desactualizado (variáveis, salários, assiduidade, ausências,
  * subsídios ou regras alterados depois do último «Recalcular»).
  */
-async function freshPayrollHashes(tx: Db, companyId: string, period: string, actorId: string): Promise<Map<string, string | null>> {
+async function freshPayrollCheck(tx: Db, companyId: string, period: string, actorId: string): Promise<PayrollCheck> {
   try {
     await tx.transaction(async (sp) => {
-      await draftPayroll(sp as unknown as Db, companyId, period, actorId);
-      const [run] = await sp.select({ id: payrollRuns.id }).from(payrollRuns).where(and(eq(payrollRuns.companyId, companyId), eq(payrollRuns.period, period)));
-      const rows = await sp.select({ employeeId: payrollLines.employeeId, hash: payrollLines.calculationHash }).from(payrollLines).where(eq(payrollLines.runId, run!.id));
-      throw new PayrollProbe(new Map(rows.map((r) => [r.employeeId, r.hash])));
+      const { run, warnings } = await draftPayroll(sp as unknown as Db, companyId, period, actorId);
+      const rows = await sp.select({ employeeId: payrollLines.employeeId, hash: payrollLines.calculationHash }).from(payrollLines).where(eq(payrollLines.runId, run.id));
+      throw new PayrollProbe({ hashes: new Map(rows.map(r => [r.employeeId, r.hash])), warnings });
     });
   } catch (error) {
-    if (error instanceof PayrollProbe) return error.hashes;
+    if (error instanceof PayrollProbe) return error.check;
     if (error instanceof DomainError) throw new DomainError('rascunho_desactualizado', `A folha já não pode ser recalculada com os dados actuais: ${error.message} Corrija e recalcule antes de fechar.`, 409);
     throw error;
   }
@@ -461,16 +463,18 @@ export async function closePayroll(db: Db, companyId: string, runId: string, act
     const included = new Set(lines.map(l => l.l.employeeId)), missing = eligible.filter(s => !included.has(s.e.id));
     if (missing.length) throw new DomainError('processamento_incompleto', `Faltam ${missing.length} colaborador(es) por processar: ${missing.slice(0, 5).map(s => s.e.name).join(', ')}. Processe o lote em falta antes de fechar o mês.`, 409);
     if (lines.some(l => !valid.has(l.l.employeeId))) throw new DomainError('equipa_alterada', 'A elegibilidade da equipa mudou. Recalcule toda a folha antes de fechar o mês.', 409);
-    // O rascunho tem de corresponder aos dados actuais: recalcula sem gravar e compara os hashes de cálculo.
-    const fresh = await freshPayrollHashes(tx as unknown as Db, companyId, run.period, actorId);
-    const names = new Map((await tx.select({ id: employees.id, name: employees.name }).from(employees).where(inArray(employees.id, lines.map(l => l.l.employeeId)))).map(e => [e.id, e.name]));
-    const changed = lines.filter(l => !l.l.calculationHash || fresh.get(l.l.employeeId) !== l.l.calculationHash);
-    if (changed.length || fresh.size !== lines.length) {
+    const fresh = await freshPayrollCheck(tx as unknown as Db, companyId, run.period, actorId);
+    const changed = lines.filter(l => !l.l.calculationHash || fresh.hashes.get(l.l.employeeId) !== l.l.calculationHash);
+    if (changed.length || fresh.hashes.size !== lines.length) {
+      const names = new Map((await tx.select({ id: employees.id, name: employees.name }).from(employees).where(inArray(employees.id, changed.slice(0, 5).map(l => l.l.employeeId)))).map(e => [e.id, e.name]));
       const who = changed.slice(0, 5).map(l => names.get(l.l.employeeId) ?? l.l.employeeId).join(', ');
       throw new DomainError('rascunho_desactualizado', `Os dados mudaram depois do último cálculo${who ? ` (${changed.length} colaborador(es): ${who}${changed.length > 5 ? '…' : ''})` : ''}. Use «Recalcular» e confirme os valores antes de fechar o mês.`, 409);
     }
+    if (warningKeys(fresh.warnings) !== warningKeys((run.warnings ?? []) as PayrollWarning[])) {
+      throw new DomainError('rascunho_desactualizado', 'Os avisos da folha mudaram depois do último cálculo. Use «Recalcular» e reveja os avisos antes de fechar o mês.', 409);
+    }
     // Avisos de cálculo manual: o fecho exige a confirmação escrita de quem fecha, que fica registada.
-    const manual = ((run.warnings ?? []) as PayrollWarning[]).filter(w => MANUAL_WARNING.test(w.message));
+    const manual = fresh.warnings.filter(w => MANUAL_WARNING.test(w.message));
     const review = options.manualReview?.trim() ?? '';
     if (manual.length && review.length < 10) throw new DomainError('revisao_calculo_manual', `Há ${manual.length} aviso(s) de CÁLCULO MANUAL neste mês. Confirme por escrito o que foi revisto e lançado (mínimo 10 caracteres) antes de fechar.`, 409);
 
@@ -502,6 +506,11 @@ export async function closePayroll(db: Db, companyId: string, runId: string, act
     const entry = payrollJournal(run.period, totals, await companyAccounts(tx as unknown as Db, companyId));
     const [je] = await tx.insert(journalEntries).values({ companyId, date: entry.date, journal: entry.journal, reference: entry.reference, description: entry.description, source: 'payroll' }).returning();
     await tx.insert(journalLines).values(entry.lines.map((l) => ({ entryId: je!.id, account: l.account, description: l.description, costCenter: l.costCenter, debitMinor: l.debitMinor, creditMinor: l.creditMinor })));
+    const contexts = await payslipContexts(tx as unknown as Db, companyId, run.period, lines.map(x => x.l.employeeId));
+    const snapshots = lines.map(({ l }) => ({ id: l.id, context: contexts.get(l.employeeId)! }));
+    await tx.execute(sql`update payroll_lines as l set payslip_context = snap.context
+      from jsonb_to_recordset(${JSON.stringify(snapshots)}::jsonb) as snap(id text, context jsonb)
+      where l.id = snap.id and l.run_id = ${run.id}`);
     const [closed] = await tx.update(payrollRuns).set({ status: 'closed', closedAt: new Date(), closedBy: actorId }).where(eq(payrollRuns.id, run.id)).returning();
     await tx.insert(auditLogs).values({ companyId, actorId, action: 'close', entity: 'payroll_run', entityId: run.id, before: run, after: { ...closed, ...(manual.length ? { manualReview: { note: review, warnings: manual.map(w => w.message) } } : {}) } });
     // Recibos disponíveis: aviso no telemóvel de cada colaborador processado (sem montantes no aviso).

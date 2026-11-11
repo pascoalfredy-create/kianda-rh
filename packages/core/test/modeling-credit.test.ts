@@ -36,6 +36,18 @@ describe('diagnóstico de crédito do Integra', () => {
     expect(creditDiagnosis(m, runFinancialModel(m))).toBeNull();
   });
 
+  it('condiciona o parecer quando existem reembolsos no horizonte e dívida a vencer depois', () => {
+    const m = graceModel();
+    m.receitas[0]!.ramp = '100';
+    m.divida = { ...m.divida, prazo: 10, carencia: 0 };
+    const r = runFinancialModel(m), diagnosis = creditDiagnosis(m, r)!;
+    expect(r.k.debt[3]).toBe(70);
+    expect(diagnosis.repaymentDscr).toBeGreaterThan(1);
+    expect(diagnosis.level).toBe('a');
+    expect(diagnosis.title).toContain('incompleta');
+    expect(diagnosis.conditions).toEqual([expect.stringContaining('70 remanescentes na moeda do projecto em 2029, com calendário até 2036')]);
+  });
+
   it('os modelos de exemplo com dívida reembolsam com DSCR positivo e nunca saem «não bancáveis»', () => {
     for (const sector of FINANCIAL_SECTORS) {
       const m = financialTemplate(sector).assumptions, r = runFinancialModel(m), d = creditDiagnosis(m, r);

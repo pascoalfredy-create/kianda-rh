@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { auditLogs, and, closeDb, eq, getDb, payrollRuns, payrollVariables } from '@kianda/db';
+import { auditLogs, and, closeDb, eq, getDb, payrollVariables } from '@kianda/db';
 import { buildApp } from '../src/app.js';
 import { testClient, type InjectResponse } from './inject.js';
 const app = testClient(buildApp({ rateLimit: false }));
@@ -84,13 +84,22 @@ describe.skipIf(!process.env.DATABASE_URL)('processamento habitual e alteraçõe
     expect(stale.statusCode).toBe(409); expect(stale.json().error).toBe('rascunho_desactualizado'); expect(stale.json().message).toContain('Pessoa Mensal 0');
     expect((await opening('2026-12')).run.status).toBe('draft');
     expect((await req(payroll, 'POST', '/v1/payroll-runs', { period: '2026-12' })).statusCode).toBe(201);
-    // Aviso de cálculo manual: sem confirmação escrita não fecha; com ela fecha e fica no registo de auditoria.
-    await getDb().update(payrollRuns).set({ warnings: [{ employeeId: a, message: 'Pessoa Mensal 0: 1 feriado(s) trabalhado(s) — CÁLCULO MANUAL do acréscimo' }] }).where(eq(payrollRuns.id, dec.id));
+    // Uma ausência pode alterar os avisos sem alterar as rubricas do cálculo.
+    const calculated = (await opening('2026-12')).run;
+    expect((await req(owner, 'POST', '/v1/absences', { employeeId: a, type: 'maternity', startDate: '2026-12-07', endDate: '2026-12-11', approve: true })).statusCode).toBe(201);
+    const changedWarning = await req(owner, 'POST', '/v1/payroll-runs/' + dec.id + '/close', { manualReview: 'Revisão anterior à nova ocorrência.' });
+    expect(changedWarning.statusCode).toBe(409);
+    expect(changedWarning.json()).toMatchObject({ error: 'rascunho_desactualizado', message: expect.stringContaining('avisos') });
+    expect((await req(payroll, 'POST', '/v1/payroll-runs', { period: '2026-12' })).statusCode).toBe(201);
+    expect((await opening('2026-12')).run.lines.map((l: any) => l.calculationHash)).toEqual(calculated.lines.map((l: any) => l.calculationHash));
     const unreviewed = await req(owner, 'POST', '/v1/payroll-runs/' + dec.id + '/close', {});
     expect(unreviewed.json().error).toBe('revisao_calculo_manual');
-    const note = 'Acréscimo do feriado lançado em Outro abono e conferido.';
+    const note = 'Ocorrência de maternidade revista na folha de teste.';
     expect((await req(owner, 'POST', '/v1/payroll-runs/' + dec.id + '/close', { manualReview: note })).statusCode).toBe(200);
     const [log] = await getDb().select().from(auditLogs).where(and(eq(auditLogs.entityId, dec.id), eq(auditLogs.action, 'close')));
-    expect((log!.after as any).manualReview).toMatchObject({ note, warnings: [expect.stringContaining('CÁLCULO MANUAL')] });
+    expect((log!.after as any).manualReview).toMatchObject({ note, warnings: [
+      expect.stringContaining('CÁLCULO MANUAL'),
+      expect.stringContaining('subsídio pago num ano com licença de maternidade'),
+    ] });
   });
 });

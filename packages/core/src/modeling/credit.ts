@@ -33,14 +33,22 @@ export function creditDiagnosis(m: FinancialModel, r: FinancialResult): CreditDi
   const repaymentDscr = rep.length ? Math.min(...rep) : null, graceDscr = grace.length ? Math.min(...grace) : null;
   const breaches = r.covenants.filter((c, i) => repSet.has(i + 1) && (c.dscr === false || c.ndEbitda === false || c.icr === false));
   const conditions: string[] = [];
-  if (repaymentDscr == null) conditions.push('confirmar o reembolso fora do horizonte do modelo: o DSCR do período de reembolso não é calculável');
-  else if (repaymentDscr < m.cov.dscr) conditions.push(`ajustar o prazo, a carência ou o montante para que o DSCR no reembolso atinja ${x(m.cov.dscr)} (mínimo modelado ${x(repaymentDscr)})`);
+  const debtAtHorizon = r.k.debt[r.H] ?? 0;
+  if (debtAtHorizon > 0) {
+    const end = m.anoBase + Math.max(m.divida.montante > 0 ? m.divida.ano + m.divida.prazo : 0,
+      m.inicio === 'existente' && m.abertura.divida > 0 ? m.abertura.divPrazo : 0);
+    const amount = debtAtHorizon.toLocaleString('pt-PT', { maximumFractionDigits: 2 });
+    conditions.push(`demonstrar o reembolso ou refinanciamento dos ${amount} remanescentes na moeda do projecto em ${r.years[r.H]}, com calendário até ${end}`);
+  } else if (repaymentDscr == null) conditions.push('demonstrar a cobertura dos reembolsos: o DSCR do período de reembolso não é calculável');
+  if (repaymentDscr != null && repaymentDscr < m.cov.dscr) conditions.push(`ajustar o prazo, a carência ou o montante para que o DSCR no reembolso atinja ${x(m.cov.dscr)} (mínimo modelado ${x(repaymentDscr)})`);
   if (graceDscr != null && graceDscr < 1) conditions.push(`cobrir os juros do período de carência com suprimentos, capital ou conta de reserva (DSCR mínimo na carência ${x(graceDscr)})`);
   if (breaches.some((c) => c.ndEbitda === false)) conditions.push(`reduzir a alavancagem para dívida líquida/EBITDA ≤ ${x(m.cov.ndEbitda)} em ${breaches.filter((c) => c.ndEbitda === false).map((c) => c.year).join(', ')}`);
   if (breaches.some((c) => c.icr === false)) conditions.push(`reforçar a cobertura de juros (EBITDA/juros ≥ ${x(m.cov.icr)}) em ${breaches.filter((c) => c.icr === false).map((c) => c.year).join(', ')}`);
   if (r.fundingGap > 0) conditions.push('assegurar o capital adicional que o modelo identifica como necessário');
   const level: CreditLevel = repaymentDscr != null && repaymentDscr < 1 ? 'r' : conditions.length ? 'a' : 'g';
-  const title = level === 'g' ? 'Bancável nos pressupostos do modelo — cumpre os covenants modelados' : level === 'a' ? 'Potencialmente bancável, com condições' : 'Não bancável na estrutura proposta: o fluxo do reembolso não cobre o serviço da dívida';
+  const title = level === 'r' ? 'Não bancável na estrutura proposta: o fluxo do reembolso não cobre o serviço da dívida'
+    : debtAtHorizon > 0 ? 'Análise de crédito incompleta: há dívida para além do horizonte'
+    : level === 'a' ? 'Potencialmente bancável, com condições' : 'Bancável nos pressupostos do modelo — cumpre os covenants modelados';
   return { level, title, repaymentDscr, graceDscr, breachYears: breaches.map((c) => c.year), conditions };
 }
 

@@ -51,6 +51,7 @@ test('Valora: cria uma análise, edita o orçamento e os dados ficam no servidor
 
   // Balancete mensal: unidade obrigatória, valores ao cêntimo, controlo antes de aplicar e desfazer.
   await valoraGo(page, 'dados');
+  const initialClose = saved.body.data.fecho;
   await page.locator('#paste').fill('conta;descricao;Jan\n61;Vendas;-1 000 000,25\n72;Pessoal;400 000,00\n43;Bancos;1 600 000,25\n51;Capital;-1 000 000,00');
   await page.locator('#btnParse').click();
   await expect(page.locator('#imp-prev')).toContainText('Indique a unidade');
@@ -60,7 +61,8 @@ test('Valora: cria uma análise, edita o orçamento e os dados ficam no servidor
   await page.locator('#btnApply').click();
   await expect(page.locator('#imp-prev')).toContainText('ao cêntimo');
   await expect.poll(async () => (await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}`)).body.data.real.v61[0], { timeout: 15_000 }).toBeCloseTo(1.00000025, 10);
-  expect((await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}`)).body.data.fecho).toBe(1);
+  expect((await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}`)).body.data.fecho).toBe(Math.max(initialClose, 1));
+  expect((await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}/versions`)).body[0]).toMatchObject({ reason: 'import_balance', revision: saved.body.revision });
   await page.locator('#btnUndoImp').click();
   await expect(page.locator('#imp-prev')).toContainText('Importação desfeita');
 
@@ -111,6 +113,47 @@ test('Valora: cria uma análise, edita o orçamento e os dados ficam no servidor
   await expect(page).toHaveURL(/\/modulos$/);
   await expect(page.locator('#hr')).toContainText('Kianda RH');
   expect(errors).toEqual([]);
+});
+
+test('Valora: cancelar ou trocar de análise elimina a prévia do balancete', async ({ page, context }) => {
+  const owner = await registerCompany({ modules: ['valuation'] });
+  await signIn(context, owner.token);
+  await page.goto('/valora#dados');
+  await page.locator('#valoraFirst').click();
+  const create = async (name: string) => {
+    await page.locator('#vName').fill(name);
+    await page.locator('#vEnt').fill(name);
+    await page.locator('#vYear').fill('2025');
+    await page.locator('#vCreate').click();
+    await expect(page.locator('#hdrEnt')).toHaveText(name);
+  };
+  await create('Entidade de origem');
+  await page.locator('#btnAnalyses').click();
+  await create('Entidade de destino');
+  const rows = (await apiAs(owner.token, 'GET', '/v1/valuation/analyses')).body;
+  const idOf = (name: string) => rows.find((r: { name: string; id: string }) => r.name === name).id;
+  const open = async (name: string) => {
+    await page.locator('#btnAnalyses').click();
+    await page.locator(`[data-vopen="${idOf(name)}"]`).click();
+    await expect(page.locator('#hdrEnt')).toHaveText(name);
+  };
+  await open('Entidade de origem');
+  const paste = async () => {
+    await page.locator('#impUnit').selectOption('kz');
+    await page.locator('#paste').fill('Conta;Jan 2026\n61;-75000,23');
+    await page.locator('#btnParse').click();
+    await expect(page.locator('#btnApply')).toBeVisible();
+  };
+  await paste();
+  await page.locator('#btnCancelImp').click();
+  await page.locator('#impUnit').selectOption('mil');
+  await expect(page.locator('#btnApply')).toHaveCount(0);
+  await paste();
+  await open('Entidade de destino');
+  await expect(page.locator('#paste')).toHaveValue('');
+  await expect(page.locator('#btnApply')).toHaveCount(0);
+  const dest = await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${idOf('Entidade de destino')}`);
+  expect(dest.body.data.real.v61[0]).toBeNull();
 });
 
 test('Valora: com licença paga exporta o relatório em PDF descarregado no navegador', async ({ page, context }) => {

@@ -2,7 +2,7 @@ import {
   ABSENCE_POLICIES, businessDays, luandaDate, checkAbsenceLimit, labourRules, vacationBalance, vacationEligibleFrom, vacationEntitlement, workingDaysByYear,
   type AbsenceType,
 } from '@kianda/core';
-import { absences, and, asc, desc, auditLogs, contracts, departments, eq, files, getDb, gte, inArray, lte, employees, sql, users, type Db } from '@kianda/db';
+import { absences, and, asc, desc, auditLogs, companies, contracts, departments, eq, files, getDb, gte, inArray, lte, employees, sql, users, type Db } from '@kianda/db';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { body as readBody, requireCompany, type Actor, type AppEnv } from '../plugins/tenant.js';
@@ -123,6 +123,7 @@ export function absenceRoutes() {
     const actor = c.get('actor');
     const b = createBody.parse(await readBody(c));
     const db = getDb();
+    await db.select({ id: companies.id }).from(companies).where(eq(companies.id, actor.companyId)).for('update');
     const [emp] = await db.select().from(employees).where(and(eq(employees.id, b.employeeId), eq(employees.companyId, actor.companyId)));
     if (!emp) return c.json({ error: 'colaborador_inexistente', message: 'Colaborador inexistente' }, 404);
     if (!canRegisterFor(actor, emp)) return c.json({ error: 'sem_permissao', message: 'Só pode registar ausências próprias ou da sua equipa.' }, 403);
@@ -202,6 +203,7 @@ export function absenceRoutes() {
     const { note } = z.object({ note: z.string().trim().max(500).optional() }).parse(await readBody(c));
     if (status === 'rejected' && !note) throw new DomainError('motivo_obrigatorio', 'Indique o motivo da recusa', 400);
     const db = getDb();
+    await db.select({ id: companies.id }).from(companies).where(eq(companies.id, actor.companyId)).for('update');
     const { a, e } = await loadAbsence(db, actor, c.req.param('id')!);
     if (a.status !== 'pending') throw new DomainError('estado_invalido', 'Só pedidos pendentes podem ser decididos');
     if (!canDecide(actor, e)) return c.json({ error: 'sem_permissao', message: 'Só a chefia directa ou os Recursos Humanos podem decidir este pedido (nunca o próprio).' }, 403);
@@ -218,6 +220,7 @@ export function absenceRoutes() {
   app.post('/v1/absences/:id/cancel', async (c) => {
     const actor = c.get('actor');
     const db = getDb();
+    await db.select({ id: companies.id }).from(companies).where(eq(companies.id, actor.companyId)).for('update');
     const { a, e } = await loadAbsence(db, actor, c.req.param('id'));
     const hr = actor.role === 'owner' || actor.role === 'hr_admin';
     if (a.status === 'rejected' || a.status === 'cancelled') throw new DomainError('estado_invalido', 'O pedido já está encerrado');

@@ -23,6 +23,11 @@ describe('importação de balancetes do Valora', () => {
     expect(r.warnings.join(' ')).toMatch(/conta\(s\)-mãe/);
   });
 
+  it('recusa uma conta-mãe com detalhe incompleto e um saldo repetido para a mesma conta', () => {
+    expect(parseBalance([['conta', 'Jan'], ['61', '-100000'], ['611', '-40000']], base).error).toMatch(/61 em jan difere.*60.*Kz/);
+    expect(parseBalance([['conta', 'Jan'], ['61', '-100000'], ['61', '-100000']], base).error).toMatch(/mais de uma vez/);
+  });
+
   it('respeita a natureza das contas e assinala saldos contrários', () => {
     const r = parseBalance([['conta', 'Jan'], ['31', '-500'], ['32', '-800'], ['34.1', '120'], ['34.2', '-40'], ['51', '-1000'], ['18', '-70'], ['87', '30']], base);
     expect(r.acc.clientes![0]).toBeCloseTo(-500 / 1e6, 12);
@@ -54,6 +59,31 @@ describe('importação de balancetes do Valora', () => {
     expect(Object.values(r.acc.v61!).map((v) => v * 1e6)).toEqual([100, 150, 200].map((v) => expect.closeTo(v, 6)));
     expect(Object.values(r.acc.c72!).map((v) => v * 1e6)).toEqual([40, 40, 40].map((v) => expect.closeTo(v, 6)));
     expect(Object.values(r.acc.caixa!).map((v) => v * 1e6)).toEqual([10, 20, 30].map((v) => expect.closeTo(v, 6)));
+  });
+
+  it('exige uma base acumulada contínua por conta, incluindo o imposto', () => {
+    const opts = { ...base, cumulative: true };
+    expect(parseBalance([['conta', 'Fev'], ['61', '-250000']], opts).error).toMatch(/saldo acumulado de jan/);
+    expect(parseBalance([['conta', 'Jan', 'Mar'], ['61', '-100000', '-450000']], opts).error).toMatch(/saldo acumulado de fev/);
+    expect(parseBalance([['conta', 'Jan', 'Fev'], ['61', '', '-250000']], opts).error).toMatch(/saldo acumulado de jan/);
+    const zero = parseBalance([['conta', 'Jan', 'Fev'], ['87', '0', '30000']], opts);
+    expect(zero.acc.imp).toEqual({ 0: 0, 1: .03 });
+  });
+
+  it('mantém estornos em contas e rubricas no modo de natureza normal', () => {
+    const r = parseBalance([['conta', 'Jan', 'Fev'], ['61', '100000', '80000'], ['c72', '60000', '50000']], { ...base, cumulative: true, signed: false });
+    expect(r.acc.v61).toEqual({ 0: .1, 1: -.02 });
+    expect(r.acc.c72).toEqual({ 0: .06, 1: -.01 });
+    expect(r.control[1]!.differenceKz).toBeNull();
+  });
+
+  it('lê o saldo final de um ERP no mês indicado, com protecção para resultados acumulados', () => {
+    const rows = [['Conta', 'Descrição', 'Saldo inicial', 'Débito', 'Crédito', 'Saldo final'], ['61', 'Vendas', '0', '0', '250000', '-250000'], ['43', 'Banco', '0', '250000', '0', '250000']];
+    expect(parseBalance(rows, base).error).toMatch(/Seleccione o mês/);
+    expect(parseBalance(rows, { ...base, erpMonth: 2 }).error).toMatch(/saldo acumulado de jan/);
+    expect(parseBalance(rows, { ...base, erpMonth: 2, erpMonthly: true }).acc.v61).toEqual({ 1: .25 });
+    const withPrior = rows.map((r, i) => [...r, i === 0 ? 'Saldo do mês anterior' : i === 1 ? '-100000' : '100000']);
+    expect(parseBalance(withPrior, { ...base, erpMonth: 2 }).acc.v61).toEqual({ 1: .15 });
   });
 
   it('aceita a chave da rubrica no lugar da conta, leva a provisão 39 para o passivo e ignora a conta 88', () => {
@@ -108,7 +138,7 @@ describe('importação de balancetes do Valora', () => {
     expect(r.acc.p68![0]).toBeCloseTo(20 / 1e6, 12);
     expect(r.acc.c78![0]).toBeCloseTo(10 / 1e6, 12);
     expect(r.control[0]!.resultKz).toBeCloseTo(210, 2);
-    expect(Math.abs(r.control[0]!.differenceKz)).toBeLessThan(0.005);
+    expect(r.control[0]!.differenceKz).toBe(0);
     expect(r.ignored).toEqual([]);
     expect(r.warnings.join(' ')).not.toMatch(/contrária/);
   });

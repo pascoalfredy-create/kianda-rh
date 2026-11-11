@@ -139,7 +139,7 @@ replace("cell=(arr,i,k,w=70,f=f0)=>`<input class=\"cell\" style=\"width:${w}px\"
   "cell=(arr,i,k,w=70,f=null)=>f?`<input class=\"cell\" style=\"width:${w}px\" inputmode=\"decimal\" data-arr=\"${arr}\" data-i=\"${i}\" data-k=\"${k}\" value=\"${f(D[arr][i][k])}\">`:`<input class=\"cell kz\" inputmode=\"decimal\" data-kz=\"1\" data-arr=\"${arr}\" data-i=\"${i}\" data-k=\"${k}\" value=\"${kzOut(D[arr][i][k])}\">`;");
 replace("${cell('eq',i,'id',50)}</td><td>${cell('eq',i,'vu',50)}</td><td>${cell('eq',i,'ob',50)}", "${cell('eq',i,'id',50,fx)}</td><td>${cell('eq',i,'vu',50,fx)}</td><td>${cell('eq',i,'ob',50,fx)}");
 // Ao sair de um campo em Kz, o valor fica escrito com separadores e cêntimos.
-replace("document.addEventListener('change',e=>{\n  const el=e.target,ds=el.dataset;", "document.addEventListener('change',e=>{\n  const el=e.target,ds=el.dataset;\n  if(ds.kz&&el.value.trim()!=='')el.value=kzOut(kzIn(el.value));\n  if(['impUnit','impCum','signConv'].includes(el.id)){if(IMP_ROWS)showPreview(parseRows(IMP_ROWS));return}\n  if(el.id==='impSheetSel'&&IMP_FILE){readFile(IMP_FILE,+el.value).then(r=>showPreview(parseRows(r))).catch(err=>showPreview({err:'Erro ao ler o ficheiro: '+err.message}));return}");
+replace("document.addEventListener('change',e=>{\n  const el=e.target,ds=el.dataset;", "document.addEventListener('change',e=>{\n  const el=e.target,ds=el.dataset;\n  if(ds.kz&&el.value.trim()!=='')el.value=kzOut(kzIn(el.value));");
 replace("e.target.matches('input.cell,.mini input,[data-orc],[data-saz],[data-var],[data-w]')", "e.target.matches('input.cell,.mini input,[data-orc],[data-saz],[data-var],[data-w],[data-kz]')");
 
 /* ---------- Importação de balancetes: unidade, precisão, hierarquia, sinais, exercício, acumulado, folhas, PDF/Word, controlo e desfazer ---------- */
@@ -148,38 +148,21 @@ replaceShell('<p class="sub">.xlsx, .xls ou .csv · ou cole o conteúdo</p>', '<
 replaceShell('<input type="file" id="file" accept=".xlsx,.xls,.csv,.txt">', '<input type="file" id="file" accept=".xlsx,.csv,.txt,.pdf,.docx"><div id="impSheet" hidden style="margin-top:8px"><label class="hint">Folha do Excel <select class="sel" id="impSheetSel"></select></label></div>');
 replaceShell('<input type="checkbox" id="signConv" checked> Saldos credores vêm com sinal negativo (convenção de balancete)</label>',
   '<input type="checkbox" id="signConv" checked> Saldos credores vêm com sinal negativo (convenção de balancete)</label>\n      <label class="hint" style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="impCum"> Classes 6 e 7 em acumulado do ano (converter em movimentos do mês)</label>\n      <div class="ctrl" style="grid-template-columns:1fr 190px"><label for="impUnit">Unidade dos valores no ficheiro</label><select class="sel" id="impUnit" required><option value="">Escolha a unidade…</option><option value="kz">Kz</option><option value="mil">Milhares de Kz</option><option value="milhoes">Milhões de Kz</option></select></div>');
-span('function mapAcc(code,val,signed){', 'function splitCSV(txt){', `let IMP=null,IMP_ROWS=null,IMP_FILE=null,IMP_UNDO=null;
-function parseRows(rows){const r=parseBalance(rows,{unit:$('#impUnit').value,signed:$('#signConv').checked,cumulative:$('#impCum').checked,year:EX});return r.error?{err:r.error}:r}
-`);
-span('async function readFile(file){', 'function showPreview(res){', `async function readFile(file,sheet=0){IMP_FILE=file;const doc=await readBalanceDocument(file,sheet),box=$('#impSheet');
-  if(doc.sheets.length>1){$('#impSheetSel').innerHTML=doc.sheets.map((s,i)=>\`<option value="\${i}" \${i===sheet?'selected':''}>\${esc(s)}</option>\`).join('');box.hidden=false}else box.hidden=true;
-  IMP_ROWS=doc.rows;return doc.rows}
-`);
-span('function showPreview(res){', 'function renderDados(){', `function showPreview(res){
-  if(res.err){$('#imp-prev').innerHTML=\`<div class="note" style="border-color:var(--crit)">\${esc(res.err)}</div>\`;IMP=null;return}
-  IMP=res;const maxM=Math.max(...res.months),bad=res.control.filter(c=>Math.abs(c.differenceKz)>=.01);
-  const byK=Object.entries(res.acc).map(([k,v])=>\`<tr><td><span class="code">\${LBL[k][0]}</span>\${LBL[k][1]}</td>\${res.months.map(m=>\`<td class="num">\${v[m]==null?'—':f0(v[m])}</td>\`).join('')}</tr>\`).join('');
-  const ctl=\`<tr><td>Resultado do mês (classes 6 e 7)</td>\${res.control.map(c=>\`<td class="num">\${f0(c.resultKz/1e6)}</td>\`).join('')}</tr><tr><td>Activo − passivo − capital próprio</td>\${res.control.map(c=>\`<td class="num">\${Math.abs(c.differenceKz)<.01?badge('good')+' 0,00':chk(c.differenceKz/1e6)}</td>\`).join('')}</tr>\`;
-  $('#imp-prev').innerHTML=\`<h3 class="mt" style="font-size:13px">Pré-visualização — \${res.lines.length} contas mapeadas, \${res.ignored.length} ignoradas · valores em Kz</h3>
-   <div class="tbl-scroll"><table><thead><tr><th>Rubrica</th>\${res.months.map(m=>\`<th>\${MES[m]}</th>\`).join('')}</tr></thead><tbody>\${byK}<tr class="sec"><td colspan="\${res.months.length+1}">Controlo antes de aplicar</td></tr>\${ctl}</tbody></table></div>
-   \${bad.length?\`<div class="note" style="border-color:var(--warn)">O balanço importado não fecha em \${bad.map(c=>MES[c.month]).join(', ')}. Confirme a unidade, a convenção de sinal e se faltam contas antes de aplicar.</div>\`:''}
-   \${res.warnings.map(w=>\`<p class="hint">\${esc(w)}</p>\`).join('')}
-   \${res.ignored.length?\`<p class="hint">Ignoradas (provisões, resultados, não operacionais, linhas sem conta): \${esc(res.ignored.slice(0,12).join(' · '))}\${res.ignored.length>12?' …':''}</p>\`:''}
-   <label class="hint" style="display:flex;gap:6px;align-items:center;margin:6px 0"><input type="checkbox" id="impFecho" checked> Actualizar o mês de fecho para \${MES[maxM]}</label>
-   <div class="row-actions" style="justify-content:flex-start"><button class="btn pri" id="btnApply">Aplicar importação</button><button class="btn" id="btnCancelImp">Cancelar</button></div>\`;
-}
-`);
-replace("showPreview(parseRows(splitCSV(txt)))", "IMP_ROWS=splitCSV(txt);IMP_FILE=null;$('#impSheet').hidden=true;showPreview(parseRows(IMP_ROWS))");
-replace("if(t.id==='btnApply'&&IMP){Object.entries(IMP.acc).forEach(([k,v])=>Object.entries(v).forEach(([m,x])=>D.real[k][+m]=Math.round(x*10)/10));",
-  "if(t.id==='btnUndoImp'&&IMP_UNDO){D.real=IMP_UNDO.real;D.fecho=IMP_UNDO.fecho;IMP_UNDO=null;refresh();$('#imp-prev').innerHTML='<div class=\"note\">Importação desfeita: os dados reais e o mês de fecho anteriores foram repostos.</div>';return}\n  if(t.id==='btnApply'&&IMP){IMP_UNDO={real:JSON.parse(JSON.stringify(D.real)),fecho:D.fecho};Object.entries(IMP.acc).forEach(([k,v])=>Object.entries(v).forEach(([m,x])=>D.real[k][+m]=x));");
-replace("$('#imp-prev').innerHTML=`<div class=\"note\">Importação aplicada: ${n} contas. Todas as análises foram recalculadas.</div>`}",
-  "$('#imp-prev').innerHTML=`<div class=\"note\">Importação aplicada: ${n} contas, ao cêntimo. Todas as análises foram recalculadas. <button class=\"btn\" id=\"btnUndoImp\">Desfazer importação</button></div>`}");
+span('function mapAcc(code,val,signed){', 'function splitCSV(txt){', '');
+span("$('#file').addEventListener", "function setTheme(t){", '');
+span('async function readFile(file){', 'function renderDados(){', await readFile(new URL('valuation/balance-import-ui.js', web), 'utf8') + '\n');
+span("  if(t.id==='btnParse')", "  if(t.id==='btnTpl')", '');
+span("  if(t.id==='btnCancelImp')", '\n});\ndocument.querySelectorAll', '');
+replaceShell('<div id="imp-prev"></div>', `<div id="impErp" hidden>
+        <label class="hint">Mês do saldo final (ERP) <select id="impMonth" class="sel"><option value="">Escolha o mês…</option>${['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'].map((m, i) => `<option value="${i + 1}">${m}</option>`).join('')}</select></label>
+        <label class="hint"><input type="checkbox" id="impErpMonthly"> As contas de resultados contêm só os movimentos desse mês</label>
+      </div><div id="imp-prev"></div>`);
 // Tema: o botão diz para onde muda e expõe o estado aos leitores de ecrã.
 replace("function setTheme(t){document.documentElement.dataset.theme=t;try{localStorage.setItem('valora-theme',t)}catch(e){}}",
   "function setTheme(t){document.documentElement.dataset.theme=t;const b=document.getElementById('btnTheme');if(b){b.textContent=t==='dark'?'Tema claro':'Tema escuro';b.setAttribute('aria-pressed',String(t==='dark'))}try{localStorage.setItem('valora-theme',t)}catch(e){}}");
 // Modelo para copiar: em Kz, com a convenção de sinal (créditos negativos), pronto a reimportar.
-replace("L.push([code,LBL[k][1],...MES.map((_,m)=>D.real[k][m]==null?'':String(D.real[k][m]).replace('.',','))].join(';'))});return L.join('\\n')}",
-  "const neg=['v61','v62','v63','p66','amort','fornec','empMLP','estado','outcred','capital','reservas'].includes(k);L.push([code,LBL[k][1],...MES.map((_,m)=>D.real[k][m]==null?'':((neg?-1:1)*D.real[k][m]*1e6).toFixed(2).replace('.',','))].join(';'))});return L.join('\\n')}");
+replace("const code=k==='empCP'?'empCP':LBL[k][0].split(/[\\/\\-]/)[0];L.push([code,LBL[k][1],...MES.map((_,m)=>D.real[k][m]==null?'':String(D.real[k][m]).replace('.',','))].join(';'))});return L.join('\\n')}",
+  "const neg=['v61','v62','v63','p66','p68','amort','fornec','empMLP','empCP','estado','outcred','capital','reservas'].includes(k);L.push([k,LBL[k][1],...MES.map((_,m)=>D.real[k][m]==null?'':((neg?-1:1)*D.real[k][m]*1e6).toFixed(2).replace('.',','))].join(';'))});return L.join('\\n')}");
 replace("$('#tplMsg').textContent='Modelo copiado — cole no Excel.'", "$('#tplMsg').textContent='Modelo copiado (Kz, créditos negativos) — cole no Excel.'");
 replace("Valores expressos em milhões de Kwanzas (Mkz).", "Valores expressos em Kwanzas.");
 // Restantes unidades de saída: Mkz → Kz.
@@ -233,7 +216,7 @@ source = '\n' + engineFile + '\n' + source.slice(engineAt);
 const adapter = await readFile(new URL('valuation/adapter.js', web), 'utf8');
 const imports = [
   `import {setupNumberFields,parseNumberInput} from '${fileURLToPath(new URL('lib/number-fields.ts', web))}';`,
-  `import {parseBalance,readBalanceDocument} from '${fileURLToPath(new URL('valuation/balance-import.ts', web))}';`,
+  `import {isErpBalance,parseBalance,readBalanceDocument} from '${fileURLToPath(new URL('valuation/balance-import.ts', web))}';`,
   `import {readXlsxRows,utils as xlsxUtils,write as xlsxWrite} from '${fileURLToPath(new URL('valuation/xlsx.ts', web))}';`,
   `import {blankValuationData,valuationDataIssue} from '${fileURLToPath(new URL('packages/core/src/valuation.ts', root))}';`,
   `import {endSession,reloadPrivatePageOnRestore} from '${fileURLToPath(new URL('lib/session-client.ts', web))}';`,

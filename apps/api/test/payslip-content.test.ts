@@ -35,5 +35,12 @@ describe.skipIf(!process.env.DATABASE_URL)('recibo: só o processado, discrimina
     expect(slip.leave).toEqual([expect.objectContaining({ type: 'vacation', startDate: '2026-10-05', endDate: '2026-10-09', workingDays: 5 }), expect.objectContaining({ type: 'unjustified' })]);
     expect(slip.termination).toBeNull();
     expect(slip.lines.every((l: { amountMinor: number }) => l.amountMinor !== 0)).toBe(true);
+    expect((await call('POST', `/v1/payroll-runs/${run.json().run.id}/close`, {})).statusCode).toBe(200);
+    const closed = (await call('GET', `/v1/payslips/${line.id}`)).json();
+    expect(closed).toMatchObject({ status: 'closed', company: slip.company, employee: slip.employee, leave: slip.leave });
+    expect((await call('PATCH', `/v1/employees/${id}`, { jobTitle: 'Coordenador' })).statusCode).toBe(200);
+    expect((await call('PATCH', '/v1/company/settings', { address: 'Morada nova' })).statusCode).toBe(200);
+    expect((await call('POST', '/v1/absences', { employeeId: id, type: 'unjustified', startDate: '2026-10-22', endDate: '2026-10-22', approve: true })).statusCode).toBe(201);
+    expect((await call('GET', `/v1/payslips/${line.id}`)).json()).toEqual(closed);
   });
 });

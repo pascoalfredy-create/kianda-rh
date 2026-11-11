@@ -8,6 +8,7 @@ function rememberValoraLocation(){if(VS&&CUR)valuationWorkspace?.set('valuation:
 window.addEventListener('pagehide',rememberValoraLocation);
 let CUR=null,LIST=VS?VS.analyses:[],USAGE=VS?VS.usage:null;
 let saveTimer=null,saving=null,pendingSave=false,conflict=false,offline=false;
+let balanceCheckpoint=false,openingAnalysis=0;
 const ESC=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dateLbl=s=>{try{return new Date(s).toLocaleDateString('pt-PT',{day:'2-digit',month:'2-digit',year:'numeric'})}catch(e){return ''}};
 
@@ -54,13 +55,16 @@ async function flushSave(){
   pendingSave=false;
   const id=CUR.id,snapshot=JSON.parse(JSON.stringify(D)),issue=valuationDataIssue(snapshot);
   if(issue){pendingSave=true;setSave(issue,true);return}
+  const importBalance=balanceCheckpoint;
+  balanceCheckpoint=false;
   setSave('A gravar…');
-  saving=api('/analyses/'+encodeURIComponent(id),{method:'PUT',body:{revision:CUR.revision,data:snapshot}}).then(r=>{
+  saving=api('/analyses/'+encodeURIComponent(id),{method:'PUT',body:{revision:CUR.revision,data:snapshot,...(importBalance?{importBalance:true}:{})}}).then(r=>{
     if(CUR&&CUR.id===id){CUR.revision=r.revision;CUR.updatedAt=r.updatedAt}
     const item=LIST.find(x=>x.id===id);if(item){item.revision=r.revision;item.updatedAt=r.updatedAt}
     offline=false;setSave(pendingSave?'Alterações por gravar…':'Gravado');
   }).catch(e=>{
     pendingSave=true;
+    balanceCheckpoint ||= importBalance;
     if(e.status===409&&e.code==='revisao_invalida'){conflict=true;lockInputs();setSave('Não gravado',true);banner('err','Esta análise foi alterada noutra sessão. As alterações feitas aqui depois disso não foram gravadas.',['Recarregar a versão gravada',()=>{if(confirm('Recarregar a versão gravada e descartar as alterações locais?'))openAnalysis(id,true)}])}
     else if(e.offline){pendingSave=true;offline=true;setSave('Sem ligação — a tentar de novo',true);setTimeout(()=>{offline=false;flushSave()},5000)}
     else if(e.status===402){VS.canWrite=false;lockInputs();setSave('Não gravado',true);banner('warn',ESC(e.message)+' <a href="/modulos">Ver licença</a>')}
@@ -91,8 +95,10 @@ function syncYears(){
   TITLES.orcamento[1]='Orçamento '+EX;
 }
 function loadAnalysis(row){
+  openingAnalysis++;
+  resetBalanceImport(true);
   CUR={id:row.id,name:row.name,revision:row.revision,ownCompany:row.ownCompany,archivedAt:row.archivedAt,updatedAt:row.updatedAt};
-  conflict=false;pendingSave=false;offline=false;
+  conflict=false;pendingSave=false;offline=false;balanceCheckpoint=false;
   D=row.data;EX=D.ex??(D.years[D.years.length-1]+1);D.ex=EX;
   for(const k of ['p68','c78'])if(!Array.isArray(D.real[k]))D.real[k]=Array(12).fill(null);
   if(D.orc&&D.orc.iva==null)D.orc.iva=14;
@@ -108,11 +114,20 @@ function loadAnalysis(row){
   lockInputs();
 }
 async function openAnalysis(id,discard=false){
+  const request=++openingAnalysis;
   if(!discard){try{await ensureSaved()}catch(e){setSave(e.message,true);banner('err',ESC(e.message));return}}
   setSave('A abrir…');
-  try{loadAnalysis(await api('/analyses/'+encodeURIComponent(id)));closeDialog()}catch(e){setSave(e.message,true)}
+  try{
+    const row=await api('/analyses/'+encodeURIComponent(id));
+    if(request!==openingAnalysis)return;
+    if(!discard)await ensureSaved();
+    if(request!==openingAnalysis)return;
+    loadAnalysis(row);closeDialog();
+  }catch(e){if(request===openingAnalysis)setSave(e.message,true)}
 }
 function showEmpty(){
+  openingAnalysis++;
+  resetBalanceImport(true);
   D=undefined;CUR=null;document.body.classList.add('valora-none');banner(null);
   $('#hdrEnt').textContent=VS?VS.company.name:'Valora';$('#pillFecho').textContent='Sem análise';$('#crumb').textContent='Valora';$('#title').textContent='Análise financeira e avaliação';
   if(!$('#valoraEmpty'))$('.wrap').insertAdjacentHTML('afterbegin',`<div class="card valora-empty" id="valoraEmpty"><h3>Comece pela primeira análise</h3>
@@ -175,7 +190,7 @@ async function createAnalysis(name,data,ownCompany,source){
 }
 async function dialogAction(fn){try{await fn()}catch(e){openDialog(ESC(e.message))}}
 /* ---------- Versões anteriores (cópia guardada antes de cada sessão de alterações, importação ou reposição) ---------- */
-const VERSION_REASON={edit:'Antes de alterações',import_personnel:'Antes de trazer os custos do RH',before_restore:'Antes de repor outra versão'};
+const VERSION_REASON={edit:'Antes de alterações',import_balance:'Antes de importar um balancete',import_personnel:'Antes de trazer os custos do RH',before_restore:'Antes de repor outra versão'};
 async function openVersions(){
   await ensureSaved();
   const rows=await api(`/analyses/${encodeURIComponent(CUR.id)}/versions`),write=!!VS&&VS.canWrite&&!CUR.archivedAt;
