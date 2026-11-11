@@ -82,7 +82,7 @@ span('function init(reset){', 'init();compute();route();', '');
 replace('init();compute();route();', '');
 replace("$('#jReset').onclick=()=>{init(true);refresh();$('#json').value=JSON.stringify(D,null,1);$('#jsonMsg').textContent='Dados de exemplo repostos.'};", '');
 replace("$('#jApply').onclick=()=>{try{const x=JSON.parse($('#json').value);if(!x.years||!x.dr||!x.bal||!x.orc||!x.real)throw 0;D=x;",
-  "$('#jApply').onclick=()=>{try{if(!valoraCanWrite())throw new Error('readonly');const x=JSON.parse($('#json').value);const issue=valoraIssue(x);if(issue){$('#jsonMsg').textContent=issue;return}D=x;EX=D.ex;");
+  "$('#jApply').onclick=()=>{try{if(!valoraCanWrite())throw new Error('readonly');const x=JSON.parse($('#json').value);const issue=valoraIssue(x);if(issue){$('#jsonMsg').textContent=issue;return}D=x;EX=D.ex;for(const k of ['p68','c78'])if(!Array.isArray(D.real[k]))D.real[k]=Array(12).fill(null);");
 
 /* ---------- Ficheiros: Excel próprio, bibliotecas locais e descarga no navegador ---------- */
 replace("await loadXLSX();const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];return XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});",
@@ -206,6 +206,32 @@ replace("const nf2=new Intl.NumberFormat('pt-PT',{minimumFractionDigits:2,maximu
 replace("const f1=v=>v==null||!isFinite(v)?'—':nf1.format(v);", "const f1=v=>v==null||!isFinite(v)?'—':nf1.format(+v.toFixed(1)||0);");
 replace("const f2=v=>v==null||!isFinite(v)?'—':nf2.format(v);", "const f2=v=>v==null||!isFinite(v)?'—':nf2.format(+v.toFixed(2)||0);");
 replace("const pct=v=>v==null||!isFinite(v)?'—':nf1.format(v*100)+'%';", "const pct=v=>v==null||!isFinite(v)?'—':nf1.format(+(v*100).toFixed(1)||0)+'%';");
+
+/* ---------- Auditoria 11/11/2026 ---------- */
+// 1) Imposto do orçamento sobre o resultado acumulado do ano (e não mês a mês): um mês com prejuízo abate os lucros
+//    dos outros meses, como na liquidação anual do Imposto Industrial. Na previsão, os meses reais já fechados entram no acumulado.
+replace("function engine(o,{start=0,end=11,open,hist,fac=null}){\n  const t=D.tax/100,out=[];let b={...open};",
+  "function engine(o,{start=0,end=11,open,hist,fac=null,ytd=null}){\n  const t=D.tax/100,out=[];let b={...open};let cumRai=ytd?ytd.rai:0,cumImp=ytd?ytd.imp:0;");
+replace("const rai=f.v61+f.v62+f.v63+f.p66-f.c71-f.c72-f.c73-f.c75-f.c76;f.imp=Math.max(0,rai)*t;",
+  "f.p68=0;f.c78=0;const rai=f.v61+f.v62+f.v63+f.p66-f.c71-f.c72-f.c73-f.c75-f.c76;cumRai+=rai;{const due=Math.max(0,cumRai)*t;f.imp=due-cumImp;cumImp=due}");
+replace("const C=engine(D.orc,{start:D.fecho,end:11,open:last.b,hist:{rev:[...hist25().rev,...rev],comp:[...hist25().comp,...comp],iva:ivaNet,credit:0}});",
+  "const done=R.slice(0,D.fecho),C=engine(D.orc,{start:D.fecho,end:11,open:last.b,hist:{rev:[...hist25().rev,...rev],comp:[...hist25().comp,...comp],iva:ivaNet,credit:0},ytd:{rai:sum(done.map(x=>rlOf(x.f)+(x.f.imp||0))),imp:sum(done.map(x=>x.f.imp||0))}});");
+// 2) Resultados não operacionais e extraordinários (68/69 e 78/79): entram no resultado antes de impostos, fora do EBITDA e dos juros.
+replace("const FKEYS=['v61','v62','v63','c71','c72','c73','c75','p66','c76','imp'];", "const FKEYS=['v61','v62','v63','c71','c72','c73','c75','p66','c76','p68','c78','imp'];");
+replace("const LBL={imp:['87','Imposto sobre os lucros'],", "const LBL={p68:['68/69','Proveitos não operacionais e extraordinários'],c78:['78/79','Custos não operacionais e extraordinários'],imp:['87','Imposto sobre os lucros'],");
+replace("function rlOf(f){const rai=f.v61+f.v62+f.v63+f.p66-f.c71-f.c72-f.c73-f.c75-f.c76;", "function rlOf(f){const rai=f.v61+f.v62+f.v63+f.p66-f.c71-f.c72-f.c73-f.c75-f.c76+(f.p68||0)-(f.c78||0);");
+replace("x.resFin=f.p66-f.c76;x.rai=x.ebit+x.resFin;", "x.resFin=f.p66-f.c76;x.resNop=(f.p68||0)-(f.c78||0);x.rai=x.ebit+x.resFin+x.resNop;");
+replace("outRec=f.v63+f.p66,", "outRec=f.v63+f.p66+(f.p68||0),");
+replace("const op=recCl+outRec-payF-payP-payS-payE+outOp,", "const op=recCl+outRec-payF-payP-payS-payE+outOp-(f.c78||0),");
+replace("{l:'Resultados financeiros',g:p=>p.resFin},", "{l:'Resultados financeiros',g:p=>p.resFin},{code:'68/69',l:'Proveitos não operacionais e extraordinários',g:p=>p.f.p68||0},{code:'78/79',l:'Custos não operacionais e extraordinários',g:p=>p.f.c78||0},{l:'Resultados não operacionais',g:p=>p.resNop},");
+replace("filter(k=>k!=='imp'&&D.real[k][MES.indexOf(p.lbl)]==null)", "filter(k=>k!=='imp'&&k!=='p68'&&k!=='c78'&&D.real[k][MES.indexOf(p.lbl)]==null)");
+replace("['76 · 77','c76'],", "['76 · 77','c76'],['68 · 69','p68'],['78 · 79','c78'],");
+replace("Ignoradas: 19/29/39/49 (provisões), 68/69/78/79 e 82–86/88–89", "As provisões 19, 29, 38 e 49 abatem ao activo respectivo e a 39 entra em outros credores. Ignoradas: 82–86 e 88–89");
+replace("const neg=['v61','v62','v63','p66',", "const neg=['v61','v62','v63','p66','p68',");
+
+// 3) Definições explícitas onde os módulos diferem (Integra usa EBITDA / juros e ROA = RO / activo).
+replace("['Cobertura de encargos financeiros','cob','x']", "['Cobertura de encargos financeiros (EBIT / juros)','cob','x']");
+replace("['','ROA (anual.)','roa',pct,", "['','ROA (RL / activo, anual.)','roa',pct,");
 
 const adapter = await readFile(new URL('valuation/adapter.js', web), 'utf8');
 const imports = [

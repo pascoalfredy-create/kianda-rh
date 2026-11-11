@@ -21,17 +21,19 @@ export const BALANCE_UNITS = { kz: 1, mil: 1e3, milhoes: 1e6 } as const;
 export type BalanceUnit = keyof typeof BALANCE_UNITS;
 
 /** Prefixos PGC → rubrica do modelo (o prefixo mais longo ganha). */
-export const BALANCE_MAP: [string, string][] = [['61', 'v61'], ['62', 'v62'], ['63', 'v63'], ['64', 'v63'], ['65', 'v63'], ['66', 'p66'], ['67', 'p66'], ['71', 'c71'], ['72', 'c72'], ['73', 'c73'], ['75', 'c75'], ['76', 'c76'], ['77', 'c76'],
-  ['11', 'imob'], ['12', 'imob'], ['14', 'imob'], ['18', 'amort'], ['13', 'invfin'], ['2', 'exist'], ['31', 'clientes'], ['32', 'fornec'], ['33', 'empMLP'], ['34', 'estado'], ['35', 'outcred'], ['36', 'outcred'], ['37', 'outcred'], ['4', 'caixa'],
+export const BALANCE_MAP: [string, string][] = [['61', 'v61'], ['62', 'v62'], ['63', 'v63'], ['64', 'v63'], ['65', 'v63'], ['66', 'p66'], ['67', 'p66'], ['71', 'c71'], ['72', 'c72'], ['73', 'c73'], ['75', 'c75'], ['76', 'c76'], ['77', 'c76'], ['68', 'p68'], ['69', 'p68'], ['78', 'c78'], ['79', 'c78'],
+  ['11', 'imob'], ['12', 'imob'], ['14', 'imob'], ['18', 'amort'], ['13', 'invfin'], ['19', 'invfin'], ['2', 'exist'], ['29', 'exist'], ['31', 'clientes'], ['38', 'clientes'], ['39', 'outcred'], ['49', 'caixa'], ['32', 'fornec'], ['33', 'empMLP'], ['34', 'estado'], ['35', 'outcred'], ['36', 'outcred'], ['37', 'outcred'], ['4', 'caixa'],
   ['51', 'capital'], ['52', 'reservas'], ['53', 'reservas'], ['54', 'reservas'], ['55', 'reservas'], ['56', 'reservas'], ['57', 'reservas'], ['58', 'reservas'], ['59', 'reservas'], ['81', 'reservas'], ['87', 'imp']];
-export const BALANCE_IGNORED = ['19', '29', '39', '49', '82', '83', '84', '85', '86', '88', '89', '68', '69', '78', '79'];
+export const BALANCE_IGNORED = ['82', '83', '84', '85', '86', '88', '89'];
+/** Provisões que abatem ao activo (saldo credor reduz a rubrica): investimentos financeiros, existências, clientes e aplicações de tesouraria. */
+const CONTRA_ASSET = ['19', '29', '38', '49'];
 /** Contas de natureza credora (saldo normal a crédito): proveitos, passivos e capital. As amortizações acumuladas (18) também. */
-const CREDIT_NORMAL = ['18', '32', '33', '51', '52', '53', '54', '55', '56', '57', '58', '59', '61', '62', '63', '64', '65', '66', '67', '81'];
+const CREDIT_NORMAL = ['18', '19', '29', '32', '33', '38', '39', '49', '51', '52', '53', '54', '55', '56', '57', '58', '59', '61', '62', '63', '64', '65', '66', '67', '68', '69', '81'];
 const MIXED = ['34', '35', '36', '37'];
 const FLOW_PREFIX = /^[67]/;
 /** Chaves das rubricas do modelo, aceites no lugar da conta (ex.: «empCP», que não tem conta PGC própria). */
-export const BALANCE_KEYS = ['v61', 'v62', 'v63', 'c71', 'c72', 'c73', 'c75', 'p66', 'c76', 'imp', 'imob', 'amort', 'invfin', 'exist', 'clientes', 'outdev', 'caixa', 'capital', 'reservas', 'empMLP', 'empCP', 'fornec', 'estado', 'outcred'];
-const FLOW_KEYS = new Set(['v61', 'v62', 'v63', 'c71', 'c72', 'c73', 'c75', 'p66', 'c76', 'imp']);
+export const BALANCE_KEYS = ['v61', 'v62', 'v63', 'c71', 'c72', 'c73', 'c75', 'p66', 'c76', 'p68', 'c78', 'imp', 'imob', 'amort', 'invfin', 'exist', 'clientes', 'outdev', 'caixa', 'capital', 'reservas', 'empMLP', 'empCP', 'fornec', 'estado', 'outcred'];
+const FLOW_KEYS = new Set(['v61', 'v62', 'v63', 'c71', 'c72', 'c73', 'c75', 'p66', 'c76', 'p68', 'c78', 'imp']);
 
 const MONTHS_PT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const MONTHS_EN = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
@@ -101,7 +103,7 @@ export interface BalanceResult {
 const empty = (error: string): BalanceResult => ({ error, acc: {}, lines: [], ignored: [], parents: [], months: [], warnings: [], control: [] });
 const round8 = (v: number) => Math.round(v * 1e8) / 1e8; // 1e-8 milhões = 1 cêntimo
 
-function rubric(code: string, natural: number): { key: string | null; value: number } {
+function rubric(code: string, natural: number): { key: string | null; value: number; contrary?: boolean } {
   const d = code.replace(/[^\d]/g, '');
   if (!d) return { key: null, value: 0 };
   if (BALANCE_IGNORED.some((p) => d.startsWith(p))) return { key: null, value: 0 };
@@ -109,7 +111,9 @@ function rubric(code: string, natural: number): { key: string | null; value: num
   if (!m) return { key: null, value: 0 };
   // 34–37: saldo devedor vai para «Estado e outros devedores», credor para a rubrica do passivo.
   if (MIXED.some((p) => d.startsWith(p))) return natural >= 0 ? { key: 'outdev', value: natural } : { key: m[1], value: -natural };
-  return { key: m[1], value: natural };
+  // Provisão de natureza credora: abate à rubrica do activo; só é contrária se vier com saldo devedor.
+  if (CONTRA_ASSET.some((p) => d.startsWith(p))) return { key: m[1], value: -natural, contrary: natural < 0 };
+  return { key: m[1], value: natural, contrary: natural < 0 };
 }
 
 export function parseBalance(rows: BalanceCell[][], opts: BalanceOptions): BalanceResult {
@@ -170,7 +174,7 @@ export function parseBalance(rows: BalanceCell[][], opts: BalanceOptions): Balan
       const got = rubric(x.code, natural);
       if (!got.key) { key = null; break; }
       key = got.key;
-      if (got.value < 0) contrary = true;
+      if (got.contrary) contrary = true;
       acc[got.key] ??= {};
       acc[got.key]![m] = round8((acc[got.key]![m] ?? 0) + got.value);
       total += got.value;
@@ -186,8 +190,8 @@ export function parseBalance(rows: BalanceCell[][], opts: BalanceOptions): Balan
   const get = (k: string, m: number) => acc[k]?.[m] ?? 0;
   let cumulativeResult = 0;
   const control = months.map((m) => {
-    const proveitos = get('v61', m) + get('v62', m) + get('v63', m) + get('p66', m);
-    const custos = get('c71', m) + get('c72', m) + get('c73', m) + get('c75', m) + get('c76', m) + get('imp', m);
+    const proveitos = get('v61', m) + get('v62', m) + get('v63', m) + get('p66', m) + get('p68', m);
+    const custos = get('c71', m) + get('c72', m) + get('c73', m) + get('c75', m) + get('c76', m) + get('c78', m) + get('imp', m);
     const result = proveitos - custos; cumulativeResult += result;
     const activo = get('imob', m) - get('amort', m) + get('invfin', m) + get('exist', m) + get('clientes', m) + get('outdev', m) + get('caixa', m);
     const passivo = get('empMLP', m) + get('empCP', m) + get('fornec', m) + get('estado', m) + get('outcred', m);

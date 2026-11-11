@@ -94,6 +94,7 @@ function loadAnalysis(row){
   CUR={id:row.id,name:row.name,revision:row.revision,ownCompany:row.ownCompany,archivedAt:row.archivedAt,updatedAt:row.updatedAt};
   conflict=false;pendingSave=false;offline=false;
   D=row.data;EX=D.ex??(D.years[D.years.length-1]+1);D.ex=EX;
+  for(const k of ['p68','c78'])if(!Array.isArray(D.real[k]))D.real[k]=Array(12).fill(null);
   if(!D.bal.reservas)deriveHistReserves();meta();
   document.body.classList.remove('valora-none');$('#valoraEmpty')?.remove();
   $('#valoraFoot').textContent=row.ownCompany?'Própria empresa · ':'';
