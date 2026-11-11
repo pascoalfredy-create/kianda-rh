@@ -74,6 +74,22 @@ test('Valora: cria uma análise, edita o orçamento e os dados ficam no servidor
   // A análise aberta fica identificada no cabeçalho mesmo em ecrãs de portátil.
   await expect(page.locator('#hdrEnt')).toBeVisible();
 
+  // Versões anteriores: a primeira gravação guardou o estado de criação; repor pede confirmação e guarda o estado actual.
+  await page.locator('#btnAnalyses').click();
+  await page.locator('#vVersions').click();
+  await expect(page.locator('#valoraDialogTitle')).toHaveText('Versões anteriores');
+  const oldest = page.locator('[data-vversion]').last();
+  await expect(page.locator('#valoraDialogBox')).toContainText('Antes de alterações');
+  await oldest.click();
+  await expect(oldest).toHaveText('Confirmar reposição');
+  await oldest.click();
+  await expect(page.locator('#valoraDialogBox')).toContainText('Versão reposta');
+  const reverted = await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}`);
+  expect(reverted.body.data.orc.vendas).not.toBeCloseTo(12345.0000005, 3);
+  expect((await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}/versions`)).body[0].reason).toBe('before_restore');
+  await page.screenshot({ path: '/tmp/e2e/valora-05-versoes.png', fullPage: false });
+  await page.locator('#valoraClose').click();
+
   // Avaliação e relatórios abrem sem erros; no período experimental não exporta.
   for (const view of ['demonstracoes', 'racios', 'dcf', 'sintese']) {
     if (await page.locator(`#nav a[data-v="${view}"]`).count()) { await valoraGo(page, view); await expect(page.locator(`#v-${view}`)).toHaveClass(/on/); }

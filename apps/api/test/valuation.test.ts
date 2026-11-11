@@ -113,6 +113,28 @@ describe.skipIf(!process.env.DATABASE_URL)('Valora: módulo de análise financei
     expect((await req(editor, 'GET', `/v1/valuation/analyses/${own}`)).json().data.tax).toBe(30);
   });
 
+  it('guarda versões anteriores e repõe uma versão sem perder o estado actual (V-8)', async () => {
+    const versions = async () => (await req(viewer, 'GET', `/v1/valuation/analyses/${own}/versions`)).json() as { id: string; revision: number; reason: string; savedBy: string | null }[];
+    const before = await versions();
+    expect(before.length).toBeGreaterThanOrEqual(1); expect(before[0]).toMatchObject({ reason: 'edit', revision: 1 });
+    expect(before[0]!.savedBy).toBeTruthy();
+    // Gravações seguidas na mesma sessão de trabalho não multiplicam versões.
+    let cur = (await req(editor, 'GET', `/v1/valuation/analyses/${own}`)).json();
+    const r1 = await req(editor, 'PUT', `/v1/valuation/analyses/${own}`, { revision: cur.revision, data: { ...cur.data, tax: 26 } });
+    expect(r1.statusCode).toBe(200); expect(await versions()).toHaveLength(before.length);
+    cur = (await req(editor, 'GET', `/v1/valuation/analyses/${own}`)).json();
+    const target = before[0]!;
+    expect((await req(viewer, 'POST', `/v1/valuation/analyses/${own}/versions/${target.id}/restore`, { revision: cur.revision })).statusCode).toBe(403);
+    expect((await req(other, 'GET', `/v1/valuation/analyses/${own}/versions`)).statusCode).toBe(404);
+    expect((await req(editor, 'POST', `/v1/valuation/analyses/${own}/versions/${target.id}/restore`, { revision: cur.revision - 1 })).json().error).toBe('revisao_invalida');
+    const restored = await req(editor, 'POST', `/v1/valuation/analyses/${own}/versions/${target.id}/restore`, { revision: cur.revision });
+    expect(restored.statusCode).toBe(200); expect(restored.json().revision).toBe(cur.revision + 1); expect(restored.json().data.tax).toBe(25);
+    const after = await versions();
+    expect(after).toHaveLength(before.length + 1); expect(after[0]).toMatchObject({ reason: 'before_restore', revision: cur.revision });
+    const audit = (await getDb().execute(sql`select action from audit_logs where entity = 'valuation_analysis' and entity_id = ${own} and action = 'restore_version'`)).rows;
+    expect(audit).toHaveLength(1);
+  });
+
   it('traz os custos com o pessoal (72) dos processamentos fechados só para a própria empresa', async () => {
     const db = getDb();
     const [emp] = (await db.execute(sql`insert into employees(company_id, number, name, job_title) values (${companyId}, ${'V' + stamp.slice(-6)}, 'Ana', 'Contabilista') returning id`)).rows as { id: string }[];

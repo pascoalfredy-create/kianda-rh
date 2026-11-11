@@ -1402,5 +1402,19 @@ export const valuationAnalyses = pgTable('valuation_analyses', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index('valuation_analyses_company').on(t.companyId, t.updatedAt)]);
 
+/** Versões anteriores de uma análise do Valora: estado completo antes de uma sessão de alterações, de uma importação ou de uma reposição. */
+export const valuationVersions = pgTable('valuation_versions', {
+  id: id(),
+  companyId: text('company_id').notNull().references(() => companies.id),
+  analysisId: text('analysis_id').notNull().references(() => valuationAnalyses.id, { onDelete: 'cascade' }),
+  revision: integer('revision').notNull(),
+  name: text('name').notNull(),
+  data: jsonb('data').$type<Record<string, unknown>>().notNull(),
+  /** edit | import_personnel | before_restore */
+  reason: text('reason').notNull(),
+  savedBy: text('saved_by').notNull(),
+  createdAt: createdAt(),
+}, (t) => [index('valuation_versions_analysis_idx').on(t.analysisId, t.createdAt)]);
+
 export type ValuationMemberRow = typeof valuationMembers.$inferSelect;
 export type ValuationAnalysisRow = typeof valuationAnalyses.$inferSelect;
