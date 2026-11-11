@@ -1,5 +1,5 @@
 import { canExportDocuments, luandaDate, personnelCostMkz, valuationDataIssue } from '@kianda/core';
-import { and, auditLogs, companies, companyModules, desc, eq, getDb, gte, inArray, lte, payrollLines, payrollRuns, users, valuationAnalyses, valuationMembers } from '@kianda/db';
+import { and, auditLogs, companies, companyModules, desc, eq, getDb, gte, inArray, lte, payrollLines, payrollRuns, users, valuationAnalyses, valuationMembers, valuationVersions, type Db, type ValuationAnalysisRow } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { body, requireCompany, requireRole, type AppEnv, type Ctx } from '../plugins/tenant.js';
@@ -24,6 +24,22 @@ async function analysisOf(c: Ctx, forUpdate = false) {
   const [row] = forUpdate ? await query.for('update') : await query;
   if (!row) throw new DomainError('nao_encontrado', 'Análise inexistente', 404);
   return row;
+}
+
+const VERSION_GAP_MS = 30 * 60_000, VERSIONS_KEPT = 50;
+/**
+ * Guarda o estado anterior antes de o alterar (V-8). Nas gravações automáticas, uma cópia por sessão de trabalho (30 min);
+ * antes de importações e reposições, sempre. Mantém as 50 mais recentes por análise.
+ */
+async function keepVersion(db: Db, row: ValuationAnalysisRow, actorId: string, reason: 'edit' | 'import_personnel' | 'before_restore') {
+  if (reason === 'edit') {
+    const [last] = await db.select({ createdAt: valuationVersions.createdAt }).from(valuationVersions).where(eq(valuationVersions.analysisId, row.id)).orderBy(desc(valuationVersions.createdAt)).limit(1);
+    const lastEdit = new Date(row.updatedAt).getTime();
+    if (last && Date.now() - new Date(last.createdAt).getTime() < VERSION_GAP_MS && Date.now() - lastEdit < VERSION_GAP_MS) return;
+  }
+  await db.insert(valuationVersions).values({ companyId: row.companyId, analysisId: row.id, revision: row.revision, name: row.name, data: row.data, reason, savedBy: actorId });
+  const old = await db.select({ id: valuationVersions.id }).from(valuationVersions).where(eq(valuationVersions.analysisId, row.id)).orderBy(desc(valuationVersions.createdAt)).offset(VERSIONS_KEPT);
+  if (old.length) await db.delete(valuationVersions).where(inArray(valuationVersions.id, old.map(v => v.id)));
 }
 
 export function valuationRoutes() {
@@ -97,6 +113,7 @@ export function valuationRoutes() {
     const current = await analysisOf(c, true);
     if (current.archivedAt) throw new DomainError('analise_arquivada', 'Restaure a análise antes de a alterar.', 409);
     if (current.revision !== input.revision) return c.json({ error: 'revisao_invalida', message: 'A análise foi alterada noutra sessão. Recarregue para continuar com a versão mais recente.', revision: current.revision }, 409);
+    if (input.data !== undefined) await keepVersion(db, current, a.actorId, 'edit');
     const [row] = await db.update(valuationAnalyses).set({ ...(input.name !== undefined ? { name: input.name } : {}), ...(input.data !== undefined ? { data: input.data } : {}), ...(input.ownCompany !== undefined ? { ownCompany: input.ownCompany } : {}), revision: current.revision + 1, updatedBy: a.actorId, updatedAt: new Date() })
       .where(and(eq(valuationAnalyses.id, current.id), eq(valuationAnalyses.companyId, a.companyId), eq(valuationAnalyses.revision, input.revision))).returning();
     if (!row) return c.json({ error: 'revisao_invalida', message: 'A análise foi alterada noutra sessão. Recarregue para continuar.' }, 409);
@@ -105,6 +122,33 @@ export function valuationRoutes() {
       before: { revision: current.revision, ...(input.name !== undefined && input.name !== current.name ? { name: current.name } : {}), ...(input.ownCompany !== undefined ? { ownCompany: current.ownCompany } : {}) },
       after: { revision: row.revision, ...(input.name !== undefined && input.name !== current.name ? { name: row.name } : {}), ...(input.ownCompany !== undefined ? { ownCompany: row.ownCompany } : {}) } });
     return c.json({ id: row.id, name: row.name, ownCompany: row.ownCompany, revision: row.revision, updatedAt: row.updatedAt });
+  });
+
+  /** Versões anteriores (sem os dados): quem gravou, quando e porquê. */
+  app.get('/v1/valuation/analyses/:id/versions', async (c) => {
+    const db = getDb(), current = await analysisOf(c);
+    const rows = await db.select({ id: valuationVersions.id, revision: valuationVersions.revision, name: valuationVersions.name, reason: valuationVersions.reason, createdAt: valuationVersions.createdAt, savedBy: users.name })
+      .from(valuationVersions).leftJoin(users, eq(users.id, valuationVersions.savedBy))
+      .where(and(eq(valuationVersions.companyId, current.companyId), eq(valuationVersions.analysisId, current.id))).orderBy(desc(valuationVersions.createdAt));
+    return c.json(rows);
+  });
+  /** Repor uma versão anterior: o estado actual fica guardado como versão antes da reposição. */
+  app.post('/v1/valuation/analyses/:id/versions/:versionId/restore', async (c) => {
+    const a = c.get('actor'), db = getDb();
+    const input = z.object({ revision }).parse(await body(c));
+    const current = await analysisOf(c, true);
+    if (current.archivedAt) throw new DomainError('analise_arquivada', 'Restaure a análise antes de a alterar.', 409);
+    if (current.revision !== input.revision) return c.json({ error: 'revisao_invalida', message: 'A análise foi alterada noutra sessão. Recarregue para continuar.', revision: current.revision }, 409);
+    const [version] = await db.select().from(valuationVersions).where(and(eq(valuationVersions.companyId, a.companyId), eq(valuationVersions.analysisId, current.id), eq(valuationVersions.id, c.req.param('versionId') ?? '')));
+    if (!version) throw new DomainError('nao_encontrado', 'Versão inexistente', 404);
+    const issue = valuationDataIssue(version.data);
+    if (issue) throw new DomainError('versao_invalida', 'Esta versão já não abre no motor actual: ' + issue, 409);
+    await keepVersion(db, current, a.actorId, 'before_restore');
+    const [row] = await db.update(valuationAnalyses).set({ data: version.data, revision: current.revision + 1, updatedBy: a.actorId, updatedAt: new Date() })
+      .where(and(eq(valuationAnalyses.id, current.id), eq(valuationAnalyses.companyId, a.companyId), eq(valuationAnalyses.revision, input.revision))).returning();
+    await db.insert(auditLogs).values({ companyId: a.companyId, actorId: a.actorId, action: 'restore_version', entity: 'valuation_analysis', entityId: current.id,
+      before: { revision: current.revision }, after: { revision: row!.revision, versionId: version.id, versionRevision: version.revision, versionDate: version.createdAt } });
+    return c.json(row);
   });
 
   app.post('/v1/valuation/analyses/:id/archive', async (c) => {
@@ -162,6 +206,7 @@ export function valuationRoutes() {
     const next = { ...analysis, real: { ...analysis.real, c72 } };
     const issue = valuationDataIssue(next);
     if (issue) throw new DomainError('analise_invalida', issue, 422);
+    await keepVersion(db, current, a.actorId, 'import_personnel');
     const [row] = await db.update(valuationAnalyses).set({ data: next, revision: current.revision + 1, updatedBy: a.actorId, updatedAt: new Date() })
       .where(and(eq(valuationAnalyses.id, current.id), eq(valuationAnalyses.companyId, a.companyId), eq(valuationAnalyses.revision, input.revision))).returning();
     await db.insert(auditLogs).values({ companyId: a.companyId, actorId: a.actorId, action: 'import_personnel', entity: 'valuation_analysis', entityId: current.id,

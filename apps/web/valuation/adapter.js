@@ -150,7 +150,7 @@ function openDialog(msg){
     <label class="check wide"><input type="checkbox" id="vOwn" ${cur.ownCompany?'checked':''}> É a nossa própria empresa (permite trazer os custos com o pessoal do RH)</label></div>
     <div class="row-actions" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn" type="button" id="vSaveMeta">Guardar nome</button><button class="btn" type="button" id="vDup">Duplicar</button>
     ${cur.ownCompany&&VS.hr.available?'<button class="btn" type="button" id="vHr">Trazer custos com o pessoal (72) do RH</button>':''}
-    <button class="btn" type="button" id="vJson">Descarregar cópia (JSON)</button><button class="btn" type="button" id="vArchive">Arquivar</button></div></div>`:''}
+    <button class="btn" type="button" id="vVersions">Versões anteriores</button><button class="btn" type="button" id="vJson">Descarregar cópia (JSON)</button><button class="btn" type="button" id="vArchive">Arquivar</button></div></div>`:''}
   ${write?`<div class="valora-section"><h4>Nova análise</h4><div class="valora-form">
     <label>Nome da análise<input type="text" id="vName" maxlength="200" placeholder="Ex.: Orçamento e avaliação ${thisYear}"></label>
     <label>Entidade analisada<input type="text" id="vEnt" maxlength="200" placeholder="Ex.: ${ESC(VS.company.name)}"></label>
@@ -174,9 +174,29 @@ async function createAnalysis(name,data,ownCompany,source){
   loadAnalysis(row);closeDialog();
 }
 async function dialogAction(fn){try{await fn()}catch(e){openDialog(ESC(e.message))}}
+/* ---------- Versões anteriores (cópia guardada antes de cada sessão de alterações, importação ou reposição) ---------- */
+const VERSION_REASON={edit:'Antes de alterações',import_personnel:'Antes de trazer os custos do RH',before_restore:'Antes de repor outra versão'};
+async function openVersions(){
+  await ensureSaved();
+  const rows=await api(`/analyses/${encodeURIComponent(CUR.id)}/versions`),write=!!VS&&VS.canWrite&&!CUR.archivedAt;
+  const when=v=>{try{return new Intl.DateTimeFormat('pt-PT',{dateStyle:'short',timeStyle:'short',timeZone:'Africa/Luanda'}).format(new Date(v))}catch{return dateLbl(v)}};
+  $('#valoraDialogBox').innerHTML=`<div style="display:flex;align-items:flex-start;gap:10px"><div style="flex:1"><h3 id="valoraDialogTitle" style="margin:0">Versões anteriores</h3><p class="hint" style="margin:4px 0 0">${ESC(CUR.name)} · guardam-se automaticamente as 50 mais recentes. Repor uma versão guarda primeiro o estado actual.</p></div><button class="btn" type="button" id="valoraClose" aria-label="Fechar">×</button></div>
+  <div class="valora-section">${rows.length?`<ul class="valora-list">${rows.map(v=>`<li><div class="grow"><b>${ESC(when(v.createdAt))}</b><span class="hint">${ESC(VERSION_REASON[v.reason]||v.reason)} · revisão ${v.revision}${v.savedBy?' · '+ESC(v.savedBy):''}</span></div>${write?`<button class="btn" type="button" data-vversion="${ESC(v.id)}">Repor</button>`:''}</li>`).join('')}</ul>`:'<p class="hint">Ainda não há versões anteriores: a primeira é guardada na próxima alteração.</p>'}</div>
+  <div class="row-actions" style="justify-content:flex-start"><button class="btn" type="button" id="vBack">Voltar às análises</button></div>`;
+  dlg.classList.add('on');$('#valoraClose').onclick=closeDialog;$('#valoraClose').focus();
+}
+let restoreArmed='';
 dlg.addEventListener('click',e=>{
   const t=e.target.closest('button');if(!t)return;
   if(t.dataset.vopen)return openAnalysis(t.dataset.vopen);
+  if(t.id==='vVersions')return dialogAction(openVersions);
+  if(t.id==='vBack')return openDialog();
+  if(t.dataset.vversion){
+    if(restoreArmed!==t.dataset.vversion){restoreArmed=t.dataset.vversion;t.textContent='Confirmar reposição';return}
+    restoreArmed='';
+    return dialogAction(async()=>{await ensureSaved();const r=await api(`/analyses/${encodeURIComponent(CUR.id)}/versions/${encodeURIComponent(t.dataset.vversion)}/restore`,{method:'POST',body:{revision:CUR.revision}});
+      loadAnalysis(r);Object.assign(LIST.find(x=>x.id===r.id)||{},{revision:r.revision,updatedAt:r.updatedAt});openDialog('Versão reposta. O estado anterior ficou guardado em «Versões anteriores».')});
+  }
   if(t.dataset.vrestore)return dialogAction(async()=>{const r=await api(`/analyses/${encodeURIComponent(t.dataset.vrestore)}/restore`,{method:'POST'});Object.assign(LIST.find(x=>x.id=== r.id),r);if(r.usage)USAGE=r.usage;await openAnalysis(r.id)});
   if(t.id==='vCreate')return dialogAction(async()=>{
     const ent=$('#vEnt').value.trim()||VS.company.name,name=$('#vName').value.trim()||ent,year=Number($('#vYear').value),start=$('#vStart').value;
