@@ -198,3 +198,23 @@ describe('financiamento, fiscalidade parametrizada e avaliação', () => {
     m.divida.montante = 0; m.horizonte = 40; m.receitas[0]!.cresc = 200; expect(() => runFinancialModel(m)).toThrow(FinancialModelError);
   });
 });
+
+describe('auditoria 11/11/2026: identidades em todos os modelos-tipo, cenários e variações', () => {
+  it('balanço equilibrado, caixa reconciliada, VAL e TIR coerentes com os fluxos', () => {
+    let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (const sector of FINANCIAL_SECTORS) {
+      const base = financialTemplate(sector).assumptions;
+      for (let i = 0; i < 12; i++) {
+        const m = structuredClone(base);
+        if (i % 3 === 1) Object.assign(m, { inicio: 'existente', abertura: { imob: 4e8 * rnd(), vidaRem: 3 + Math.floor(rnd() * 6), exist: 4e7 * rnd(), clientes: 6e7 * rnd(), caixa: 5e7 * rnd(), fornec: 3e7 * rnd(), divida: 1e8 * rnd(), divTaxa: 15, divPrazo: 4 } });
+        m.divida = { ...m.divida, montante: i % 2 ? Math.round(2e8 * rnd()) : 0, taxa: 10 + rnd() * 10, prazo: 5, carencia: 1, ano: i % 2, jurosDesembolso: 50 };
+        m.payout = Math.round(rnd() * 60); m.capitalAutomatico = i % 4 === 0;
+        const r = runFinancialModel(m, { cen: (['base', 'otim', 'pess'] as const)[i % 3] });
+        expect(r.checks.balance && r.checks.cashFlow).toBe(true);
+        const flows = r.valuationFlows.project;
+        expect(r.npv).toBeCloseTo(flows.reduce((s, f, t) => s + f / (1 + r.wacc) ** t, 0), 2);
+        if (r.irr !== null) expect(Math.abs(flows.reduce((s, f, t) => s + f / (1 + r.irr!) ** t, 0))).toBeLessThan(1e-6 * Math.max(...flows.map(Math.abs)));
+      }
+    }
+  });
+});

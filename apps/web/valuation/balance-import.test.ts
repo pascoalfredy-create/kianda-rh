@@ -56,10 +56,11 @@ describe('importação de balancetes do Valora', () => {
     expect(Object.values(r.acc.caixa!).map((v) => v * 1e6)).toEqual([10, 20, 30].map((v) => expect.closeTo(v, 6)));
   });
 
-  it('aceita a chave da rubrica no lugar da conta e ignora provisões e a conta 88', () => {
+  it('aceita a chave da rubrica no lugar da conta, leva a provisão 39 para o passivo e ignora a conta 88', () => {
     const r = parseBalance([['conta', 'Jan'], ['empCP', '-75'], ['39', '-5'], ['88', '-20'], ['Total', '0']], base);
     expect(r.acc.empCP![0]).toBeCloseTo(75 / 1e6, 12);
-    expect(r.ignored).toHaveLength(3);
+    expect(r.acc.outcred![0]).toBeCloseTo(5 / 1e6, 12);
+    expect([...r.ignored].sort()).toEqual(['88', 'Total']);
   });
 
   it('dá o controlo do mês: resultado e diferença de balanço em Kz', () => {
@@ -95,5 +96,20 @@ describe('importação de balancetes do Valora', () => {
     await expect(readBalanceDocument(new File(['x'], 'b.xls'))).rejects.toThrow(/\.xlsx/);
     const doc = await readBalanceDocument(new File(['conta;Jan\n61;-10'], 'b.csv'));
     expect(doc.rows).toEqual([['conta', 'Jan'], ['61', '-10']]);
+  });
+
+  it('provisões abatem ao activo, a 39 é passivo e os resultados não operacionais entram no resultado: o balancete fecha', () => {
+    const r = parseBalance([['conta', 'Jan'], ['11', '1000'], ['18', '-200'], ['22', '100'], ['29', '-10'], ['31', '300'], ['38', '-30'], ['43', '100'],
+      ['32', '-150'], ['39', '-40'], ['51', '-800'], ['81', '-60'], ['61', '-500'], ['71', '300'], ['68', '-20'], ['78', '10']], base);
+    expect(r.error).toBeUndefined();
+    expect(r.acc.exist![0]).toBeCloseTo(90 / 1e6, 12);
+    expect(r.acc.clientes![0]).toBeCloseTo(270 / 1e6, 12);
+    expect(r.acc.outcred![0]).toBeCloseTo(40 / 1e6, 12);
+    expect(r.acc.p68![0]).toBeCloseTo(20 / 1e6, 12);
+    expect(r.acc.c78![0]).toBeCloseTo(10 / 1e6, 12);
+    expect(r.control[0]!.resultKz).toBeCloseTo(210, 2);
+    expect(Math.abs(r.control[0]!.differenceKz)).toBeLessThan(0.005);
+    expect(r.ignored).toEqual([]);
+    expect(r.warnings.join(' ')).not.toMatch(/contrária/);
   });
 });

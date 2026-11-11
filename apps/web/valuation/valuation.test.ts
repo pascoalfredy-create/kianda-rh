@@ -111,4 +111,26 @@ describe('Kianda Valora: Excel sem bibliotecas externas', () => {
   it('recusa um ficheiro que não é .xlsx', async () => {
     await expect(readXlsxRows(new TextEncoder().encode('não é um zip').buffer)).rejects.toThrow();
   });
+
+  it('imposto do orçamento: calculado sobre o resultado acumulado do ano, e não mês a mês', () => {
+    const d = sample();
+    Object.assign(d.orc, { vendas: 1200, saz: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 89], mb: 40, salBase: 20, fseFix: 10 });
+    const R = engine(d), fy = R.fyO;
+    expect(fy.rai).toBeGreaterThan(0);
+    expect(fy.imp).toBeCloseTo(Math.max(0, fy.rai) * 0.25, 6);
+  });
+  it('resultados não operacionais (68/69, 78/79) entram no resultado e o fluxo de caixa continua a reconciliar', () => {
+    const ctx: Record<string, unknown> = { console, Math, JSON, Number, Object, Array, String, Intl, Date, isFinite, isNaN };
+    runInNewContext(`${VALUATION_ENGINE_SOURCE}\nD=__data;EX=D.ex;compute();
+      const E=engine(D.orc,{open:open25(),hist:hist25()});FKEYS.forEach(k=>D.real[k][0]=E[0].f[k]||0);BKEYS.forEach(k=>D.real[k][0]=E[0].b[k]);
+      D.fecho=1;CACHE={};const base=periods('real','M',false)[0];D.real.p68[0]=5;D.real.c78[0]=2;D.real.caixa[0]+=3;CACHE={};
+      globalThis.__out={base,p:periods('real','M',false)[0]};`, Object.assign(ctx, { __data: structuredClone(sample()) }));
+    const { base, p } = ctx.__out as Record<string, any>;
+    expect(p.resNop).toBeCloseTo(3, 9);
+    expect(p.rai).toBeCloseTo(base.rai + 3, 9);
+    expect(p.ebitda).toBeCloseTo(base.ebitda, 9);
+    expect(Math.abs(p.dif)).toBeLessThan(1e-9);
+    expect(Math.abs(p.td.ctrl)).toBeLessThan(1e-9);
+    expect(Math.abs(p.fc.difInd)).toBeLessThan(1e-9);
+  });
 });

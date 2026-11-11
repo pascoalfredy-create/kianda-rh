@@ -143,7 +143,7 @@ function ratios({ B, P, income }: Statements, previous: Statements | null, days 
 }
 export const HISTORICAL_RATIO_DEFINITIONS: [string, keyof ReturnType<typeof ratios>, string, string, [number, number]][] = [
   ['Liquidez', 'lg', 'Liquidez geral', 'x', [1.2, 1]], ['Liquidez', 'lr', 'Liquidez reduzida', 'x', [1, 0.7]], ['Liquidez', 'li', 'Liquidez imediata', 'x', [0.2, 0.1]],
-  ['Estrutura', 'af', 'Autonomia financeira', '%', [0.35, 0.2]], ['Estrutura', 'end', 'Endividamento', '%i', [0.65, 0.8]], ['Estrutura', 'solv', 'Solvabilidade', 'x', [0.5, 0.25]], ['Estrutura', 'dle', 'Dívida líquida / EBITDA', 'xi', [2.5, 4]], ['Estrutura', 'icr', 'Cobertura de juros', 'x', [4, 2]],
+  ['Estrutura', 'af', 'Autonomia financeira', '%', [0.35, 0.2]], ['Estrutura', 'end', 'Endividamento', '%i', [0.65, 0.8]], ['Estrutura', 'solv', 'Solvabilidade', 'x', [0.5, 0.25]], ['Estrutura', 'dle', 'Dívida líquida / EBITDA', 'xi', [2.5, 4]], ['Estrutura', 'icr', 'Cobertura de juros (EBITDA / juros)', 'x', [4, 2]],
   ['Rendibilidade', 'mb', 'Margem bruta', '%', [0.2, 0.1]], ['Rendibilidade', 'me', 'Margem EBITDA', '%', [0.1, 0.05]], ['Rendibilidade', 'mo', 'Margem operacional', '%', [0.07, 0.03]], ['Rendibilidade', 'ml', 'Margem líquida', '%', [0.04, 0.01]], ['Rendibilidade', 'roa', 'ROA (RO/activo)', '%', [0.08, 0.04]], ['Rendibilidade', 'roe', 'ROE', '%', [0.15, 0.08]], ['Rendibilidade', 'rot', 'Rotação do activo', 'x', [1.5, 0.8]],
   ['Actividade', 'pmr', 'Prazo médio de recebimento', 'di', [45, 75]], ['Actividade', 'pme', 'Prazo médio de existências', 'di', [45, 90]], ['Actividade', 'pmp', 'Prazo médio de pagamento', 'd', [45, 25]], ['Actividade', 'cc', 'Ciclo de conversão de caixa', 'di', [30, 60]],
 ];

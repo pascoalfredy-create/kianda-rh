@@ -45,6 +45,8 @@ export const VALUATION_MAX_BYTES = 1_000_000;
 
 /** Rubricas de resultados (movimento do período). */
 export const VALUATION_FLOW_KEYS = ['v61', 'v62', 'v63', 'c71', 'c72', 'c73', 'c75', 'p66', 'c76', 'imp'] as const;
+/** Resultados não operacionais e extraordinários (68/69 e 78/79): opcionais nas análises gravadas antes de 11/11/2026. */
+export const VALUATION_OPTIONAL_FLOW_KEYS = ['p68', 'c78'] as const;
 /** Rubricas de balanço (saldo final). */
 export const VALUATION_BALANCE_KEYS = ['imob', 'amort', 'invfin', 'exist', 'clientes', 'outdev', 'caixa', 'capital', 'reservas', 'empMLP', 'empCP', 'fornec', 'estado', 'outcred'] as const;
 /** Histórico anual: o imposto não é pedido (calcula-se à taxa da análise). */
@@ -94,7 +96,7 @@ export function blankValuationData(options: ValuationBlankOptions) {
       pmr: 30, pmp: 30, pms: 30, ivaAb: 0, iiV: 0, iiM: 5, divV: 0, divM: 6,
     },
     fecho: 0,
-    real: Object.fromEntries([...VALUATION_FLOW_KEYS, ...VALUATION_BALANCE_KEYS].map(k => [k, emptyMonths()])),
+    real: Object.fromEntries([...VALUATION_FLOW_KEYS, ...VALUATION_OPTIONAL_FLOW_KEYS, ...VALUATION_BALANCE_KEYS].map(k => [k, emptyMonths()])),
     var: { c71: 0, c72: 0, c75: 0 },
     dcf: { anchor: true, g: [10, 10, 9, 8, 8], mTarget: 15, da: 3, capex: 4, rf: 17, beta: 1, erp: 6.5, crp: 2.5, kd: 21, wd: 30, gT: 8, mid: true },
     peers: [],
@@ -133,7 +135,8 @@ export function valuationDataIssue(data: unknown): string | null {
   };
   const issue = series(data.dr, VALUATION_HISTORY_FLOW_KEYS, years.length, false, 'Histórico de resultados')
     ?? series(data.bal, VALUATION_BALANCE_KEYS, years.length, false, 'Histórico de balanço')
-    ?? series(data.real, [...VALUATION_FLOW_KEYS, ...VALUATION_BALANCE_KEYS], 12, true, 'Dados reais mensais');
+    ?? series(data.real, [...VALUATION_FLOW_KEYS, ...VALUATION_BALANCE_KEYS], 12, true, 'Dados reais mensais')
+    ?? (isObject(data.real) ? series(data.real, VALUATION_OPTIONAL_FLOW_KEYS.filter(k => k in (data.real as object)), 12, true, 'Dados reais mensais') : null);
   if (issue) return issue;
   if (!Number.isInteger(data.fecho) || (data.fecho as number) < 0 || (data.fecho as number) > 12) return 'O mês de fecho deve estar entre 0 e 12.';
   if (!finite(data.tax) || data.tax < 0 || data.tax > 100) return 'Taxa de imposto inválida.';
