@@ -1,7 +1,7 @@
 # Kianda RH + Kianda Integra + Kianda Valora — documento de passagem
 
 > Para quem continua o trabalho (agente ou programador). Leia isto primeiro; depois `docs/MODULOS-LICENCAS.md` (comercial), `docs/INTEGRA_MODULE.md` (Modelagem), secção Valora de `docs/MODULOS-LICENCAS.md` e `docs/DEPLOY.md` (produção).
-> **Última actualização: 04/11/2026** — auditoria e correcções nas PR #55/#56; o cadastro, o mês experimental, a confirmação do email, mapas recolhidos e modelos RH estão descritos em `docs/ONBOARDING-E-MODELOS.md`. Consulte o CI para a publicação da versão corrente.
+> **Última actualização: 11/11/2026** — produção no commit `f0ecf81` (PR #107), sem PR abertos nem trabalho a meio; ler primeiro a secção 16 (auditorias de cálculo e plano de acção). Anterior: 04/11/2026 — auditoria e correcções nas PR #55/#56; o cadastro, o mês experimental, a confirmação do email, mapas recolhidos e modelos RH estão descritos em `docs/ONBOARDING-E-MODELOS.md`. Consulte o CI para a publicação da versão corrente.
 > **Operação:** a confirmação de novos proprietários exige Resend e remetente validado em produção. Sem fornecedor disponível, a conta fica pendente; o ecrã informa a indisponibilidade e permite reenviar quando o serviço estiver configurado.
 > **Fonte de verdade: o código e os testes.** Se um documento divergir do código, corrija o documento, nunca o contrário sem decisão do dono. A tabela comercial existe só em `MODULOS-LICENCAS.md`; um teste (`packages/core/test/docs-coherence.test.ts`) falha se ela divergir do código.
 
@@ -237,6 +237,7 @@ O core mantém `suspendedDays`, `holidayWorkDays` e `familyEveMinutes` (testados
 
 ## 13. Início sugerido para a próxima sessão
 
+0. **Ponto de situação em 11/11/2026:** ver secção 16. Tudo em produção (PR #107), CI e cópia de segurança verdes. Aguardam decisão do dono/contabilista os pontos R-1 a R-4 do RH. Recomendação dada ao dono: congelar funcionalidades novas, fazer 3 a 5 pilotos, passar o Neon para plano pago antes do primeiro cliente pago, alerta de indisponibilidade e privacidade com a localização dos dados (Frankfurt).
 1. Ler este documento e a última mensagem do dono. Ponto de situação em 03/11/2026: tudo o que o dono pediu está em produção (PR #53); não há trabalho a meio nem ramos por fundir. Pergunta em aberto ao dono: manter ou retirar do Integra a importação do orçamento de pessoal do RH (conta 72) — hoje mantém-se, por ser informação da própria plataforma.
    O dono valida pelo aspecto: depois de cada entrega visível, enviar capturas (Playwright: um `tests/zz-*.spec.ts` temporário em `apps/e2e` que regista uma empresa pela API, entra com `signIn` e grava `page.screenshot`; apagar o ficheiro antes do commit).
 2. Actualizar o checkout (`git fetch && git checkout main && git pull`) e ler o histórico recente; preservar alterações de terceiros.
@@ -279,3 +280,29 @@ Decisões do dono: Copiloto/IA fora da plataforma; processamento e regras «como
 - Relatórios de RH imprimíveis em A4; Valora: quadros largos do PDF sem números partidos (#94, #97).
 - Por decidir (não iniciado): férias proporcionais com suspensão/licença > 30 dias (arts. 204.º n.º 3 e 216.º); plano de férias em A4 (art. 206.º).
 - Teste local `error-alerts` falha só com a base local poluída; no CI passa (filtro por assunto, #89).
+
+## 16. Auditorias de cálculo e plano de acção (10–11/11/2026, PRs #102–#107)
+
+Relatório para o dono (artefacto Docs): «Kianda — Auditoria de cálculos e qualidade: Integra e Valora» — https://claude.ai/artifact/H7WRbqWzvCDK6H5U4xQiSA (inclui a secção 7, RH). Auditoria interna alinhada com ISO/IEC 25010, ISO 5055 e ISO/IEC 27001 — **não é certificação**; não escrever o contrário.
+
+| PR | O quê |
+| --- | --- |
+| #102 | Visitas ao site na consola da plataforma: tabela `site_visits` (migr. 0060, visitante = hash diário de IP+UA+segredo, bots excluídos), `POST /v1/public/visit`, `GET /v1/platform/visits`, `components/visit-beacon.tsx` na página pública e no registo; o proxy reencaminha `user-agent` e `cf-ipcountry`. |
+| #103 | Auditoria geral: retirado o resto do copiloto (rotas, serviços, chaves OpenAI no CI/Worker; `docs/COPILOTOS.md` é histórico), datas de Luanda (`luandaDate`) em ausências/plano/perfil/portal/orçamento, país desconhecido no ponto (`XX`), tabelas de licença com deslocação horizontal no telemóvel. |
+| #104 | Valora: imposto do orçamento sobre o resultado **acumulado do ano** (antes mês a mês: 1 539,6 vs 782,2 Mkz no teste sazonal); importação de balancetes com provisões 19/29/38/49 como contra-activos e 39 em outros credores; resultados não operacionais 68/69 → `p68` e 78/79 → `c78` (linhas novas, opcionais em dados antigos, `VALUATION_OPTIONAL_FLOW_KEYS`). Rótulos de cobertura de juros e ROA explícitos. |
+| #105 | **V-9: motor do Valora com fonte única em `apps/web/valuation/engine.js`** (dados, utilitários, orçamento, cenários, métricas, avaliação). O build junta-o ao protótipo no lugar da secção equivalente; `engine.generated.ts` vem do ficheiro. Editar cálculos AQUI, não com `replace()`. V-4 FSE a crédito com o PMP (fluxo directo com um só pagamento a fornecedores); V-5 ROE/ROA/ROIC/rotação sobre saldos médios (`cpM`, `atM`, `icM`; DuPont exacta); V-6 bissextos (`monthDays`, `yearDays`, `p.yd`); V-7 IVA configurável `D.orc.iva` (14% por omissão, `ivaRate()`, validado em `valuationDataIssue`). |
+| #106 | Integra (motor `integra-1.1.0`): I-1 múltiplos sobre o 1.º ano em velocidade de cruzeiro (fim da rampa) ou `mult.ano`; I-2 reserva legal `reservaLegal` (5%) até `reservaLegalLimite` (20% do capital) — **valores por omissão a confirmar pelo dono**; séries `resLeg`/`resFree`; I-3 `impostoPagamento: 'mesmo_ano' \| 'ano_seguinte'` com `taxPay`, `taxPaid`, `taxUPaid`, `dtax`. Versões aprovadas antigas passam a mostrar que o cálculo difere (motor mudou); os PDF aprovados fazem fé. |
+| #107 | V-8: `valuation_versions` (migr. 0061, RLS, entra na eliminação de dados): cópia do estado anterior por sessão de trabalho (30 min), antes de trazer custos do RH e antes de repor; 50 por análise. `GET /v1/valuation/analyses/:id/versions`, `POST …/versions/:versionId/restore` (editor, revisão, auditoria `restore_version`). Interface: Análises › Versões anteriores. |
+
+**Evidência das auditorias (harness fora do repositório, recálculo independente):** Integra 224 cenários / 56 009 comparações; Valora 585; RH processamento 3 998 casos e fecho de contas 1 500 casos — **0 divergências**, controlo negativo detectado. Testes de regressão ficaram no repositório (identidade contabilística do Integra em todos os sectores, imposto anual, reconciliação de caixa, V-4 a V-8, I-1 a I-3).
+
+**Pendente de decisão (não alterar sem o dono/contabilista):**
+- R-1 maternidade: hoje paga o mês e avisa (secção 12); confirmar se a empresa paga e é reembolsada pela segurança social ou se o salário fica suspenso. O core já suporta `suspendedDays`.
+- R-2 valor de um dia de salário: 1/30 (mês incompleto, aviso prévio), 1/22 (férias), 8 h × valor-hora (feriado, manual).
+- R-3 subsídio de férias no ano de admissão: processamento usa meses até ao pagamento ÷ 12; fecho de contas usa 2 dias/mês ÷ 22.
+- R-4 férias proporcionais na cessação: 2 dias/mês; alternativa 22 × meses ÷ 12.
+
+**Cópias de segurança:** já existiam e estão verdes — `.github/workflows/backup.yml` diário (02:17 Luanda), Neon + R2 cifrados, 30 dias, com restauro real numa base isolada em cada execução. Fornecedores: Neon (PostgreSQL, Frankfurt) e Cloudflare (Workers, Hyperdrive, R2).
+
+**Notas da sessão do agente:** Postgres local em `localhost:5433` (`DATABASE_URL=postgres://kianda:kianda@localhost:5433/kianda`), pára com frequência — reiniciar antes de investigar falhas. Falhas locais conhecidas e que passam no CI: `error-alerts` («limited») e Multicaixa «sem integrações»; o teste web de importação de PDF é instável sob carga. Uma tabela nova com `company_id` precisa de RLS (`CREATE POLICY empresa …`) e de entrar em `services/privacy.ts`, senão o teste de blindagem falha no CI.
+
