@@ -442,6 +442,13 @@
       "when": 1794524800000,
       "tag": "0062_payslip_context",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1794611200000,
+      "tag": "0063_revoked_sessions",
+      "breakpoints": true
     }
   ]
 }

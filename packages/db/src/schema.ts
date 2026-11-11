@@ -688,6 +688,12 @@ export interface PayslipContext {
   termination: { reasonLabel: string; hireDate: string | null; noticeDate: string | null; effectiveDate: string; seniority: string | null } | null;
 }
 
+/** Identificadores irreversíveis de sessões terminadas, só até à expiração do token. */
+export const revokedSessions = pgTable('revoked_sessions', {
+  tokenHash: text('token_hash').primaryKey(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+}, t => [index('revoked_sessions_expiry').on(t.expiresAt)]);
+
 export const payrollLines = pgTable('payroll_lines', {
   id: id(),
   runId: text('run_id').notNull().references(() => payrollRuns.id),

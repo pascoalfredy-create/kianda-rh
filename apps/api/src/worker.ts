@@ -4,7 +4,7 @@
  * Este Worker NÃO tem endereço público: só o Worker web lhe chega, por service binding.
  */
 import { luandaDate } from '@kianda/core';
-import { getDb, withRequestDb } from '@kianda/db';
+import { getDb, lte, revokedSessions, withRequestDb } from '@kianda/db';
 import type { ExecutionContext } from 'hono';
 import { buildApp, type App } from './app.js';
 import { syncGatewayPayments } from './services/billing.js';
@@ -56,8 +56,10 @@ export default {
     if (!connectionString) return;
     await withRequestDb(connectionString, async () => {
       const db = getDb();
-      if (event.cron === '0 7 * * *') console.log('avisos', JSON.stringify(await dailyReminders(db, luandaDate(new Date()))));
-      else console.log('multicaixa', JSON.stringify(await syncGatewayPayments(db)));
+      if (event.cron === '0 7 * * *') {
+        await db.delete(revokedSessions).where(lte(revokedSessions.expiresAt, new Date()));
+        console.log('avisos', JSON.stringify(await dailyReminders(db, luandaDate(new Date()))));
+      } else console.log('multicaixa', JSON.stringify(await syncGatewayPayments(db)));
       // Reserva: notificações que não saíram logo depois do pedido.
       console.log('push', JSON.stringify(await dispatchPush(db)));
       console.log('recruitment_mail', JSON.stringify(await dispatchRecruitmentMail(db)));

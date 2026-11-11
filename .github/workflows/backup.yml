@@ -74,6 +74,22 @@ jobs:
           [ "$users" -ge 1 ] || fail "Base restaurada sem utilizadores"
           [ "$migrations" -ge 50 ] || fail "Base restaurada sem o registo de migrações ($migrations)"
           q "select count(*) from pg_policies where policyname = 'empresa'" | grep -qv '^0$' || fail "Base restaurada sem as políticas RLS por empresa"
+          # A cópia usa --no-privileges. Recria os acessos de leitura do papel restrito e confirma que o isolamento funciona.
+          docker exec -i kianda-restore psql -U postgres -d kianda -v ON_ERROR_STOP=1 -q >/dev/null <<'SQL'
+          GRANT USAGE ON SCHEMA public TO kianda_app;
+          GRANT SELECT ON users TO kianda_app;
+          BEGIN;
+          SELECT set_config('app.company_id', (SELECT company_id FROM users LIMIT 1), true);
+          SET LOCAL ROLE kianda_app;
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM users WHERE company_id = kianda_tenant())
+               OR EXISTS (SELECT 1 FROM users WHERE company_id <> kianda_tenant()) THEN
+              RAISE EXCEPTION 'Isolamento da empresa falhou na base restaurada';
+            END IF;
+          END $$;
+          ROLLBACK;
+          SQL
           docker rm -f kianda-restore >/dev/null; docker network rm kianda-restore >/dev/null
           echo "Restauro verificado: $tables tabelas com dados; base reconstruída com $companies empresa(s), $users utilizador(es) e $migrations migrações."
           # Identifica a frase usada sem a revelar: compare com a da sua cópia guardada (docs/DEPLOY.md).
@@ -83,18 +99,22 @@ jobs:
 
       # Ficheiros anexados no R2 (opcional): só corre se os secrets da chave S3 do R2 existirem.
       # Sem eles, o R2 fica coberto apenas pela durabilidade do próprio Cloudflare (ver docs/DEPLOY.md).
-      - name: Cópia dos ficheiros do R2 (opcional, cifrada)
+      - name: Cópia cifrada e restauro de ensaio dos ficheiros do R2
         if: env.R2_ACCESS_KEY_ID != ''
         run: |
           set -euo pipefail
           export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" AWS_DEFAULT_REGION=auto
-          aws s3 sync "s3://${R2_BUCKET:-kianda-files}" /tmp/r2 --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" --only-show-errors
-          count=$(find /tmp/r2 -type f | wc -l)
-          tar -C /tmp -czf /tmp/r2.tgz r2 && rm -rf /tmp/r2
-          gpg --batch --yes --pinentry-mode loopback --passphrase "$PASSPHRASE" --symmetric --cipher-algo AES256 -o "/tmp/kianda-r2-$STAMP.tgz.gpg" /tmp/r2.tgz
-          shred -u /tmp/r2.tgz
-          sha256sum "/tmp/kianda-r2-$STAMP.tgz.gpg" >> "/tmp/kianda-$STAMP.sha256"
-          echo "R2: $count ficheiro(s) copiados e cifrados."
+          backup_dir=$(mktemp -d)
+          trap 'rm -rf -- "$backup_dir"' EXIT
+          mkdir "$backup_dir/r2" "$backup_dir/restored"
+          aws s3 sync "s3://${R2_BUCKET:-kianda-files}" "$backup_dir/r2" --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" --only-show-errors
+          count=$(find "$backup_dir/r2" -type f | wc -l)
+          archive="/tmp/kianda-r2-$STAMP.tgz.gpg"
+          tar -C "$backup_dir" -czf - r2 | gpg --batch --yes --pinentry-mode loopback --passphrase "$PASSPHRASE" --symmetric --cipher-algo AES256 -o "$archive"
+          gpg --batch --quiet --pinentry-mode loopback --passphrase "$PASSPHRASE" -d "$archive" | tar -xzf - -C "$backup_dir/restored"
+          diff -qr "$backup_dir/r2" "$backup_dir/restored/r2" >/dev/null || { echo "::error title=Restauro R2::Os ficheiros restaurados divergem da cópia de origem"; exit 1; }
+          sha256sum "$archive" >> "/tmp/kianda-$STAMP.sha256"
+          echo "R2: $count ficheiro(s) copiados, cifrados e restaurados em ambiente isolado."
         env:
           R2_SECRET_ACCESS_KEY: ${{ secrets.KIANDA_R2_SECRET_ACCESS_KEY }}
           R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

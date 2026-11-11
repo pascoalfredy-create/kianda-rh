@@ -126,8 +126,9 @@ const keyOf = (code: string) => BALANCE_KEYS.find(k => k.toLowerCase() === code.
 const normalise = (value: BalanceCell) => String(value ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase();
 const closingColumn = (row: BalanceCell[]) => row.findIndex((value, i) => i > 0 && /^(saldo final|saldo actual|saldo atual|saldo acumulado)$/.test(normalise(value)));
 function balanceHeader(row: BalanceCell[]) {
-  const code = String(row[0] ?? '').trim();
-  return !digitsOf(code) && !keyOf(code) && (closingColumn(row) > 0 || row.some((c, i) => i > 0 && monthHeader(c)));
+  const code = normalise(row[0] ?? null);
+  const accountColumn = !code || /\b(conta|codigo|rubrica|pgc|account|code)\b/.test(code);
+  return accountColumn && (closingColumn(row) > 0 || row.some((c, i) => i > 0 && monthHeader(c)));
 }
 
 export function isErpBalance(rows: BalanceCell[][]) {
@@ -163,7 +164,11 @@ export function parseBalance(rows: BalanceCell[][], opts: BalanceOptions): Balan
   const raw = new Map<string, Raw>(), ignored: string[] = [], warnings: string[] = [];
   for (const r of rows.slice(hi + 1)) {
     const code = String(r[0] ?? '').trim();
-    if (!code || balanceHeader(r)) continue;
+    if (!code) continue;
+    if (balanceHeader(r)) {
+      if (JSON.stringify(r.map(normalise)) !== JSON.stringify(hdr.map(normalise))) return empty('O ficheiro tem cabeçalhos diferentes. Use uma só estrutura de colunas por importação.');
+      continue;
+    }
     const key = keyOf(code), digits = key ? '' : digitsOf(code);
     const desc = descCol > 0 ? String(r[descCol] ?? '') : '';
     if (!digits && !key) { ignored.push(code); continue; }

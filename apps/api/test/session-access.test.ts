@@ -16,6 +16,18 @@ it('o servidor exige aceitação explícita dos termos no registo', async () => 
 });
 
 describe.skipIf(!process.env.DATABASE_URL)('retirada de acessos em sessões já emitidas', () => {
+  it('termina apenas a sessão que fez logout, mesmo com dois logins consecutivos', async () => {
+    const reg = registration();
+    const registered = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { ...reg, acceptTerms: true } });
+    expect(registered.statusCode).toBe(201);
+    const login = await app.inject({ method: 'POST', url: '/v1/auth/login', payload: { email: reg.email, password: reg.password } });
+    const first = { cookie: `kianda_session=${registered.cookies.find(c => c.name === 'kianda_session')!.value}` };
+    const second = { cookie: `kianda_session=${login.cookies.find(c => c.name === 'kianda_session')!.value}` };
+    expect(first.cookie).not.toBe(second.cookie);
+    expect((await app.inject({ method: 'POST', url: '/v1/auth/logout', headers: first })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/v1/auth/me', headers: first })).json().error).toBe('sessao_terminada');
+    expect((await app.inject({ method: 'GET', url: '/v1/auth/me', headers: second })).statusCode).toBe(200);
+  });
   it('mudar a palavra-passe e «terminar sessões» revogam os tokens antigos e mantêm a sessão actual', async () => {
     const reg = registration();
     const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { ...reg, acceptTerms: true } });

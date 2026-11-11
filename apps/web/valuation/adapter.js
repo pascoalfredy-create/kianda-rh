@@ -82,8 +82,13 @@ addEventListener('beforeunload',e=>{if(pendingSave||saving){e.preventDefault();e
 const KEEP='[data-rp],[data-rep],[data-exp],.tabs button,#ctlPer,[data-t],#valoraFirst';
 function lockInputs(){
   const ro=!valoraCanWrite();document.body.classList.toggle('valora-readonly',ro);
-  if(!ro)return;
-  document.querySelectorAll('.wrap input,.wrap select,.wrap textarea,.wrap button').forEach(el=>{if(!el.matches(KEEP))el.disabled=true});
+  if(!ro){
+    document.querySelectorAll('[data-valora-locked]').forEach(el=>{el.disabled=false;delete el.dataset.valoraLocked});
+    return;
+  }
+  document.querySelectorAll('.wrap input,.wrap select,.wrap textarea,.wrap button').forEach(el=>{
+    if(!el.disabled&&!el.matches(KEEP)){el.disabled=true;el.dataset.valoraLocked='1'}
+  });
 }
 new MutationObserver(()=>{if(!valoraCanWrite())lockInputs()}).observe(document.querySelector('.wrap'),{childList:true,subtree:true});
 {const original=renderView;renderView=function(v){if(!D)return;original(v);prepareMapDisclosures(document.querySelector('.wrap'),`${CUR?.id}:${v}`,valuationWorkspace);rememberValoraLocation()}}
