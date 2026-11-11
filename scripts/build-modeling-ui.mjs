@@ -171,6 +171,28 @@ replace("const xf=(v,d=2)=>v==null||!isFinite(v)?'—':v.toFixed(d).replace('.',
 source = source.replace(/font-family:Inter;/g, '');
 span('function fsCSV(){', '/* ---------------- Eventos', '');
 source = source.slice(0, source.indexOf('/* ---------------- Eventos'));
+/* ---------- Auditoria 11/11/2026 — plano de acção (I-1 a I-3) ---------- */
+// Campos em falta em modelos antigos (p. ex. mult) são criados ao editar.
+replace("function setP(o,p,v){const ks=p.split('.');const last=ks.pop();const t=ks.reduce((a,k)=>a[k],o);t[last]=v;}", "function setP(o,p,v){const ks=p.split('.');const last=ks.pop();const t=ks.reduce((a,k)=>a[k]??=({}),o);t[last]=v;}");
+// I-3: momento de pagamento do Imposto Industrial.
+replace("${F('ii','Imposto Industrial (%)','Taxa geral 25%; agricultura 10%; petróleo — IRP')}", "${F('ii','Imposto Industrial (%)','Taxa geral 25%; agricultura 10%; petróleo — IRP')}${SelF('impostoPagamento','Pagamento do Imposto Industrial',[['mesmo_ano','No próprio exercício'],['ano_seguinte','No exercício seguinte (fica a pagar ao Estado)']])}");
+// I-2: reserva legal.
+replace("${F('payout','Distribuição de dividendos (% RL)','Só com resultados acumulados positivos')}", "${F('payout','Distribuição de dividendos (% RL)','Só com resultados acumulados positivos')}${F('reservaLegal','Reserva legal (% do resultado líquido)','Retida antes dos dividendos')}${F('reservaLegalLimite','Limite da reserva legal (% do capital)','Atingido o limite, deixa de ser reforçada')}");
+// I-1: ano do EBITDA para os múltiplos.
+replace("${F('mult.lo','Múltiplo EV/EBITDA comparáveis — mínimo')}", "${F('mult.ano','Ano do EBITDA para múltiplos (n.º)','0 = automático: primeiro ano em velocidade de cruzeiro')}${F('mult.lo','Múltiplo EV/EBITDA comparáveis — mínimo')}");
+replace("(EBITDA ${R.years[1]})", "(EBITDA ${R.multiples.year})");
+replace("xf(k.ebitda[1]?R.ev/k.ebitda[1]:null)", "xf(R.multiples.ebitda?R.ev/R.multiples.ebitda:null)");
+// Balanço: reserva legal separada e imposto a pagar no passivo.
+replace("finRow('81/88 · Resultados acumulados',k.res,'sub')", "finRow('55 · Reserva legal',k.resLeg,'sub')+finRow('81/88 · Resultados acumulados',k.resFree,'sub')");
+replace("finRow('32 · Fornecedores',k.ap,'sub')+finRow('Total do passivo',k.debt.map((d,i)=>d+k.ap[i]),'tot')", "finRow('32 · Fornecedores',k.ap,'sub')+(m.impostoPagamento==='ano_seguinte'?finRow('34 · Estado — Imposto Industrial a pagar',k.taxPay,'sub'):'')+finRow('Total do passivo',k.debt.map((d,i)=>d+k.ap[i]+k.taxPay[i]),'tot')");
+replace("${row('81/88 · Resultados acumulados',k.res)}", "${row('55 · Reserva legal',k.resLeg)}${row('81/88 · Resultados acumulados',k.resFree)}");
+replace("${row('32 · Fornecedores',k.ap)}${row('Total do capital próprio e passivo',k.le,'tot')}", "${row('32 · Fornecedores',k.ap)}${m.impostoPagamento==='ano_seguinte'?row('34 · Estado — Imposto Industrial a pagar',k.taxPay):''}${row('Total do capital próprio e passivo',k.le,'tot')}");
+// Fluxos: variação do imposto a pagar e imposto efectivamente pago no FCFF.
+replace("finRow('− Variação do fundo de maneio',neg(k.dnwc),'sub')+finRow('Fluxo de caixa operacional',k.cfo,'tot')", "finRow('− Variação do fundo de maneio',neg(k.dnwc),'sub')+(m.impostoPagamento==='ano_seguinte'?finRow('+ Variação do imposto a pagar',k.dtax,'sub'):'')+finRow('Fluxo de caixa operacional',k.cfo,'tot')");
+replace("${row('− Variação do fundo de maneio',n(k.dnwc))}${row('Fluxo operacional',k.cfo,'tot')}", "${row('− Variação do fundo de maneio',n(k.dnwc))}${m.impostoPagamento==='ano_seguinte'?row('+ Variação do imposto a pagar',k.dtax):''}${row('Fluxo operacional',k.cfo,'tot')}");
+replace("finRow('− Imposto sobre o EBIT (desalavancado)',k.taxU.map(v=>-v))", "finRow('− Imposto sobre o EBIT (desalavancado, pago)',k.taxUPaid.map(v=>-v))");
+replace("['− Imposto sobre EBIT',k.taxU.map(v=>-v)]", "['− Imposto sobre EBIT (pago)',k.taxUPaid.map(v=>-v)]");
+
 const adapter = (await readFile(new URL('modeling/adapter.js', web), 'utf8')).replace('__NEW_MODEL_DIALOG__', dialog);
 /* ---------- Crédito: diagnóstico único (todos os covenants; DSCR do reembolso; carência à parte; linguagem condicional) ---------- */
 span('function bankV(m,R){', 'const vbox=', "function bankV(m,R){const D=creditDiagnosis(m,R);if(!D)return null;return {c:D.level,t:D.title,D,d:creditDiagnosisText(m,R,D)+(m.divida.montante>0?` Capacidade de endividamento ao DSCR alvo: ${money(R.debtCap)} vs. ${money(m.divida.montante)} pedidos.`:' Dívida existente no balanço de abertura.')+' Leitura indicativa do modelo; a decisão cabe ao financiador.'};}\nconst repDscr=(m,R)=>creditDiagnosis(m,R)?.repaymentDscr??null;\n");

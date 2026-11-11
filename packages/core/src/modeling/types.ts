@@ -1,5 +1,5 @@
 /** Contrato anual compatível com os pressupostos do protótipo Integra. Montantes de entrada/saída em unidades da moeda do projecto. */
-export const FINANCIAL_ENGINE_VERSION = 'integra-1.0.0';
+export const FINANCIAL_ENGINE_VERSION = 'integra-1.1.0';
 export const FINANCIAL_SECTORS = ['mineracao', 'petroleo', 'agro', 'comercio', 'servicos', 'industria', 'imobiliario', 'tecnologia'] as const;
 export type FinancialSector = typeof FINANCIAL_SECTORS[number];
 export type FinancialScenario = 'base' | 'otim' | 'pess';
@@ -15,15 +15,19 @@ export interface FinancialAssumptions {
   tv: { metodo: 'gordon' | 'multiplo' | 'nenhum'; g: number; mult: number };
   abertura: { imob: number; vidaRem: number; exist: number; clientes: number; caixa: number; fornec: number; divida: number; divTaxa: number; divPrazo: number };
   receitas: FinancialRevenue[]; capex: FinancialCapex[]; cenarios: Record<FinancialScenario, ScenarioFactors>; cen: FinancialScenario;
-  cov: { dscr: number; ndEbitda: number; icr: number }; mult: { lo: number; hi: number }; sens: number; prejuizosAnos: number; capitalAutomatico: boolean;
+  cov: { dscr: number; ndEbitda: number; icr: number }; mult: { lo: number; hi: number; ano: number }; sens: number; prejuizosAnos: number; capitalAutomatico: boolean;
   valorResidualLiquido: number; libertarFundoManeio: boolean;
+  /** Reserva legal: % do resultado líquido positivo até atingir o limite (% do capital). */
+  reservaLegal: number; reservaLegalLimite: number;
+  /** Imposto Industrial pago no próprio exercício ou no seguinte (fica em dívida ao Estado no balanço). */
+  impostoPagamento: 'mesmo_ano' | 'ano_seguinte';
 }
 export interface FinancialOverrides { cen?: FinancialScenario; preco?: number; volume?: number; cvar?: number; fixos?: number; capex?: number; wacc?: number }
 export const FINANCIAL_SERIES = [
   'rev', 'cv', 'roy', 'pes', 'fst', 'out', 'ebitda', 'da', 'ebit', 'jur', 'ebt', 'imp', 'rl',
   'capex', 'capexExp', 'capexMan', 'ar', 'inv', 'ap', 'nwc', 'dnwc', 'cfo', 'cfi', 'draw', 'princ',
   'eqInj', 'eqAuto', 'div', 'cff', 'cash', 'debt', 'imobB', 'depAc', 'imob', 'cap', 'res', 'assets', 'le', 'check',
-  'fcff', 'fcfe', 'equityCashFlow', 'cfads', 'ds', 'taxU', 'unfunded',
+  'fcff', 'fcfe', 'equityCashFlow', 'cfads', 'ds', 'taxU', 'unfunded', 'resLeg', 'resFree', 'taxPay', 'taxPaid', 'taxUPaid', 'dtax',
 ] as const;
 export type FinancialSeries = typeof FINANCIAL_SERIES[number];
 export type IrrStatus = 'ok' | 'no_sign_change' | 'non_conventional' | 'outside_range';
@@ -42,7 +46,7 @@ export interface FinancialResult {
   hasDebt: boolean; repY: number[]; serviceYears: number[]; minDscr: number | null; avgDscr: number | null;
   llcr: number | null; debtCap: number | null; ndE: (number | null)[]; icr: (number | null)[];
   covenants: { year: number; dscr: boolean | null; ndEbitda: boolean | null; icr: boolean | null }[];
-  multiples: { year: number; ebitda: number; enterpriseLow: number | null; enterpriseHigh: number | null; equityLow: number | null; equityHigh: number | null };
+  multiples: { year: number; yearIndex: number; automatic: boolean; ebitda: number; enterpriseLow: number | null; enterpriseHigh: number | null; equityLow: number | null; equityHigh: number | null };
   checks: { balance: boolean; cashFlow: boolean; maxBalanceDifference: number; maxCashFlowDifference: number };
   warnings: { code: string; message: string }[];
 }

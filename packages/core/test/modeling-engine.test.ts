@@ -91,7 +91,7 @@ describe('financiamento, fiscalidade parametrizada e avaliação', () => {
     expect(Math.abs(financialNpv(r.irrEq!, r.valuationFlows.equity!))).toBeLessThan(1e-8);
     expect(r.k.cash[2]).toBe(120);
     expect(r.irrEq).toBeCloseTo(Math.sqrt(120 / 100) - 1, 12);
-    m.payout = 100;
+    m.payout = 100; m.reservaLegal = 0;
     const distributed = runFinancialModel(m);
     expect(distributed.k.div).toEqual([0, 10, 10]);
     expect(distributed.irrEq).toBeCloseTo(0.1, 12);
@@ -208,7 +208,9 @@ describe('auditoria 11/11/2026: identidades em todos os modelos-tipo, cenários 
         const m = structuredClone(base);
         if (i % 3 === 1) Object.assign(m, { inicio: 'existente', abertura: { imob: 4e8 * rnd(), vidaRem: 3 + Math.floor(rnd() * 6), exist: 4e7 * rnd(), clientes: 6e7 * rnd(), caixa: 5e7 * rnd(), fornec: 3e7 * rnd(), divida: 1e8 * rnd(), divTaxa: 15, divPrazo: 4 } });
         m.divida = { ...m.divida, montante: i % 2 ? Math.round(2e8 * rnd()) : 0, taxa: 10 + rnd() * 10, prazo: 5, carencia: 1, ano: i % 2, jurosDesembolso: 50 };
-        m.payout = Math.round(rnd() * 60); m.capitalAutomatico = i % 4 === 0;
+        m.payout = Math.round(rnd() * 100); m.capitalAutomatico = i % 4 === 0;
+        if (i % 2) m.impostoPagamento = 'ano_seguinte';
+        m.reservaLegal = [0, 5, 10][i % 3]!;
         const r = runFinancialModel(m, { cen: (['base', 'otim', 'pess'] as const)[i % 3] });
         expect(r.checks.balance && r.checks.cashFlow).toBe(true);
         const flows = r.valuationFlows.project;
@@ -216,5 +218,44 @@ describe('auditoria 11/11/2026: identidades em todos os modelos-tipo, cenários 
         if (r.irr !== null) expect(Math.abs(flows.reduce((s, f, t) => s + f / (1 + r.irr!) ** t, 0))).toBeLessThan(1e-6 * Math.max(...flows.map(Math.abs)));
       }
     }
+  });
+});
+
+describe('auditoria 11/11/2026 — plano de acção (I-1 a I-3)', () => {
+  it('I-1: múltiplos sobre o EBITDA do primeiro ano em velocidade de cruzeiro, ou do ano escolhido', () => {
+    const m = simple(); m.horizonte = 6; m.receitas[0]!.ramp = '40,75,100'; m.inicioOp = 2;
+    const r = runFinancialModel(m);
+    expect(r.multiples.yearIndex).toBe(4); expect(r.multiples.year).toBe(2030); expect(r.multiples.automatic).toBe(true);
+    expect(r.multiples.ebitda).toBe(r.k.ebitda[4]);
+    m.mult.ano = 5; const chosen = runFinancialModel(m);
+    expect(chosen.multiples.yearIndex).toBe(5); expect(chosen.multiples.automatic).toBe(false);
+    expect(chosen.multiples.enterpriseLow).toBeCloseTo(chosen.k.ebitda[5]! * m.mult.lo, 6);
+    m.receitas[0]!.ramp = '100'; m.mult.ano = 0; expect(runFinancialModel(m).multiples.yearIndex).toBe(2);
+  });
+  it('I-2: reserva legal retida até ao limite sobre o capital e excluída dos dividendos', () => {
+    const m = simple(); m.horizonte = 8; m.payout = 100; m.reservaLegal = 5; m.reservaLegalLimite = 20; m.receitas[0]!.preco = 200;
+    const r = runFinancialModel(m);
+    const cap = r.k.cap[1]!;
+    for (let t = 1; t <= 8; t++) {
+      const expected = Math.min(r.k.rl.slice(1, t + 1).reduce((s, v) => s + v * 0.05, 0), cap * 0.2);
+      expect(r.k.resLeg[t]).toBeCloseTo(expected, 1);
+      expect(r.k.res[t]! + 1e-9).toBeGreaterThanOrEqual(r.k.resLeg[t]!);
+    }
+    expect(r.k.resLeg[8]).toBeCloseTo(20, 6);
+    expect(r.k.div[8]).toBeCloseTo(r.k.rl[8]!, 6);
+    expect(r.checks.balance && r.checks.cashFlow).toBe(true);
+  });
+  it('I-3: imposto pago no ano seguinte fica em dívida ao Estado e o balanço continua a fechar', () => {
+    const m = simple(); m.horizonte = 5; m.ii = 25; m.receitas[0]!.preco = 200;
+    const same = runFinancialModel(m);
+    m.impostoPagamento = 'ano_seguinte';
+    const next = runFinancialModel(m);
+    expect(next.checks.balance && next.checks.cashFlow).toBe(true);
+    expect(next.k.imp).toEqual(same.k.imp);
+    for (let t = 0; t <= 5; t++) { expect(next.k.taxPay[t]).toBe(next.k.imp[t]); expect(next.k.taxPaid[t]).toBe(t ? next.k.imp[t - 1] : 0); }
+    expect(next.k.cash[5]! - same.k.cash[5]!).toBeCloseTo(next.k.imp[5]!, 6);
+    expect(next.k.cfads[3]! - same.k.cfads[3]!).toBeCloseTo(next.k.imp[3]! - next.k.imp[2]!, 6);
+    // Projecto finito: o imposto do último ano é pago no fim, por isso o valor não sobe artificialmente.
+    expect(next.npv).toBeGreaterThan(same.npv); expect(next.npv - same.npv).toBeLessThan(next.k.taxU.reduce((s, v) => s + v, 0));
   });
 });
