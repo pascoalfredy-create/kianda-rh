@@ -10,4 +10,9 @@ CREATE TABLE IF NOT EXISTS "valuation_versions" (
   "saved_by" text NOT NULL,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "valuation_versions_analysis_idx" ON "valuation_versions" ("analysis_id", "created_at");
+--> statement-breakpoint
+ALTER TABLE "valuation_versions" ENABLE ROW LEVEL SECURITY;
+--> statement-breakpoint
+CREATE POLICY empresa ON "valuation_versions" USING (company_id = kianda_tenant()) WITH CHECK (company_id = kianda_tenant());
