@@ -1,0 +1,28 @@
+name: Disponibilidade pública
+
+on:
+  schedule:
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-health:
+    if: vars.KIANDA_DEPLOY == 'true' && vars.KIANDA_HOSTNAME != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      KIANDA_DOMAINS: ${{ vars.KIANDA_HOSTNAME }}
+    steps:
+      - name: Verificar a página pública, o login e a API
+        run: |
+          set -euo pipefail
+          host=$(printf '%s' "${KIANDA_DOMAINS%%,*}" | tr -d '[:space:]')
+          for path in / /login; do
+            curl --fail --silent --show-error --max-time 12 --retry 1 --output /dev/null \
+              --write-out "%{http_code} %{time_total}s $path\n" "https://$host$path"
+          done
+          curl --fail --silent --show-error --max-time 12 --retry 1 "https://$host/api/health" \
+            | jq -e '.status == "ok"' >/dev/null

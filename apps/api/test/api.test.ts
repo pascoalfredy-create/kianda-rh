@@ -1218,6 +1218,11 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       // MRR ao preço do ciclo contratado (anual com desconto ÷ 12), por módulo, incluindo o Valora.
       const after = (await get(owner, '/v1/platform/companies')).json(), row = after.companies.find((x: { id: string }) => x.id === companyId);
       expect(row.hrMrr).toBeGreaterThan(0); expect(row.hrMrr).toBeLessThan(row.monthlyMinor);
+      // Um ciclo pago a um preço anterior mantém o seu valor quando o catálogo muda.
+      await getDb().execute(sql`update payment_requests set amount_minor = 28000000 where id = ${pending.id}`);
+      const repriced = (await get(owner, '/v1/platform/companies')).json().companies.find((x: { id: string }) => x.id === companyId);
+      expect(repriced.hrMrr).toBe(Math.round(28_000_000 / 12));
+      await getDb().execute(sql`update payment_requests set amount_minor = ${pending.amountMinor} where id = ${pending.id}`);
       expect(after.summary.mrrByModule).toEqual(expect.objectContaining({ hr: expect.any(Number), modeling: expect.any(Number), valuation: expect.any(Number) }));
       expect(after.summary.mrrMinor).toBe(after.summary.mrrByModule.hr + after.summary.mrrByModule.modeling + after.summary.mrrByModule.valuation);
       expect(after.summary.modules.valuation).toEqual(expect.objectContaining({ trial: expect.any(Number), active: expect.any(Number) }));

@@ -30,10 +30,11 @@ const CONTRA_ASSET = ['19', '29', '38', '49'];
 /** Contas de natureza credora (saldo normal a crédito): proveitos, passivos e capital. As amortizações acumuladas (18) também. */
 const CREDIT_NORMAL = ['18', '19', '29', '32', '33', '38', '39', '49', '51', '52', '53', '54', '55', '56', '57', '58', '59', '61', '62', '63', '64', '65', '66', '67', '68', '69', '81'];
 const MIXED = ['34', '35', '36', '37'];
-const FLOW_PREFIX = /^[67]/;
+const FLOW_PREFIX = /^(?:[67]|87)/;
 /** Chaves das rubricas do modelo, aceites no lugar da conta (ex.: «empCP», que não tem conta PGC própria). */
 export const BALANCE_KEYS = ['v61', 'v62', 'v63', 'c71', 'c72', 'c73', 'c75', 'p66', 'c76', 'p68', 'c78', 'imp', 'imob', 'amort', 'invfin', 'exist', 'clientes', 'outdev', 'caixa', 'capital', 'reservas', 'empMLP', 'empCP', 'fornec', 'estado', 'outcred'];
 const FLOW_KEYS = new Set(['v61', 'v62', 'v63', 'c71', 'c72', 'c73', 'c75', 'p66', 'c76', 'p68', 'c78', 'imp']);
+const CREDIT_KEYS = new Set(['v61', 'v62', 'v63', 'p66', 'p68', 'amort', 'empMLP', 'empCP', 'fornec', 'estado', 'outcred', 'capital', 'reservas']);
 
 const MONTHS_PT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const MONTHS_EN = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
@@ -84,6 +85,10 @@ export interface BalanceOptions {
   cumulative: boolean;
   /** Exercício da análise: colunas de outro ano são recusadas. */
   year: number;
+  /** Mês seleccionado para um ficheiro ERP com coluna de saldo final (1–12). */
+  erpMonth?: number;
+  /** O saldo final das contas de resultados corresponde apenas ao movimento do mês escolhido. */
+  erpMonthly?: boolean;
 }
 export interface BalanceLine { code: string; desc: string; key: string; total: number; contrary: boolean }
 export interface BalanceResult {
@@ -97,7 +102,7 @@ export interface BalanceResult {
   months: number[];
   warnings: string[];
   /** Controlo por mês: resultado (6 − 7, em Kz) e diferença de balanço (activo − passivo − capital − resultado acumulado, em Kz). */
-  control: { month: number; resultKz: number; differenceKz: number }[];
+  control: { month: number; resultKz: number; differenceKz: number | null }[];
 }
 
 const empty = (error: string): BalanceResult => ({ error, acc: {}, lines: [], ignored: [], parents: [], months: [], warnings: [], control: [] });
@@ -116,88 +121,141 @@ function rubric(code: string, natural: number): { key: string | null; value: num
   return { key: m[1], value: natural, contrary: natural < 0 };
 }
 
+const digitsOf = (code: string) => code.match(/^(\d+(?:[.\s-]\d+)*)(?:\s*[-–—]?\s+[A-Za-zÀ-ÿ].*)?$/)?.[1]?.replace(/\D/g, '') ?? '';
+const keyOf = (code: string) => BALANCE_KEYS.find(k => k.toLowerCase() === code.toLowerCase());
+const normalise = (value: BalanceCell) => String(value ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase();
+const closingColumn = (row: BalanceCell[]) => row.findIndex((value, i) => i > 0 && /^(saldo final|saldo actual|saldo atual|saldo acumulado)$/.test(normalise(value)));
+function balanceHeader(row: BalanceCell[]) {
+  const code = normalise(row[0] ?? null);
+  const accountColumn = !code || /\b(conta|codigo|rubrica|pgc|account|code)\b/.test(code);
+  return accountColumn && (closingColumn(row) > 0 || row.some((c, i) => i > 0 && monthHeader(c)));
+}
+
+export function isErpBalance(rows: BalanceCell[][]) {
+  const header = rows.find(balanceHeader);
+  return header !== undefined && closingColumn(header) > 0;
+}
+
 export function parseBalance(rows: BalanceCell[][], opts: BalanceOptions): BalanceResult {
   if (!opts.unit || !(opts.unit in BALANCE_UNITS)) return empty('Indique a unidade dos valores do ficheiro (Kz, milhares de Kz ou milhões de Kz) antes de pré-visualizar.');
   const factor = BALANCE_UNITS[opts.unit] / 1e6;
-  const hi = rows.findIndex((r) => (r ?? []).filter((c, i) => i > 0 && monthHeader(c)).length >= 1);
-  if (hi < 0) return empty('Não encontrei colunas de meses no cabeçalho (ex.: Jan, Fev… ou 2026-01).');
+  const hi = rows.findIndex(balanceHeader);
+  if (hi < 0) return empty('Indique colunas de meses (Jan, Fev, 2026-01) ou uma coluna «Saldo final» no balancete.');
   const hdr = rows[hi]!;
-  const cols = hdr.map((h, i) => [i, monthHeader(h)] as const).filter(([i, m]) => i > 0 && m) as [number, { month: number; year: number | null }][];
+  const finalCol = closingColumn(hdr);
+  const erp = finalCol > 0;
+  const month = (opts.erpMonth ?? 0) - 1;
+  if (erp && (!Number.isInteger(month) || month < 0 || month > 11)) return empty('Seleccione o mês do saldo final no balancete do ERP.');
+  const cols = erp
+    ? [[finalCol, { month, year: opts.year }]] as const
+    : hdr.flatMap((value, i) => { const m = i > 0 ? monthHeader(value) : null; return m ? [[i, m] as const] : []; });
   const other = cols.find(([, m]) => m.year !== null && m.year !== opts.year);
   if (other) return empty(`O ficheiro tem colunas de ${other[1].year}; esta análise é do exercício ${opts.year}. Escolha o balancete do exercício certo.`);
   const months = [...new Set(cols.map(([, m]) => m.month))].sort((a, b) => a - b);
   if (months.length !== cols.length) return empty('O cabeçalho repete o mesmo mês. Deixe uma coluna por mês.');
-  const descCol = hdr.length > 1 && !monthHeader(hdr[1]) ? 1 : -1;
+  const descCol = hdr.length > 1 && !monthHeader(hdr[1]) && finalCol !== 1 ? 1 : -1;
+  const cumulative = erp ? !opts.erpMonthly : opts.cumulative;
+  const priorCol = erp && cumulative && month > 0
+    ? hdr.findIndex((value, i) => i > 0 && normalise(value) === 'saldo do mes anterior')
+    : -1;
+  const sourceCols = priorCol > 0 ? [...cols, [priorCol, { month: month - 1, year: opts.year }] as const] : cols;
 
   type Raw = { code: string; digits: string; desc: string; values: Record<number, number>; key?: string };
-  const raw: Raw[] = [], ignored: string[] = [], warnings: string[] = [];
+  const raw = new Map<string, Raw>(), ignored: string[] = [], warnings: string[] = [];
   for (const r of rows.slice(hi + 1)) {
-    if (!r || r[0] === null || r[0] === undefined || String(r[0]).trim() === '') continue;
-    const code = String(r[0]).trim(), digits = code.replace(/[^\d]/g, ''), desc = descCol > 0 && r[descCol] != null ? String(r[descCol]) : '';
-    const key = BALANCE_KEYS.find((k) => k.toLowerCase() === code.toLowerCase());
-    if (!digits && !key) { ignored.push(code + (desc ? ' ' + desc : '')); continue; }
-    const values: Record<number, number> = {};
-    for (const [i, m] of cols) { const v = balanceNumber(r[i] ?? null); if (v !== null) values[m.month] = v * factor; }
-    raw.push({ code, digits: key ? '' : digits, desc, values, key });
-  }
-  // Hierarquia: uma conta cujo número é prefixo de outra do ficheiro é um subtotal e não entra.
-  const codes = raw.map((x) => x.digits).filter(Boolean), parents: string[] = [];
-  const leaves = raw.filter((x) => {
-    if (x.key) return true;
-    const isParent = codes.some((c) => c !== x.digits && c.startsWith(x.digits));
-    if (isParent) parents.push(x.code + (x.desc ? ' ' + x.desc : ''));
-    return !isParent;
-  });
-  const acc: Record<string, Record<number, number>> = {}, lines: BalanceLine[] = [];
-  for (const x of leaves) {
-    if (x.key) {
-      // Chave da rubrica: o valor é lido na natureza normal da rubrica (positivo), qualquer que seja a convenção de sinal.
-      const series = { ...x.values };
-      if (opts.cumulative && FLOW_KEYS.has(x.key)) for (let k = months.length - 1; k > 0; k--) { const m = months[k]!, p = months[k - 1]!; if (series[m] !== undefined && series[p] !== undefined) series[m] = series[m]! - series[p]!; }
-      let total = 0;
-      for (const m of months) { const v = series[m]; if (v === undefined) continue; const val = Math.abs(v); acc[x.key] ??= {}; acc[x.key]![m] = round8((acc[x.key]![m] ?? 0) + val); total += val; }
-      lines.push({ code: x.code, desc: x.desc, key: x.key, total: round8(total), contrary: false });
+    const code = String(r[0] ?? '').trim();
+    if (!code) continue;
+    if (balanceHeader(r)) {
+      if (JSON.stringify(r.map(normalise)) !== JSON.stringify(hdr.map(normalise))) return empty('O ficheiro tem cabeçalhos diferentes. Use uma só estrutura de colunas por importação.');
       continue;
     }
-    const credit = CREDIT_NORMAL.some((p) => x.digits.startsWith(p)), flow = FLOW_PREFIX.test(x.digits), mixed = MIXED.some((p) => x.digits.startsWith(p));
-    let key: string | null = null, total = 0, contrary = false;
-    const series = { ...x.values };
-    if (opts.cumulative && flow) {
-      for (let k = months.length - 1; k > 0; k--) { const m = months[k]!, p = months[k - 1]!; if (series[m] !== undefined && series[p] !== undefined) series[m] = series[m]! - series[p]!; }
+    const key = keyOf(code), digits = key ? '' : digitsOf(code);
+    const desc = descCol > 0 ? String(r[descCol] ?? '') : '';
+    if (!digits && !key) { ignored.push(code); continue; }
+    const id = key ?? digits, existing = raw.get(id);
+    const values: Record<number, number> = existing?.values ?? {};
+    for (const [i, m] of sourceCols) {
+      const cell = r[i] ?? null;
+      if (!String(cell ?? '').trim() || ['-', '—', '–'].includes(String(cell).trim())) continue;
+      const value = balanceNumber(cell), mkz = value === null ? NaN : round8(value * factor);
+      if (!Number.isSafeInteger(Math.round(mkz * 1e8))) return empty(`Valor inválido na conta ${code}, ${MONTHS_PT[m.month]}. Verifique o número e a unidade.`);
+      if (values[m.month] !== undefined) return empty(`A conta ${code} aparece mais de uma vez em ${MONTHS_PT[m.month]}. Confirme o detalhe antes de importar.`);
+      values[m.month] = mkz;
     }
+    if (Object.keys(values).length) raw.set(id, { code, digits, desc, values, key });
+  }
+
+  // Verifica cada subtotal contra os seus filhos imediatos antes de usar apenas o detalhe.
+  const children = new Map<string, string[]>(), ancestors: string[] = [];
+  for (const code of [...raw.values()].map(x => x.digits).filter(Boolean).sort()) {
+    while (ancestors.length && !code.startsWith(ancestors.at(-1)!)) ancestors.pop();
+    const parent = ancestors.at(-1);
+    if (parent) {
+      const list = children.get(parent) ?? [];
+      list.push(code);
+      children.set(parent, list);
+    }
+    ancestors.push(code);
+  }
+  for (const [code, childCodes] of children) {
+    const parent = raw.get(code)!;
+    for (const [, { month: m }] of sourceCols) {
+      const value = parent.values[m];
+      if (value === undefined) continue;
+      const childrenTotal = childCodes.reduce((sum, child) => sum + (raw.get(child)!.values[m] ?? 0), 0);
+      const diff = Math.round((value - childrenTotal) * 1e8) / 100;
+      if (diff !== 0) return empty(`Subtotal da conta ${parent.code} em ${MONTHS_PT[m]} difere das subcontas em ${diff.toLocaleString('pt-PT')} Kz. Inclua todo o detalhe ou importe apenas o subtotal.`);
+    }
+  }
+  const parents = [...children.keys()].map(code => raw.get(code)!.code);
+  const acc: Record<string, Record<number, number>> = {}, lines: BalanceLine[] = [];
+  for (const x of raw.values()) {
+    if (children.has(x.digits)) continue;
+    const credit = x.key ? CREDIT_KEYS.has(x.key) : CREDIT_NORMAL.some(p => x.digits.startsWith(p));
+    const flow = x.key ? FLOW_KEYS.has(x.key) : FLOW_PREFIX.test(x.digits);
+    const mixed = MIXED.some(p => x.digits.startsWith(p));
+    let key: string | null = null, total = 0, contrary = false;
     for (const m of months) {
-      const v = series[m];
-      if (v === undefined) continue;
-      // Natureza: com a convenção de sinal, os créditos vêm negativos; sem ela, os valores vêm na natureza normal da conta.
-      // Nas contas 34–37 (saldo misto) o valor «natural» é positivo quando devedor.
-      const natural = opts.signed ? (mixed ? v : credit ? -v : v) : (mixed ? -Math.abs(v) : Math.abs(v));
-      const got = rubric(x.code, natural);
-      if (!got.key) { key = null; break; }
+      let value = x.values[m];
+      if (value === undefined) continue;
+      if (cumulative && flow && m > 0) {
+        const previous = x.values[m - 1];
+        if (previous === undefined) return empty(`Falta o saldo acumulado de ${MONTHS_PT[m - 1]} na conta ${x.code} para calcular o movimento de ${MONTHS_PT[m]}. Inclua o mês anterior ou um saldo explícito de 0 quando aplicável.`);
+        value -= previous;
+      }
+      // No modo de natureza normal, um negativo é um estorno. Contas mistas positivas representam credores.
+      const natural = (opts.signed ? credit : mixed) ? -value : value;
+      const got = x.key ? { key: x.key, value: natural, contrary: natural < 0 } : rubric(x.digits, natural);
+      if (!got.key) break;
       key = got.key;
-      if (got.contrary) contrary = true;
-      acc[got.key] ??= {};
-      acc[got.key]![m] = round8((acc[got.key]![m] ?? 0) + got.value);
+      contrary ||= !!got.contrary;
+      const target = acc[key] ??= {};
+      target[m] = round8((target[m] ?? 0) + got.value);
       total += got.value;
     }
     if (key) lines.push({ code: x.code, desc: x.desc, key, total: round8(total), contrary });
     else ignored.push(x.code + (x.desc ? ' ' + x.desc : ''));
   }
-  const contraryLines = lines.filter((l) => l.contrary);
-  if (contraryLines.length) warnings.push(`${contraryLines.length} conta(s) com saldo de natureza contrária (ex.: clientes credores): ficam negativas na rubrica. Confirme se devem ser reclassificadas: ${contraryLines.slice(0, 5).map((l) => l.code).join(', ')}.`);
-  if (parents.length) warnings.push(`${parents.length} conta(s)-mãe não somadas porque o ficheiro traz as subcontas (evita duplicar valores).`);
+  const contraryLines = lines.filter(l => l.contrary);
+  if (contraryLines.length) warnings.push(`${contraryLines.length} conta(s) com saldo de natureza contrária ou estorno. Confirme a classificação: ${contraryLines.slice(0, 5).map(l => l.code).join(', ')}.`);
+  if (parents.length) warnings.push(`${parents.length} conta(s)-mãe reconciliadas com o detalhe e excluídas para evitar duplicação.`);
   if (!lines.length) return { ...empty('Nenhuma conta do ficheiro corresponde às rubricas do modelo. Confirme a coluna de contas PGC.'), ignored, parents };
 
   const get = (k: string, m: number) => acc[k]?.[m] ?? 0;
   let cumulativeResult = 0;
-  const control = months.map((m) => {
+  const control = months.map((m, index) => {
     const proveitos = get('v61', m) + get('v62', m) + get('v63', m) + get('p66', m) + get('p68', m);
     const custos = get('c71', m) + get('c72', m) + get('c73', m) + get('c75', m) + get('c76', m) + get('c78', m) + get('imp', m);
-    const result = proveitos - custos; cumulativeResult += result;
+    const result = proveitos - custos;
+    cumulativeResult += result;
     const activo = get('imob', m) - get('amort', m) + get('invfin', m) + get('exist', m) + get('clientes', m) + get('outdev', m) + get('caixa', m);
     const passivo = get('empMLP', m) + get('empCP', m) + get('fornec', m) + get('estado', m) + get('outcred', m);
     const capital = get('capital', m) + get('reservas', m);
-    const hasBalance = ['imob', 'caixa', 'capital', 'clientes', 'fornec'].some((k) => acc[k]?.[m] !== undefined);
-    return { month: m, resultKz: Math.round(result * 1e8) / 100, differenceKz: hasBalance ? Math.round((activo - passivo - capital - cumulativeResult) * 1e8) / 100 : 0 };
+    const hasAssets = ['imob', 'amort', 'invfin', 'exist', 'clientes', 'outdev', 'caixa'].some(k => acc[k]?.[m] !== undefined);
+    const hasClaims = ['empMLP', 'empCP', 'fornec', 'estado', 'outcred', 'capital', 'reservas'].some(k => acc[k]?.[m] !== undefined);
+    const canReconcile = hasAssets && hasClaims && index === m;
+    const differenceKz = canReconcile ? Math.round((activo - passivo - capital - cumulativeResult) * 1e8) / 100 || 0 : null;
+    return { month: m, resultKz: Math.round(result * 1e8) / 100, differenceKz };
   });
   return { acc, lines, ignored, parents, months, warnings, control };
 }
@@ -210,7 +268,15 @@ export function balanceRowsFromPdf(pages: PdfTextItem[][]): string[][] {
     const rows = pdfPageRows(page);
     if (!rows.length) throw new Error(`A página ${index + 1} não contém texto seleccionável. Use Excel, Word, CSV ou um PDF com texto (um PDF digitalizado precisa de OCR).`);
     for (const row of rows) {
-      if (row.filter((c, i) => i > 0 && monthHeader(c.text)).length >= 1) { if (!header) out.push(row.map((c) => c.text)); header = row; continue; }
+      const cellsText = row.map(c => c.text);
+      if (balanceHeader(cellsText)) {
+        if (header && JSON.stringify(header.map(c => normalise(c.text))) !== JSON.stringify(cellsText.map(normalise))) {
+          throw new Error('As páginas do PDF têm cabeçalhos diferentes. Importe uma tabela com as mesmas colunas em todas as páginas.');
+        }
+        if (!header) out.push(cellsText);
+        header = row;
+        continue;
+      }
       if (!header) continue;
       const cells = header.map(() => '');
       for (const cell of row) {
@@ -221,7 +287,7 @@ export function balanceRowsFromPdf(pages: PdfTextItem[][]): string[][] {
       out.push(cells);
     }
   }
-  if (!header) throw new Error('Não encontrei no PDF um cabeçalho com os meses (Jan, Fev… ou 2026-01).');
+  if (!header) throw new Error('O PDF deve ter um cabeçalho com os meses ou uma coluna «Saldo final».');
   return out;
 }
 

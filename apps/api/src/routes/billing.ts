@@ -11,6 +11,7 @@ import { body, requireCompany, requireRole, type AppEnv } from '../plugins/tenan
 import { DomainError } from '../services/payroll.js';
 import { isPlatformAdmin, licenceFromRows, licenceOf, platformSettingsGet, priceTable, tierOf, type PlatformSettings } from '../services/licence.js';
 import { consoleMrr } from '../services/console-mrr.js';
+import { groupBy } from '../lib/group-by.js';
 import {
   afterPayment, applyGatewayPayment, attachGatewayReference, confirmPaymentRequest, emailPaymentInstructions, invoiceSettingsGet, issueInvoice,
   releaseGatewayReference, syncGatewayPayments,
@@ -228,20 +229,24 @@ export function platformRoutes() {
   app.get('/v1/platform/companies', async (c) => {
     const db = getDb();
     // Tudo em consultas agregadas (sem uma ronda de consultas por empresa).
-    const [cos, subs, counts, owners, pending, grants] = await Promise.all([
+    const [cos, subs, counts, owners, pending, grants, paidCycles] = await Promise.all([
       db.select().from(companies).orderBy(desc(companies.createdAt)),
       db.select().from(subscriptions),
       db.select({ companyId: employees.companyId, n: sql<number>`count(*)::int` }).from(employees).where(eq(employees.status, 'active')).groupBy(employees.companyId),
       db.select({ id: users.id, companyId: users.companyId, email: users.email, name: users.name }).from(users).where(eq(users.role, 'owner')),
       db.select({ companyId: paymentRequests.companyId, n: sql<number>`count(*)::int` }).from(paymentRequests).where(eq(paymentRequests.status, 'pending')).groupBy(paymentRequests.companyId),
       db.select().from(companyModules),
+      db.select({ companyId: paymentRequests.companyId, kind: paymentRequests.kind, tierKey: paymentRequests.tierKey, cycle: paymentRequests.cycle,
+        periodEnd: paymentRequests.periodEnd, extraUsers: paymentRequests.extraUsers, amountMinor: paymentRequests.amountMinor })
+        .from(paymentRequests).where(eq(paymentRequests.status, 'paid')).orderBy(desc(paymentRequests.paidAt), desc(paymentRequests.id)),
     ]);
+    const paidByCompany = groupBy(paidCycles, row => row.companyId);
     const out = await Promise.all(cos.filter((x) => x.nif !== 'PLATAFORMA').map(async (co) => {
       const sub = subs.find((s) => s.companyId === co.id) ?? null, active = counts.find((x) => x.companyId === co.id)?.n ?? 0;
       const l = licenceFromRows(sub, active);
       const owner = owners.find(o => o.companyId === co.id);
       const modules = await companyModulesOverview(db, co.id, owner?.id ?? '', 'owner', { licence: l, sector: co.sector, grants: grants.filter(g => g.companyId === co.id), member: undefined, valuationMember: undefined } as never);
-      const mrr = consoleMrr(sub, l.status, modules);
+      const mrr = consoleMrr(sub, l.status, modules, paidByCompany.get(co.id));
       return {
         id: co.id, name: co.name, nif: co.nif, sector: co.sector, sectorLabel: co.sector ? SECTORS[co.sector as keyof typeof SECTORS] ?? co.sector : null, code: co.code, createdAt: co.createdAt,
         owner: owner ?? null, activeEmployees: active, modules, modelingMrr: mrr.modeling, valuationMrr: mrr.valuation, hrMrr: mrr.hr,

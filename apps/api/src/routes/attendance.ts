@@ -351,6 +351,7 @@ export function attendanceRoutes() {
       noRecord: z.enum(['absent', 'present']).optional(),
     }).parse(await body(c));
     const db = getDb();
+    await db.select({ id: companies.id }).from(companies).where(eq(companies.id, actor.companyId)).for('update');
     const emp = await loadEmployee(db, actor, b.employeeId);
     if (!canDecideFor(actor, emp)) return c.json({ error: 'sem_permissao', message: 'Só a chefia directa ou o RH aprovam a assiduidade (nunca a própria).' }, 403);
     if (b.period >= luandaDate(new Date()).slice(0, 7)) throw new DomainError('mes_em_curso', 'O mês só pode ser aprovado depois de terminar', 400);
@@ -410,6 +411,7 @@ export function attendanceRoutes() {
     const actor = c.get('actor');
     const b = z.object({ employeeId: z.string(), period: periodSchema, note: z.string().trim().min(3, 'Indique o motivo') }).parse(await body(c));
     const db = getDb();
+    await db.select({ id: companies.id }).from(companies).where(eq(companies.id, actor.companyId)).for('update');
     const [run] = await db.select({ id: payrollRuns.id }).from(payrollRuns).where(and(eq(payrollRuns.companyId, actor.companyId), eq(payrollRuns.period, b.period), eq(payrollRuns.status, 'closed')));
     if (run) throw new DomainError('periodo_fechado', `O processamento de ${b.period} já está fechado: corrija no mês seguinte.`);
     const [row] = await db.delete(attendanceMonths).where(and(eq(attendanceMonths.companyId, actor.companyId), eq(attendanceMonths.employeeId, b.employeeId), eq(attendanceMonths.period, b.period))).returning();

@@ -7,9 +7,10 @@ afterAll(async () => { if (process.env.DATABASE_URL) await closeDb(); });
 describe('alertas de erro interno', () => {
   it('agrupa pela rota sem identificadores e pelo tipo de erro', () => {
     expect(normalisedRoute('/v1/employees/123e4567-e89b-12d3-a456-426614174000/contracts/42')).toBe('/v1/employees/:id/contracts/:n');
+    expect(normalisedRoute('/v1/public/documents/ABCD-EFGH-IJKL?info=teste')).toBe('/v1/public/documents/:id');
     const a = errorSignature({ method: 'GET', path: '/v1/x/123e4567-e89b-12d3-a456-426614174000', error: new TypeError('falhou\nlinha 2') });
     const b = errorSignature({ method: 'GET', path: '/v1/x/223e4567-e89b-12d3-a456-426614174000', error: new TypeError('outra mensagem') });
-    expect(a.fingerprint).toBe(b.fingerprint); expect(a.first).toBe('falhou');
+    expect(a.fingerprint).toBe(b.fingerprint); expect(a).not.toHaveProperty('first');
   });
 });
 

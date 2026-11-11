@@ -678,6 +678,22 @@ export const payrollVariables = pgTable('payroll_variables', {
   createdAt: createdAt(),
 }, (t) => [index('payroll_variables_company_period').on(t.companyId, t.period)]);
 
+export interface PayslipContext {
+  company: { name: string; nif: string; inssNumber: string | null; address: string | null };
+  employee: {
+    name: string; number: string; jobTitle: string; department: string | null; nif: string | null;
+    inssNumber: string | null; iban: string | null; bank: string | null;
+  };
+  leave: { type: string; label: string; startDate: string; endDate: string; workingDays: number }[];
+  termination: { reasonLabel: string; hireDate: string | null; noticeDate: string | null; effectiveDate: string; seniority: string | null } | null;
+}
+
+/** Identificadores irreversíveis de sessões terminadas, só até à expiração do token. */
+export const revokedSessions = pgTable('revoked_sessions', {
+  tokenHash: text('token_hash').primaryKey(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+}, t => [index('revoked_sessions_expiry').on(t.expiresAt)]);
+
 export const payrollLines = pgTable('payroll_lines', {
   id: id(),
   runId: text('run_id').notNull().references(() => payrollRuns.id),
@@ -697,6 +713,8 @@ export const payrollLines = pgTable('payroll_lines', {
   irtBracket: integer('irt_bracket').notNull().default(1),
   breakdown: jsonb('breakdown').notNull().default([]),
   calculationHash: text('calculation_hash'),
+  /** Dados apresentados no recibo, registados na transacção do fecho. */
+  payslipContext: jsonb('payslip_context').$type<PayslipContext>(),
   /** Departamento e centro de custo no momento do cálculo: o histórico não muda quando a ficha muda de departamento. */
   departmentId: text('department_id'),
   costCenter: text('cost_center'),

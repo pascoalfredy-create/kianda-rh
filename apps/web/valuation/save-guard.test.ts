@@ -22,7 +22,7 @@ function harness(error?: Record<string, unknown>, issue: string | null = null) {
     loadAnalysis(row: unknown) { loaded.push(row); },
   };
   runInNewContext(`let CUR={id:'a',revision:1},D={orc:{vendas:42}},LIST=[],VS={canWrite:true};
-    let pendingSave=true,saving=null,conflict=false,offline=false,saveTimer=null;
+    let pendingSave=true,saving=null,conflict=false,offline=false,saveTimer=null,balanceCheckpoint=false,openingAnalysis=0;
     ${saveCode}\n${openCode}\nthis.openAnalysis=openAnalysis;this.ensureSaved=ensureSaved;this.pending=()=>pendingSave;`, ctx);
   return ctx as typeof ctx & { openAnalysis(id: string): Promise<void>; ensureSaved(): Promise<void>; pending(): boolean };
 }

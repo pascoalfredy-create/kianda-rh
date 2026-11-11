@@ -1,7 +1,7 @@
 /** Zona «Visitas ao site» da consola: quantas pessoas visitam o site e quantas criam conta. */
 export interface VisitsSummary {
   days: number; from: string; to: string;
-  totals: { today: number; last7: number; visitors: number; views: number; previous: number; signups: number; conversion: number | null };
+  totals: { today: number; last7: number; visitors: number; views: number; previous: number; signups: number; confirmed?: number };
   series: { day: string; visitors: number; views: number; signups: number }[];
   pages: { key: string; n: number }[]; referrers: { key: string; n: number }[]; countries: { key: string; n: number }[];
   devices: { key: string; n: number }[]; sources: { key: string; n: number }[];
@@ -40,7 +40,7 @@ export function Visits({ v }: { v: VisitsSummary }) {
         <div className="card kpi"><div className="l">Hoje</div><div className="v">{t.today}</div><div className="muted">pessoas no site</div></div>
         <div className="card kpi"><div className="l">Últimos 7 dias</div><div className="v">{t.last7}</div><div className="muted">visitas</div></div>
         <div className="card kpi"><div className="l">Últimos {v.days} dias</div><div className="v">{t.visitors}</div><div className="muted">{trend === null ? `${t.views} páginas vistas` : `${trend >= 0 ? '+' : ''}${trend}% face aos ${v.days} dias anteriores`}</div></div>
-        <div className="card kpi"><div className="l">Contas criadas</div><div className="v">{t.signups}</div><div className="muted">{t.conversion === null ? 'sem visitas no período' : t.conversion > 100 ? 'mais contas do que visitas contadas' : `${t.conversion.toLocaleString('pt-PT')}% das visitas`}</div></div>
+        <div className="card kpi"><div className="l">Contas criadas</div><div className="v">{t.signups}</div><div className="muted">{t.confirmed === undefined ? 'Registos no período' : `${t.confirmed} com email confirmado`}</div></div>
       </div>
       <div style={{ padding: '16px 16px 4px' }}>
         <div aria-label="Visitas por dia" style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 120 }}>

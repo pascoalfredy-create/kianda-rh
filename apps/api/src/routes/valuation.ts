@@ -31,7 +31,7 @@ const VERSION_GAP_MS = 30 * 60_000, VERSIONS_KEPT = 50;
  * Guarda o estado anterior antes de o alterar (V-8). Nas gravações automáticas, uma cópia por sessão de trabalho (30 min);
  * antes de importações e reposições, sempre. Mantém as 50 mais recentes por análise.
  */
-async function keepVersion(db: Db, row: ValuationAnalysisRow, actorId: string, reason: 'edit' | 'import_personnel' | 'before_restore') {
+async function keepVersion(db: Db, row: ValuationAnalysisRow, actorId: string, reason: 'edit' | 'import_balance' | 'import_personnel' | 'before_restore') {
   if (reason === 'edit') {
     const [last] = await db.select({ createdAt: valuationVersions.createdAt }).from(valuationVersions).where(eq(valuationVersions.analysisId, row.id)).orderBy(desc(valuationVersions.createdAt)).limit(1);
     const lastEdit = new Date(row.updatedAt).getTime();
@@ -109,16 +109,18 @@ export function valuationRoutes() {
   /** Gravação com controlo de concorrência: quem tiver uma versão desactualizada recebe 409 e recarrega. */
   app.put('/v1/valuation/analyses/:id', async (c) => {
     const a = c.get('actor'), db = getDb();
-    const input = z.object({ revision, name: name.optional(), data: data.optional(), ownCompany: z.boolean().optional() }).refine(v => v.name !== undefined || v.data !== undefined || v.ownCompany !== undefined, 'Nada para gravar').parse(await body(c));
+    const input = z.object({ revision, name: name.optional(), data: data.optional(), ownCompany: z.boolean().optional(), importBalance: z.literal(true).optional() })
+      .refine(v => v.name !== undefined || v.data !== undefined || v.ownCompany !== undefined, 'Nada para gravar')
+      .refine(v => !v.importBalance || v.data !== undefined, 'A importação deve incluir os dados da análise').parse(await body(c));
     const current = await analysisOf(c, true);
     if (current.archivedAt) throw new DomainError('analise_arquivada', 'Restaure a análise antes de a alterar.', 409);
     if (current.revision !== input.revision) return c.json({ error: 'revisao_invalida', message: 'A análise foi alterada noutra sessão. Recarregue para continuar com a versão mais recente.', revision: current.revision }, 409);
-    if (input.data !== undefined) await keepVersion(db, current, a.actorId, 'edit');
+    if (input.data !== undefined) await keepVersion(db, current, a.actorId, input.importBalance ? 'import_balance' : 'edit');
     const [row] = await db.update(valuationAnalyses).set({ ...(input.name !== undefined ? { name: input.name } : {}), ...(input.data !== undefined ? { data: input.data } : {}), ...(input.ownCompany !== undefined ? { ownCompany: input.ownCompany } : {}), revision: current.revision + 1, updatedBy: a.actorId, updatedAt: new Date() })
       .where(and(eq(valuationAnalyses.id, current.id), eq(valuationAnalyses.companyId, a.companyId), eq(valuationAnalyses.revision, input.revision))).returning();
     if (!row) return c.json({ error: 'revisao_invalida', message: 'A análise foi alterada noutra sessão. Recarregue para continuar.' }, 409);
     // A auditoria regista quem gravou e a revisão; os valores ficam na própria análise.
-    await db.insert(auditLogs).values({ companyId: a.companyId, actorId: a.actorId, action: 'update', entity: 'valuation_analysis', entityId: row.id,
+    await db.insert(auditLogs).values({ companyId: a.companyId, actorId: a.actorId, action: input.importBalance ? 'import_balance' : 'update', entity: 'valuation_analysis', entityId: row.id,
       before: { revision: current.revision, ...(input.name !== undefined && input.name !== current.name ? { name: current.name } : {}), ...(input.ownCompany !== undefined ? { ownCompany: current.ownCompany } : {}) },
       after: { revision: row.revision, ...(input.name !== undefined && input.name !== current.name ? { name: row.name } : {}), ...(input.ownCompany !== undefined ? { ownCompany: row.ownCompany } : {}) } });
     return c.json({ id: row.id, name: row.name, ownCompany: row.ownCompany, revision: row.revision, updatedAt: row.updatedAt });

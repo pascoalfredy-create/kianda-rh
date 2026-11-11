@@ -1,11 +1,11 @@
-import { REGISTRATION_TERMS_VERSION, DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, defaultModelingSector, isValidCompanyNif, luandaDate, SECTORS, tierFor, trialEndDate, TRIAL_DAYS, VALUATION_PLANS, VALUATION_PLAN_KEYS, verifyTotp } from '@kianda/core';
-import { auditLogs, companies, companyModules, employees, getDb, modelingMembers, valuationMembers, platformAdmins, hashPassword, passwordProblems, subscriptions, users, verifyPassword, type Db } from '@kianda/db';
+import { REGISTRATION_TERMS_VERSION, DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, defaultModelingSector, isValidCompanyNif, luandaDate, SECTORS, sha256Hex, tierFor, trialEndDate, TRIAL_DAYS, VALUATION_PLANS, VALUATION_PLAN_KEYS, verifyTotp } from '@kianda/core';
+import { auditLogs, companies, companyModules, employees, getDb, modelingMembers, revokedSessions, valuationMembers, platformAdmins, hashPassword, passwordProblems, subscriptions, users, verifyPassword, type Db } from '@kianda/db';
 import { and, eq, sql } from '@kianda/db';
 import { Hono } from 'hono';
 import { deleteCookie, setCookie } from 'hono/cookie';
 import { sign, verify } from 'hono/jwt';
 import { z } from 'zod';
-import { body, jwtSecret, rateLimit, requireCompany, requireRole, SESSION_COOKIE, type AppEnv, type Ctx, type Role, type SessionClaims } from '../plugins/tenant.js';
+import { body, jwtSecret, rateLimit, requireCompany, requireRole, SESSION_COOKIE, sessionToken, type AppEnv, type Ctx, type Role, type SessionClaims } from '../plugins/tenant.js';
 import { applySectorPreset } from '../services/sector.js';
 import { appBaseUrl } from '../services/integrations.js';
 import { sendMail } from '../services/mail.js';
@@ -49,7 +49,7 @@ export async function startSession(c: Ctx, claims: SessionClaims) {
   const exp = Math.floor(Date.now() / 1000) + SESSION_HOURS * 3600;
   const [u] = await getDb().select({ sv: users.sessionVersion }).from(users).where(eq(users.id, claims.sub));
   const { requiresEmailVerification: _r, ...stable } = claims;
-  const token = await sign({ ...stable, sv: u?.sv ?? 0, exp }, jwtSecret(), 'HS256');
+  const token = await sign({ ...stable, sv: u?.sv ?? 0, jti: crypto.randomUUID(), exp }, jwtSecret(), 'HS256');
   setCookie(c, SESSION_COOKIE, token, {
     path: '/', httpOnly: true, sameSite: 'Lax', secure: secureCookie(c), maxAge: SESSION_HOURS * 3600,
   });
@@ -194,8 +194,15 @@ export function authRoutes() {
     return c.json({ ok: true });
   });
 
-  app.post('/v1/auth/logout', (c) => {
-    deleteCookie(c, SESSION_COOKIE, { path: '/' });
+  app.post('/v1/auth/logout', async (c) => {
+    const token = sessionToken(c);
+    if (token) {
+      const claims = await verify(token, jwtSecret(), 'HS256').catch(() => null);
+      if (typeof claims?.sub === 'string' && typeof claims.companyId === 'string' && typeof claims.exp === 'number') {
+        await getDb().insert(revokedSessions).values({ tokenHash: await sha256Hex(token), expiresAt: new Date(claims.exp * 1000) }).onConflictDoNothing();
+      }
+    }
+    deleteCookie(c, SESSION_COOKIE, { path: '/', secure: secureCookie(c), httpOnly: true, sameSite: 'Lax' });
     return c.json({ ok: true });
   });
 

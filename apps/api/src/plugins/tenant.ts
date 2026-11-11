@@ -1,8 +1,8 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { verify } from 'hono/jwt';
-import { and, eq, getDb, users, withTenant } from '@kianda/db';
-import { canExportDocuments, moduleForPath, type ModuleAccess } from '@kianda/core';
+import { and, eq, getDb, revokedSessions, users, withTenant } from '@kianda/db';
+import { canExportDocuments, moduleForPath, sha256Hex, type ModuleAccess } from '@kianda/core';
 import { isDocumentExport } from '../services/document-access.js';
 import { moduleLicence } from '../services/modules.js';
 import { licenceBlocks } from '../services/licence.js';
@@ -33,6 +33,9 @@ export type AppEnv = { Variables: { actor: Actor; companyGuarded: boolean; modul
 export type Ctx = Context<AppEnv>;
 
 export const SESSION_COOKIE = 'kianda_session';
+export function sessionToken(c: Ctx) {
+  return getCookie(c, SESSION_COOKIE) || c.req.header('authorization')?.match(/^Bearer (.+)$/i)?.[1];
+}
 
 export function jwtSecret(): string {
   const s = process.env.API_JWT_SECRET;
@@ -49,8 +52,7 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
   // Vários padrões de rota podem casar o mesmo pedido. A primeira passagem já verificou
   // sessão/licença e abriu a transacção RLS; as seguintes continuam nessa mesma transacção.
   if (c.get('companyGuarded')) return next();
-  const bearer = c.req.header('authorization')?.match(/^Bearer (.+)$/i)?.[1];
-  const token = getCookie(c, SESSION_COOKIE) || bearer;
+  const token = sessionToken(c);
   let claims: SessionClaims;
   try {
     if (!token) throw new Error('sem token');
@@ -60,11 +62,11 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
     return c.json({ error: 'sessao_invalida', message: 'Inicie sessão para continuar.' }, 401);
   }
   // Um JWT ainda válido não conserva acessos retirados depois de ter sido emitido.
-  const [user] = await getDb().select({ role: users.role, employeeId: users.employeeId, name: users.name, disabledAt: users.disabledAt, sessionVersion: users.sessionVersion, emailVerificationRequired: users.emailVerificationRequired, emailVerifiedAt: users.emailVerifiedAt })
-    .from(users).where(and(eq(users.id, claims.sub), eq(users.companyId, claims.companyId)));
+  const [user] = await getDb().select({ role: users.role, employeeId: users.employeeId, name: users.name, disabledAt: users.disabledAt, sessionVersion: users.sessionVersion, emailVerificationRequired: users.emailVerificationRequired, emailVerifiedAt: users.emailVerifiedAt, revoked: revokedSessions.tokenHash })
+    .from(users).leftJoin(revokedSessions, eq(revokedSessions.tokenHash, await sha256Hex(token!))).where(and(eq(users.id, claims.sub), eq(users.companyId, claims.companyId)));
   if (!user || user.disabledAt) return c.json({ error: 'sessao_invalida', message: 'O acesso foi desactivado. Contacte o responsável da empresa.' }, 401);
   // Sessões terminadas (palavra-passe alterada ou «terminar sessões»): tokens anteriores deixam de valer.
-  if ((claims.sv ?? 0) !== user.sessionVersion) return c.json({ error: 'sessao_terminada', message: 'A sessão foi terminada. Inicie sessão novamente.' }, 401);
+  if (user.revoked || (claims.sv ?? 0) !== user.sessionVersion) return c.json({ error: 'sessao_terminada', message: 'A sessão foi terminada. Inicie sessão novamente.' }, 401);
   const requiresEmailVerification = user.emailVerificationRequired && !user.emailVerifiedAt;
   if (requiresEmailVerification && !['/v1/auth/me', '/v1/auth/email-verification', '/v1/auth/email-verification/resend', '/v1/auth/password'].includes(c.req.path)) return c.json({ error: 'email_por_confirmar', message: 'Confirme o seu email para começar a utilizar os módulos.' }, 403);
   claims = { ...claims, role: user.role, employeeId: user.employeeId, name: user.name, requiresEmailVerification };
