@@ -95,6 +95,7 @@ function loadAnalysis(row){
   conflict=false;pendingSave=false;offline=false;
   D=row.data;EX=D.ex??(D.years[D.years.length-1]+1);D.ex=EX;
   for(const k of ['p68','c78'])if(!Array.isArray(D.real[k]))D.real[k]=Array(12).fill(null);
+  if(D.orc&&D.orc.iva==null)D.orc.iva=14;
   if(!D.bal.reservas)deriveHistReserves();meta();
   document.body.classList.remove('valora-none');$('#valoraEmpty')?.remove();
   $('#valoraFoot').textContent=row.ownCompany?'Própria empresa · ':'';

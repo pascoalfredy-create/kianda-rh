@@ -66,8 +66,6 @@ replaceShell('<div class="wrap">', '<div id="valoraBanner" class="valora-banner"
 shell += '<div class="modal" id="valoraDialog" role="dialog" aria-modal="true" aria-labelledby="valoraDialogTitle"><div class="box" id="valoraDialogBox"></div></div>\n';
 
 /* ---------- Motor: exercício por análise e análises sem meses reais (fecho 0) ---------- */
-replace('const EX=2026;', 'let EX=2026;');
-replace("    else{\n      M=[...R];\n      if(D.fecho<12){", "    else if(D.fecho===0){M=engine(D.orc,{open:open25(),hist:hist25()}).map(x=>({...x,src:'prev'}))}\n    else{\n      M=[...R];\n      if(D.fecho<12){");
 replace("o.push(['ytd',`Acumulado Jan–${MES[f-1]}`]);", "if(f>0)o.push(['ytd',`Acumulado Jan–${MES[f-1]}`]);");
 replace("if(!opts.find(o=>o[0]===UI.ctl))UI.ctl='ytd';", "if(!opts.find(o=>o[0]===UI.ctl))UI.ctl=opts[0][0];");
 replace("$('#ctlNote').textContent=fy?`Previsão = real Jan–${MES[D.fecho-1]} + orçamento ${MES[D.fecho]||''}${D.fecho<12?'–Dez':''}`", "$('#ctlNote').textContent=fy?(D.fecho===0?'Sem meses reais: a previsão é o orçamento do ano.':`Previsão = real Jan–${MES[D.fecho-1]} + orçamento ${MES[D.fecho]||''}${D.fecho<12?'–Dez':''}`)");
@@ -98,10 +96,6 @@ replace("async function runExport(kind){const msg=$('#rep-msg'),btns=document.qu
 replace("${rep.title.replace(/[^\\wÀ-ú]+/g,'_')}_${meta().ent.split(/[ ,]/)[0]}_", "${rep.title.replace(/[^\\wÀ-ú]+/g,'_')}_${(meta().ent.split(/[ ,]/)[0]||'analise').replace(/[^\\wÀ-ú-]+/g,'')}_");
 
 /* ---------- Montantes sempre por inteiro: os dados ficam em milhões de Kz, a apresentação é em Kz com 2 casas ---------- */
-replace("const f0=v=>v==null||!isFinite(v)?'—':Math.abs(v)<.5?'0':(Math.round(v)<0?'('+nf0.format(-v)+')':nf0.format(v));",
-  "const fd=v=>v==null||!isFinite(v)?'—':Math.abs(v)<.5?'0':(Math.round(v)<0?'('+nf0.format(-v)+')':nf0.format(v));\n" +
-  "const nfK=new Intl.NumberFormat('pt-PT',{minimumFractionDigits:2,maximumFractionDigits:2,useGrouping:'always'});\n" +
-  "const f0=v=>v==null||!isFinite(v)?'—':Math.abs(v*1e6)<.005?'0,00':(v<0?'('+nfK.format(-v*1e6)+')':nfK.format(v*1e6));");
 replace("function fs(v){return isFinite(v)?(v<0?'−':'+')+nf0.format(Math.abs(Math.round(v))):'—'}", "function fs(v){return isFinite(v)?(v<0?'−':'+')+nfK.format(Math.abs(v*1e6)):'—'}");
 // Prazos, percentagens e contagens continuam como números simples.
 for (const k of ['x.pms', 'x.pmr', 'x.pmp', 'x.ccc', 'py.pmr', 'py.pms', 'py.ccc', 'oy.pmr', 'pmrR', 'pmrO', 'o.subFer', 'o.subNat', 'cx/payD']) replace(`f0(${k})`, `fd(${k})`);
@@ -128,7 +122,6 @@ replace("<th>Mês</th><th>Valor</th><th>Prazo (meses)</th><th>Prestação de cap
 replace("<td class=\"num\">${f1(c.v/c.prazo)}</td>", "<td class=\"num\">${f0(c.v/c.prazo)}</td>");
 replace("<th>Activo</th><th>Valor contabilístico</th><th>Renda líquida anual</th><th>Taxa capitalização (%)</th><th>Justo valor</th><th>Diferença</th>", "<th>Activo</th><th>Valor contabilístico (Kz)</th><th>Renda líquida anual (Kz)</th><th>Taxa capitalização (%)</th><th>Justo valor (Kz)</th><th>Diferença (Kz)</th>");
 replace("<th>Activo</th><th>Valor contabilístico</th><th>Custo reposição novo</th>", "<th>Activo</th><th>Valor contabilístico (Kz)</th><th>Custo reposição novo (Kz)</th>");
-replace("const f0=v=>v==null||!isFinite(v)?'—'", "const kzOut=v=>v==null||!isFinite(v)?'':nfK.format(Math.round(v*1e8)/100);\nconst kzIn=v=>{const n=parseNumberInput(String(v??''));return isFinite(n)?n/1e6:0};\nconst fx=v=>v==null||!isFinite(v)?'':String(+v).replace('.',',');\nconst f0=v=>v==null||!isFinite(v)?'—'");
 // Histórico anual e grelha real mensal.
 replace('<input class="cell" data-o="${obj}" data-k="${key}" data-i="${i}" value="${nf0.format(D[obj][key][i])}">', '<input class="cell kz" inputmode="decimal" data-kz="1" data-o="${obj}" data-k="${key}" data-i="${i}" value="${kzOut(D[obj][key][i])}">');
 replace('<input class="cell" style="width:70px" data-real="${k}" data-i="${m}" value="${D.real[k][m]==null?\'\':nf0.format(D.real[k][m])}">', '<input class="cell kz" inputmode="decimal" data-kz="1" data-real="${k}" data-i="${m}" value="${D.real[k][m]==null?\'\':kzOut(D.real[k][m])}">');
@@ -201,28 +194,11 @@ replace(`const Z={n:'#,##0;(#,##0);"-"'`, `const Z={i:'0',n:'#,##0.00;(#,##0.00)
 replace(`chk:'#,##0;(#,##0);0'}`, `chk:'#,##0.00;(#,##0.00);0'}`);
 
 /* ---------- Percentagens e números à portuguesa: milhares sempre separados e nunca «-0,0» ---------- */
-replace("const nf1=new Intl.NumberFormat('pt-PT',{minimumFractionDigits:1,maximumFractionDigits:1});", "const nf1=new Intl.NumberFormat('pt-PT',{minimumFractionDigits:1,maximumFractionDigits:1,useGrouping:'always'});");
-replace("const nf2=new Intl.NumberFormat('pt-PT',{minimumFractionDigits:2,maximumFractionDigits:2});", "const nf2=new Intl.NumberFormat('pt-PT',{minimumFractionDigits:2,maximumFractionDigits:2,useGrouping:'always'});");
-replace("const f1=v=>v==null||!isFinite(v)?'—':nf1.format(v);", "const f1=v=>v==null||!isFinite(v)?'—':nf1.format(+v.toFixed(1)||0);");
-replace("const f2=v=>v==null||!isFinite(v)?'—':nf2.format(v);", "const f2=v=>v==null||!isFinite(v)?'—':nf2.format(+v.toFixed(2)||0);");
-replace("const pct=v=>v==null||!isFinite(v)?'—':nf1.format(v*100)+'%';", "const pct=v=>v==null||!isFinite(v)?'—':nf1.format(+(v*100).toFixed(1)||0)+'%';");
 
 /* ---------- Auditoria 11/11/2026 ---------- */
 // 1) Imposto do orçamento sobre o resultado acumulado do ano (e não mês a mês): um mês com prejuízo abate os lucros
 //    dos outros meses, como na liquidação anual do Imposto Industrial. Na previsão, os meses reais já fechados entram no acumulado.
-replace("function engine(o,{start=0,end=11,open,hist,fac=null}){\n  const t=D.tax/100,out=[];let b={...open};",
-  "function engine(o,{start=0,end=11,open,hist,fac=null,ytd=null}){\n  const t=D.tax/100,out=[];let b={...open};let cumRai=ytd?ytd.rai:0,cumImp=ytd?ytd.imp:0;");
-replace("const rai=f.v61+f.v62+f.v63+f.p66-f.c71-f.c72-f.c73-f.c75-f.c76;f.imp=Math.max(0,rai)*t;",
-  "f.p68=0;f.c78=0;const rai=f.v61+f.v62+f.v63+f.p66-f.c71-f.c72-f.c73-f.c75-f.c76;cumRai+=rai;{const due=Math.max(0,cumRai)*t;f.imp=due-cumImp;cumImp=due}");
-replace("const C=engine(D.orc,{start:D.fecho,end:11,open:last.b,hist:{rev:[...hist25().rev,...rev],comp:[...hist25().comp,...comp],iva:ivaNet,credit:0}});",
-  "const done=R.slice(0,D.fecho),C=engine(D.orc,{start:D.fecho,end:11,open:last.b,hist:{rev:[...hist25().rev,...rev],comp:[...hist25().comp,...comp],iva:ivaNet,credit:0},ytd:{rai:sum(done.map(x=>rlOf(x.f)+(x.f.imp||0))),imp:sum(done.map(x=>x.f.imp||0))}});");
 // 2) Resultados não operacionais e extraordinários (68/69 e 78/79): entram no resultado antes de impostos, fora do EBITDA e dos juros.
-replace("const FKEYS=['v61','v62','v63','c71','c72','c73','c75','p66','c76','imp'];", "const FKEYS=['v61','v62','v63','c71','c72','c73','c75','p66','c76','p68','c78','imp'];");
-replace("const LBL={imp:['87','Imposto sobre os lucros'],", "const LBL={p68:['68/69','Proveitos não operacionais e extraordinários'],c78:['78/79','Custos não operacionais e extraordinários'],imp:['87','Imposto sobre os lucros'],");
-replace("function rlOf(f){const rai=f.v61+f.v62+f.v63+f.p66-f.c71-f.c72-f.c73-f.c75-f.c76;", "function rlOf(f){const rai=f.v61+f.v62+f.v63+f.p66-f.c71-f.c72-f.c73-f.c75-f.c76+(f.p68||0)-(f.c78||0);");
-replace("x.resFin=f.p66-f.c76;x.rai=x.ebit+x.resFin;", "x.resFin=f.p66-f.c76;x.resNop=(f.p68||0)-(f.c78||0);x.rai=x.ebit+x.resFin+x.resNop;");
-replace("outRec=f.v63+f.p66,", "outRec=f.v63+f.p66+(f.p68||0),");
-replace("const op=recCl+outRec-payF-payP-payS-payE+outOp,", "const op=recCl+outRec-payF-payP-payS-payE+outOp-(f.c78||0),");
 replace("{l:'Resultados financeiros',g:p=>p.resFin},", "{l:'Resultados financeiros',g:p=>p.resFin},{code:'68/69',l:'Proveitos não operacionais e extraordinários',g:p=>p.f.p68||0},{code:'78/79',l:'Custos não operacionais e extraordinários',g:p=>p.f.c78||0},{l:'Resultados não operacionais',g:p=>p.resNop},");
 replace("filter(k=>k!=='imp'&&D.real[k][MES.indexOf(p.lbl)]==null)", "filter(k=>k!=='imp'&&k!=='p68'&&k!=='c78'&&D.real[k][MES.indexOf(p.lbl)]==null)");
 replace("['76 · 77','c76'],", "['76 · 77','c76'],['68 · 69','p68'],['78 · 79','c78'],");
@@ -231,7 +207,28 @@ replace("const neg=['v61','v62','v63','p66',", "const neg=['v61','v62','v63','p6
 
 // 3) Definições explícitas onde os módulos diferem (Integra usa EBITDA / juros e ROA = RO / activo).
 replace("['Cobertura de encargos financeiros','cob','x']", "['Cobertura de encargos financeiros (EBIT / juros)','cob','x']");
-replace("['','ROA (anual.)','roa',pct,", "['','ROA (RL / activo, anual.)','roa',pct,");
+replace("['','ROA (anual.)','roa',pct,", "['','ROA (RL / activo médio, anual.)','roa',pct,");
+
+/* ---------- Auditoria 11/11/2026 — plano de acção (V-4 a V-7; o cálculo está em valuation/engine.js) ---------- */
+// V-4: fornecedores incluem fornecimentos e serviços externos; o fluxo directo mostra um só pagamento a fornecedores.
+replace("{l:'Pagamentos a fornecedores (c/ IVA)',g:p=>p.td?.payF},{l:'Pagamentos ao pessoal',g:p=>p.td?.payP},{l:'Fornecimentos e serviços (c/ IVA)',g:p=>p.td?.payS},",
+  "{l:'Pagamentos a fornecedores — mercadorias e FSE (c/ IVA)',g:p=>p.td?.payF},{l:'Pagamentos ao pessoal',g:p=>p.td?.payP},");
+replace("${fld('pmp','Prazo médio de pagamento (dias)',1)}", "${fld('pmp','Prazo médio de pagamento — mercadorias e FSE (dias)',1)}");
+// V-5: rendibilidades sobre saldos médios.
+replace("['','ROE (anual.)','roe',pct,", "['','ROE (RL / capital próprio médio, anual.)','roe',pct,");
+replace("{l:'= ROE (anual.)',", "{l:'= ROE (capital próprio médio, anual.)',");
+replace("Alavancagem (AT/CP)", "Alavancagem (activo médio / capital próprio médio)");
+replace("'ROE (anualiz.)'", "'ROE (capital próprio médio, anualiz.)'");
+// V-7: taxa de IVA da análise (por omissão 14%).
+replace("${fld('ivaAb','IVA de dezembro a pagar em janeiro',1)}", "${fld('iva','Taxa de IVA (%)',1)}${fld('ivaAb','IVA de dezembro a pagar em janeiro',1)}");
+replace("PMR e PMP incluem IVA a 14%.", "PMR e PMP incluem IVA a ${f1(ivaRate()*100)}%; o PMP inclui mercadorias e fornecimentos e serviços externos.");
+replace("rY.rec*1.14/rY.days", "rY.rec*(1+ivaRate())/rY.days");
+
+/* ---------- Motor (V-9): fonte única em valuation/engine.js; substitui a secção equivalente do protótipo ---------- */
+const engineAt = source.indexOf('/* ================= GRÁFICOS (SVG)');
+if (engineAt < 0) throw new Error('Secção de gráficos não encontrada');
+const engineFile = await readFile(new URL('valuation/engine.js', web), 'utf8');
+source = '\n' + engineFile + '\n' + source.slice(engineAt);
 
 const adapter = await readFile(new URL('valuation/adapter.js', web), 'utf8');
 const imports = [
@@ -250,9 +247,7 @@ const digest = (s) => createHash('sha256').update(s).digest('hex');
 const css = await readFile(new URL('valuation/space.css', web), 'utf8') + '\n' + await readFile(new URL('components/map-disclosure.css', web), 'utf8');
 const generated = `// Gerado por scripts/build-valuation-ui.mjs a partir de valuation/prototype.html. Não editar à mão.\nexport const VALUATION_SHELL = ${JSON.stringify(shell)};\nexport const VALUATION_SUFFIX = ${JSON.stringify(suffix)};\nexport const VALUATION_SPACE_CSS = ${JSON.stringify(css)};\nexport const VALUATION_ASSET_HASH = '${digest(js).slice(0, 16)}';\nexport const VALUATION_REFERENCE_HASH = '${digest(original)}';\n`;
 // Motor isolado para os testes (mesmas funções da interface, sem DOM).
-const engineEnd = source.indexOf('/* ================= GRÁFICOS (SVG)');
-if (engineEnd < 0) throw new Error('Secção de gráficos não encontrada');
-const engine = `// Gerado por scripts/build-valuation-ui.mjs. Motor do Valora para testes (sem DOM).\nexport const VALUATION_ENGINE_SOURCE = ${JSON.stringify(source.slice(0, engineEnd))};\n`;
+const engine = `// Gerado por scripts/build-valuation-ui.mjs a partir de valuation/engine.js. Motor do Valora para testes (sem DOM).\nexport const VALUATION_ENGINE_SOURCE = ${JSON.stringify(engineFile)};\n`;
 await mkdir(new URL('lib/valuation/', web), { recursive: true });
 for (const [path, data] of [['lib/valuation/generated.ts', generated], ['lib/valuation/engine.generated.ts', engine], ['public/valuation-runtime.js', js]]) {
   const url = new URL(path, web);

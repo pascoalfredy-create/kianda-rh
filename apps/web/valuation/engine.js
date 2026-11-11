@@ -1,0 +1,772 @@
+/* Kianda Valora — motor de cálculo (dados, utilitários, orçamento, cenários, métricas e avaliação).
+ * Fonte única: editar aqui. scripts/build-valuation-ui.mjs junta este ficheiro à interface (valuation/prototype.html)
+ * e gera lib/valuation/engine.generated.ts para os testes. Sem acesso ao DOM fora de $, css e esc (usados pela interface). */
+/* ================= DADOS DE EXEMPLO (fictícios) ================= */
+const MES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+const MD = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+// Calendário real: fevereiro com 29 dias nos anos bissextos (V-6).
+const leap = y => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+const yearDays = y => (leap(+y) ? 366 : 365);
+const monthDays = i => (i === 1 && leap(EX) ? 29 : MD[i]);
+// Taxa de IVA da análise, em fracção (V-7). Por omissão 14%.
+const ivaRate = () => {
+  const v = D && D.orc ? D.orc.iva : null;
+  return v == null || v === '' || !isFinite(+v) ? 0.14 : +v / 100;
+};
+let EX = 2026;
+const FKEYS = ['v61', 'v62', 'v63', 'c71', 'c72', 'c73', 'c75', 'p66', 'c76', 'p68', 'c78', 'imp'];
+const BKEYS = [
+  'imob',
+  'amort',
+  'invfin',
+  'exist',
+  'clientes',
+  'outdev',
+  'caixa',
+  'capital',
+  'reservas',
+  'empMLP',
+  'empCP',
+  'fornec',
+  'estado',
+  'outcred',
+];
+const LBL = {
+  p68: ['68/69', 'Proveitos não operacionais e extraordinários'],
+  c78: ['78/79', 'Custos não operacionais e extraordinários'],
+  imp: ['87', 'Imposto sobre os lucros'],
+  reservas: ['52-59/81', 'Reservas e resultados transitados'],
+  v61: ['61', 'Vendas'],
+  v62: ['62', 'Prestações de serviço'],
+  v63: ['63', 'Outros proveitos operacionais'],
+  c71: ['71', 'Custo das mercadorias vendidas'],
+  c72: ['72', 'Custos com o pessoal'],
+  c73: ['73', 'Amortizações do exercício'],
+  c75: ['75', 'Outros custos e perdas operacionais'],
+  p66: ['66', 'Proveitos e ganhos financeiros'],
+  c76: ['76', 'Custos e perdas financeiros'],
+  imob: ['11/12', 'Imobilizações (bruto)'],
+  amort: ['18', 'Amortizações acumuladas'],
+  invfin: ['13', 'Investimentos financeiros'],
+  exist: ['2', 'Existências'],
+  clientes: ['31', 'Clientes'],
+  outdev: ['34-37', 'Estado e outros devedores'],
+  caixa: ['4', 'Meios monetários'],
+  capital: ['51', 'Capital'],
+  empMLP: ['33', 'Empréstimos MLP'],
+  empCP: ['33', 'Empréstimos CP e linha de crédito'],
+  fornec: ['32', 'Fornecedores'],
+  estado: ['34', 'Estado'],
+  outcred: ['35-37', 'Outros credores'],
+};
+
+const SAMPLE = {
+  v: 3,
+  years: [2021, 2022, 2023, 2024, 2025],
+  dr: {
+    v61: [8200, 9600, 11500, 13800, 15900],
+    v62: [600, 750, 900, 1100, 1300],
+    v63: [120, 140, 160, 180, 200],
+    c71: [5500, 6400, 7700, 9200, 10500],
+    c72: [900, 1050, 1250, 1480, 1700],
+    c75: [950, 1100, 1300, 1550, 1800],
+    c73: [300, 340, 400, 470, 540],
+    p66: [40, 60, 80, 70, 90],
+    c76: [380, 450, 560, 640, 700],
+  },
+  bal: {
+    imob: [4000, 4600, 5400, 6300, 7200],
+    amort: [1200, 1540, 1940, 2410, 2950],
+    invfin: [200, 200, 250, 250, 300],
+    exist: [1300, 1550, 1900, 2300, 2700],
+    clientes: [1400, 1700, 2100, 2600, 3050],
+    outdev: [250, 300, 350, 400, 450],
+    caixa: [600, 650, 700, 900, 1100],
+    capital: [1500, 1500, 1500, 1500, 1500],
+    empMLP: [1800, 2000, 2300, 2600, 2700],
+    empCP: [600, 700, 800, 900, 900],
+    fornec: [1100, 1300, 1600, 1900, 2150],
+    estado: [200, 240, 290, 350, 420],
+    outcred: [150, 180, 220, 260, 300],
+  },
+  tax: 25,
+  orc: {
+    vendas: 18300,
+    saz: [7, 7, 8, 8, 8.5, 8, 8, 8.5, 8.5, 9, 9, 10.5],
+    p62: 8.5,
+    p63: 18,
+    mb: 35,
+    salBase: 135,
+    inss: 8,
+    subFer: 50,
+    mesFer: 7,
+    subNat: 50,
+    mesNat: 12,
+    fseFix: 110,
+    fseVar: 3,
+    amortBase: 47,
+    capex: [
+      { d: 'ERP e equipamento informático', m: 2, v: 90, vu: 4 },
+      { d: 'Ampliação do armazém de Viana', m: 4, v: 450, vu: 20 },
+      { d: 'Renovação da frota (4 camiões)', m: 7, v: 520, vu: 8 },
+    ],
+    taxa: 19,
+    amortMLP: 45,
+    loans: [{ d: 'Financiamento bancário — armazém', m: 4, v: 400, prazo: 48 }],
+    linha: true,
+    linhaLim: 1500,
+    cxMin: 600,
+    txApl: 6,
+    iva: 14,
+    pmr: 58,
+    pmp: 62,
+    pms: 92,
+    ivaAb: 120,
+    iiV: 300,
+    iiM: 5,
+    divV: 700,
+    divM: 6,
+  },
+  fecho: 10,
+  real: null,
+  var: { c71: 100, c72: 0, c75: 35 },
+  dcf: {
+    anchor: true,
+    g: [14, 12, 10, 9, 8],
+    mTarget: 20,
+    da: 3.4,
+    capex: 5.5,
+    rf: 17,
+    beta: 1.05,
+    erp: 6.5,
+    crp: 2.5,
+    kd: 21,
+    wd: 30,
+    gT: 10,
+    mid: true,
+  },
+  peers: [
+    { n: 'Comparável A', p: 'Nigéria', ev: 6.2, evs: 0.75, pe: 11.5 },
+    { n: 'Comparável B', p: 'Quénia', ev: 7.4, evs: 0.9, pe: 13.8 },
+    { n: 'Comparável C', p: 'África do Sul', ev: 8.1, evs: 0.82, pe: 15.2 },
+    { n: 'Comparável D', p: 'Marrocos', ev: 9.0, evs: 1.1, pe: 17.0 },
+    { n: 'Comparável E', p: 'Egipto', ev: 5.6, evs: 0.6, pe: 9.8 },
+    { n: 'Comparável F', p: 'Gana', ev: 6.8, evs: 0.7, pe: 12.1 },
+  ],
+  disc: 25,
+  imo: [
+    { d: 'Armazém logístico — Viana', vc: 1500, r: 420, y: 14 },
+    { d: 'Escritórios — Talatona', vc: 650, r: 150, y: 12 },
+  ],
+  eq: [
+    { d: 'Frota de camiões', vc: 900, crn: 2600, id: 4, vu: 8, ob: 5 },
+    { d: 'Empilhadores', vc: 350, crn: 600, id: 3, vu: 10, ob: 0 },
+    { d: 'Câmaras de frio', vc: 450, crn: 1100, id: 5, vu: 12, ob: 10 },
+    { d: 'Viaturas ligeiras', vc: 400, crn: 900, id: 3, vu: 6, ob: 0 },
+  ],
+  w: { dcf: 45, ev: 25, evs: 0, pe: 10, nav: 20 },
+};
+let D,
+  UI = { mode: 'M', scn: 'prev', dtab: 'dr' };
+
+/* ================= UTILITÁRIOS ================= */
+const $ = s => document.querySelector(s);
+const nf0 = new Intl.NumberFormat('pt-PT', { maximumFractionDigits: 0, useGrouping: 'always' });
+const nf1 = new Intl.NumberFormat('pt-PT', { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: 'always' });
+const nf2 = new Intl.NumberFormat('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' });
+const fd = v =>
+  v == null || !isFinite(v) ? '—' : Math.abs(v) < 0.5 ? '0' : Math.round(v) < 0 ? '(' + nf0.format(-v) + ')' : nf0.format(v);
+const nfK = new Intl.NumberFormat('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' });
+const kzOut = v => (v == null || !isFinite(v) ? '' : nfK.format(Math.round(v * 1e8) / 100));
+const kzIn = v => {
+  const n = parseNumberInput(String(v ?? ''));
+  return isFinite(n) ? n / 1e6 : 0;
+};
+const fx = v => (v == null || !isFinite(v) ? '' : String(+v).replace('.', ','));
+const f0 = v =>
+  v == null || !isFinite(v) ? '—' : Math.abs(v * 1e6) < 0.005 ? '0,00' : v < 0 ? '(' + nfK.format(-v * 1e6) + ')' : nfK.format(v * 1e6);
+const f1 = v => (v == null || !isFinite(v) ? '—' : nf1.format(+v.toFixed(1) || 0));
+const f2 = v => (v == null || !isFinite(v) ? '—' : nf2.format(+v.toFixed(2) || 0));
+const pct = v => (v == null || !isFinite(v) ? '—' : nf1.format(+(v * 100).toFixed(1) || 0) + '%');
+const sum = a => a.reduce((x, y) => x + (y || 0), 0);
+const median = a => {
+  const s = [...a].sort((x, y) => x - y),
+    n = s.length;
+  return n ? (n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2) : NaN;
+};
+const quant = (a, q) => {
+  const s = [...a].sort((x, y) => x - y);
+  if (!s.length) return NaN;
+  const p = (s.length - 1) * q,
+    b = Math.floor(p);
+  return s[b] + (s[Math.min(b + 1, s.length - 1)] - s[b]) * (p - b);
+};
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+function num(v) {
+  if (typeof v === 'number') return v;
+  let s = String(v ?? '')
+    .trim()
+    .replace(/[\s ]/g, '');
+  if (!s) return 0;
+  let neg = false;
+  if (/^\(.*\)$/.test(s)) {
+    neg = true;
+    s = s.slice(1, -1);
+  }
+  const c = s.lastIndexOf(','),
+    d = s.lastIndexOf('.');
+  if (c > -1 && d > -1) {
+    s = c > d ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+  } else if (c > -1) {
+    s = s.split(',').length > 2 || (/,\d{3}$/.test(s) && s.length > 4 && false) ? s.replace(/,/g, '') : s.replace(',', '.');
+  }
+  const x = parseFloat(s);
+  return isFinite(x) ? (neg ? -x : x) : 0;
+}
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const clone = o => JSON.parse(JSON.stringify(o));
+
+/* ================= MOTOR DE ORÇAMENTO (drivers → DR, balanço, caixa) ================= */
+function lagBal(H, d) {
+  const k = Math.floor(d / 30),
+    r = d / 30 - k,
+    n = H.length;
+  let s = 0;
+  for (let i = 0; i < k; i++) s += H[n - 1 - i] ?? H[0];
+  s += r * (H[n - 1 - k] ?? H[0]);
+  return s;
+}
+function engine(o, { start = 0, end = 11, open, hist, fac = null, ytd = null }) {
+  const t = D.tax / 100,
+    iv = ivaRate(),
+    g = 1 + iv,
+    out = [];
+  let b = { ...open };
+  let cumRai = ytd ? ytd.rai : 0,
+    cumImp = ytd ? ytd.imp : 0;
+  const revH = [...hist.rev],
+    compH = [...hist.comp];
+  let ivaPend = hist.iva,
+    credit = hist.credit || 0;
+  const vend = m => ((o.vendas * o.saz[m]) / 100) * (fac ? (fac[m] ?? 1) : 1);
+  for (let m = start; m <= end; m++) {
+    const ob = { ...b },
+      f = {};
+    f.v61 = vend(m);
+    f.v62 = (f.v61 * o.p62) / 100;
+    f.v63 = o.p63;
+    f.c71 = f.v61 * (1 - o.mb / 100);
+    const sb = o.salBase * (1 + o.inss / 100);
+    f.c72 = sb + (m + 1 === +o.mesFer ? (sb * o.subFer) / 100 : 0) + (m + 1 === +o.mesNat ? (sb * o.subNat) / 100 : 0);
+    f.c75 = o.fseFix + (f.v61 * o.fseVar) / 100;
+    const capexM = sum(o.capex.filter(c => +c.m === m + 1).map(c => +c.v));
+    f.c73 = o.amortBase + sum(o.capex.filter(c => +c.m < m + 1 && c.vu > 0).map(c => c.v / c.vu / 12));
+    f.p66 = (Math.max(0, ob.caixa) * o.txApl) / 100 / 12;
+    f.c76 = ((ob.empMLP + ob.empCP) * o.taxa) / 100 / 12;
+    f.p68 = 0;
+    f.c78 = 0;
+    const rai = f.v61 + f.v62 + f.v63 + f.p66 - f.c71 - f.c72 - f.c73 - f.c75 - f.c76;
+    cumRai += rai;
+    {
+      const due = Math.max(0, cumRai) * t;
+      f.imp = due - cumImp;
+      cumImp = due;
+    }
+    b.exist = (vend(Math.min(m + 1, 11)) * (1 - o.mb / 100) * o.pms) / 30;
+    const compras = f.c71 + b.exist - ob.exist,
+      rev = f.v61 + f.v62;
+    revH.push(rev);
+    // Fornecedores: mercadorias e fornecimentos e serviços externos pagos com o mesmo prazo médio (V-4).
+    compH.push(compras + f.c75);
+    b.clientes = lagBal(revH, o.pmr) * g;
+    b.fornec = lagBal(compH, o.pmp) * g;
+    const ivaNet = rev * iv - (compras + f.c75) * iv,
+      estPay = ivaPend + (m + 1 === +o.iiM ? o.iiV : 0);
+    b.estado = ob.estado + ivaNet + f.imp - estPay;
+    ivaPend = ivaNet;
+    let newL = 0,
+      rep = Math.min(o.amortMLP, Math.max(0, open.empMLP - o.amortMLP * (m - start)));
+    o.loans.forEach(l => {
+      if (+l.m === m + 1) newL += +l.v;
+      if (m + 1 > +l.m && m + 1 <= +l.m + +l.prazo) rep += l.v / l.prazo;
+    });
+    b.empMLP = ob.empMLP + newL - rep;
+    b.imob = ob.imob + capexM;
+    b.amort = ob.amort + f.c73;
+    const div = m + 1 === +o.divM ? o.divV : 0;
+    b.reservas = ob.reservas - div;
+    const recC = ob.clientes + rev * g - b.clientes,
+      payF = ob.fornec + (compras + f.c75) * g - b.fornec;
+    let cx = ob.caixa + recC + f.v63 + f.p66 - payF - f.c72 - estPay - f.c76 - capexM + newL - rep - div;
+    b.empCP = ob.empCP;
+    if (o.linha) {
+      if (cx < o.cxMin) {
+        const d = Math.max(0, Math.min(o.cxMin - cx, o.linhaLim - credit));
+        credit += d;
+        b.empCP += d;
+        cx += d;
+      } else if (credit > 0) {
+        const r = Math.min(credit, cx - o.cxMin);
+        credit -= r;
+        b.empCP -= r;
+        cx -= r;
+      }
+    }
+    b.caixa = cx;
+    out[m] = { f, b: { ...b }, credit, div, src: 'orc' };
+  }
+  return out;
+}
+function rlOf(f) {
+  const rai = f.v61 + f.v62 + f.v63 + f.p66 - f.c71 - f.c72 - f.c73 - f.c75 - f.c76 + (f.p68 || 0) - (f.c78 || 0);
+  return rai - (f.imp != null ? f.imp : (Math.max(0, rai) * D.tax) / 100);
+}
+function histF(i) {
+  const f = {};
+  FKEYS.forEach(k => (f[k] = D.dr[k] ? D.dr[k][i] : null));
+  return f;
+}
+/* abertura do exercício: o resultado de 2025 é transferido para resultados transitados */
+function open25() {
+  const L = D.years.length - 1,
+    o = {};
+  BKEYS.forEach(k => (o[k] = D.bal[k][L]));
+  o.reservas = D.bal.reservas[L] + rlOf(histF(L));
+  o.rlY = 0;
+  return o;
+}
+function deriveHistReserves() {
+  // reservas de exemplo coerentes: CP (activo − passivo) − capital − resultado do ano
+  D.bal.reservas = D.years.map((_, i) => {
+    const b = {};
+    BKEYS.forEach(k => (b[k] = k === 'reservas' ? 0 : D.bal[k][i]));
+    const at = b.imob - b.amort + b.invfin + b.exist + b.clientes + b.outdev + b.caixa,
+      pt = b.empMLP + b.empCP + b.fornec + b.estado + b.outcred;
+    return Math.round((at - pt - b.capital - rlOf(histF(i))) * 10) / 10;
+  });
+}
+function hist25() {
+  const L = D.years.length - 1,
+    r = (D.dr.v61[L] + D.dr.v62[L]) / 12,
+    c = (D.dr.c71[L] + D.dr.c75[L]) / 12;
+  return { rev: [r, r, r, r], comp: [c, c, c, c], iva: D.orc.ivaAb, credit: 0 };
+}
+function genReal() {
+  // gera dados reais fictícios (desvios face ao orçamento)
+  const o = clone(D.orc);
+  o.mb = 34.2;
+  o.fseFix = 118;
+  o.pmr = 66;
+  o.pms = 98;
+  o.pmp = 60;
+  o.capex = [
+    { m: 2, v: 95, vu: 4 },
+    { m: 5, v: 480, vu: 20 },
+    { m: 7, v: 520, vu: 8 },
+  ];
+  o.loans = [{ m: 5, v: 400, prazo: 48 }];
+  const fac = [0.96, 1.03, 0.97, 0.94, 1.01, 0.98, 0.95, 1.02, 0.97, 0.99, 1, 1];
+  const E = engine(o, { open: open25(), hist: hist25(), fac });
+  const R = {};
+  [...FKEYS, ...BKEYS].forEach(
+    k => (R[k] = MES.map((_, m) => (m < D.fecho ? Math.round((FKEYS.includes(k) ? E[m].f[k] : E[m].b[k]) * 10) / 10 : null))),
+  );
+  // após o arredondamento, os meios monetários absorvem os cêntimos para que cada balancete de exemplo feche exactamente
+  let rlY = 0;
+  for (let m = 0; m < D.fecho; m++) {
+    const f = {};
+    FKEYS.forEach(k => (f[k] = R[k][m]));
+    rlY += rlOf(f);
+    const g = k => R[k][m];
+    R.caixa[m] =
+      g('empMLP') +
+      g('empCP') +
+      g('fornec') +
+      g('estado') +
+      g('outcred') +
+      g('capital') +
+      g('reservas') +
+      rlY -
+      (g('imob') - g('amort') + g('invfin') + g('exist') + g('clientes') + g('outdev'));
+  }
+  return R;
+}
+/* ================= CENÁRIOS MENSAIS ================= */
+let CACHE = {};
+function realMonth(m) {
+  const f = {},
+    b = {};
+  FKEYS.forEach(k => (f[k] = num(D.real[k][m])));
+  BKEYS.forEach(k => (b[k] = num(D.real[k][m])));
+  return { f, b, src: 'real' };
+} // imposto (87): só o contabilizado, para não criar valores que o balanço não tem
+function months(scn) {
+  if (CACHE[scn]) return CACHE[scn];
+  let M;
+  if (scn === 'orc') M = engine(D.orc, { open: open25(), hist: hist25() });
+  else {
+    const R = MES.map((_, m) => (m < D.fecho ? realMonth(m) : null));
+    if (scn === 'real') M = R;
+    else if (D.fecho === 0) {
+      M = engine(D.orc, { open: open25(), hist: hist25() }).map(x => ({ ...x, src: 'prev' }));
+    } else {
+      M = [...R];
+      if (D.fecho < 12) {
+        const rev = [],
+          comp = [];
+        let prevB = open25();
+        R.slice(0, D.fecho).forEach(x => {
+          rev.push(x.f.v61 + x.f.v62);
+          comp.push(x.f.c71 + x.b.exist - prevB.exist + x.f.c75);
+          prevB = x.b;
+        });
+        const last = R[D.fecho - 1],
+          ivaNet = (last.f.v61 + last.f.v62 - comp[comp.length - 1]) * ivaRate();
+        const done = R.slice(0, D.fecho),
+          C = engine(D.orc, {
+            start: D.fecho,
+            end: 11,
+            open: last.b,
+            hist: { rev: [...hist25().rev, ...rev], comp: [...hist25().comp, ...comp], iva: ivaNet, credit: 0 },
+            ytd: { rai: sum(done.map(x => rlOf(x.f) + (x.f.imp || 0))), imp: sum(done.map(x => x.f.imp || 0)) },
+          });
+        for (let m = D.fecho; m < 12; m++) M[m] = { ...C[m], src: 'prev' };
+      }
+    }
+  }
+  CACHE[scn] = M;
+  return M;
+}
+const GROUPS = {
+  M: MES.map((_, i) => [i]),
+  T: [
+    [0, 1, 2],
+    [3, 4, 5],
+    [6, 7, 8],
+    [9, 10, 11],
+  ],
+  S: [
+    [0, 1, 2, 3, 4, 5],
+    [6, 7, 8, 9, 10, 11],
+  ],
+  A: [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]],
+};
+const SCN_LBL = { orc: 'Orç.', real: 'Real', prev: 'Prev.' };
+function aggMonths(M, idx) {
+  const pres = idx.filter(i => M[i]);
+  if (!pres.length) return null;
+  const f = {};
+  FKEYS.forEach(k => (f[k] = sum(pres.map(i => M[i].f[k]))));
+  const first = pres[0],
+    last = pres[pres.length - 1],
+    ytd = n => sum(M.slice(0, n).map(m => (m ? rlOf(m.f) : 0)));
+  const o = first === 0 ? open25() : M[first - 1] ? { ...M[first - 1].b, rlY: ytd(first) } : null;
+  return {
+    f,
+    b: M[last].b,
+    o,
+    rlY: ytd(last + 1),
+    days: sum(pres.map(i => monthDays(i))),
+    yd: yearDays(EX),
+    partial: pres.length < idx.length,
+    mix: new Set(pres.map(i => M[i].src)).size > 1,
+    months: pres,
+    tag: (() => {
+      const S = new Set(pres.map(i => M[i].src));
+      return S.has('orc') ? '' : S.size > 1 ? 'real+prev.' : S.has('prev') ? 'previsão' : '';
+    })(),
+  };
+}
+function histPeriods() {
+  return D.years.map((y, i) => {
+    const f = histF(i),
+      b = {},
+      o = i ? { rlY: rlOf(histF(i - 1)) } : null;
+    BKEYS.forEach(k => {
+      b[k] = D.bal[k][i];
+      if (o) o[k] = D.bal[k][i - 1];
+    });
+    return { lbl: String(y), f, b, o, days: yearDays(y), yd: yearDays(y), hist: true, rlY: rlOf(f) };
+  });
+}
+function periods(scn = UI.scn, mode = UI.mode, withHist = true) {
+  const M = months(scn),
+    G = GROUPS[mode],
+    out = [];
+  if (mode === 'A' && withHist) histPeriods().forEach(p => out.push(p));
+  G.forEach((idx, gi) => {
+    const a = aggMonths(M, idx);
+    if (!a) return;
+    const base = mode === 'M' ? MES[gi] : mode === 'T' ? 'T' + (gi + 1) : mode === 'S' ? 'S' + (gi + 1) : String(EX);
+    a.lbl = base + (mode === 'A' ? ' ' + SCN_LBL[scn] : '') + (a.partial ? '*' : '');
+    out.push(a);
+  });
+  return out.map(metrics);
+}
+/* ================= MÉTRICAS POR PERÍODO ================= */
+function nfmOf(b) {
+  return b.exist + b.clientes + b.outdev - b.fornec - b.estado - b.outcred;
+}
+function metrics(p) {
+  const f = p.f,
+    b = p.b,
+    o = p.o,
+    t = D.tax / 100,
+    iv = ivaRate(),
+    g = 1 + iv,
+    ann = (p.yd || 365) / p.days,
+    x = { lbl: p.lbl, days: p.days, partial: p.partial, hist: p.hist, tag: p.tag, f, b, o };
+  x.rlY = p.rlY;
+  x.rec = f.v61 + f.v62;
+  x.provOp = x.rec + f.v63;
+  x.ebitda = x.provOp - f.c71 - f.c72 - f.c75;
+  x.ebit = x.ebitda - f.c73;
+  x.resFin = f.p66 - f.c76;
+  x.resNop = (f.p68 || 0) - (f.c78 || 0);
+  x.rai = x.ebit + x.resFin + x.resNop;
+  x.imp = f.imp != null ? f.imp : Math.max(0, x.rai * t);
+  x.rl = x.rai - x.imp;
+  if (x.rlY == null) x.rlY = x.rl;
+  x.margB = (x.rec - f.c71) / x.rec;
+  x.margE = x.ebitda / x.rec;
+  x.margL = x.rl / x.rec;
+  x.imobL = b.imob - b.amort;
+  x.anc = x.imobL + b.invfin;
+  x.ac = b.exist + b.clientes + b.outdev + b.caixa;
+  x.at = x.anc + x.ac;
+  x.pc = b.empCP + b.fornec + b.estado + b.outcred;
+  x.pnc = b.empMLP;
+  x.pt = x.pc + x.pnc;
+  x.cp = b.capital + b.reservas + x.rlY;
+  x.res = b.reservas + x.rlY;
+  x.cpp = x.cp + x.pt;
+  x.dif = x.at - x.cpp;
+  x.div = b.empMLP + b.empCP;
+  x.dl = x.div - b.caixa;
+  x.nfm = nfmOf(b);
+  x.fm = x.cp + x.pnc - x.anc;
+  x.tl = x.fm - x.nfm;
+  x.compras = o ? f.c71 + b.exist - o.exist : f.c71;
+  x.liqG = x.ac / x.pc;
+  x.liqR = (x.ac - b.exist) / x.pc;
+  x.liqI = b.caixa / x.pc;
+  x.auto = x.cp / x.at;
+  x.gear = x.div / x.cp;
+  x.dlE = x.dl / (x.ebitda * ann);
+  x.cob = x.ebit / f.c76;
+  x.pmr = (b.clientes / (x.rec * g)) * p.days;
+  // Prazo médio de pagamento sobre compras de mercadorias e fornecimentos e serviços externos (V-4).
+  x.pmp = (b.fornec / ((x.compras + f.c75) * g)) * p.days;
+  x.pms = (b.exist / f.c71) * p.days;
+  x.ccc = x.pms + x.pmr - x.pmp;
+  // Rendibilidades sobre saldos médios do período (abertura e fecho), como no Integra (V-5); DuPont mantém-se exacto.
+  {
+    const cpO = o && o.capital != null ? o.capital + o.reservas + (o.rlY || 0) : x.cp,
+      atO = o && o.imob != null ? o.imob - o.amort + o.invfin + o.exist + o.clientes + o.outdev + o.caixa : x.at,
+      dlO = o && o.empMLP != null ? o.empMLP + o.empCP - o.caixa : x.dl;
+    x.cpM = (cpO + x.cp) / 2;
+    x.atM = (atO + x.at) / 2;
+    x.icM = (cpO + dlO + x.cp + x.dl) / 2;
+  }
+  x.roe = (x.rl * ann) / x.cpM;
+  x.roa = (x.rl * ann) / x.atM;
+  x.roic = (x.ebit * (1 - t) * ann) / x.icM;
+  x.rot = (x.rec * ann) / x.atM;
+  x.alav = x.atM / x.cpM;
+  {
+    const X1 = (x.ac - x.pc) / x.at,
+      X2 = x.res / x.at,
+      X3 = (x.ebit * ann) / x.at,
+      X4 = x.cp / x.pt;
+    x.z = { X1, X2, X3, X4, z: 3.25 + 6.56 * X1 + 3.26 * X2 + 6.72 * X3 + 1.05 * X4 };
+  }
+  const V = D.var;
+  x.cv = (f.c71 * V.c71) / 100 + (f.c72 * V.c72) / 100 + (f.c75 * V.c75) / 100;
+  x.mc = x.provOp - x.cv;
+  x.mcp = x.mc / x.provOp;
+  x.cf = f.c71 + f.c72 + f.c75 + f.c73 - x.cv;
+  x.pcrit = x.cf / x.mcp;
+  x.ms = (x.provOp - x.pcrit) / x.provOp;
+  x.gao = x.mc / x.ebit;
+  x.gaf = x.ebit / x.rai;
+  x.gac = x.gao * x.gaf;
+  if (o) {
+    const dnfm = x.nfm - nfmOf(o),
+      capex = -(b.imob - b.amort - (o.imob - o.amort) + f.c73),
+      fin = -(b.invfin - o.invfin),
+      ddiv = x.div - (o.empMLP + o.empCP);
+    const cpO = o.capital + o.reservas + (o.rlY || 0),
+      dcap = b.capital - o.capital,
+      divd = cpO + x.rl + dcap - x.cp;
+    const recCl = o.clientes + x.rec * g - b.clientes,
+      outRec = f.v63 + f.p66 + (f.p68 || 0),
+      payF = o.fornec + (x.compras + f.c75) * g - b.fornec,
+      payP = f.c72,
+      payS = 0,
+      payE = o.estado + x.rec * iv - (x.compras + f.c75) * iv + x.imp - b.estado,
+      outOp = o.outdev - b.outdev + (b.outcred - o.outcred);
+    const op = recCl + outRec - payF - payP - payS - payE + outOp - (f.c78 || 0),
+      inv = capex + fin,
+      finT = ddiv - f.c76 + dcap - divd,
+      dfc = op + inv + finT,
+      ind = x.rl + f.c73 + f.c76 - dnfm;
+    x.td = {
+      recCl,
+      outRec,
+      payF: -payF,
+      payP: -payP,
+      payS: -payS,
+      payE: -payE,
+      outOp,
+      op,
+      capex,
+      fin,
+      inv,
+      emp: ddiv,
+      jur: -f.c76,
+      cap: dcap,
+      divd: -divd,
+      finT,
+      dcx: dfc,
+      cx0: o.caixa,
+      cx1: o.caixa + dfc,
+      cxB: b.caixa,
+      ctrl: b.caixa - (o.caixa + dfc),
+    };
+    x.fc = {
+      rl: x.rl,
+      am: f.c73,
+      jur: f.c76,
+      dnfm: -dnfm,
+      ind,
+      difInd: ind - op,
+      cfo: op - f.c76,
+      capex,
+      fcff: x.ebit * (1 - t) + f.c73 + capex - dnfm,
+    };
+  }
+  return x;
+}
+/* ================= AVALIAÇÃO (histórico anual) ================= */
+let R;
+function prevFY() {
+  return periods('prev', 'A', false)[0];
+}
+function compute() {
+  CACHE = {};
+  const H = histPeriods().map(metrics),
+    out = {};
+  Object.keys(H[H.length - 1]).forEach(k => (out[k] = H.map(h => h[k])));
+  out.L = H.length - 1;
+  out.H = H;
+  R = out;
+  R.fy = prevFY();
+  R.fyO = periods('orc', 'A', false)[0];
+  R.dcf = dcf(R, D.dcf);
+  R.mult = mult(R);
+  R.assets = assets(R);
+  return R;
+}
+function waccOf(p, t) {
+  const ke = p.rf + p.beta * p.erp + p.crp,
+    kdt = p.kd * (1 - t),
+    wd = p.wd / 100;
+  return { ke, kdt, w: (1 - wd) * ke + wd * kdt };
+}
+function dcf(R, p, wOver, gOver) {
+  const t = D.tax / 100,
+    L = R.L,
+    W = waccOf(p, t),
+    w = (wOver ?? W.w) / 100,
+    gT = (gOver ?? p.gT) / 100;
+  const rev0 = R.rec[L],
+    m0 = R.margE[L],
+    nfmPct = R.nfm[L] / rev0;
+  let rev = rev0,
+    nfmPrev = R.nfm[L],
+    pv = 0;
+  const rows = [];
+  for (let i = 0; i < 5; i++) {
+    let m;
+    if (i === 0 && p.anchor && R.fy) {
+      rev = R.fy.rec;
+      m = R.fy.margE;
+    } else {
+      rev = rev * (1 + p.g[i] / 100);
+      const mS = p.anchor && R.fy ? R.fy.margE : m0,
+        k = p.anchor ? i / 4 : (i + 1) / 5;
+      m = mS + (p.mTarget / 100 - mS) * k;
+    }
+    const ebitda = rev * m,
+      da = (rev * p.da) / 100,
+      ebit = ebitda - da,
+      nopat = ebit * (1 - t),
+      capex = (rev * p.capex) / 100,
+      nfm = rev * nfmPct,
+      dnfm = nfm - nfmPrev;
+    nfmPrev = nfm;
+    const fcff = nopat + da - capex - dnfm,
+      per = i + 1 - (p.mid ? 0.5 : 0),
+      df = 1 / Math.pow(1 + w, per),
+      pvf = fcff * df;
+    pv += pvf;
+    rows.push({
+      y: D.years[L] + i + 1,
+      rev,
+      m,
+      ebitda,
+      da,
+      ebit,
+      nopat,
+      capex,
+      dnfm,
+      fcff,
+      df,
+      pvf,
+      g: i === 0 ? rev / rev0 - 1 : p.g[i] / 100,
+    });
+  }
+  const last = rows[4],
+    tv = w > gT ? (last.fcff * (1 + gT)) / (w - gT) : NaN,
+    pvtv = tv / Math.pow(1 + w, 5 - (p.mid ? 0.5 : 0));
+  const ev = pv + pvtv,
+    nd = R.dl[L],
+    inv = D.bal.invfin[L],
+    eq = ev - nd + inv;
+  return { W, rows, pv, tv, pvtv, ev, nd, inv, eq, tvShare: pvtv / ev, exitMult: tv / last.ebitda, w: w * 100 };
+}
+function mult(R) {
+  const L = R.L,
+    P = D.peers,
+    disc = 1 - D.disc / 100,
+    nd = R.dl[L],
+    inv = D.bal.invfin[L];
+  return [
+    { k: 'ev', lbl: 'EV/EBITDA', base: R.ebitda[L], ev: true },
+    { k: 'evs', lbl: 'EV/Vendas', base: R.rec[L], ev: true },
+    { k: 'pe', lbl: 'P/L (PER)', base: R.rl[L], ev: false },
+  ].map(d => {
+    const a = P.map(x => +x[d.k]).filter(isFinite),
+      toEq = m => (d.ev ? m * d.base - nd + inv : m * d.base) * disc;
+    return {
+      ...d,
+      med: median(a),
+      q1: quant(a, 0.25),
+      q3: quant(a, 0.75),
+      lo: toEq(quant(a, 0.25)),
+      mid: toEq(median(a)),
+      hi: toEq(quant(a, 0.75)),
+    };
+  });
+}
+function assets(R) {
+  const t = D.tax / 100;
+  const imo = D.imo.map(x => ({ ...x, jv: x.y > 0 ? x.r / (x.y / 100) : 0 })),
+    eq = D.eq.map(x => ({ ...x, jv: x.crn * Math.max(0.1, 1 - x.id / x.vu) * (1 - x.ob / 100) }));
+  const all = [...imo, ...eq],
+    vc = sum(all.map(x => x.vc)),
+    jv = sum(all.map(x => x.jv)),
+    mv = jv - vc,
+    L = R.L;
+  return { imo, eq, all, vc, jv, mv, dtl: mv * t, nav: R.cp[L] + mv * (1 - t), gap: R.imobL[L] - vc };
+}

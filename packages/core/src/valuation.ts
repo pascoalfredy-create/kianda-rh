@@ -93,7 +93,7 @@ export function blankValuationData(options: ValuationBlankOptions) {
       salBase: 0, inss: 8, subFer: 50, mesFer: 7, subNat: 50, mesNat: 12,
       fseFix: 0, fseVar: 0, amortBase: 0, capex: [], taxa: 0, amortMLP: 0, loans: [],
       linha: false, linhaLim: 0, cxMin: 0, txApl: 0,
-      pmr: 30, pmp: 30, pms: 30, ivaAb: 0, iiV: 0, iiM: 5, divV: 0, divM: 6,
+      iva: 14, pmr: 30, pmp: 30, pms: 30, ivaAb: 0, iiV: 0, iiM: 5, divV: 0, divM: 6,
     },
     fecho: 0,
     real: Object.fromEntries([...VALUATION_FLOW_KEYS, ...VALUATION_OPTIONAL_FLOW_KEYS, ...VALUATION_BALANCE_KEYS].map(k => [k, emptyMonths()])),
@@ -142,6 +142,7 @@ export function valuationDataIssue(data: unknown): string | null {
   if (!finite(data.tax) || data.tax < 0 || data.tax > 100) return 'Taxa de imposto inválida.';
   const orc = data.orc;
   if (!isObject(orc) || !Array.isArray(orc.saz) || orc.saz.length !== 12 || !orc.saz.every(finite) || !Array.isArray(orc.capex) || !Array.isArray(orc.loans)) return 'Orçamento incompleto.';
+  if (orc.iva !== undefined && (!finite(orc.iva) || orc.iva < 0 || orc.iva > 100)) return 'Taxa de IVA inválida.';
   if (!isObject(data.dcf) || !Array.isArray((data.dcf as Record<string, unknown>).g) || ((data.dcf as Record<string, unknown>).g as unknown[]).length !== 5) return 'Pressupostos de avaliação incompletos.';
   for (const list of ['peers', 'imo', 'eq'] as const) if (!Array.isArray(data[list]) || (data[list] as unknown[]).length > 200) return 'Listas de comparáveis ou activos inválidas.';
   if (!isObject(data.w)) return 'Ponderações da síntese em falta.';
