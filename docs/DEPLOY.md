@@ -124,13 +124,18 @@ Cada integração liga-se sozinha quando o secret existir no GitHub (o deploy se
 
 ## Cópias de segurança (entrega 18)
 
-O workflow **Cópia de segurança** (`.github/workflows/backup.yml`) corre todos os dias às 02:17 de Luanda (e manualmente em Actions → Cópia de segurança → Run workflow): `pg_dump` da base Neon, cifrado com AES-256 antes de sair do runner, guardado 30 dias como artefacto privado do repositório. Complementa o restauro de histórico do próprio Neon.
+O workflow **Cópia de segurança** (`.github/workflows/backup.yml`) está agendado para as 02:17 de Luanda e pode correr manualmente em **Actions → Cópia de segurança → Run workflow**. Guarda o `pg_dump` da base Neon e a cópia dos anexos, cifrados com AES-256 antes de saírem do runner, por 30 dias. O repositório é público. Os artefactos estão sujeitos às permissões de leitura do GitHub e a confidencialidade dos dados depende da cifra e do segredo da frase. Uma alteração ao próprio workflow em `main` corre o ensaio de restauro sem publicar um novo artefacto. A cópia complementa o restauro de histórico do Neon.
 
 - **Secret obrigatório:** `KIANDA_BACKUP_PASSPHRASE` — frase longa (20+ caracteres), gerada e guardada fora do GitHub (gestor de palavras-passe). Sem ela não há cópia (nunca se guardam dados de clientes sem cifra). **Perder a frase = perder as cópias.**
-- **Teste de restauro em cada cópia:** depois de cifrar, o workflow decifra o ficheiro com a frase gravada e lê-o com `pg_restore --list` (mínimo de 20 tabelas com dados, incluindo `companies`, `users`, `subscriptions`, `financial_models`). Se falhar, a execução fica vermelha. O registo mostra a impressão digital da frase (8 primeiros caracteres do SHA-256) para confirmar que coincide com a guardada: `printf %s 'FRASE' | sha256sum | cut -c1-8`.
+- **Verificação da cópia SQL.** O workflow decifra o ficheiro com a frase gravada e lê o inventário com `pg_restore --list`. Exige pelo menos 20 tabelas com dados, incluindo `companies`, `users`, `subscriptions` e `financial_models`.
 - **Restauro real em cada cópia:** o workflow reconstrói a cópia numa base Postgres 18 isolada, consulta os registos essenciais e confirma que o papel `kianda_app` só lê utilizadores da empresa seleccionada. Erros de restauro ou de isolamento falham a execução.
-- **Ficheiros no R2:** com os secrets `KIANDA_R2_ACCESS_KEY_ID` e `KIANDA_R2_SECRET_ACCESS_KEY` (chave S3 só de leitura) e o `CLOUDFLARE_ACCOUNT_ID`, o workflow copia o bucket, cifra o arquivo e junta-o ao artefacto. O teste decifra e extrai o arquivo no runner e compara os caminhos e o conteúdo com a cópia de origem. Sem estes secrets, aplica-se a durabilidade do Cloudflare.
-- **Restaurar:** descarregar o artefacto → `gpg --decrypt kianda-AAAA-MM-DD_HHMM.dump.gpg > kianda.dump` → criar um ramo (branch) novo no Neon → `pg_restore --no-owner --no-privileges -d "<ligação do ramo>" kianda.dump` → validar → apontar o Hyperdrive para o ramo restaurado (ou copiar só as tabelas necessárias).
+- **Ficheiros no R2.** Com os secrets `KIANDA_R2_ACCESS_KEY_ID` e `KIANDA_R2_SECRET_ACCESS_KEY` (chave S3 só de leitura) e o `CLOUDFLARE_ACCOUNT_ID`, o workflow copia o bucket, cifra o arquivo e junta-o ao artefacto. Depois de decifrar e extrair, compara os ficheiros com a cópia de origem e os SHA-256 dos anexos com os registos da base restaurada. Também valida os anexos guardados directamente na base. A execução falha se existirem referências ao R2 sem a chave de leitura ou se faltar um anexo registado.
+
+Para recuperar o serviço, faça o ensaio numa base vazia e num bucket privado de recuperação. Use o SQL e o R2 da mesma execução.
+
+1. Confira os ficheiros cifrados com o manifesto SHA-256 e decifre-os num ambiente isolado. Use `gpg --decrypt kianda-AAAA-MM-DD_HHMM.dump.gpg > kianda.dump` para o SQL e extraia o `.tgz.gpg` dos anexos num directório temporário.
+2. Crie o papel `kianda_app` na base vazia, restaure com `pg_restore --no-owner --no-privileges -d "$RESTORE_DATABASE_URL" kianda.dump` e reponha as permissões de aplicação das migrações. O dump preserva as políticas RLS, mas omite os `GRANT`. Um ramo Neon criado a partir de produção já contém as tabelas e os dados dessa produção.
+3. Copie os ficheiros do directório `r2/` para o bucket de recuperação, mantendo as chaves `empresa/ficheiro`. Ligue uma instância de ensaio da aplicação à base e ao bucket restaurados. Confirme o acesso de uma empresa aos seus anexos e o isolamento entre empresas. Registe a hora da cópia e o tempo do ensaio antes de decidir a reposição da produção.
 
 ## Domínio próprio
 

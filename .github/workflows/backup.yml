@@ -1,4 +1,4 @@
-# Cópia de segurança diária da base de dados (Neon), cifrada, guardada 30 dias como artefacto privado do GitHub.
+# Cópia de segurança diária da base de dados (Neon), cifrada, guardada 30 dias como artefacto do GitHub.
 # Complementa o restauro do próprio Neon (histórico/ramificação). Restauro: ver docs/DEPLOY.md, secção "Cópias de segurança".
 name: Cópia de segurança
 
@@ -6,6 +6,9 @@ on:
   schedule:
     - cron: '17 1 * * *' # 02:17 em Luanda
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/backup.yml']
 
 permissions:
   contents: read
@@ -58,17 +61,20 @@ jobs:
           rm -f /tmp/check.list
           # Restauro real numa base Postgres isolada (contentor efémero, sem rede para fora do runner):
           # a cópia só conta se se reconstrói e responde às consultas essenciais.
-          docker network create kianda-restore >/dev/null
+          docker network create --internal kianda-restore >/dev/null
           docker run -d --name kianda-restore --network kianda-restore -e POSTGRES_PASSWORD=restore -e POSTGRES_DB=kianda postgres:18 >/dev/null
           for i in $(seq 1 30); do docker exec kianda-restore pg_isready -U postgres -d kianda >/dev/null 2>&1 && break; sleep 2; done
           docker exec kianda-restore psql -U postgres -d kianda -qc "CREATE ROLE kianda_app NOLOGIN" >/dev/null
-          docker run --rm --network kianda-restore -v /tmp:/w -e PGPASSWORD=restore postgres:18 \
-            pg_restore --no-owner --no-privileges -h kianda-restore -U postgres -d kianda /w/check.dump > /tmp/restore.log 2>&1 || true
-          # Só se toleram avisos benignos do ambiente gerido (esquema/extensão já existentes); qualquer outro erro falha.
-          if grep "pg_restore: error:" /tmp/restore.log | grep -vE "already exists|must be owner of (extension|schema)" ; then fail "O pg_restore falhou ao reconstruir a base"; fi
+          if ! docker run --rm --network kianda-restore -v /tmp:/w -e PGPASSWORD=restore postgres:18 \
+            pg_restore --no-owner --no-privileges -h kianda-restore -U postgres -d kianda /w/check.dump > /tmp/restore.log 2>&1; then
+            # Os detalhes do restauro podem incluir dados de clientes. Registar apenas o estado no GitHub.
+            errors=$(grep -c '^pg_restore: error:' /tmp/restore.log || true)
+            benign=$(grep -cE '^pg_restore: error: .*(already exists|must be owner of (extension|schema))' /tmp/restore.log || true)
+            [ "$errors" -gt 0 ] && [ "$errors" = "$benign" ] || fail "O pg_restore falhou ao reconstruir a base"
+          fi
           rm -f /tmp/restore.log
           shred -u /tmp/check.dump
-          q() { docker exec kianda-restore psql -U postgres -d kianda -tAc "$1"; }
+          q() { docker exec kianda-restore psql -X -U postgres -d kianda -v ON_ERROR_STOP=1 -tAc "$1"; }
           companies=$(q "select count(*) from companies"); users=$(q "select count(*) from users"); migrations=$(q "select count(*) from drizzle.__drizzle_migrations" 2>/dev/null || echo 0)
           [ "$companies" -ge 1 ] || fail "Base restaurada sem empresas"
           [ "$users" -ge 1 ] || fail "Base restaurada sem utilizadores"
@@ -90,22 +96,28 @@ jobs:
           END $$;
           ROLLBACK;
           SQL
+          # Reconstituir a ligação usada pela aplicação entre os metadados e os dois meios de armazenamento.
+          invalid=$(q "SELECT count(*) FROM files f LEFT JOIN file_blobs b ON b.file_id = f.id AND b.company_id = f.company_id
+            WHERE (f.storage = 'db' AND (octet_length(b.data) IS DISTINCT FROM f.size_bytes OR encode(sha256(b.data), 'hex') IS DISTINCT FROM f.sha256))
+               OR (f.storage = 'r2' AND (f.company_id !~ '^[A-Za-z0-9_-]+$' OR f.id !~ '^[A-Za-z0-9_-]+$' OR f.sha256 !~ '^[a-f0-9]{64}$'))
+               OR f.storage NOT IN ('db', 'r2')")
+          [ "$invalid" = 0 ] || fail "$invalid anexo(s) com conteúdo na base ou metadados inválidos"
+          umask 077
+          q "SELECT sha256 || '  ' || company_id || '/' || id FROM files WHERE storage = 'r2'" > /tmp/kianda-r2.sha256
+          [ ! -s /tmp/kianda-r2.sha256 ] || [ -n "$R2_ACCESS_KEY_ID" ] || fail "A base contém anexos no R2 e falta a chave para copiar o bucket"
           docker rm -f kianda-restore >/dev/null; docker network rm kianda-restore >/dev/null
           echo "Restauro verificado: $tables tabelas com dados; base reconstruída com $companies empresa(s), $users utilizador(es) e $migrations migrações."
-          # Identifica a frase usada sem a revelar: compare com a da sua cópia guardada (docs/DEPLOY.md).
-          echo "Impressão digital da frase (SHA-256, 8 caracteres): $(printf %s "$PASSPHRASE" | sha256sum | cut -c1-8)"
         env:
           PASSPHRASE: ${{ secrets.KIANDA_BACKUP_PASSPHRASE }}
 
-      # Ficheiros anexados no R2 (opcional): só corre se os secrets da chave S3 do R2 existirem.
-      # Sem eles, o R2 fica coberto apenas pela durabilidade do próprio Cloudflare (ver docs/DEPLOY.md).
+      # A cópia de objectos é necessária quando a base restaurada referencia ficheiros no R2.
       - name: Cópia cifrada e restauro de ensaio dos ficheiros do R2
         if: env.R2_ACCESS_KEY_ID != ''
         run: |
           set -euo pipefail
           export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" AWS_DEFAULT_REGION=auto
           backup_dir=$(mktemp -d)
-          trap 'rm -rf -- "$backup_dir"' EXIT
+          trap 'rm -rf -- "$backup_dir"; rm -f /tmp/kianda-r2.sha256' EXIT
           mkdir "$backup_dir/r2" "$backup_dir/restored"
           aws s3 sync "s3://${R2_BUCKET:-kianda-files}" "$backup_dir/r2" --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" --only-show-errors
           count=$(find "$backup_dir/r2" -type f | wc -l)
@@ -113,8 +125,13 @@ jobs:
           tar -C "$backup_dir" -czf - r2 | gpg --batch --yes --pinentry-mode loopback --passphrase "$PASSPHRASE" --symmetric --cipher-algo AES256 -o "$archive"
           gpg --batch --quiet --pinentry-mode loopback --passphrase "$PASSPHRASE" -d "$archive" | tar -xzf - -C "$backup_dir/restored"
           diff -qr "$backup_dir/r2" "$backup_dir/restored/r2" >/dev/null || { echo "::error title=Restauro R2::Os ficheiros restaurados divergem da cópia de origem"; exit 1; }
+          if [ -s /tmp/kianda-r2.sha256 ]; then
+            (cd "$backup_dir/restored/r2" && sha256sum --check --strict --quiet /tmp/kianda-r2.sha256) >/dev/null 2>&1 \
+              || { echo "::error title=Restauro R2::Há anexos em falta ou com conteúdo diferente do registado na base restaurada"; exit 1; }
+          fi
           sha256sum "$archive" >> "/tmp/kianda-$STAMP.sha256"
           echo "R2: $count ficheiro(s) copiados, cifrados e restaurados em ambiente isolado."
+          echo "Anexos R2 conferidos com a base restaurada: $(wc -l < /tmp/kianda-r2.sha256)."
         env:
           R2_SECRET_ACCESS_KEY: ${{ secrets.KIANDA_R2_SECRET_ACCESS_KEY }}
           R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -122,6 +139,8 @@ jobs:
           PASSPHRASE: ${{ secrets.KIANDA_BACKUP_PASSPHRASE }}
 
       - uses: actions/upload-artifact@v4
+        # Uma alteração ao workflow ensaia o restauro em main. A retenção continua diária e manual.
+        if: github.event_name != 'push'
         with:
           name: kianda-db-${{ env.STAMP }}
           path: |
