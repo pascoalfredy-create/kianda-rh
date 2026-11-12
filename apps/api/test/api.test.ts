@@ -1,10 +1,11 @@
-import { candidates, closeDb, employees as employeesTable, getDb, jobOpenings, platformAdmins, platformSettings, sql, withTenant } from '@kianda/db';
+import { candidates, closeDb, employees as employeesTable, getDb, jobOpenings, platformSettings, sql, withTenant } from '@kianda/db';
 import { COMPANY_TABLES_PURGE_ORDER } from '../src/services/privacy.js';
 import { setObjectStore, type ObjectStore } from '../src/services/storage.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { luandaDate, totp } from '@kianda/core';
 import { buildApp } from '../src/app.js';
 import { testClient, type InjectResponse } from './inject.js';
+import { platformCookie } from './platform-admin.js';
 import { fixtureWord, fixtureZip } from '../../../packages/core/test/fixtures/document-import.js';
 
 const app = testClient(buildApp({ rateLimit: false }));
@@ -42,6 +43,7 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
   const nifB = String(Number(nifA) + 1).padStart(10, '0').slice(-10);
   const pw = 'Segura2026abc';
   let owner = '';
+  let admin = '';
   let payrollUser = '';
   let financeUser = '';
   let employeeUser = '';
@@ -1175,7 +1177,10 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
     const patch = (cookie: string, url: string, payload: object) => app.inject({ method: 'PATCH', url, headers: as(cookie), payload });
     let companyId = '';
-    beforeAll(async () => { await getDb().delete(platformSettings); });
+    beforeAll(async () => {
+      await getDb().delete(platformSettings);
+      admin = await platformCookie(app, `dona+${stamp}@a.ao`);
+    });
 
     it('empresa nova em período experimental, com código e escalão pela dimensão declarada', async () => {
       const me = (await get(owner, '/v1/auth/me')).json();
@@ -1206,27 +1211,27 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
 
     it('consola: só administradores; confirmar o plano activa a licença, sem venda de extras', async () => {
       expect((await get(owner, '/v1/platform/companies')).statusCode).toBe(403);
-      await getDb().insert(platformAdmins).values({ email: `dona+${stamp}@a.ao` }).onConflictDoNothing();
-      expect((await get(owner, '/v1/auth/me')).json().platformAdmin).toBe(true);
-      const list = (await get(owner, '/v1/platform/companies')).json();
+      expect((await get(owner, '/v1/auth/me')).json().platformAdmin).toBe(false);
+      expect((await get(admin, '/v1/auth/me')).json().platformAdmin).toBe(true);
+      const list = (await get(admin, '/v1/platform/companies')).json();
       expect(list.companies.find((x: { id: string }) => x.id === companyId)).toMatchObject({ status: 'trial', pendingPayments: 1 });
-      const pending = (await get(owner, '/v1/platform/payment-requests')).json().find((x: { companyId: string }) => x.companyId === companyId);
-      const ok = await post(owner, `/v1/platform/payment-requests/${pending.id}/confirm`, { invoiceRef: 'FT KRH2026/0001' });
+      const pending = (await get(admin, '/v1/platform/payment-requests')).json().find((x: { companyId: string }) => x.companyId === companyId);
+      const ok = await post(admin, `/v1/platform/payment-requests/${pending.id}/confirm`, { invoiceRef: 'FT KRH2026/0001' });
       expect(ok.json().status).toBe('paid');
       const b = (await get(financeUser, '/v1/billing')).json();
       expect(b).toMatchObject({ status: 'active', cycle: 'annual', paidUntil: pending.periodEnd });
       // MRR ao preço do ciclo contratado (anual com desconto ÷ 12), por módulo, incluindo o Valora.
-      const after = (await get(owner, '/v1/platform/companies')).json(), row = after.companies.find((x: { id: string }) => x.id === companyId);
+      const after = (await get(admin, '/v1/platform/companies')).json(), row = after.companies.find((x: { id: string }) => x.id === companyId);
       expect(row.hrMrr).toBeGreaterThan(0); expect(row.hrMrr).toBeLessThan(row.monthlyMinor);
       // Um ciclo pago a um preço anterior mantém o seu valor quando o catálogo muda.
       await getDb().execute(sql`update payment_requests set amount_minor = 28000000 where id = ${pending.id}`);
-      const repriced = (await get(owner, '/v1/platform/companies')).json().companies.find((x: { id: string }) => x.id === companyId);
+      const repriced = (await get(admin, '/v1/platform/companies')).json().companies.find((x: { id: string }) => x.id === companyId);
       expect(repriced.hrMrr).toBe(Math.round(28_000_000 / 12));
       await getDb().execute(sql`update payment_requests set amount_minor = ${pending.amountMinor} where id = ${pending.id}`);
       expect(after.summary.mrrByModule).toEqual(expect.objectContaining({ hr: expect.any(Number), modeling: expect.any(Number), valuation: expect.any(Number) }));
       expect(after.summary.mrrMinor).toBe(after.summary.mrrByModule.hr + after.summary.mrrByModule.modeling + after.summary.mrrByModule.valuation);
       expect(after.summary.modules.valuation).toEqual(expect.objectContaining({ trial: expect.any(Number), active: expect.any(Number) }));
-      await app.inject({ method: 'PUT', url: '/v1/platform/settings', headers: as(owner), payload: { bank: { holder: 'Kianda RH, Lda.', bankName: 'BAI', iban: 'AO06004000005521889010252' }, supportEmail: 'suporte@kianda.ao', supportPhone: '+244 923 000 000' } });
+      await app.inject({ method: 'PUT', url: '/v1/platform/settings', headers: as(admin), payload: { bank: { holder: 'Kianda RH, Lda.', bankName: 'BAI', iban: 'AO06004000005521889010252' }, supportEmail: 'suporte@kianda.ao', supportPhone: '+244 923 000 000' } });
       const extra = await post(financeUser, '/v1/billing/requests', { kind: 'extra_seats', seats: 10 });
       expect(extra.statusCode).toBe(400);
       const fixed = (await get(financeUser, '/v1/billing')).json();
@@ -1236,7 +1241,7 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
 
     it('visitas ao site: sem cookies, uma por pessoa/página/dia, robôs ignorados; resumo só para a plataforma', async () => {
       const visit = (ua: string, ip: string, payload: object, country = 'AO') => app.inject({ method: 'POST', url: '/v1/public/visit', headers: { 'content-type': 'application/json', 'user-agent': ua, 'x-forwarded-for': ip, 'cf-ipcountry': country }, payload });
-      const before = (await get(owner, '/v1/platform/visits?days=7')).json();
+      const before = (await get(admin, '/v1/platform/visits?days=7')).json();
       const phone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148', pc = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0';
       const ip = `10.${Number(stamp.slice(-3)) % 200}.7.1`;
       const first = await visit(phone, ip, { path: '/?utm_source=x', referrer: 'https://l.facebook.com/l.php?u=kianda', source: 'Instagram' });
@@ -1246,7 +1251,7 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       await visit('facebookexternalhit/1.1', ip, { path: '/' });                // pré-visualização de link
       await visit(pc, `10.${Number(stamp.slice(-3)) % 200}.7.2`, { path: '/registo', referrer: 'https://www.linkedin.com/feed/' }, 'PT');
       expect((await visit(pc, ip, { path: 12 })).statusCode).toBe(204);         // corpo inválido: ignorado em silêncio
-      const r = (await get(owner, '/v1/platform/visits?days=7')).json();
+      const r = (await get(admin, '/v1/platform/visits?days=7')).json();
       expect(r.totals.today - before.totals.today).toBe(2);
       expect(r.totals.views - before.totals.views).toBe(2);
       expect(r.series).toHaveLength(7);
@@ -1260,18 +1265,18 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
 
     it('licença suspensa: só consulta (escrever dá 402), mas pode tratar da licença; limite de colaboradores', async () => {
-      await patch(owner, `/v1/platform/companies/${companyId}/subscription`, { status: 'suspended' });
+      await patch(admin, `/v1/platform/companies/${companyId}/subscription`, { status: 'suspended' });
       expect((await get(owner, '/v1/employees')).statusCode).toBe(200);
       const w = await post(owner, '/v1/departments', { name: 'Bloqueado', costCenter: 'CC-X' });
       expect(w.statusCode).toBe(402);
       expect(w.json().error).toBe('licenca_inactiva');
       expect((await post(financeUser, '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'monthly' })).statusCode).toBe(201);
-      await patch(owner, `/v1/platform/companies/${companyId}/subscription`, { status: 'active' });
+      await patch(admin, `/v1/platform/companies/${companyId}/subscription`, { status: 'active' });
       const n = (await get(owner, '/v1/employees')).json().filter((e: { status: string }) => e.status === 'active').length;
-      await patch(owner, `/v1/platform/companies/${companyId}/subscription`, { tierKey: 'custom', customMaxEmployees: n });
+      await patch(admin, `/v1/platform/companies/${companyId}/subscription`, { tierKey: 'custom', customMaxEmployees: n });
       const over = await post(owner, '/v1/employees', { number: '999', name: 'Excedente', jobTitle: 'Teste', contract: { type: 'indefinite', startDate: '2026-11-02', base: 150000 } });
       expect(over.json().error).toBe('limite_colaboradores');
-      await patch(owner, `/v1/platform/companies/${companyId}/subscription`, { tierKey: 't1' });
+      await patch(admin, `/v1/platform/companies/${companyId}/subscription`, { tierKey: 't1' });
     });
 
     it('logotipo para o papel timbrado: só PNG/JPEG', async () => {
@@ -1519,7 +1524,7 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       const r = (await post(financeUser, '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'monthly' })).json();
       expect(r.gatewayReference).toBeNull();
       expect((await get(financeUser, '/v1/billing')).json()).toMatchObject({ multicaixa: false, invoicesOnline: false });
-      const integ = (await get(owner, '/v1/platform/integrations')).json();
+      const integ = (await get(admin, '/v1/platform/integrations')).json();
       expect(integ.status).toMatchObject({ proxypay: { enabled: false }, email: { enabled: false }, vendus: { enabled: false } });
       expect(integ.emails.find((e: { kind: string }) => e.kind === 'pedido_pagamento').status).toBe('skipped');
     });
@@ -1556,15 +1561,15 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(paid).toMatchObject({ status: 'paid', confirmedVia: 'gateway', invoiceRef: null });
       expect(b.paidUntil).toBe(r.periodEnd);
       expect(emails.some((e) => e.subject === `Kianda RH — pagamento ${r.number} recebido`)).toBe(true);
-      const events = (await get(owner, '/v1/platform/integrations')).json().events;
+      const events = (await get(admin, '/v1/platform/integrations')).json().events;
       expect(events.map((e: { outcome: string }) => e.outcome).slice(0, 2).sort()).toEqual(['amount_mismatch', 'applied']);
     });
 
     it('factura certificada no Vendus: emissão pela consola, PDF pela página Licença; automática quando activada', async () => {
       const paid = (await get(financeUser, '/v1/billing')).json().requests.find((x: { confirmedVia: string | null }) => x.confirmedVia === 'gateway');
-      expect((await put(owner, '/v1/platform/invoicing', { autoIssue: true, taxId: 'ISE', exemptionCode: null, exemptionLaw: null, paymentMethodId: null, registerId: null })).statusCode).toBe(400);
-      expect((await put(owner, '/v1/platform/invoicing', { autoIssue: true, taxId: 'NOR', exemptionCode: null, exemptionLaw: null, paymentMethodId: 3, registerId: null })).statusCode).toBe(200);
-      const inv = (await post(owner, `/v1/platform/payment-requests/${paid.id}/invoice`)).json();
+      expect((await put(admin, '/v1/platform/invoicing', { autoIssue: true, taxId: 'ISE', exemptionCode: null, exemptionLaw: null, paymentMethodId: null, registerId: null })).statusCode).toBe(400);
+      expect((await put(admin, '/v1/platform/invoicing', { autoIssue: true, taxId: 'NOR', exemptionCode: null, exemptionLaw: null, paymentMethodId: 3, registerId: null })).statusCode).toBe(200);
+      const inv = (await post(admin, `/v1/platform/payment-requests/${paid.id}/invoice`)).json();
       expect(inv).toMatchObject({ invoiceRef: 'FR KRH2026/1', invoiceProvider: 'vendus', invoiceError: null });
       expect(invoices[0]).toMatchObject({ type: 'FR', mode: 'tests', tx_id: paid.number, client: { fiscal_id: nifA, country: 'AO' }, payments: [{ id: 3 }] });
       expect((invoices[0] as { items: { gross_price: string; tax_id: string }[] }).items[0]).toMatchObject({ gross_price: (paid.amountMinor / 100).toFixed(2), tax_id: 'NOR' });
@@ -1573,7 +1578,7 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       // Sincronização: renovação da faixa fixa → aplicada, factura automática, pagamento reconhecido.
       const renewal = (await post(financeUser, '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'monthly' })).json();
       queue = [{ id: pid(3), reference_id: Number(renewal.gatewayReference), amount: (renewal.amountMinor / 100).toFixed(2) }];
-      expect((await post(owner, '/v1/platform/gateway/sync')).json()).toMatchObject({ enabled: true, processed: 1, applied: 1, issues: 0 });
+      expect((await post(admin, '/v1/platform/gateway/sync')).json()).toMatchObject({ enabled: true, processed: 1, applied: 1, issues: 0 });
       expect(acked).toContain(String(pid(3)));
       const after = (await get(financeUser, '/v1/billing')).json().requests.find((x: { id: string }) => x.id === renewal.id);
       expect(after).toMatchObject({ status: 'paid', invoiceRef: 'FR KRH2026/2' });
@@ -1597,7 +1602,7 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       const integra = reminderFor({ status: 'active', trialEndsAt: null, paidUntil: '2026-12-31' }, '2026-12-24', 'Kianda Integra', 'modeling_');
       expect(integra).toMatchObject({ kind: 'modeling_renovacao_7d', subject: 'A sua licença Kianda Integra termina dentro de 7 dias' });
       expect(reminderFor({ status: 'trial', trialEndsAt: '2026-11-03', paidUntil: null }, '2026-11-03', 'Kianda Valora', 'valuation_')?.subject).toBe('O período experimental do Kianda Valora termina hoje');
-      expect((await post(owner, '/v1/platform/jobs/reminders')).json().checked).toBeGreaterThan(0);
+      expect((await post(admin, '/v1/platform/jobs/reminders')).json().checked).toBeGreaterThan(0);
     });
   });
 
@@ -1687,17 +1692,18 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       const idP = reg.json().company.id;
       await post(ownerP, '/v1/employees', { number: '1', name: 'Vigia', jobTitle: 'Vigilante', contract: { type: 'indefinite', startDate: '2026-01-05', base: 120000 } });
       await post(ownerP, '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'monthly' });
-      expect((await post(owner, `/v1/platform/companies/${idP}/purge`, { confirmNif: nifP })).json().error).toBe('nao_cancelada');
-      await app.inject({ method: 'PATCH', url: `/v1/platform/companies/${idP}/subscription`, headers: as(owner), payload: { status: 'cancelled' } });
-      expect((await get(owner, `/v1/platform/companies/${idP}/export`)).json().tables.employees).toHaveLength(1);
-      expect((await post(owner, `/v1/platform/companies/${idP}/purge`, { confirmNif: '0000000000' })).statusCode).toBe(422);
+      expect((await post(admin, `/v1/platform/companies/${idP}/purge`, { confirmNif: nifP })).json().error).toBe('nao_cancelada');
+      await app.inject({ method: 'PATCH', url: `/v1/platform/companies/${idP}/subscription`, headers: as(admin), payload: { status: 'cancelled' } });
+      expect((await get(admin, `/v1/platform/companies/${idP}/export`)).json().tables.employees).toHaveLength(1);
+      expect((await post(admin, `/v1/platform/companies/${idP}/purge`, { confirmNif: '0000000000' })).statusCode).toBe(422);
       expect((await post(financeUser, `/v1/platform/companies/${idP}/purge`, { confirmNif: nifP })).statusCode).toBe(403);
-      const ok = (await post(owner, `/v1/platform/companies/${idP}/purge`, { confirmNif: nifP })).json();
+      const ok = (await post(admin, `/v1/platform/companies/${idP}/purge`, { confirmNif: nifP })).json();
       expect(ok.deleted).toMatchObject({ companies: 1, employees: 1, users: 1, subscriptions: 1, payment_requests: 1 });
       const db = getDb();
       const tables = (await db.execute(sql`select table_name from information_schema.columns where table_schema = 'public' and column_name = 'company_id'`)).rows.map((r) => String(r.table_name));
       for (const t of tables) expect((await db.execute(sql`select count(*)::int as n from ${sql.identifier(t)} where company_id = ${idP}`)).rows[0], t).toEqual({ n: 0 });
-      expect((await post(owner, `/v1/platform/companies/${companyA}/purge`, { confirmNif: nifA })).json().error).toBe('protegida'); // a própria empresa do administrador
+      const internal = (await get(admin, '/v1/auth/me')).json().user.companyId;
+      expect((await post(admin, `/v1/platform/companies/${internal}/purge`, { confirmNif: 'PLATAFORMA' })).json().error).toBe('protegida');
     });
   });
 
@@ -1936,7 +1942,7 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
 describe.skipIf(!process.env.DATABASE_URL)('Integra: módulos e importação opcional de pessoal', () => {
   const stamp = String(Date.now()) + 'mf';
   const password = 'IntegraSegura2026';
-  let cookie = '', other = '', companyId = '', modelId = '', budgetId = '';
+  let cookie = '', admin = '', other = '', companyId = '', modelId = '', budgetId = '';
   const request = (method: string, url: string, payload?: unknown, session = cookie) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
   beforeAll(async () => {
     for (const [i, name] of ['Integra A', 'Integra B'].entries()) {
@@ -1950,8 +1956,8 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: módulos e importação opc
   it('não concede Modelagem através da licença RH e protege a consola', async () => {
     expect((await request('GET', '/v1/modeling/models')).statusCode).toBe(403);
     expect((await request('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 })).statusCode).toBe(403);
-    await getDb().insert(platformAdmins).values({ email: `${stamp}0@integra.ao` });
-    expect((await request('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 })).statusCode).toBe(200);
+    admin = await platformCookie(app, `${stamp}0@integra.ao`);
+    expect((await request('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 }, admin)).statusCode).toBe(200);
     expect((await request('GET', '/v1/modules')).json().modeling.canWrite).toBe(true);
   });
   it('cria modelo com pressupostos manuais e impede sobrescrita concorrente', async () => {
@@ -1962,7 +1968,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: módulos e importação opc
     expect((await request('PUT', `/v1/modeling/models/${modelId}`, { ...values, revision: 1 })).statusCode).toBe(409);
   });
   it('isola modelos entre empresas, incluindo a pesquisa por identificador', async () => {
-    await request('PUT', `/v1/platform/companies/${(await request('GET', '/v1/auth/me', undefined, other)).json().company.id}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 });
+    await request('PUT', `/v1/platform/companies/${(await request('GET', '/v1/auth/me', undefined, other)).json().company.id}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 }, admin);
     expect((await request('GET', `/v1/modeling/models/${modelId}`, undefined, other)).statusCode).toBe(404);
     expect((await request('GET', '/v1/modeling/models', undefined, other)).json()).toEqual([]);
   });
@@ -1994,7 +2000,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: módulos e importação opc
     expect(r.json().model.assumptions.pessoal).toBeCloseTo(9.99999);
   });
   it('Modelagem continua activa com RH desligado; importação opcional fica bloqueada', async () => {
-    await request('PUT', `/v1/platform/companies/${companyId}/modules/hr`, { enabled: false });
+    await request('PUT', `/v1/platform/companies/${companyId}/modules/hr`, { enabled: false }, admin);
     await getDb().execute(sql`update subscriptions set status='suspended' where company_id=${companyId}`);
     expect((await request('GET', '/v1/employees')).statusCode).toBe(403);
     expect((await request('POST', '/v1/payroll-runs', {})).statusCode).toBe(403);
@@ -2003,7 +2009,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: módulos e importação opc
     expect((await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'budget', budgetId, revision: 5, exchangeRate: 0.001 })).statusCode).toBe(403);
   });
   it('suspender Modelagem mantém consulta e bloqueia alterações; empresa não altera direitos', async () => {
-    await request('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'suspended' });
+    await request('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'suspended' }, admin);
     expect((await request('GET', `/v1/modeling/models/${modelId}`)).statusCode).toBe(200);
     expect((await request('POST', '/v1/modeling/models', {})).statusCode).toBe(402);
     await expect(withTenant(companyId, () => getDb().execute(sql`update company_modules set enabled=true where company_id=${companyId}`))).rejects.toThrow();
@@ -2012,10 +2018,10 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: módulos e importação opc
 
 describe.skipIf(!process.env.DATABASE_URL)('Integra: projectos, cinco acessos e exportações', () => {
   const stamp = String(Date.now()) + 'plans';
-  let cookie = '', companyId = '', ownerId = '', first = '', second = '';
+  let cookie = '', admin = '', companyId = '', ownerId = '', first = '', second = '';
   const memberIds: string[] = [];
   const req = (method: string, url: string, payload?: unknown, session = cookie) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
-  const grant = (extraUsers = 0, projectLimit = 2) => req('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit, extraUsers });
+  const grant = (extraUsers = 0, projectLimit = 2) => req('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit, extraUsers }, admin);
   const model = { name: 'Projecto', sector: 'servicos', currency: 'Kz', assumptions: { pessoal: 100 } };
   beforeAll(async () => {
     const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Projectos Integra', nif: String(Date.now() + 700).slice(-10) }, name: 'Gestor', email: `${stamp}@plans.ao`, password: 'Projectos2026Seguros' } });
@@ -2023,7 +2029,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: projectos, cinco acessos e 
     const me = (await req('GET', '/v1/auth/me')).json();
     companyId = me.company.id; ownerId = me.user.sub;
     expect(ownerId).toBeTypeOf('string');
-    await getDb().insert(platformAdmins).values({ email: `${stamp}@plans.ao` });
+    admin = await platformCookie(app, `${stamp}@plans.ao`);
     expect((await grant()).statusCode).toBe(200);
   });
   it('serializa criações concorrentes e não permite ultrapassar a quota', async () => {
@@ -2079,7 +2085,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: projectos, cinco acessos e 
 
 describe.skipIf(!process.env.DATABASE_URL)('Integra: motor financeiro e modelos sectoriais', () => {
   const stamp = String(Date.now()) + 'engine';
-  let cookie = '', other = '', companyId = '', modelId = '', draftId = '';
+  let cookie = '', admin = '', other = '', companyId = '', modelId = '', draftId = '';
   let assumptions: Record<string, unknown>;
   let inputHash = '';
   const req = (method: string, url: string, payload?: unknown, session = cookie) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
@@ -2090,9 +2096,9 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: motor financeiro e modelos 
       if (i === 0) cookie = cookieOf(r); else other = cookieOf(r);
     }
     companyId = (await req('GET', '/v1/auth/me')).json().company.id;
-    await getDb().insert(platformAdmins).values({ email: `${stamp}0@engine.ao` });
+    admin = await platformCookie(app, `${stamp}0@engine.ao`);
     for (const id of [companyId, (await req('GET', '/v1/auth/me', undefined, other)).json().company.id]) {
-      expect((await req('PUT', `/v1/platform/companies/${id}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 })).statusCode).toBe(200);
+      expect((await req('PUT', `/v1/platform/companies/${id}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 }, admin)).statusCode).toBe(200);
     }
   });
   it('fornece oito templates demonstrativos sem consumir quota de projectos', async () => {
@@ -2140,7 +2146,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: motor financeiro e modelos 
   });
   it('projectos arquivados e licença em consulta mantêm cálculo; novas simulações ficam bloqueadas', async () => {
     expect((await req('POST', `/v1/modeling/models/${modelId}/archive`, { archived: true, revision: 2 })).statusCode).toBe(200);
-    expect((await req('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'suspended' })).statusCode).toBe(200);
+    expect((await req('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'suspended' }, admin)).statusCode).toBe(200);
     const calc = await req('GET', `/v1/modeling/models/${modelId}/calculation`);
     expect(calc.statusCode).toBe(200); expect(calc.json().model.archived).toBe(true); expect(calc.json().sourceAssumptionsHash).toBe(inputHash);
     expect((await req('POST', '/v1/modeling/simulate', { assumptions })).statusCode).toBe(402);
@@ -2149,7 +2155,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: motor financeiro e modelos 
 
 describe.skipIf(!process.env.DATABASE_URL)('Integra: versões aprovadas e downloads privados', () => {
   const stamp = String(Date.now()) + 'versions';
-  let owner = '', other = '', finance = '', viewer = '', companyId = '', otherCompany = '', ownerId = '', modelId = '', versionId = '';
+  let owner = '', admin = '', other = '', finance = '', viewer = '', companyId = '', otherCompany = '', ownerId = '', modelId = '', versionId = '';
   let assumptions: Record<string, any>, snapshotPdf: Uint8Array;
   const req = (method: string, url: string, payload?: unknown, session = owner) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
   const report = (format = 'pdf', version = versionId, session = owner) => req('GET', `/v1/modeling/models/${modelId}/reports/sumario?format=${format}${version ? '&version=' + version : ''}`, undefined, session);
@@ -2160,8 +2166,8 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: versões aprovadas e downlo
     }
     const me = (await req('GET', '/v1/auth/me')).json(); companyId = me.company.id; ownerId = me.user.sub;
     otherCompany = (await req('GET', '/v1/auth/me', undefined, other)).json().company.id;
-    await getDb().insert(platformAdmins).values({ email: `${stamp}0@versions.ao` });
-    for (const id of [companyId, otherCompany]) expect((await req('PUT', `/v1/platform/companies/${id}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 })).statusCode).toBe(200);
+    admin = await platformCookie(app, `${stamp}0@versions.ao`);
+    for (const id of [companyId, otherCompany]) expect((await req('PUT', `/v1/platform/companies/${id}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 }, admin)).statusCode).toBe(200);
     for (const [i, permission] of ['editor', 'viewer'].entries()) {
       const email = `${stamp}user${i}@versions.ao`;
       const user = await req('POST', '/v1/users', { name: permission, email, password: 'VersoesSeguras2026abc', role: 'finance' });
@@ -2257,7 +2263,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: versões aprovadas e downlo
   it('arquivo e licença em consulta conservam a pré-visualização mas bloqueiam downloads e aprovações', async () => {
     expect((await req('POST', `/v1/modeling/models/${modelId}/archive`, { archived: true, revision: 3 })).statusCode).toBe(200);
     expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 4, label: 'Arquivo' })).statusCode).toBe(409);
-    expect((await req('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'suspended' })).statusCode).toBe(200);
+    expect((await req('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'suspended' }, admin)).statusCode).toBe(200);
     expect((await report('pdf', versionId, viewer)).statusCode).toBe(402);
     expect((await req('GET', `/v1/modeling/models/${modelId}/versions/${versionId}`, undefined, viewer)).json().payload.source.versionId).toBe(versionId);
     expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 4, label: 'Suspensa' })).statusCode).toBe(402);

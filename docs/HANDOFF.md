@@ -26,7 +26,7 @@ Uma conta, um repositório e uma base de dados para três módulos com licenças
 - RH e Modelagem: mesmo repositório, conta e base de dados; licenças e permissões próprias; ambos visíveis no catálogo comum, sem conceder acesso ao não contratado. Não criar outra base, repositório ou serviço (Supabase, etc.).
 - Importação RH → Integra: **opcional**, accionada pelo utilizador, cópia com origem e data; alterações posteriores no RH não mudam o modelo.
 - Projectos ≠ sectores ≠ utilizadores (limites distintos).
-- Clientes do Integra exportam **só PDF**. Excel só para o ID configurado em `KIANDA_MODELING_OWNER_USER_ID` com estatuto de administrador da plataforma.
+- Clientes do Integra exportam **só PDF**. Excel fica reservado à conta de empresa do proprietário do produto configurada em `KIANDA_MODELING_OWNER_USER_ID`.
 - Importações de documentos: manter cancelar/remover/substituir e a protecção contra respostas assíncronas antigas.
 - Não prometer indexação no Google, OCR completo, finanças offline nem protecção absoluta contra cópias/capturas.
 - Ritmo: o dono responde «Avançar» a cada entrega. Fluxo: ramo → alterações → testes (unitários, API com Postgres, navegador) → PR → CI verde → merge squash → publicação automática → confirmar CI e smoke → resumo curto.
@@ -78,7 +78,7 @@ Uma conta, um repositório e uma base de dados para três módulos com licenças
 
 **Feito pelo dono (confirmado em 02/11/2026):** IBAN do Banco Atlântico configurado na consola (Plataforma Kianda); os pedidos de pagamento mostram as instruções de transferência. Ficheiros anexados em R2 (`kianda-files`) activo.
 
-**Conta interna do dono (02/11/2026):** procedimento manual «Administração — conta interna com todos os módulos» (`.github/workflows/admin-internal-account.yml`, `packages/db/scripts/internal-account.ts`): só para emails de `KIANDA_PLATFORM_ADMINS`, nas empresas de que são proprietários — RH (faixa sem limite), Modelagem Ilimitado com os 8 sectores e Valora Ilimitado, pagos até 31/12/2099, acesso do proprietário e auditoria. Idempotente; correr de novo depois de recriar a conta.
+**Conta administrativa:** entrar por `/login?area=plataforma`. A conta do registo interno `PLATAFORMA` dá acesso à consola e à segurança da própria conta. Para usar os módulos é preciso entrar na conta de uma empresa com a licença correspondente. A publicação desactiva as antigas licenças internas.
 
 **Pendentes (do dono)** — estado lido do registo da publicação de 02/11/2026: o Worker só tem `API_JWT_SECRET` e `APP_BASE_URL`; ProxyPay, Resend, Vendus e `KIANDA_MODELING_OWNER_USER_ID` estão vazios.
 1. Confirmar na consola o email e o telefone de suporte (aparecem na licença e no Valora).
@@ -143,7 +143,7 @@ A moeda do Integra muda valores e mapas, não só o símbolo (`docs/MODELAGEM-MO
 
 ## 6. Contas
 
-- **Administrador da plataforma:** `pascoalfredy@gmail.com` (variável `KIANDA_PLATFORM_ADMINS`), na empresa interna «Kianda RH — Plataforma» (NIF interno `PLATAFORMA`, excluída da lista de clientes). Palavra-passe só do dono. 2FA desactivada a 02/11 (o dono não tinha a app); recomenda-se reactivar com uma app autenticadora.
+- **Administrador da plataforma:** `pascoalfredy@gmail.com` (variável `KIANDA_PLATFORM_ADMINS`), com acesso próprio associado ao registo interno `PLATAFORMA`. Palavra-passe só do dono. 2FA desactivada a 02/11.
 - **Demonstração** (empresa «Kwanza Logística»): `admin@`, `edson@`, `joana@kwanzalog.co.ao`, palavra-passe = secret `KIANDA_SEED_OWNER_PASSWORD` (local: `Kianda2026demo`). Com `KIANDA_SEED_DEMO=false` deixam de ser recriadas/sincronizadas nas publicações, mas continuam na base.
 
 ## 7. Stack e estrutura (monorepo pnpm)

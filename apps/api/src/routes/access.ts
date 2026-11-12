@@ -1,10 +1,10 @@
 import { normalizePhone, otpauthUri, pinProblem, randomBase32, randomToken, sha256Hex, verifyTotp } from '@kianda/core';
 import {
-  accessLinks, and, auditLogs, companies, desc, employees, eq, getDb, hashPassword, isNull, passwordProblems, sql, users, verifyPassword, type Db,
+  accessLinks, and, auditLogs, companies, desc, employees, eq, getDb, hashPassword, isNull, ne, passwordProblems, PLATFORM_NIF, platformAdmins, sql, users, verifyPassword, type Db,
 } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { body, rateLimit, requireCompany, requireRole, type Actor, type AppEnv, type Role } from '../plugins/tenant.js';
+import { body, rateLimit, requireAccount, requireCompany, requireRole, type Actor, type AppEnv, type Role } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
 import { appBaseUrl, mailConfig } from '../services/integrations.js';
 import { sendMail } from '../services/mail.js';
@@ -22,9 +22,10 @@ function assertCanManage(actor: Actor, targetRole: string) {
 }
 
 async function linkByToken(db: Db, token: string) {
-  const [l] = await db.select({ l: accessLinks, company: companies.name, code: companies.code }).from(accessLinks).innerJoin(companies, eq(companies.id, accessLinks.companyId))
+  const [l] = await db.select({ l: accessLinks, company: companies.name, code: companies.code, nif: companies.nif }).from(accessLinks).innerJoin(companies, eq(companies.id, accessLinks.companyId))
     .where(eq(accessLinks.tokenHash, await sha256Hex(token)));
   if (!l) throw new DomainError('ligacao_invalida', 'Ligação inválida. Peça uma nova aos Recursos Humanos.', 404);
+  if (l.nif === PLATFORM_NIF && l.l.kind !== 'self_reset') throw new DomainError('ligacao_invalida', 'Use a recuperação de acesso da administração.', 404);
   if (l.l.usedAt) throw new DomainError('ligacao_usada', 'Esta ligação já foi usada. Se precisa de recuperar o acesso, peça uma nova aos Recursos Humanos.', 410);
   if (l.l.revokedAt || l.l.expiresAt < new Date()) throw new DomainError('ligacao_expirada', 'Esta ligação expirou. Peça uma nova aos Recursos Humanos.', 410);
   return l;
@@ -83,7 +84,8 @@ async function credentialValues(b: z.infer<typeof credentials>) {
 
 export function accessRoutes() {
   const app = new Hono<AppEnv>();
-  for (const p of ['/v1/access', '/v1/access/*', '/v1/users/*', '/v1/auth/2fa', '/v1/auth/2fa/*']) app.use(p, requireCompany);
+  for (const p of ['/v1/access', '/v1/access/*', '/v1/users/*']) app.use(p, requireCompany);
+  for (const p of ['/v1/auth/2fa', '/v1/auth/2fa/*']) app.use(p, requireAccount);
 
   // ——— Entrada por código da empresa + n.º mecanográfico/telefone + PIN ———
   app.post('/v1/auth/login-pin', rateLimit('login-pin', 10, 900_000), async (c) => {
@@ -91,7 +93,7 @@ export function accessRoutes() {
     const db = getDb();
     const generic = c.json({ error: 'credenciais_invalidas', message: 'Código da empresa, número ou PIN incorrectos.' }, 401);
     const [co] = await db.select().from(companies).where(eq(companies.code, b.companyCode.toUpperCase()));
-    if (!co) return generic;
+    if (!co || co.nif === PLATFORM_NIF) return generic;
     const id = b.identifier.replace(/\s/g, '');
     const phone = normalizePhone(id);
     const [emp] = await db.select({ id: employees.id }).from(employees).where(and(eq(employees.companyId, co.id), sql`(${employees.number} = ${id} or regexp_replace(coalesce(${employees.phone}, ''), '\\D', '', 'g') in (${phone}, ${`244${phone}`}))`)).limit(1);
@@ -111,19 +113,23 @@ export function accessRoutes() {
    * não passa o segundo passo.
    */
   app.post('/v1/auth/forgot', rateLimit('forgot', 5, 3_600_000), async (c) => {
-    const b = z.object({ email: z.email('Email inválido') }).parse(await body(c));
+    const b = z.object({ email: z.email('Email inválido'), area: z.literal('plataforma').optional() }).parse(await body(c));
+    const platform = b.area === 'plataforma';
     const base = appBaseUrl();
     const enabled = Boolean(mailConfig() && base);
     const reply = {
       ok: true, emailEnabled: enabled,
       message: enabled
-        ? `Se este email tiver acesso ao Kianda RH, vai receber em poucos minutos uma ligação para definir uma nova palavra-passe (válida durante ${SELF_RESET_MINUTES} minutos).`
-        : 'A recuperação por email ainda não está activa. Peça aos Recursos Humanos uma ligação de recuperação.',
+        ? `Se este email tiver acesso ao Kianda, vai receber em poucos minutos uma ligação para definir uma nova palavra-passe (válida durante ${SELF_RESET_MINUTES} minutos).`
+        : platform ? 'A recuperação por email ainda não está activa.' : 'A recuperação por email ainda não está activa. Peça aos Recursos Humanos uma ligação de recuperação.',
     };
     if (!enabled) return c.json(reply);
     const db = getDb();
     const rows = await db.select({ u: users, company: companies.name }).from(users).innerJoin(companies, eq(companies.id, users.companyId))
-      .where(and(eq(users.email, b.email.toLowerCase()), isNull(users.disabledAt), sql`${users.passwordHash} <> '!'`));
+      .where(and(eq(users.email, b.email.toLowerCase()), isNull(users.disabledAt), ne(users.passwordHash, '!'),
+        platform
+          ? and(eq(companies.nif, PLATFORM_NIF), eq(users.role, 'owner'), sql`exists (select 1 from ${platformAdmins} where ${platformAdmins.email} = ${users.email})`)
+          : ne(companies.nif, PLATFORM_NIF)));
     for (const { u, company } of rows) {
       // No máximo um pedido a cada 2 minutos por conta (evita encher a caixa de correio de alguém).
       const [recent] = await db.select({ id: accessLinks.id }).from(accessLinks)
@@ -138,10 +144,10 @@ export function accessRoutes() {
       await db.insert(auditLogs).values({ companyId: u.companyId, actorId: u.id, action: 'password_reset_requested', entity: 'access_link', entityId: l!.id });
       await sendMail(db, {
         to: u.email, companyId: u.companyId, kind: 'recuperacao',
-        subject: 'Kianda RH — definir nova palavra-passe',
+        subject: platform ? 'Administração Kianda — definir nova palavra-passe' : 'Kianda RH — definir nova palavra-passe',
         title: 'Definir nova palavra-passe',
         paragraphs: [
-          `Recebemos um pedido para definir uma nova palavra-passe do seu acesso à ${company}.`,
+          platform ? 'Recebemos um pedido para definir uma nova palavra-passe do seu acesso à administração do Kianda.' : `Recebemos um pedido para definir uma nova palavra-passe do seu acesso à ${company}.`,
           `A ligação só pode ser usada uma vez e é válida durante ${SELF_RESET_MINUTES} minutos. A verificação em dois passos mantém-se.`,
           'Se não fez este pedido, ignore este email — a palavra-passe actual continua válida.',
         ],
@@ -154,14 +160,16 @@ export function accessRoutes() {
   // ——— Ligações de acesso (públicas: aceitar convite / recuperar) ———
   app.get('/v1/public/access/:token', async (c) => {
     const db = getDb();
-    const { l, company, code } = await linkByToken(db, c.req.param('token'));
+    const { l, company, code, nif } = await linkByToken(db, c.req.param('token'));
+    const platformAdmin = nif === PLATFORM_NIF;
     const [emp] = l.employeeId ? await db.select({ name: employees.name, number: employees.number, email: employees.email, phone: employees.phone }).from(employees).where(eq(employees.id, l.employeeId)) : [];
     const [u] = l.userId ? await db.select({ name: users.name, email: users.email, pin: users.pinHash }).from(users).where(eq(users.id, l.userId)) : [];
     return c.json({
-      kind: l.kind, company, companyCode: code, role: l.role, roleLabel: ROLE_LABEL[l.role] ?? l.role, name: u?.name ?? emp?.name ?? l.name,
+      kind: l.kind, company: platformAdmin ? 'Administração Kianda' : company, companyCode: platformAdmin ? null : code, platformAdmin,
+      role: l.role, roleLabel: platformAdmin ? 'Administrador da plataforma' : ROLE_LABEL[l.role] ?? l.role, name: u?.name ?? emp?.name ?? l.name,
       number: emp?.number ?? null, email: u?.email ?? l.email ?? emp?.email ?? null, phone: l.phone ?? emp?.phone ?? null, hasPin: Boolean(u?.pin), expiresAt: l.expiresAt,
       // Perfis de gestão entram sempre com email e palavra-passe (o PIN é para colaboradores).
-      pinAllowed: l.kind !== 'self_reset' && (l.role === 'employee' || l.role === 'manager'),
+      pinAllowed: !platformAdmin && l.kind !== 'self_reset' && (l.role === 'employee' || l.role === 'manager'),
     });
   });
 

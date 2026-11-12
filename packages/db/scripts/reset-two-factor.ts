@@ -1,6 +1,6 @@
 import 'dotenv/config';
-import { eq } from 'drizzle-orm';
-import { auditLogs, closeDb, getDb, users } from '../src/index.js';
+import { and, eq } from 'drizzle-orm';
+import { auditLogs, closeDb, companies, getDb, PLATFORM_NIF, users } from '../src/index.js';
 
 /**
  * Desactiva a verificação em dois passos de um ADMINISTRADOR DA PLATAFORMA que perdeu a app autenticadora.
@@ -14,15 +14,18 @@ if (!email) throw new Error('Indique RESET_2FA_EMAIL.');
 if (!admins.includes(email)) throw new Error(`${email} não é administrador da plataforma (KIANDA_PLATFORM_ADMINS). Clientes recuperam o acesso pelo RH da empresa.`);
 
 const db = getDb();
-const accounts = await db.select().from(users).where(eq(users.email, email));
-if (!accounts.length) throw new Error(`Não há utilizadores com o email ${email}.`);
-let changed = 0;
-for (const u of accounts) {
-  if (!u.totpEnabledAt && !u.totpSecret) { console.log(`Conta ${u.id}: verificação em dois passos já desactivada.`); continue; }
-  await db.update(users).set({ totpSecret: null, totpEnabledAt: null, failedAttempts: 0, lockedUntil: null }).where(eq(users.id, u.id));
-  await db.insert(auditLogs).values({ companyId: u.companyId, actorId: u.id, action: 'reset_2fa', entity: 'user', entityId: u.id, before: { totpEnabledAt: u.totpEnabledAt }, after: { totpEnabledAt: null, by: 'procedimento de administração (GitHub Actions)' } });
-  console.log(`Conta ${u.id}: verificação em dois passos desactivada.`);
-  changed++;
+try {
+  const [account] = await db.select({ u: users }).from(users).innerJoin(companies, eq(companies.id, users.companyId))
+    .where(and(eq(companies.nif, PLATFORM_NIF), eq(users.email, email)));
+  if (!account) throw new Error(`Não há conta administrativa para ${email}.`);
+  const { u } = account;
+  if (u.totpEnabledAt || u.totpSecret) {
+    await db.transaction(async (tx) => {
+      await tx.update(users).set({ totpSecret: null, totpEnabledAt: null, failedAttempts: 0, lockedUntil: null }).where(eq(users.id, u.id));
+      await tx.insert(auditLogs).values({ companyId: u.companyId, actorId: u.id, action: 'reset_2fa', entity: 'user', entityId: u.id, before: { totpEnabledAt: u.totpEnabledAt }, after: { totpEnabledAt: null, by: 'procedimento de administração (GitHub Actions)' } });
+    });
+  }
+  console.log(`Conta administrativa de ${email}: verificação em dois passos desactivada.`);
+} finally {
+  await closeDb();
 }
-console.log(`Concluído: ${changed} conta(s) alterada(s) para ${email}.`);
-await closeDb();

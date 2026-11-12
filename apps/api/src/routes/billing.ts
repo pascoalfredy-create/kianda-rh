@@ -3,13 +3,13 @@ import { requireValuationPlanUsage, valuationUsage } from '../services/valuation
 import { storageMode } from '../services/storage.js';
 import { CYCLES, cyclePrice, DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, MODELING_EXTRA_USER_MONTHLY_MINOR, VALUATION_EXTRA_USER_MONTHLY_MINOR, VALUATION_INCLUDED_USERS, VALUATION_PLANS, VALUATION_PLAN_KEYS, VALUATION_TRIAL_ANALYSES, valuationPlanPrice, defaultModelingSector, modelingPlanPrice, luandaDate, periodEnd, SECTORS, type BillingCycle, type FinancialSector } from '@kianda/core';
 import {
-  and, auditLogs, companyModules, companies, desc, employees, eq, ne, files, gatewayEvents, getDb, like, outboundEmails, paymentRequests, platformAdmins, platformSettings, sql, subscriptions, users, type Db,
+  and, auditLogs, companyModules, companies, desc, employees, eq, ne, files, gatewayEvents, getDb, like, outboundEmails, paymentRequests, PLATFORM_NIF, platformAdmins, platformSettings, sql, subscriptions, users, type Db,
 } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { body, requireCompany, requireRole, type AppEnv } from '../plugins/tenant.js';
+import { body, requireCompany, requirePlatform, requireRole, type AppEnv } from '../plugins/tenant.js';
 import { DomainError } from '../services/payroll.js';
-import { isPlatformAdmin, licenceFromRows, licenceOf, platformSettingsGet, priceTable, tierOf, type PlatformSettings } from '../services/licence.js';
+import { licenceFromRows, licenceOf, platformSettingsGet, priceTable, tierOf, type PlatformSettings } from '../services/licence.js';
 import { consoleMrr } from '../services/console-mrr.js';
 import { groupBy } from '../lib/group-by.js';
 import {
@@ -184,9 +184,9 @@ export function billingRoutes() {
 /** Consola da plataforma (administradores Kianda): empresas, licenças, pagamentos e parâmetros comerciais. */
 export function platformRoutes() {
   const app = new Hono<AppEnv>();
-  app.use('/v1/platform/*', requireCompany);
-  app.use('/v1/platform/*', async (c, next) => {
-    if (!(await isPlatformAdmin(getDb(), c.get('actor').actorId))) return c.json({ error: 'sem_permissao', message: 'Reservado à administração da plataforma Kianda.' }, 403);
+  app.use('/v1/platform/*', requirePlatform);
+  app.use('/v1/platform/companies/:id/*', async (c, next) => {
+    if (c.req.param('id') === c.get('actor').companyId) return c.json({ error: 'protegida', message: 'O registo da plataforma é reservado à administração.' }, 403);
     await next();
   });
 
@@ -230,7 +230,7 @@ export function platformRoutes() {
     const db = getDb();
     // Tudo em consultas agregadas (sem uma ronda de consultas por empresa).
     const [cos, subs, counts, owners, pending, grants, paidCycles] = await Promise.all([
-      db.select().from(companies).orderBy(desc(companies.createdAt)),
+      db.select().from(companies).where(ne(companies.nif, PLATFORM_NIF)).orderBy(desc(companies.createdAt)),
       db.select().from(subscriptions),
       db.select({ companyId: employees.companyId, n: sql<number>`count(*)::int` }).from(employees).where(eq(employees.status, 'active')).groupBy(employees.companyId),
       db.select({ id: users.id, companyId: users.companyId, email: users.email, name: users.name }).from(users).where(eq(users.role, 'owner')),
@@ -241,7 +241,7 @@ export function platformRoutes() {
         .from(paymentRequests).where(eq(paymentRequests.status, 'paid')).orderBy(desc(paymentRequests.paidAt), desc(paymentRequests.id)),
     ]);
     const paidByCompany = groupBy(paidCycles, row => row.companyId);
-    const out = await Promise.all(cos.filter((x) => x.nif !== 'PLATAFORMA').map(async (co) => {
+    const out = await Promise.all(cos.map(async (co) => {
       const sub = subs.find((s) => s.companyId === co.id) ?? null, active = counts.find((x) => x.companyId === co.id)?.n ?? 0;
       const l = licenceFromRows(sub, active);
       const owner = owners.find(o => o.companyId === co.id);
@@ -271,7 +271,7 @@ export function platformRoutes() {
     const status = z.enum(['pending', 'paid', 'cancelled', 'all']).default('pending').parse(c.req.query('status') ?? undefined);
     const db = getDb();
     const rows = await db.select({ r: paymentRequests, company: companies.name, nif: companies.nif }).from(paymentRequests).innerJoin(companies, eq(companies.id, paymentRequests.companyId))
-      .where(status === 'all' ? undefined : eq(paymentRequests.status, status)).orderBy(desc(paymentRequests.createdAt)).limit(300);
+      .where(and(ne(companies.nif, PLATFORM_NIF), status === 'all' ? undefined : eq(paymentRequests.status, status))).orderBy(desc(paymentRequests.createdAt)).limit(300);
     return c.json(rows.map(({ r, company, nif }) => ({ ...r, company, nif })));
   });
 
@@ -371,7 +371,7 @@ export function platformRoutes() {
     const id = c.req.param('id');
     const [co] = await db.select().from(companies).where(eq(companies.id, id));
     if (!co) throw new DomainError('nao_encontrado', 'Empresa inexistente', 404);
-    if (co.nif === 'PLATAFORMA' || co.id === actor.companyId) throw new DomainError('protegida', 'Esta empresa não pode ser eliminada');
+    if (co.nif === PLATFORM_NIF) throw new DomainError('protegida', 'Esta empresa não pode ser eliminada');
     const [sub] = await db.select().from(subscriptions).where(eq(subscriptions.companyId, id));
     if (sub?.status !== 'cancelled') throw new DomainError('nao_cancelada', 'Cancele primeiro a licença da empresa (e entregue a exportação dos dados ao cliente)');
     const [modeling] = await db.select().from(companyModules).where(and(eq(companyModules.companyId, id), eq(companyModules.module, 'modeling')));

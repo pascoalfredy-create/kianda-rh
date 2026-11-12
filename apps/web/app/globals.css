@@ -16,6 +16,10 @@ a { color: inherit; text-decoration: none; }
 .side nav a { display: block; padding: 8px 10px; border-radius: 8px; font-weight: 500; }
 .side nav a:hover { background: #14302a; color: #fff; }
 .content { padding: 24px 28px; max-width: 1200px; }
+.platform-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 12px clamp(16px, 4vw, 34px); border-bottom: 1px solid var(--line); background: var(--panel); }
+.platform-brand, .platform-header nav { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.platform-header [aria-current="page"] { color: var(--brand); font-weight: 700; }
+.platform-app .platform-content { max-width: 1360px; margin-inline: auto; }
 h1 { font-size: 22px; letter-spacing: -0.3px; }
 .sub { color: var(--ink2); margin: 2px 0 18px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }

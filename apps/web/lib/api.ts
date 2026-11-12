@@ -1,6 +1,7 @@
 import 'server-only';
 import { cache } from 'react';
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { upstream } from './upstream';
 import type { CompanyModulesOverview } from '@kianda/core';
 export const SESSION_COOKIE = 'kianda_session';
@@ -22,7 +23,11 @@ async function requestJson(path: string, init: RequestInit = {}): Promise<ApiRes
   const role = res.headers.get('X-Kianda-Role');
   const sub = res.headers.get('X-Kianda-User');
   const actor = role && sub ? { sub, role, employeeId: res.headers.get('X-Kianda-Employee') || null } : null;
-  if (!res.ok) throw new ApiError(res.status, (await res.json().catch(() => ({}))).message ?? `Erro ${res.status}`, actor);
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    if (res.status === 403 && error.error === 'conta_da_plataforma') redirect('/plataforma');
+    throw new ApiError(res.status, error.message ?? `Erro ${res.status}`, actor);
+  }
   return { data: await res.json(), actor };
 }
 
@@ -52,7 +57,7 @@ export function preloadApi(...paths: string[]) {
 export interface Me {
   user: { sub: string; name: string; role: string; companyId: string; employeeId: string | null; requiresEmailVerification?: boolean };
   company: { id: string; name: string; nif: string; code?: string | null; hasLogo?: boolean } | null;
-  licence?: { status: string; label: string; canWrite: boolean; trialEndsAt: string | null; paidUntil: string | null };
+  licence?: { status: string; label: string; canWrite: boolean; trialEndsAt: string | null; paidUntil: string | null } | null;
   platformAdmin?: boolean;
   notifications?: { absences: number; expenses: number; tasks?: number; acks?: number };
   modules: CompanyModulesOverview;

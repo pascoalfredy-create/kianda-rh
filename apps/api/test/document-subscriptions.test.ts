@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { financialTemplate } from '@kianda/core';
-import { closeDb, getDb, platformAdmins, sql } from '@kianda/db';
+import { closeDb, getDb, sql } from '@kianda/db';
+import { platformCookie } from './platform-admin.js';
 import { buildApp } from '../src/app.js';
 import { isDocumentExport } from '../src/services/document-access.js';
 import { testClient } from './inject.js';
@@ -30,14 +31,14 @@ const app = testClient(buildApp({ rateLimit: false }));
 afterAll(async () => { await app.close(); if (process.env.DATABASE_URL) await closeDb(); });
 describe.skipIf(!process.env.DATABASE_URL)('avaliação, pagamento e exportação por módulo', () => {
   const stamp = `${Date.now()}${Math.floor(Math.random() * 1000)}`, email = `${stamp}@preview.test`;
-  let cookie = '', companyId = '', modelId = '', versionId = '', ownerId = '';
-  const req = (method: string, url: string, payload?: unknown) => app.inject({ method, url, headers: { cookie }, ...(payload === undefined ? {} : { payload }) });
+  let cookie = '', admin = '', companyId = '', modelId = '', versionId = '', ownerId = '';
+  const req = (method: string, url: string, payload?: unknown, session = cookie) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
   const output = () => req('GET', `/v1/modeling/models/${modelId}/reports/sumario?version=${versionId}`);
   beforeAll(async () => {
     const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Avaliação sintética', nif: stamp.slice(-10), sector: 'services' }, name: 'Gestor sintético', email, password: 'Previsualizacao2026abc', modules: ['hr', 'modeling'], modelingPlan: { key: 'pme', cycle: 'monthly', primarySector: 'servicos', sectors: ['servicos', 'comercio'] } } });
     expect(r.statusCode).toBe(201); companyId = r.json().company.id; ownerId = r.json().user.id;
     cookie = `kianda_session=${r.cookies.find(c => c.name === 'kianda_session')!.value}`;
-    await getDb().insert(platformAdmins).values({ email });
+    admin = await platformCookie(app, email);
   });
   it('o teste permite criar, calcular e aprovar para pré-visualização, mas não disponibiliza ficheiros', async () => {
     const model = await req('POST', '/v1/modeling/models', { name: 'Estudo de avaliação', sector: 'servicos', currency: 'Kz', assumptions: financialTemplate('servicos').assumptions });
@@ -70,7 +71,7 @@ describe.skipIf(!process.env.DATABASE_URL)('avaliação, pagamento e exportaçã
     const pay = await req('POST', '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'annual' });
     expect(pay.statusCode).toBe(201); expect(pay.json()).toMatchObject({ amountMinor: 30_498_000, discountMinor: 5_382_000 });
     expect(pay.json().periodStart > before.hr.trialEndsAt).toBe(true);
-    expect((await req('POST', `/v1/platform/payment-requests/${pay.json().id}/confirm`, {})).statusCode).toBe(200);
+    expect((await req('POST', `/v1/platform/payment-requests/${pay.json().id}/confirm`, {}, admin)).statusCode).toBe(200);
     expect((await req('GET', '/v1/ledger/trial-balance?from=2026-10-01&to=2026-10-31&format=csv')).headers['content-type']).toContain('text/csv');
     expect((await output()).statusCode).toBe(402);
     expect((await req('GET', '/v1/modules')).json().modeling).toEqual(before.modeling);
@@ -78,7 +79,7 @@ describe.skipIf(!process.env.DATABASE_URL)('avaliação, pagamento e exportaçã
   it('pagar Integra liberta o PDF já pré-visualizado, conservando a restrição de Excel', async () => {
     const pay = await req('POST', '/v1/billing/requests', { kind: 'modeling_subscription', planKey: 'pme', cycle: 'semiannual', sectors: ['servicos', 'comercio'] });
     expect(pay.statusCode).toBe(201); expect(pay.json()).toMatchObject({ amountMinor: 37_260_000, discountMinor: 4_140_000 });
-    expect((await req('POST', `/v1/platform/payment-requests/${pay.json().id}/confirm`, {})).statusCode).toBe(200);
+    expect((await req('POST', `/v1/platform/payment-requests/${pay.json().id}/confirm`, {}, admin)).statusCode).toBe(200);
     const file = await output(); expect(file.statusCode).toBe(200); expect(file.headers['content-type']).toBe('application/pdf'); expect(new TextDecoder().decode(file.bytes.slice(0,8))).toBe('%PDF-1.7');
     expect((await req('GET', '/v1/modeling/export-options')).json()).toEqual({ pdf: true, xlsx: false, csv: false });
     expect((await req('GET', `/v1/modeling/models/${modelId}/reports/sumario?format=xlsx`)).statusCode).toBe(403);

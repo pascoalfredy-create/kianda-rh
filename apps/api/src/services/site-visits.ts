@@ -1,5 +1,5 @@
 import { luandaDate, sha256Hex } from '@kianda/core';
-import { and, companies, gte, ne, siteVisits, sql, users, type Db } from '@kianda/db';
+import { and, companies, gte, ne, PLATFORM_NIF, siteVisits, sql, users, type Db } from '@kianda/db';
 
 /** Robôs e pré-visualizações de links não contam como visitas. */
 const BOT = /bot|crawl|spider|slurp|preview|facebookexternalhit|whatsapp|telegram|headless|lighthouse|pingdom|curl|wget|python|axios|node-fetch/i;
@@ -61,7 +61,7 @@ export async function visitsSummary(db: Db, days: number, now = new Date()) {
       day: sql<string>`(${companies.createdAt} at time zone 'Africa/Luanda')::date::text`,
       confirmed: sql<boolean>`exists (select 1 from ${users} where ${users.companyId} = ${companies.id} and ${users.role} = 'owner' and ${users.emailVerifiedAt} is not null)`,
     }).from(companies)
-      .where(and(ne(companies.nif, 'PLATAFORMA'), sql`(${companies.createdAt} at time zone 'Africa/Luanda')::date >= ${from}`)),
+      .where(and(ne(companies.nif, PLATFORM_NIF), sql`(${companies.createdAt} at time zone 'Africa/Luanda')::date >= ${from}`)),
   ]);
   const byDay = new Map(daily.map(d => [String(d.day), d]));
   const signupsByDay = new Map<string, number>();

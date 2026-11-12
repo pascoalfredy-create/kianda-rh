@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Me } from '@/lib/api';
 import { navActive, navigation, type NavItem } from '@/lib/navigation';
 import { ROLE_LABEL, type EmployeeRow } from '@/lib/types';
-import { LogoutButton } from '@/app/(app)/logout-button';
+import { LogoutButton } from './logout-button';
 import { ClockCard } from './clock-card';
 import { RhIcon } from './rh-icon';
 import { KiandaMark } from '@/components/kianda-mark';

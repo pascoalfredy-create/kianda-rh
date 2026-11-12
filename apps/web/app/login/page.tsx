@@ -9,7 +9,9 @@ import { returnPath } from '../../lib/return-path';
 import { PasswordInput } from '../../components/password-input';
 
 function LoginForm() {
-  const next = useSearchParams().get('voltar') ?? '/';
+  const search = useSearchParams();
+  const next = search.get('voltar') ?? '/';
+  const platform = search.get('area') === 'plataforma';
   const [mode, setMode] = useState<'email' | 'pin'>('email');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,8 +25,8 @@ function LoginForm() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   // Código da empresa lembrado neste telemóvel (só depois de carregar, para não divergir do servidor).
-  useEffect(() => { try { const c = localStorage.getItem('kianda_company_code'); if (c) { setCode(c); setMode('pin'); } } catch { /* sem armazenamento */ } }, []);
-  const go = (verify = false) => window.location.assign(verify ? '/confirmar-email' : returnPath(next));
+  useEffect(() => { if (!platform) try { const c = localStorage.getItem('kianda_company_code'); if (c) { setCode(c); setMode('pin'); } } catch { /* sem armazenamento */ } }, [platform]);
+  const go = (verify = false, admin = false) => window.location.assign(verify ? '/confirmar-email' : admin ? '/plataforma' : returnPath(next));
 
   async function call(url: string, payload: object) {
     setBusy(true);
@@ -38,18 +40,18 @@ function LoginForm() {
     e.preventDefault();
     if (ticket) {
       const { res, body } = await call('/api/v1/auth/login/2fa', { ticket, code: otp });
-      if (res.ok) return go(body.requiresEmailVerification);
+      if (res.ok) return go(body.requiresEmailVerification, body.platformAdmin);
       if (body.error === 'bilhete_expirado') setTicket('');
       return setError(body.message ?? 'Código incorrecto');
     }
-    const { res, body } = mode === 'email'
-      ? await call('/api/v1/auth/login', { email, password, ...(companyNif ? { companyNif } : {}) })
+    const { res, body } = platform || mode === 'email'
+      ? await call('/api/v1/auth/login', { email, password, ...(platform ? { area: 'plataforma' } : companyNif ? { companyNif } : {}) })
       : await call('/api/v1/auth/login-pin', { companyCode: code.trim(), identifier, pin });
     if (res.ok && body.twoFactor) return setTicket(body.ticket);
     // Navegação completa: o layout raiz tem de ser re-renderizado com a sessão.
     if (res.ok) {
-      try { if (mode === 'pin') localStorage.setItem('kianda_company_code', code.trim().toUpperCase()); } catch { /* sem armazenamento */ }
-      return go(body.requiresEmailVerification);
+      try { if (!platform && mode === 'pin') localStorage.setItem('kianda_company_code', code.trim().toUpperCase()); } catch { /* sem armazenamento */ }
+      return go(body.requiresEmailVerification, body.platformAdmin);
     }
     if (body.error === 'varias_empresas') setAskNif(true);
     setError(body.message ?? 'Não foi possível iniciar sessão.');
@@ -64,22 +66,22 @@ function LoginForm() {
       <AuthNavigation />
       <div className="logo" style={{ padding: 0, marginBottom: 18 }}>
         <KiandaMark size={34} />
-        <div><b style={{ color: 'var(--ink)' }}>Kianda</b><small style={{ color: 'var(--ink3)' }}>RH · Integra · Valora</small></div>
+        <div><b style={{ color: 'var(--ink)' }}>Kianda</b><small style={{ color: 'var(--ink3)' }}>{platform ? 'Administração da plataforma' : 'RH · Integra · Valora'}</small></div>
       </div>
-      <h1 style={{ fontSize: 19, marginBottom: 14 }}>{ticket ? 'Verificação em dois passos' : 'Iniciar sessão'}</h1>
+      <h1 style={{ fontSize: 19, marginBottom: 14 }}>{ticket ? 'Verificação em dois passos' : platform ? 'Entrar na administração' : 'Iniciar sessão'}</h1>
       {ticket ? (
         <>
-          <p className="muted" style={{ marginTop: 0 }}>Abra a aplicação autenticadora no telemóvel e escreva o código de 6 dígitos da Kianda RH.</p>
+          <p className="muted" style={{ marginTop: 0 }}>Abra a aplicação autenticadora no telemóvel e escreva o código de 6 dígitos do Kianda.</p>
           <label>Código<input inputMode="numeric" autoComplete="one-time-code" autoFocus maxLength={7} required value={otp} onChange={(e) => setOtp(e.target.value)} /></label>
         </>
       ) : (
         <>
-          <div style={{ display: 'flex', marginBottom: 14, borderBottom: '1px solid var(--line)' }}>{tab('email', 'Email')}{tab('pin', 'Código da empresa + PIN')}</div>
-          {mode === 'email' ? (
+          {!platform && <div style={{ display: 'flex', marginBottom: 14, borderBottom: '1px solid var(--line)' }}>{tab('email', 'Email')}{tab('pin', 'Código da empresa + PIN')}</div>}
+          {platform || mode === 'email' ? (
             <>
               <label>Email<input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
               <label>Palavra-passe<PasswordInput aria-label="Palavra-passe" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
-              {askNif && <label>NIF da empresa<input inputMode="numeric" value={companyNif} onChange={(e) => setCompanyNif(e.target.value)} /></label>}
+              {!platform && askNif && <label>NIF da empresa<input inputMode="numeric" value={companyNif} onChange={(e) => setCompanyNif(e.target.value)} /></label>}
             </>
           ) : (
             <>
@@ -93,8 +95,9 @@ function LoginForm() {
       {error && <div className="alert" role="alert">{error}</div>}
       <button className="btn" disabled={busy} style={{ width: '100%' }}>{busy ? 'A entrar…' : ticket ? 'Confirmar' : 'Entrar'}</button>
       {ticket && <button type="button" className="btn ghost" style={{ width: '100%', marginTop: 10 }} onClick={() => { setTicket(''); setOtp(''); setError(''); }}>Voltar ao início de sessão</button>}
-      {!ticket && <p className="muted" style={{ textAlign: 'center', marginTop: 12, fontSize: 12.5 }}>{mode === 'email' ? <><a href="/recuperar">Esqueceu-se da palavra-passe?</a></> : 'Esqueceu-se do PIN? Peça aos Recursos Humanos uma ligação de recuperação.'}</p>}
-      {!ticket && <p className="muted" style={{ textAlign: 'center', marginTop: 4 }}>Empresa nova? <a href="/registo">Criar conta — um mês grátis</a></p>}
+      {!ticket && <p className="muted" style={{ textAlign: 'center', marginTop: 12, fontSize: 12.5 }}>{platform || mode === 'email' ? <a href={platform ? '/recuperar?area=plataforma' : '/recuperar'}>Esqueceu-se da palavra-passe?</a> : 'Esqueceu-se do PIN? Peça aos Recursos Humanos uma ligação de recuperação.'}</p>}
+      {!ticket && !platform && <p className="muted" style={{ textAlign: 'center', marginTop: 4 }}>Empresa nova? <a href="/registo">Criar conta — um mês grátis</a></p>}
+      {!ticket && <p className="muted" style={{ textAlign: 'center', marginTop: 4 }}><a href={platform ? '/login' : '/login?area=plataforma'}>{platform ? 'Entrar numa conta de empresa' : 'Entrar na administração'}</a></p>}
     </form>
   );
 }

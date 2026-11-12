@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { closeDb, getDb, platformAdmins, sql, withTenant } from '@kianda/db';
+import { closeDb, getDb, sql, withTenant } from '@kianda/db';
+import { platformCookie } from './platform-admin.js';
 import { buildApp } from '../src/app.js';
 import { testClient, type InjectResponse } from './inject.js';
 
@@ -25,8 +26,8 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: participantes por projecto,
     }
     ownerId = (await req(owner, 'GET', '/v1/auth/me')).json().user.sub;
     // Quota de projectos suficiente para o teste (consola da plataforma).
-    await getDb().insert(platformAdmins).values({ email: `${stamp}.0@controls.test` });
-    expect((await req(owner, 'PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 10 })).statusCode).toBe(200);
+    const admin = await platformCookie(app, `${stamp}.0@controls.test`);
+    expect((await req(admin, 'PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 10 })).statusCode).toBe(200);
     for (const [i, permission] of ['editor', 'viewer'].entries()) {
       const email = `${stamp}.member${i}@controls.test`;
       const u = await req(owner, 'POST', '/v1/users', { name: permission === 'editor' ? 'Analista' : 'Leitor', email, password, role: 'finance' });

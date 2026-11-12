@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { closeDb, employees, eq, getDb, paymentRequests, platformAdmins, sql, subscriptions, withTenant } from '@kianda/db';
+import { closeDb, employees, eq, getDb, paymentRequests, sql, subscriptions, withTenant } from '@kianda/db';
+import { platformCookie } from './platform-admin.js';
 import { buildApp } from '../src/app.js';
 import { applyGatewayPayment, attachGatewayReference } from '../src/services/billing.js';
 import { testClient } from './inject.js';
@@ -9,14 +10,14 @@ const app = testClient(buildApp({ rateLimit: false }));
 afterAll(async () => { await app.close(); if (process.env.DATABASE_URL) await closeDb(); });
 describe.skipIf(!process.env.DATABASE_URL)('RH: apenas faixas fixas, sem cobrança por colaborador', () => {
   const stamp = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
-  let cookie = '', companyId = '', actorId = '', legacyId = '';
-  const request = (method: string, url: string, payload?: unknown) => app.inject({ method, url, headers: { cookie }, ...(payload === undefined ? {} : { payload }) });
+  let cookie = '', admin = '', companyId = '', actorId = '', legacyId = '';
+  const request = (method: string, url: string, payload?: unknown, session = cookie) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
   beforeAll(async () => {
     const email = `${stamp}@hr-fixed-plans.test`;
     const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Faixas RH sintéticas', nif: stamp.slice(-10) }, name: 'Responsável', email, password: 'FaixasFixas2026abc', modules: ['hr'] } });
     expect(r.statusCode).toBe(201); companyId = r.json().company.id; actorId = r.json().user.id;
     cookie = `kianda_session=${r.cookies.find(c => c.name === 'kianda_session')!.value}`;
-    await getDb().insert(platformAdmins).values({ email });
+    admin = await platformCookie(app, email);
     await withTenant(companyId, async () => {
       await getDb().insert(employees).values(Array.from({ length: 100 }, (_, i) => ({ companyId, number: String(i + 1), name: `Pessoa sintética ${i + 1}`, jobTitle: 'Técnico' })));
       // Dados legados nunca podem voltar a aumentar o limite ou o preço da faixa.
@@ -51,10 +52,10 @@ describe.skipIf(!process.env.DATABASE_URL)('RH: apenas faixas fixas, sem cobran�
   });
 
   it('bloqueia ajustes de extras e a confirmação ou regeneração de um pedido antigo', async () => {
-    expect((await request('PATCH', `/v1/platform/companies/${companyId}/subscription`, { extraSeats: 10 })).statusCode).toBe(400);
-    expect((await request('PUT', '/v1/platform/settings', { extraSeatMinor: 300000, bank: null, supportEmail: null, supportPhone: null })).statusCode).toBe(400);
-    expect((await request('GET', '/v1/platform/settings')).json()).not.toHaveProperty('extraSeatMinor');
-    const confirm = await request('POST', `/v1/platform/payment-requests/${legacyId}/confirm`, {});
+    expect((await request('PATCH', `/v1/platform/companies/${companyId}/subscription`, { extraSeats: 10 }, admin)).statusCode).toBe(400);
+    expect((await request('PUT', '/v1/platform/settings', { extraSeatMinor: 300000, bank: null, supportEmail: null, supportPhone: null }, admin)).statusCode).toBe(400);
+    expect((await request('GET', '/v1/platform/settings', undefined, admin)).json()).not.toHaveProperty('extraSeatMinor');
+    const confirm = await request('POST', `/v1/platform/payment-requests/${legacyId}/confirm`, {}, admin);
     expect(confirm.statusCode).toBe(400); expect(confirm.json().error).toBe('cobranca_descontinuada');
     expect((await request('POST', `/v1/billing/requests/${legacyId}/reference`, { payerReference: 'TRF' })).statusCode).toBe(404);
     const [row] = await getDb().select().from(paymentRequests).where(eq(paymentRequests.id, legacyId));

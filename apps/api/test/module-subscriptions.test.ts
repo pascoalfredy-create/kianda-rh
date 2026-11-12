@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { closeDb, companyModules, getDb, measureQueries, platformAdmins, sql, withTenant } from '@kianda/db';
+import { closeDb, companyModules, getDb, measureQueries, sql, withTenant } from '@kianda/db';
+import { platformCookie } from './platform-admin.js';
 import { FINANCIAL_SECTORS } from '@kianda/core';
 import { buildApp } from '../src/app.js';
 import { testClient, type InjectResponse } from './inject.js';
@@ -26,7 +27,7 @@ describe('selecção de módulos antes da criação da conta', () => {
 });
 
 describe.skipIf(!process.env.DATABASE_URL)('conta comum, preços e direitos independentes', () => {
-  let hr = '', modeling = '', both = '', unlimited = '';
+  let admin = '', hr = '', modeling = '', both = '', unlimited = '';
   let hrId = '', modelingId = '', bothId = '', modelingProject = '';
   const model = (sector = 'mineracao') => ({ name: 'Projecto sintético', sector, currency: 'Kz', assumptions: { pessoal: 100 } });
   beforeAll(async () => {
@@ -38,7 +39,7 @@ describe.skipIf(!process.env.DATABASE_URL)('conta comum, preços e direitos inde
     expect(rBoth.statusCode).toBe(201); both = cookieOf(rBoth); bothId = rBoth.json().company.id;
     const rUnlimited = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: registration(4, { modules: ['modeling'], modelingPlan: { key: 'unlimited', cycle: 'annual', primarySector: 'mineracao', sectors: FINANCIAL_SECTORS } }) });
     expect(rUnlimited.statusCode).toBe(201); unlimited = cookieOf(rUnlimited);
-    await getDb().insert(platformAdmins).values({ email: `${stamp}.1@modules.test` });
+    admin = await platformCookie(app, `${stamp}.1@modules.test`);
   });
   it('mostra os dois módulos, bloqueando o não escolhido, sem depender da licença do RH', async () => {
     expect((await request(hr, 'GET', '/v1/auth/me')).json().modules).toMatchObject({ hr: { canAccess: true, canWrite: true }, modeling: { subscribed: false, canAccess: false } });
@@ -102,15 +103,15 @@ describe.skipIf(!process.env.DATABASE_URL)('conta comum, preços e direitos inde
     expect(pay.statusCode).toBe(201); expect(pay.json()).toMatchObject({ amountMinor: 13_900_000, projectLimit: 2, extraUsers: 2, status: 'pending', modelingSectors: ['mineracao', 'servicos'] });
     expect((await request(hr, 'GET', '/v1/billing')).json().requests.filter((p: { status: string }) => p.status === 'pending')).toHaveLength(2);
     expect((await request(hr, 'GET', '/v1/modules')).json().modeling.subscribed).toBe(false);
-    expect((await request(hr, 'POST', `/v1/platform/payment-requests/${pay.json().id}/confirm`, {})).json().status).toBe('paid');
+    expect((await request(admin, 'POST', `/v1/platform/payment-requests/${pay.json().id}/confirm`, {})).json().status).toBe('paid');
     expect((await request(hr, 'GET', '/v1/modules')).json()).toMatchObject({ hr: { status: 'trial' }, modeling: { status: 'active', projectLimit: 2, userLimit: 7, sectors: pme.sectors } });
-    expect((await request(hr, 'POST', `/v1/platform/payment-requests/${pay.json().id}/confirm`, {})).statusCode).toBe(404);
+    expect((await request(admin, 'POST', `/v1/platform/payment-requests/${pay.json().id}/confirm`, {})).statusCode).toBe(404);
   });
   it('pagar RH activa apenas RH e conserva a licença de Modelagem', async () => {
     const before = (await request(modeling, 'GET', '/v1/modules')).json().modeling;
     const pay = await request(modeling, 'POST', '/v1/billing/requests', { kind: 'subscription', tierKey: 't5', cycle: 'monthly' });
     expect(pay.json().amountMinor).toBe(9_999_900);
-    expect((await request(hr, 'POST', `/v1/platform/payment-requests/${pay.json().id}/confirm`, {})).statusCode).toBe(200);
+    expect((await request(admin, 'POST', `/v1/platform/payment-requests/${pay.json().id}/confirm`, {})).statusCode).toBe(200);
     const after = (await request(modeling, 'GET', '/v1/modules')).json();
     expect(after.hr).toMatchObject({ status: 'active', canAccess: true }); expect(after.modeling).toEqual(before);
   });

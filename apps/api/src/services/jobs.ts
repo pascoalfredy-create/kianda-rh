@@ -1,5 +1,5 @@
 import { formatKz, GRACE_DAYS } from '@kianda/core';
-import { and, companies, companyModules, eq, inArray, isNull, ne, paymentRequests, subscriptions, users, type Db } from '@kianda/db';
+import { and, companies, companyModules, eq, inArray, isNull, ne, paymentRequests, PLATFORM_NIF, subscriptions, users, type Db } from '@kianda/db';
 import { appBaseUrl } from './integrations.js';
 import { platformSettingsGet } from './licence.js';
 import { sendMail } from './mail.js';
@@ -33,9 +33,9 @@ export function reminderFor(sub: { status: string; trialEndsAt: string | null; p
 /** Avisos diários de licença (proprietário e Finanças), do RH e também do Integra e do Valora. Repetir no mesmo dia não duplica. */
 export async function dailyReminders(db: Db, today: string) {
   const rows = await db.select({ s: subscriptions, name: companies.name, nif: companies.nif }).from(subscriptions).innerJoin(companies, eq(companies.id, subscriptions.companyId))
-    .where(ne(companies.nif, 'PLATAFORMA'));
+    .where(ne(companies.nif, PLATFORM_NIF));
   const grants = await db.select({ g: companyModules, name: companies.name }).from(companyModules).innerJoin(companies, eq(companies.id, companyModules.companyId))
-    .where(and(ne(companies.nif, 'PLATAFORMA'), inArray(companyModules.module, ['modeling', 'valuation']), eq(companyModules.enabled, true)));
+    .where(and(ne(companies.nif, PLATFORM_NIF), inArray(companyModules.module, ['modeling', 'valuation']), eq(companyModules.enabled, true)));
   const settings = await platformSettingsGet(db);
   const base = appBaseUrl();
   let sent = 0;

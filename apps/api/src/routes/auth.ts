@@ -1,11 +1,11 @@
 import { REGISTRATION_TERMS_VERSION, DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, defaultModelingSector, isValidCompanyNif, luandaDate, SECTORS, sha256Hex, tierFor, trialEndDate, TRIAL_DAYS, VALUATION_PLANS, VALUATION_PLAN_KEYS, verifyTotp } from '@kianda/core';
-import { auditLogs, companies, companyModules, employees, getDb, modelingMembers, revokedSessions, valuationMembers, platformAdmins, hashPassword, passwordProblems, subscriptions, users, verifyPassword, type Db } from '@kianda/db';
+import { auditLogs, companies, companyModules, employees, getDb, modelingMembers, revokedSessions, valuationMembers, PLATFORM_NIF, platformAdmins, hashPassword, passwordProblems, subscriptions, users, verifyPassword, type Db } from '@kianda/db';
 import { and, eq, sql } from '@kianda/db';
 import { Hono } from 'hono';
 import { deleteCookie, setCookie } from 'hono/cookie';
 import { sign, verify } from 'hono/jwt';
 import { z } from 'zod';
-import { body, jwtSecret, rateLimit, requireCompany, requireRole, SESSION_COOKIE, sessionToken, type AppEnv, type Ctx, type Role, type SessionClaims } from '../plugins/tenant.js';
+import { body, jwtSecret, rateLimit, requireAccount, requireCompany, requireRole, SESSION_COOKIE, sessionToken, type AppEnv, type Ctx, type Role, type SessionClaims } from '../plugins/tenant.js';
 import { applySectorPreset } from '../services/sector.js';
 import { appBaseUrl } from '../services/integrations.js';
 import { sendMail } from '../services/mail.js';
@@ -29,6 +29,11 @@ export async function registerFailure(db: Db, u: { id: string; failedAttempts: n
 
 /** Fim do login: verificação em dois passos (se activa), sessão, auditoria. */
 export async function completeLogin(c: Ctx, db: Db, u: typeof users.$inferSelect, co: typeof companies.$inferSelect, method: string, secondFactorDone = false) {
+  const platformAdmin = co.nif === PLATFORM_NIF;
+  if (platformAdmin) {
+    const [admin] = await db.select().from(platformAdmins).where(eq(platformAdmins.email, u.email?.toLowerCase() ?? ''));
+    if (!admin || u.role !== 'owner' || u.disabledAt) return c.json({ error: 'acesso_desactivado', message: 'O acesso administrativo foi desactivado.' }, 403);
+  }
   if (u.disabledAt) return c.json({ error: 'acesso_desactivado', message: 'O seu acesso foi desactivado. Contacte os Recursos Humanos.' }, 403);
   if (u.totpEnabledAt && !secondFactorDone) {
     const ticket = await sign({ sub: u.id, purpose: '2fa', exp: Math.floor(Date.now() / 1000) + 300 }, jwtSecret(), 'HS256');
@@ -37,7 +42,7 @@ export async function completeLogin(c: Ctx, db: Db, u: typeof users.$inferSelect
   const token = await startSession(c, { sub: u.id, companyId: co.id, role: u.role, employeeId: u.employeeId, name: u.name });
   await db.update(users).set({ failedAttempts: 0, lockedUntil: null, lastLoginAt: new Date() }).where(eq(users.id, u.id));
   await db.insert(auditLogs).values({ companyId: co.id, actorId: u.id, action: 'login', entity: 'user', entityId: u.id, after: { method } });
-  return c.json({ user: { id: u.id, name: u.name, email: u.email, role: u.role }, company: { id: co.id, name: co.name }, token, requiresEmailVerification: u.emailVerificationRequired && !u.emailVerifiedAt });
+  return c.json({ user: { id: u.id, name: u.name, email: u.email, role: u.role }, company: platformAdmin ? null : { id: co.id, name: co.name }, platformAdmin, token, requiresEmailVerification: u.emailVerificationRequired && !u.emailVerifiedAt });
 }
 
 /** O cookie de sessão é sempre Secure em HTTPS (também atrás de um proxy), qualquer que seja o NODE_ENV. */
@@ -134,12 +139,15 @@ export function authRoutes() {
   });
 
   app.post('/v1/auth/login', rateLimit('login', 10, 900_000), async (c) => {
-    const b = z.object({ email: z.email(), password: z.string().min(1), companyNif: z.string().optional() }).parse(await body(c));
+    const b = z.object({ email: z.email(), password: z.string().min(1), companyNif: z.string().optional(), area: z.literal('plataforma').optional() }).parse(await body(c));
     const db = getDb();
+    const nif = b.area === 'plataforma' ? PLATFORM_NIF : b.companyNif;
     const rows = await db.select({ u: users, co: companies }).from(users).innerJoin(companies, eq(companies.id, users.companyId))
-      .where(b.companyNif ? and(eq(users.email, b.email.toLowerCase()), eq(companies.nif, b.companyNif)) : eq(users.email, b.email.toLowerCase()));
-    if (rows.length > 1) return c.json({ error: 'varias_empresas', message: 'Este email existe em várias empresas. Indique o NIF da empresa.' }, 409);
-    const row = rows[0];
+      .where(and(eq(users.email, b.email.toLowerCase()), nif ? eq(companies.nif, nif) : undefined));
+    const companyRows = rows.filter(({ co }) => co.nif !== PLATFORM_NIF);
+    const matches = companyRows.length ? companyRows : rows;
+    if (matches.length > 1) return c.json({ error: 'varias_empresas', message: 'Este email existe em várias empresas. Indique o NIF da empresa.' }, 409);
+    const row = matches[0];
     if (row && isLocked(row.u)) return c.json(LOCKED, 429);
     // Mesma resposta para email inexistente e palavra-passe errada (não revela contas).
     if (!row || !(await verifyPassword(b.password, row.u.passwordHash))) {
@@ -171,7 +179,7 @@ export function authRoutes() {
   });
 
   /** Alterar a própria palavra-passe (confirma a actual). */
-  app.post('/v1/auth/password', requireCompany, rateLimit('password', 10, 900_000), async (c) => {
+  app.post('/v1/auth/password', requireAccount, rateLimit('password', 10, 900_000), async (c) => {
     const actor = c.get('actor');
     const b = z.object({ current: z.string().min(1, 'Indique a palavra-passe actual'), next: password }).parse(await body(c));
     const db = getDb();
@@ -186,7 +194,7 @@ export function authRoutes() {
   });
 
   /** Terminar a sessão em todos os outros dispositivos (telemóvel perdido, computador partilhado). */
-  app.post('/v1/auth/sessions/end-others', requireCompany, rateLimit('sessions', 10, 900_000), async (c) => {
+  app.post('/v1/auth/sessions/end-others', requireAccount, rateLimit('sessions', 10, 900_000), async (c) => {
     const actor = c.get('actor'), db = getDb();
     await db.update(users).set({ sessionVersion: sql`${users.sessionVersion} + 1` }).where(eq(users.id, actor.actorId));
     await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'end_sessions', entity: 'user', entityId: actor.actorId });
@@ -206,7 +214,7 @@ export function authRoutes() {
     return c.json({ ok: true });
   });
 
-  app.get('/v1/auth/me', requireCompany, async (c) => {
+  app.get('/v1/auth/me', requireAccount, async (c) => {
     const { session } = c.get('actor');
     const { exp: _exp, ...user } = session as SessionClaims & { exp?: number };
     return c.json({ user, ...await accountOverview(getDb(), c.get('actor')) });
