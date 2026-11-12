@@ -59,6 +59,11 @@ describe('importação de balancetes do Valora', () => {
     expect(Object.values(r.acc.v61!).map((v) => v * 1e6)).toEqual([100, 150, 200].map((v) => expect.closeTo(v, 6)));
     expect(Object.values(r.acc.c72!).map((v) => v * 1e6)).toEqual([40, 40, 40].map((v) => expect.closeTo(v, 6)));
     expect(Object.values(r.acc.caixa!).map((v) => v * 1e6)).toEqual([10, 20, 30].map((v) => expect.closeTo(v, 6)));
+    expect(r.lines.find(line => line.code === '61')?.movements).toEqual([
+      { month: 1, previous: -.0001, current: -.00025, movement: -.00015 },
+      { month: 2, previous: -.00025, current: -.00045, movement: -.0002 },
+    ]);
+    expect(r.lines.find(line => line.code === '43')?.movements).toBeUndefined();
   });
 
   it('exige uma base acumulada contínua por conta, incluindo o imposto', () => {

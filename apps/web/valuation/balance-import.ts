@@ -90,7 +90,10 @@ export interface BalanceOptions {
   /** O saldo final das contas de resultados corresponde apenas ao movimento do mês escolhido. */
   erpMonthly?: boolean;
 }
-export interface BalanceLine { code: string; desc: string; key: string; total: number; contrary: boolean }
+export interface BalanceLine {
+  code: string; desc: string; key: string; total: number; contrary: boolean;
+  movements?: { month: number; previous: number; current: number; movement: number }[];
+}
 export interface BalanceResult {
   error?: string;
   /** Valores por rubrica e mês, em milhões de Kz (unidade interna do modelo), com precisão ao cêntimo. */
@@ -214,6 +217,7 @@ export function parseBalance(rows: BalanceCell[][], opts: BalanceOptions): Balan
     const credit = x.key ? CREDIT_KEYS.has(x.key) : CREDIT_NORMAL.some(p => x.digits.startsWith(p));
     const flow = x.key ? FLOW_KEYS.has(x.key) : FLOW_PREFIX.test(x.digits);
     const mixed = MIXED.some(p => x.digits.startsWith(p));
+    const movements: NonNullable<BalanceLine['movements']> = [];
     let key: string | null = null, total = 0, contrary = false;
     for (const m of months) {
       let value = x.values[m];
@@ -221,6 +225,7 @@ export function parseBalance(rows: BalanceCell[][], opts: BalanceOptions): Balan
       if (cumulative && flow && m > 0) {
         const previous = x.values[m - 1];
         if (previous === undefined) return empty(`Falta o saldo acumulado de ${MONTHS_PT[m - 1]} na conta ${x.code} para calcular o movimento de ${MONTHS_PT[m]}. Inclua o mês anterior ou um saldo explícito de 0 quando aplicável.`);
+        movements.push({ month: m, previous, current: value, movement: round8(value - previous) });
         value -= previous;
       }
       // No modo de natureza normal, um negativo é um estorno. Contas mistas positivas representam credores.
@@ -233,7 +238,7 @@ export function parseBalance(rows: BalanceCell[][], opts: BalanceOptions): Balan
       target[m] = round8((target[m] ?? 0) + got.value);
       total += got.value;
     }
-    if (key) lines.push({ code: x.code, desc: x.desc, key, total: round8(total), contrary });
+    if (key) lines.push({ code: x.code, desc: x.desc, key, total: round8(total), contrary, ...(movements.length ? { movements } : {}) });
     else ignored.push(x.code + (x.desc ? ' ' + x.desc : ''));
   }
   const contraryLines = lines.filter(l => l.contrary);
