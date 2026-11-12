@@ -1,4 +1,4 @@
-import { canExportDocuments, luandaDate, personnelCostMkz, valuationDataIssue } from '@kianda/core';
+import { canExportDocuments, luandaDate, personnelCostMkz, VALUATION_BALANCE_KEYS, VALUATION_FLOW_KEYS, VALUATION_OPTIONAL_FLOW_KEYS, valuationDataIssue } from '@kianda/core';
 import { and, auditLogs, companies, companyModules, desc, eq, getDb, gte, inArray, lte, payrollLines, payrollRuns, users, valuationAnalyses, valuationMembers, valuationVersions, type Db, type ValuationAnalysisRow } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -70,13 +70,13 @@ export function valuationRoutes() {
 
   const session = async (c: Ctx) => {
     const a = c.get('actor'), db = getDb(), access = c.get('moduleAccess');
-    const [row] = await db.select({ company: { id: companies.id, name: companies.name, nif: companies.nif }, grant: companyModules }).from(companies)
+    const [row] = await db.select({ company: { id: companies.id, name: companies.name, nif: companies.nif }, balanceMapping: companies.valuationBalanceMapping, grant: companyModules }).from(companies)
       .leftJoin(companyModules, and(eq(companyModules.companyId, companies.id), eq(companyModules.module, 'valuation'))).where(eq(companies.id, a.companyId));
     const permission = c.get('valuationPermission');
     const hr = await moduleLicence(db, a.companyId, 'hr');
     const exportable = canExportDocuments(access.status);
     return {
-      user: { id: a.actorId, name: a.session.name, role: a.role }, company: row!.company, permission,
+      user: { id: a.actorId, name: a.session.name, role: a.role }, company: row!.company, permission, balanceMapping: row?.balanceMapping ?? {},
       canWrite: permission === 'editor' && access.canWrite,
       formats: { pdf: exportable, docx: exportable, xlsx: exportable },
       licence: { status: access.status, trialEndsAt: row?.grant?.trialEndsAt ?? null, paidUntil: row?.grant?.paidUntil ?? null },
@@ -84,6 +84,23 @@ export function valuationRoutes() {
       hr: { available: hr.canRead },
     };
   };
+  app.put('/v1/valuation/balance-mapping', requireRole(), async (c) => {
+    const a = c.get('actor'), db = getDb();
+    if (!c.get('moduleAccess').canWrite) throw new DomainError('sem_permissao', 'A licença permite apenas consulta.', 403);
+    const rubric = z.enum([...VALUATION_FLOW_KEYS, ...VALUATION_OPTIONAL_FLOW_KEYS, ...VALUATION_BALANCE_KEYS]);
+    const input = z.object({
+      account: z.string().regex(/^\d{1,20}$/),
+      rubric: rubric.nullable(),
+    }).parse(await body(c));
+    const [company] = await db.select({ mapping: companies.valuationBalanceMapping }).from(companies).where(eq(companies.id, a.companyId)).for('update');
+    const mapping = { ...company!.mapping };
+    if (input.rubric === null) delete mapping[input.account];
+    else mapping[input.account] = input.rubric;
+    if (Object.keys(mapping).length > 500) throw new DomainError('limite_mapeamento', 'O mapeamento admite até 500 contas.', 422);
+    await db.update(companies).set({ valuationBalanceMapping: mapping }).where(eq(companies.id, a.companyId));
+    await db.insert(auditLogs).values({ companyId: a.companyId, actorId: a.actorId, action: 'update', entity: 'valuation_balance_mapping', entityId: a.companyId, after: input });
+    return c.json(mapping);
+  });
   app.get('/v1/valuation/session', async (c) => c.json(await session(c)));
   /** Abertura da interface: sessão, lista de análises e a mais recente já carregada. */
   app.get('/v1/valuation/bootstrap', async (c) => {

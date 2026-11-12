@@ -66,6 +66,14 @@ describe('importação de balancetes do Valora', () => {
     expect(r.lines.find(line => line.code === '43')?.movements).toBeUndefined();
   });
 
+  it('aplica o mapeamento exacto da empresa antes do mapeamento PGC', () => {
+    const r = parseBalance([['conta', 'Jan', 'Fev'], ['61001', '-1000000', '-2500000'], ['61002', '-100', '-200']], {
+      ...base, cumulative: true, mapping: { '61001': 'v62' },
+    });
+    expect(r.acc.v62).toEqual({ 0: 1, 1: 1.5 });
+    expect(r.acc.v61).toEqual({ 0: .0001, 1: .0001 });
+  });
+
   it('exige uma base acumulada contínua por conta, incluindo o imposto', () => {
     const opts = { ...base, cumulative: true };
     expect(parseBalance([['conta', 'Fev'], ['61', '-250000']], opts).error).toMatch(/saldo acumulado de jan/);

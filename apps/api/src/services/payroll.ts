@@ -323,7 +323,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
           if (ov.holiday) warnings.push({ employeeId: e.id, message: `${e.name}: subsídio de férias de ${year} já foi pago — não incluído` });
         } else {
           // Art. 238.º, n.º 3: sem um ano de serviço, proporcional aos meses completos trabalhados (até ao pagamento).
-          holidaySubsidy = hire > `${year}-01-01` ? Math.round((Math.min(12, fullMonthsBetween(hire, periodEnd)) / 12) * 10_000) / 10_000 : 1;
+          holidaySubsidy = Math.min(12, fullMonthsBetween(hire, periodEnd)) / 12;
           if (!holidaySubsidy) holidaySubsidy = false;
         }
       }
@@ -346,7 +346,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
           vacationAllowanceCut, absenceAllowanceCut, latenessHours,
         });
         // Casos sem regra fechada na LGT: o motor não calcula — avisa e o valor é lançado à mão nas variáveis.
-        if (maternityDays) warnings.push({ employeeId: e.id, message: `${e.name}: ${maternityDays} dia(s) de licença de maternidade em ${period} — CÁLCULO MANUAL: o salário está suspenso e o motor pagou o mês por inteiro; lance "Desconto na remuneração" com o valor a retirar (base, alimentação, transporte)` });
+        if (maternityDays) warnings.push({ employeeId: e.id, message: `${e.name}: ${maternityDays} dia(s) de licença de maternidade em ${period} — CÁLCULO MANUAL: o salário está suspenso e o motor pagou o mês por inteiro; lance "Desconto na remuneração" com o valor a retirar (base, alimentação, transporte). Apure separadamente o subsídio de maternidade e o reembolso ao abrigo do regime aplicável à licença (DP n.º 95/26 para as licenças abrangidas pelo novo regime).` });
         if (holidayWorkDays) warnings.push({ employeeId: e.id, message: `${e.name}: ${holidayWorkDays} feriado(s) trabalhado(s) — CÁLCULO MANUAL do acréscimo por feriado trabalhado ("mais um dia de salário normal"): lance em "Outro abono"` });
         if (period.endsWith('-12') && att && sched?.kind !== 'cycle') warnings.push({ employeeId: e.id, message: `${e.name}: 24 e 31 de Dezembro com paragem às 12h30 — CÁLCULO MANUAL: horas trabalhadas depois das 12h30 não entram como extraordinárias; lance-as em "Outro abono" se forem devidas` });
         if (maternityYear.has(e.id) && (holidaySubsidy || christmasSubsidy)) {

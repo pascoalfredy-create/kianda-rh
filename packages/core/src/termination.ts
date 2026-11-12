@@ -118,15 +118,16 @@ export function terminationProposal(i: TerminationInput): TerminationProposal {
   const yearStart = `${year}-01-01`;
   const hiredThisYear = i.hireDate >= yearStart;
   const monthsThisYear = fullMonthsBetween(hiredThisYear ? i.hireDate : yearStart, i.effectiveDate);
-  if (!hiredThisYear && i.reason !== 'probation') {
-    const propDays = Math.min(pack.labour.vacationWorkingDays, monthsThisYear * pack.leave.firstYearDaysPerMonth);
-    add('FERPROP', `${monthsThisYear} mês(es) completo(s) × ${pack.leave.firstYearDaysPerMonth} dias = ${propDays} dia(s) × base/${pack.labour.vacationWorkingDays}`, daily(propDays), 'earning', true, true);
-    add('SUBFERPROP', `${pack.labour.holidaySubsidyBps / 100}% da base × ${propDays}/${pack.labour.vacationWorkingDays}`, prorate(applyBps(i.baseMinor, pack.labour.holidaySubsidyBps), propDays, pack.labour.vacationWorkingDays), 'earning', pack.inss.holidaySubsidyInBase, true);
+  // A remuneração de férias proporcionais segue o art. 212.º. A gratificação usa meses completos (art. 238.º).
+  const propDays = Math.min(pack.labour.vacationWorkingDays, monthsThisYear * pack.leave.firstYearDaysPerMonth);
+  add('FERPROP', `${monthsThisYear} mês(es) completo(s) × ${pack.leave.firstYearDaysPerMonth} dias = ${propDays} dia(s) × base/${pack.labour.vacationWorkingDays}`, daily(propDays), 'earning', true, true);
+  const holidayBase = applyBps(i.baseMinor, pack.labour.holidaySubsidyBps);
+  if (!hiredThisYear) {
+    add('SUBFERPROP', `${pack.labour.holidaySubsidyBps / 100}% da base × ${monthsThisYear}/12 meses completos`, prorate(holidayBase, monthsThisYear, 12), 'earning', pack.inss.holidaySubsidyInBase, true);
   }
   if (!i.holidaySubsidyPaidThisYear) {
-    // Subsídio das férias do ano (vencidas a 1 de Janeiro, ou proporcionais no ano de admissão).
-    const ent = hiredThisYear ? Math.min(pack.labour.vacationWorkingDays, monthsThisYear * pack.leave.firstYearDaysPerMonth) : pack.labour.vacationWorkingDays;
-    add('SUBFER', `${pack.labour.holidaySubsidyBps / 100}% da base × ${ent}/${pack.labour.vacationWorkingDays} (não pago em ${year})`, prorate(applyBps(i.baseMinor, pack.labour.holidaySubsidyBps), ent, pack.labour.vacationWorkingDays), 'earning', pack.inss.holidaySubsidyInBase, true);
+    const holidayMonths = hiredThisYear ? monthsThisYear : 12;
+    add('SUBFER', `${pack.labour.holidaySubsidyBps / 100}% da base × ${holidayMonths}/12 meses (não pago em ${year})`, prorate(holidayBase, holidayMonths, 12), 'earning', pack.inss.holidaySubsidyInBase, true);
   }
   if (!i.christmasSubsidyPaidThisYear) {
     // Art. 238.º, n.º 3: proporcional aos meses completos trabalhados no ano.

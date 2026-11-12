@@ -13,7 +13,7 @@ it('minutos de um turno publicado, também quando atravessa a meia-noite', () =>
 });
 
 describe.skipIf(!process.env.DATABASE_URL)('folha a partir da escala publicada', () => {
-  it('o subsídio por dia conta só os turnos publicados; sem escala vale o regime', async () => {
+  it('fecha a folha por escala publicada e reconcilia recibo, IRT e transferência', async () => {
     const nif = String(Math.floor(Math.random() * 10_000_000_000)).padStart(10, '0');
     const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Escala publicada', nif }, name: 'Dona', email: `escala.${Date.now()}@kianda.test`, password: 'EscalaPublicada2026seguro' } });
     expect(r.statusCode, r.body).toBe(201);
@@ -21,7 +21,7 @@ describe.skipIf(!process.env.DATABASE_URL)('folha a partir da escala publicada',
     const call = (method: string, url: string, payload?: unknown) => app.inject({ method, url, headers: { cookie }, ...(payload === undefined ? {} : { payload }) });
     const ids: string[] = [];
     for (const n of [1, 2]) {
-      const e = await call('POST', '/v1/employees', { number: String(n), name: `Turno ${n}`, jobTitle: 'Operador', contract: { type: 'indefinite', startDate: '2026-01-01', base: 300000 } });
+      const e = await call('POST', '/v1/employees', { number: String(n), name: `Turno ${n}`, jobTitle: 'Operador', ...(n === 1 ? { iban: 'AO06 0040 0000 5521 8890 1015 5' } : {}), contract: { type: 'indefinite', startDate: '2026-01-01', base: 300000 } });
       expect(e.statusCode, e.body).toBe(201); ids.push(e.json().id);
     }
     await withTenant(companyId, async () => {
@@ -42,5 +42,14 @@ describe.skipIf(!process.env.DATABASE_URL)('folha a partir da escala publicada',
     expect(allowance(ids[0]!).name).toContain('(3 dia(s))');
     expect(allowance(ids[0]!).amountMinor).toBe(300_000);
     expect(allowance(ids[1]!).name).toContain('(22 dia(s))');
+    const closed = await call('POST', `/v1/payroll-runs/${run.id}/close`);
+    expect(closed.statusCode, closed.body).toBe(200);
+    const payslips = await call('GET', `/v1/payslips?employeeId=${ids[0]}`);
+    expect(payslips.json()[0]).toMatchObject({ period: '2026-03', netMinor: run.lines[0].employeeId === ids[0] ? run.lines[0].netMinor : run.lines[1].netMinor });
+    const irt = await call('GET', `/v1/payroll-runs/${run.id}/maps/irt`);
+    expect(irt.json().totalIrt).toBe(run.lines.reduce((total: number, line: { irtMinor: number }) => total + line.irtMinor, 0));
+    const bank = await call('GET', `/v1/payroll-runs/${run.id}/bank-file?format=json`);
+    expect(bank.statusCode, bank.body).toBe(200);
+    expect(bank.json().excluded).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Turno 2', reason: 'sem IBAN' })]));
   });
 });

@@ -36,6 +36,7 @@ export const companies = pgTable('companies', {
   municipality: text('municipality'),
   /** Ficheiro de transferências dos salários: nib (NOME, NIB, VALOR — regra comum), generic (CSV com IBAN), bfa ou bai. */
   bankFileProfile: text('bank_file_profile').notNull().default('nib'),
+  valuationBalanceMapping: jsonb('valuation_balance_mapping').$type<Record<string, string>>().notNull().default({}),
   caeCode: text('cae_code'),
   microOrStartup: boolean('micro_or_startup').notNull().default(false),
   bankAccountIban: text('bank_account_iban'),

@@ -122,6 +122,37 @@ test('Valora: cria uma análise, edita o orçamento e os dados ficam no servidor
   expect(errors).toEqual([]);
 });
 
+test('Valora: reutiliza o mapeamento da empresa e mostra o movimento no controlo orçamental', async ({ page, context }) => {
+  const owner = await registerCompany({ modules: ['valuation'] });
+  await signIn(context, owner.token);
+  await page.goto('/valora');
+  await page.locator('#valoraFirst').click();
+  await page.locator('#vName').fill('Controlo de importação');
+  await page.locator('#vEnt').fill('Empresa fictícia');
+  await page.locator('#vStart').selectOption('blank');
+  await page.locator('#vCreate').click();
+  await expect(page.locator('#hdrEnt')).toHaveText('Empresa fictícia');
+  await valoraGo(page, 'dados');
+  await page.getByText('Mapeamento de contas da empresa', { exact: true }).click();
+  await page.getByLabel('Conta', { exact: true }).fill('61001');
+  await page.getByLabel('Rubrica', { exact: true }).selectOption('v62');
+  await page.getByRole('button', { name: 'Guardar mapeamento' }).click();
+  await expect(page.getByText('Mapeamento guardado para as próximas importações da empresa.')).toBeVisible();
+  await page.reload();
+  await valoraGo(page, 'dados');
+  await page.locator('#paste').fill('conta;descricao;Jan;Fev\n61001;Serviços;-1000000;-2500000');
+  await page.locator('#btnParse').click();
+  await page.locator('#impUnit').selectOption('kz');
+  await page.locator('#impCum').check();
+  await expect(page.locator('#imp-prev')).toContainText('Prestações de serviço');
+  await page.locator('#btnApply').click();
+  await expect(page.locator('#imp-prev')).toContainText('Importação aplicada');
+  await valoraGo(page, 'controlo');
+  await page.locator('#ctlPer').selectOption('m1');
+  const service = page.locator('#t-ctl').getByRole('row').filter({ hasText: 'Prestações de serviço (62)' });
+  await expect(service.getByRole('cell').nth(1)).toHaveText(/1\s500\s000,00/);
+});
+
 test('Valora: cancelar ou trocar de análise elimina a prévia do balancete', async ({ page, context }) => {
   const owner = await registerCompany({ modules: ['valuation'] });
   await signIn(context, owner.token);

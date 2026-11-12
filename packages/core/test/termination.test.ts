@@ -17,7 +17,7 @@ describe('cessação do contrato', () => {
     expect(code(p, 'AVISO')).toBe(kz(140_000));
     expect(code(p, 'FERNG')).toBe(13_636_364);
     expect(code(p, 'FERPROP')).toBe(27_272_727);
-    expect(code(p, 'SUBFERPROP')).toBe(13_636_364);
+    expect(code(p, 'SUBFERPROP')).toBe(kz(125_000));
     expect(code(p, 'SUBFER')).toBe(kz(150_000));
     expect(code(p, 'SUBNAT')).toBe(kz(125_000)); // 10 meses completos / 12 (art. 238.º, n.º 3)
     expect(p.items.find((i) => i.code === 'COMP')).toMatchObject({ inInss: false, inIrt: false });
@@ -37,12 +37,13 @@ describe('cessação do contrato', () => {
     expect(p.items.find((i) => i.code === 'COMPEXC')).toMatchObject({ amountMinor: kz(300_000), inIrt: true, inInss: false });
   });
 
-  it('caducidade do contrato a termo sem aviso: 30 dias de compensação; período experimental sem compensação nem férias proporcionais', () => {
+  it('caducidade do contrato a termo sem aviso: 30 dias de compensação; período experimental sem compensação, com férias proporcionais', () => {
     const f = terminationProposal({ ...base, reason: 'fixed_term_expiry', hireDate: '2025-11-01', effectiveDate: '2026-10-31', baseMinor: kz(200_000) });
     expect(code(f, 'AVISO')).toBe(kz(200_000));
     const p = terminationProposal({ ...base, reason: 'probation', hireDate: '2026-09-01', effectiveDate: '2026-10-15', baseMinor: kz(200_000), holidaySubsidyPaidThisYear: false });
-    expect(p.items.map((i) => i.code)).toEqual(['SUBFER']);
-    expect(code(p, 'SUBFER')).toBe(Math.round(kz(100_000) * 2 / 22));
+    expect(p.items.map((i) => i.code)).toEqual(['FERPROP', 'SUBFER']);
+    expect(code(p, 'FERPROP')).toBe(Math.round(kz(200_000) * 2 / 22));
+    expect(code(p, 'SUBFER')).toBe(Math.round(kz(100_000) / 12));
   });
 
   it('processamento do mês de saída: base proporcional aos dias, falta de aviso descontada, lançamento equilibrado', () => {

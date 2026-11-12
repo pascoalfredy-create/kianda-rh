@@ -89,6 +89,7 @@ export interface BalanceOptions {
   erpMonth?: number;
   /** O saldo final das contas de resultados corresponde apenas ao movimento do mês escolhido. */
   erpMonthly?: boolean;
+  mapping?: Readonly<Record<string, string>>;
 }
 export interface BalanceLine {
   code: string; desc: string; key: string; total: number; contrary: boolean;
@@ -214,9 +215,10 @@ export function parseBalance(rows: BalanceCell[][], opts: BalanceOptions): Balan
   const acc: Record<string, Record<number, number>> = {}, lines: BalanceLine[] = [];
   for (const x of raw.values()) {
     if (children.has(x.digits)) continue;
-    const credit = x.key ? CREDIT_KEYS.has(x.key) : CREDIT_NORMAL.some(p => x.digits.startsWith(p));
-    const flow = x.key ? FLOW_KEYS.has(x.key) : FLOW_PREFIX.test(x.digits);
-    const mixed = MIXED.some(p => x.digits.startsWith(p));
+    const mapped = x.key ?? keyOf(opts.mapping?.[x.digits] ?? '');
+    const credit = mapped ? CREDIT_KEYS.has(mapped) : CREDIT_NORMAL.some(p => x.digits.startsWith(p));
+    const flow = mapped ? FLOW_KEYS.has(mapped) : FLOW_PREFIX.test(x.digits);
+    const mixed = !mapped && MIXED.some(p => x.digits.startsWith(p));
     const movements: NonNullable<BalanceLine['movements']> = [];
     let key: string | null = null, total = 0, contrary = false;
     for (const m of months) {
@@ -230,7 +232,7 @@ export function parseBalance(rows: BalanceCell[][], opts: BalanceOptions): Balan
       }
       // No modo de natureza normal, um negativo é um estorno. Contas mistas positivas representam credores.
       const natural = (opts.signed ? credit : mixed) ? -value : value;
-      const got = x.key ? { key: x.key, value: natural, contrary: natural < 0 } : rubric(x.digits, natural);
+      const got = mapped ? { key: mapped, value: natural, contrary: natural < 0 } : rubric(x.digits, natural);
       if (!got.key) break;
       key = got.key;
       contrary ||= !!got.contrary;
