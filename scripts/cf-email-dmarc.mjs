@@ -18,7 +18,7 @@ async function cloudflare(method, path, body) {
     const codes = (data.errors ?? []).map(error => error.code).filter(Number.isInteger);
     throw new Error(`Pedido Cloudflare recusado (HTTP ${response.status}${codes.length ? `, código ${codes.join(', ')}` : ''}).`);
   }
-  return data.result;
+  return data;
 }
 
 async function configureDmarc() {
@@ -27,23 +27,27 @@ async function configureDmarc() {
     return;
   }
   if (!token) throw new Error('O token Cloudflare está em falta.');
-  const zones = await cloudflare('GET', `/zones?${new URLSearchParams({ name: zoneName, status: 'active' })}`);
+  const { result: zones } = await cloudflare('GET', `/zones?${new URLSearchParams({ name: zoneName, status: 'active' })}`);
   if (!Array.isArray(zones) || zones.length !== 1 || zones[0].name !== zoneName) {
     throw new Error(`Zona activa ${zoneName} indisponível.`);
   }
   const records = `/zones/${zones[0].id}/dns_records`;
   const recordName = `_dmarc.${senderDomain}`;
-  const parentName = `_dmarc.${zoneName}`;
-  const existing = await Promise.all([recordName, parentName].map(async name => {
-    const found = await cloudflare('GET', `${records}?${new URLSearchParams({ 'name[exact]': name })}`);
-    if (!Array.isArray(found) || found.some(record => record.name !== name)) {
-      throw new Error(`A Cloudflare não confirmou a pesquisa exacta de ${name}.`);
+  const dmarcNames = new Set([recordName, `_dmarc.${zoneName}`]);
+  const pageSize = 100;
+  for (let page = 1; ; page++) {
+    const { result, result_info: info } = await cloudflare('GET', `${records}?page=${page}&per_page=${pageSize}`);
+    if (!Array.isArray(result) || (info?.page != null && info.page !== page)) {
+      throw new Error('A Cloudflare devolveu uma página DNS inválida.');
     }
-    return found;
-  }));
-  if (existing.some(found => found.length > 0)) {
-    console.log('DMARC: já existe um registo próprio ou na zona principal. Mantida a configuração existente.');
-    return;
+    if (result.some(record => dmarcNames.has(record.name?.toLowerCase()))) {
+      console.log('DMARC: já existe um registo próprio ou na zona principal. Mantida a configuração existente.');
+      return;
+    }
+    const perPage = info?.per_page || pageSize;
+    const totalPages = info?.total_pages ?? (info?.total_count == null ? null : Math.ceil(info.total_count / perPage));
+    if (totalPages == null ? result.length < perPage : page >= totalPages) break;
+    if (result.length === 0) throw new Error('A listagem DNS terminou antes da última página.');
   }
   await cloudflare('POST', records, { type: 'TXT', name: recordName, content: 'v=DMARC1; p=none', ttl: 300 });
   console.log(`DMARC: criado TXT ${recordName} com política p=none.`);

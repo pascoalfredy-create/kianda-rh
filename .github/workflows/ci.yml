@@ -86,6 +86,25 @@ jobs:
             apps/e2e/test-results
           retention-days: 14
 
+  email-dns:
+    name: Configurar DNS do email
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.KIANDA_DEPLOY == 'true' && vars.KIANDA_MAIL_FROM != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: DMARC das notificações do Kianda
+        run: node scripts/cf-email-dmarc.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          MAIL_FROM: ${{ vars.KIANDA_MAIL_FROM }}
+
   deploy:
     name: Publicar no Cloudflare
     needs: [test, e2e]
@@ -162,13 +181,6 @@ jobs:
       - name: Limite de tentativas na Cloudflare (opcional)
         if: vars.KIANDA_HOSTNAME != ''
         run: node scripts/cf-ratelimit.mjs "$PRIMARY_HOST"
-
-      - name: DMARC das notificações do Kianda
-        if: vars.KIANDA_MAIL_FROM != ''
-        continue-on-error: true
-        run: node scripts/cf-email-dmarc.mjs
-        env:
-          MAIL_FROM: ${{ vars.KIANDA_MAIL_FROM }}
 
       - name: Armazenamento de ficheiros (R2, opcional)
         working-directory: apps/api
