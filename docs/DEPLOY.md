@@ -94,13 +94,13 @@ npx wrangler dev -c apps/web/wrangler.jsonc -c apps/api/wrangler.jsonc   # web +
 
 ## Administradores da plataforma (consola Kianda)
 
-Em **Settings → Secrets and variables → Actions → Variables**, crie `KIANDA_PLATFORM_ADMINS` com os emails (separados por vírgula) de quem administra a plataforma. Cada publicação sincroniza a lista. O email tem de corresponder a um utilizador que já exista (por exemplo, o proprietário de uma empresa criada em `/registo`); ao entrar, aparece o menu **Plataforma Kianda**.
+Em **Settings → Secrets and variables → Actions → Variables**, configure `KIANDA_PLATFORM_ADMINS` com os emails de administração separados por vírgula. Cada publicação sincroniza a lista. Para criar um acesso em falta, defina o secret `KIANDA_PLATFORM_INITIAL_PASSWORD`. A publicação conserva as credenciais de acessos já criados.
 
-### Acompanhamento do Integra em produção
+Entre por `/login?area=plataforma` para abrir a consola. A conta administrativa dá acesso à gestão de clientes, licenças e pagamentos, e à sua própria segurança de sessão. A conta de uma empresa segue os seus módulos e licenças. O mesmo email pode ser usado nas duas contas.
 
-A Modelagem está em `https://<domínio-principal>/modelagem`, com a mesma sessão. A publicação autorizada inclui `modeling:review`: quando há exactamente um email em `KIANDA_PLATFORM_ADMINS`, uma única conta activa de proprietário correspondente e estatuto de administrador já registado, activa uma licença interna apenas na empresa dessa conta, com 20 projectos e cinco utilizadores, sem facturação. É uma capacidade técnica para acompanhar o desenvolvimento, não uma tabela comercial para clientes. O proprietário é admitido como editor; nenhum outro participante é adicionado automaticamente.
+Para acompanhar o Integra, use uma conta de empresa com o módulo activo. O Excel exige que `KIANDA_MODELING_OWNER_USER_ID` identifique o proprietário dessa empresa e que o email corresponda ao titular registado em `KIANDA_PLATFORM_ADMINS`. Esta configuração só concede o formato Excel.
 
-O script preserva qualquer licença já existente, incluindo suspensões e quotas, e não reactiva participações desactivadas ou ultrapassa cinco acessos. Uma configuração ambígua fica sem alterações e é indicada no log. As restantes empresas continuam a precisar de adesão explícita. O Excel continua a exigir `KIANDA_MODELING_OWNER_USER_ID` e estatuto de administrador: esta activação não o concede por inferência.
+O registo interno de NIF `PLATAFORMA` suporta os acessos e a auditoria administrativa. As antigas licenças internas são desactivadas na sincronização, com os registos históricos preservados.
 
 A análise de balancetes usa a migração aditiva `0031_integra_historical_analysis`, aplicada pelo workflow antes da API. Não exige novos secrets ou alterações de subscrição. Ver [formato, limitações e utilização](./MODELAGEM-HISTORICO.md).
 

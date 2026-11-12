@@ -1,7 +1,7 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { verify } from 'hono/jwt';
-import { and, eq, getDb, revokedSessions, users, withTenant } from '@kianda/db';
+import { and, companies, eq, getDb, PLATFORM_NIF, platformAdmins, revokedSessions, sql, users, withTenant } from '@kianda/db';
 import { canExportDocuments, moduleForPath, sha256Hex, type ModuleAccess } from '@kianda/core';
 import { isDocumentExport } from '../services/document-access.js';
 import { moduleLicence } from '../services/modules.js';
@@ -26,10 +26,12 @@ export interface Actor {
   actorId: string;
   role: Role;
   employeeId: string | null;
+  platformAdmin: boolean;
   session: SessionClaims;
 }
 
-export type AppEnv = { Variables: { actor: Actor; companyGuarded: boolean; moduleAccess: ModuleAccess; modelingPermission: string; valuationPermission: string; modelingMember: import('@kianda/db').ModelingMemberRow; afterTenant?: () => Promise<Response> } };
+type SessionScope = 'company' | 'account' | 'platform';
+export type AppEnv = { Variables: { actor: Actor; guardedScope: SessionScope; moduleAccess: ModuleAccess; modelingPermission: string; valuationPermission: string; modelingMember: import('@kianda/db').ModelingMemberRow; afterTenant?: () => Promise<Response> } };
 export type Ctx = Context<AppEnv>;
 
 export const SESSION_COOKIE = 'kianda_session';
@@ -48,10 +50,10 @@ export function jwtSecret(): string {
  * Exige sessão válida (cookie httpOnly ou cabeçalho Authorization: Bearer).
  * A empresa vem SEMPRE do token assinado — nunca de um parâmetro enviado pelo cliente.
  */
-export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
+const sessionGuard = (scope: SessionScope): MiddlewareHandler<AppEnv> => async (c, next) => {
   // Vários padrões de rota podem casar o mesmo pedido. A primeira passagem já verificou
   // sessão/licença e abriu a transacção RLS; as seguintes continuam nessa mesma transacção.
-  if (c.get('companyGuarded')) return next();
+  if (c.get('guardedScope') === scope) return next();
   const token = sessionToken(c);
   let claims: SessionClaims;
   try {
@@ -62,40 +64,53 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
     return c.json({ error: 'sessao_invalida', message: 'Inicie sessão para continuar.' }, 401);
   }
   // Um JWT ainda válido não conserva acessos retirados depois de ter sido emitido.
-  const [user] = await getDb().select({ role: users.role, employeeId: users.employeeId, name: users.name, disabledAt: users.disabledAt, sessionVersion: users.sessionVersion, emailVerificationRequired: users.emailVerificationRequired, emailVerifiedAt: users.emailVerifiedAt, revoked: revokedSessions.tokenHash })
-    .from(users).leftJoin(revokedSessions, eq(revokedSessions.tokenHash, await sha256Hex(token!))).where(and(eq(users.id, claims.sub), eq(users.companyId, claims.companyId)));
+  const [user] = await getDb().select({
+    role: users.role, employeeId: users.employeeId, name: users.name, disabledAt: users.disabledAt, sessionVersion: users.sessionVersion,
+    emailVerificationRequired: users.emailVerificationRequired, emailVerifiedAt: users.emailVerifiedAt, revoked: revokedSessions.tokenHash,
+    nif: companies.nif, adminEmail: platformAdmins.email,
+  }).from(users)
+    .innerJoin(companies, eq(companies.id, users.companyId))
+    .leftJoin(platformAdmins, and(eq(companies.nif, PLATFORM_NIF), eq(platformAdmins.email, sql`lower(${users.email})`)))
+    .leftJoin(revokedSessions, eq(revokedSessions.tokenHash, await sha256Hex(token!)))
+    .where(and(eq(users.id, claims.sub), eq(users.companyId, claims.companyId)));
   if (!user || user.disabledAt) return c.json({ error: 'sessao_invalida', message: 'O acesso foi desactivado. Contacte o responsável da empresa.' }, 401);
   // Sessões terminadas (palavra-passe alterada ou «terminar sessões»): tokens anteriores deixam de valer.
   if (user.revoked || (claims.sv ?? 0) !== user.sessionVersion) return c.json({ error: 'sessao_terminada', message: 'A sessão foi terminada. Inicie sessão novamente.' }, 401);
+  const platformAdmin = user.nif === PLATFORM_NIF && user.role === 'owner' && Boolean(user.adminEmail);
+  if (user.nif === PLATFORM_NIF && !platformAdmin) return c.json({ error: 'sessao_invalida', message: 'O acesso administrativo foi desactivado.' }, 401);
+  if (scope === 'platform' && !platformAdmin) return c.json({ error: 'sem_permissao', message: 'Reservado à administração da plataforma Kianda.' }, 403);
+  if (scope === 'company' && platformAdmin) return c.json({ error: 'conta_da_plataforma', message: 'Esta conta dá acesso à consola da plataforma Kianda.' }, 403);
   const requiresEmailVerification = user.emailVerificationRequired && !user.emailVerifiedAt;
   if (requiresEmailVerification && !['/v1/auth/me', '/v1/auth/email-verification', '/v1/auth/email-verification/resend', '/v1/auth/password'].includes(c.req.path)) return c.json({ error: 'email_por_confirmar', message: 'Confirme o seu email para começar a utilizar os módulos.' }, 403);
   claims = { ...claims, role: user.role, employeeId: user.employeeId, name: user.name, requiresEmailVerification };
-  c.set('actor', { companyId: claims.companyId, actorId: claims.sub, role: claims.role, employeeId: claims.employeeId, session: claims });
+  c.set('actor', { companyId: claims.companyId, actorId: claims.sub, role: claims.role, employeeId: claims.employeeId, platformAdmin, session: claims });
   // Licença inactiva: só consulta (excepto tratar da licença).
-  const module = moduleForPath(c.req.path);
-  let blocked: string | null = null;
-  if (module) {
-    const access = await moduleLicence(getDb(), claims.companyId, module);
-    c.set('moduleAccess', access);
-    if (!access.canRead) return c.json({ error: 'modulo_nao_subscrito', message: 'A empresa não subscreveu este módulo.' }, 403);
-    if (isDocumentExport(c.req.path, c.req.query('format')) && !canExportDocuments(access.status)) return c.json({ error: 'exportacao_requer_subscricao', message: 'Os documentos estão disponíveis em pré-visualização. Active uma subscrição paga deste módulo para exportar ou imprimir.' }, 402);
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && !access.canWrite) blocked = 'A licença deste módulo está em modo de consulta.';
-  } else {
-    blocked = await licenceBlocks(getDb(), claims.companyId, c.req.method, c.req.path);
-    if (blocked && ((await moduleLicence(getDb(), claims.companyId, 'modeling')).canWrite || (await moduleLicence(getDb(), claims.companyId, 'valuation')).canWrite)) blocked = null;
+  if (scope === 'company') {
+    const module = moduleForPath(c.req.path);
+    let blocked: string | null = null;
+    if (module) {
+      const access = await moduleLicence(getDb(), claims.companyId, module);
+      c.set('moduleAccess', access);
+      if (!access.canRead) return c.json({ error: 'modulo_nao_subscrito', message: 'A empresa não subscreveu este módulo.' }, 403);
+      if (isDocumentExport(c.req.path, c.req.query('format')) && !canExportDocuments(access.status)) return c.json({ error: 'exportacao_requer_subscricao', message: 'Os documentos estão disponíveis em pré-visualização. Active uma subscrição paga deste módulo para exportar ou imprimir.' }, 402);
+      if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && !access.canWrite) blocked = 'A licença deste módulo está em modo de consulta.';
+    } else {
+      blocked = await licenceBlocks(getDb(), claims.companyId, c.req.method, c.req.path);
+      if (blocked && ((await moduleLicence(getDb(), claims.companyId, 'modeling')).canWrite || (await moduleLicence(getDb(), claims.companyId, 'valuation')).canWrite)) blocked = null;
+    }
+    if (blocked) return c.json({ error: 'licenca_inactiva', message: blocked }, 402);
   }
-  if (blocked) return c.json({ error: 'licenca_inactiva', message: blocked }, 402);
   // Metadados da sessão já verificada para o servidor web; nunca são lidos de cabeçalhos do cliente.
   c.header('X-Kianda-Role', claims.role);
   c.header('X-Kianda-User', claims.sub);
   c.header('X-Kianda-Employee', claims.employeeId ?? '');
-  // A consola da plataforma vê todas as empresas (o acesso é verificado a seguir: só administradores Kianda).
-  if (c.req.path.startsWith('/v1/platform/')) { c.set('companyGuarded', true); return next(); }
+  // A consola autorizada gere várias empresas; o restante acesso é isolado por RLS.
+  if (scope === 'platform') { c.set('guardedScope', scope); return next(); }
   // Segurança por empresa na base de dados (RLS): o pedido corre numa transacção restrita à empresa da sessão.
   // Um erro no pedido desfaz tudo o que gravou (o onError do Hono já preparou a resposta).
   try {
     await withTenant(claims.companyId, async () => {
-      c.set('companyGuarded', true);
+      c.set('guardedScope', scope);
       await next();
       if (c.error) throw new Rollback();
     });
@@ -107,6 +122,9 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
   const afterTenant = c.get('afterTenant');
   if (!c.error && c.res.status < 400 && afterTenant) c.res = await afterTenant();
 };
+export const requireCompany = sessionGuard('company');
+export const requireAccount = sessionGuard('account');
+export const requirePlatform = sessionGuard('platform');
 
 class Rollback extends Error {}
 

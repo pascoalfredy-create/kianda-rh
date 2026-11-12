@@ -1,7 +1,6 @@
 import { canExportModeling, modelingCapacity, modelingSectorSelection, type FinancialSector } from '@kianda/core';
-import { and, companies, companyModules, eq, financialModels, isNull, modelingMembers, sql, type Db } from '@kianda/db';
+import { and, companies, companyModules, eq, financialModels, isNull, modelingMembers, platformAdmins, sql, users, type Db } from '@kianda/db';
 import { DomainError } from './payroll.js';
-import { isPlatformAdmin } from './licence.js';
 
 export function validateModelingSectors(planKey: string, primarySector: FinancialSector, selected: readonly string[]) {
   try { return modelingSectorSelection(planKey, primarySector, selected); }
@@ -34,6 +33,11 @@ export async function requireProjectCapacity(db: Db, companyId: string) {
 }
 export async function modelingExportOptions(db: Db, actorId: string, allowed: boolean) {
   if (!allowed) return { pdf: false, xlsx: false, csv: false };
-  const admin = await isPlatformAdmin(db, actorId);
-  return { pdf: true, xlsx: canExportModeling('xlsx', actorId, process.env.KIANDA_MODELING_OWNER_USER_ID, admin), csv: false };
+  const ownerId = process.env.KIANDA_MODELING_OWNER_USER_ID;
+  if (!ownerId || ownerId !== actorId) return { pdf: true, xlsx: false, csv: false };
+  // O Excel continua reservado ao titular configurado na sua conta empresarial.
+  const [owner] = await db.select({ id: users.id }).from(users)
+    .innerJoin(platformAdmins, eq(platformAdmins.email, sql`lower(${users.email})`))
+    .where(and(eq(users.id, actorId), eq(users.role, 'owner')));
+  return { pdf: true, xlsx: canExportModeling('xlsx', actorId, ownerId, Boolean(owner)), csv: false };
 }

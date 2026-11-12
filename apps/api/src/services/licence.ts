@@ -2,7 +2,7 @@ import {
   canWrite, cyclePrice, CYCLES, DEFAULT_TIERS, LEGACY_CUSTOM_TIER, effectiveStatus, employeeLimit, luandaDate, SUBSCRIPTION_STATUS, tierFor,
   type BillingCycle, type SubscriptionStatus, type Tier,
 } from '@kianda/core';
-import { and, auditLogs, eq, employees, platformAdmins, platformSettings, sql, subscriptions, users, type Db } from '@kianda/db';
+import { and, auditLogs, eq, employees, platformSettings, sql, subscriptions, type Db } from '@kianda/db';
 
 export interface PlatformSettings { bank: { holder: string; bankName: string; iban: string } | null; supportEmail: string | null; supportPhone: string | null }
 const DEFAULT_SETTINGS: PlatformSettings = { bank: null, supportEmail: null, supportPhone: null };
@@ -52,7 +52,7 @@ export function priceTable() {
 }
 
 /** Rotas que continuam disponíveis com a licença em só leitura (tratar da licença, sessão). */
-const ALWAYS = ['/v1/billing', '/v1/auth/', '/v1/platform'];
+const ALWAYS = ['/v1/billing'];
 
 /** Bloqueia escritas quando a licença não está activa. */
 export async function licenceBlocks(db: Db, companyId: string, method: string, path: string): Promise<string | null> {
@@ -62,11 +62,6 @@ export async function licenceBlocks(db: Db, companyId: string, method: string, p
   return l.status === 'trial' || l.sub?.trialEndsAt && !l.sub.paidUntil
     ? 'O período experimental terminou. A conta está em modo de consulta até regularizar a licença (menu Licença).'
     : `Licença ${l.statusLabel.toLowerCase()}: a conta está em modo de consulta até regularizar o pagamento (menu Licença).`;
-}
-
-export async function isPlatformAdmin(db: Db, userId: string): Promise<boolean> {
-  const [a] = await db.select({ email: platformAdmins.email }).from(users).innerJoin(platformAdmins, eq(platformAdmins.email, sql`lower(${users.email})`)).where(eq(users.id, userId));
-  return Boolean(a);
 }
 
 /**

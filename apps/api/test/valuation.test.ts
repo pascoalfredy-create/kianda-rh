@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { blankValuationData } from '@kianda/core';
-import { closeDb, getDb, platformAdmins, sql } from '@kianda/db';
+import { closeDb, getDb, sql } from '@kianda/db';
+import { platformCookie } from './platform-admin.js';
 import { buildApp } from '../src/app.js';
 import { testClient, type InjectResponse } from './inject.js';
 
@@ -14,7 +15,7 @@ const analysis = (entity: string) => blankValuationData({ entity, lastClosedYear
 
 describe.skipIf(!process.env.DATABASE_URL)('Valora: módulo de análise financeira e avaliação', () => {
   let owner = '', hrOnly = '', other = '', editor = '', viewer = '', companyId = '', hrOnlyCompany = '', editorId = '', viewerId = '';
-  let own = '', target = '';
+  let own = '', target = '', admin = '';
   const req = (session: string, method: string, url: string, payload?: unknown) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
 
   beforeAll(async () => {
@@ -158,14 +159,14 @@ describe.skipIf(!process.env.DATABASE_URL)('Valora: módulo de análise financei
   });
 
   it('a plataforma define limites e não aceita limites abaixo do uso', async () => {
-    await getDb().insert(platformAdmins).values({ email: `${stamp}.0@valora.test` });
-    const low = await req(owner, 'PUT', `/v1/platform/companies/${companyId}/modules/valuation`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 1 });
+    admin = await platformCookie(app, `${stamp}.0@valora.test`);
+    const low = await req(admin, 'PUT', `/v1/platform/companies/${companyId}/modules/valuation`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 1 });
     expect(low.statusCode).toBe(409);
-    const ok = await req(owner, 'PUT', `/v1/platform/companies/${companyId}/modules/valuation`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: null, extraUsers: 2 });
+    const ok = await req(admin, 'PUT', `/v1/platform/companies/${companyId}/modules/valuation`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: null, extraUsers: 2 });
     expect(ok.statusCode).toBe(200);
     expect((await req(owner, 'GET', '/v1/modules')).json().valuation).toMatchObject({ status: 'active', analysisLimit: null, userLimit: 7 });
     expect((await req(owner, 'GET', '/v1/valuation/session')).json().formats).toEqual({ pdf: true, docx: true, xlsx: true });
-    expect((await req(owner, 'PUT', `/v1/platform/companies/${hrOnlyCompany}/modules/valuation`, { enabled: true, status: 'trial' })).json().error).toBe('periodo_obrigatorio');
+    expect((await req(admin, 'PUT', `/v1/platform/companies/${hrOnlyCompany}/modules/valuation`, { enabled: true, status: 'trial' })).json().error).toBe('periodo_obrigatorio');
   });
 
   it('licença em consulta: lê mas não grava', async () => {
@@ -195,7 +196,7 @@ describe.skipIf(!process.env.DATABASE_URL)('Valora: módulo de análise financei
     expect(created.statusCode).toBe(201);
     expect(created.json()).toMatchObject({ kind: 'valuation_subscription', tierKey: 'pme', projectLimit: 10, extraUsers: 1, amountMinor: 28_566_000 + 6_000_000 });
     expect((await req(hrOnly, 'GET', '/v1/valuation/bootstrap')).json().error).toBe('modulo_nao_subscrito');
-    const confirmed = await req(owner, 'POST', `/v1/platform/payment-requests/${created.json().id}/confirm`, { invoiceRef: null });
+    const confirmed = await req(admin, 'POST', `/v1/platform/payment-requests/${created.json().id}/confirm`, { invoiceRef: null });
     expect(confirmed.statusCode).toBe(200);
     expect((await req(hrOnly, 'GET', '/v1/modules')).json().valuation).toMatchObject({ subscribed: true, status: 'active', canAccess: true, analysisLimit: 10, userLimit: 6, planKey: 'pme', cycle: 'semiannual' });
     expect((await req(hrOnly, 'GET', '/v1/valuation/session')).json().formats).toEqual({ pdf: true, docx: true, xlsx: true });

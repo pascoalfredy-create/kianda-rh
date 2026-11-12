@@ -62,7 +62,6 @@ export function navigation(me: Me, counts: { absences: number; expenses: number;
     { ...item(me.modules.modeling.canAccess ? '/modelagem' : '/modulos#modeling', 'Modelagem Financeira', 'chart'), locked: !me.modules.modeling.canAccess },
     { ...item(me.modules.valuation?.canAccess ? '/valora' : '/modulos#valuation', 'Análise e Avaliação', 'money'), locked: !me.modules.valuation?.canAccess },
     has('finance') && item('/licenca', 'Módulos e licenças', 'lock'),
-    !!me.platformAdmin && item('/plataforma', 'Plataforma Kianda', 'gear'),
   ]);
   return groups;
 }

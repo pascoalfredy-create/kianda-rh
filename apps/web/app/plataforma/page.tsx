@@ -1,6 +1,7 @@
 import { CYCLES, DEFAULT_TIERS, LEGACY_CUSTOM_TIER, MODELING_PLANS, VALUATION_PLANS, SUBSCRIPTION_STATUS, formatKz, type CompanyModulesOverview } from '@kianda/core';
 import { redirect } from 'next/navigation';
 import { api, currentUser } from '@/lib/api';
+import { PlatformShell } from '@/components/platform-shell';
 import { PurgeCompany } from '@/components/privacy-actions';
 import { Visits, type VisitsSummary } from './visits';
 import { ConfirmPayment, EditSubscription, EditValuation, InvoicingForm, IssueInvoice, JobButtons, MockPayment, SettingsForm } from './forms';
@@ -23,8 +24,10 @@ const pt = (d: string | null) => (d ? d.split('-').reverse().join('/') : '—');
 const ST: Record<string, string> = { trial: 'st pending', active: 'st approved', past_due: 'st pending', suspended: 'st rejected', cancelled: 'tag' };
 
 export default async function Plataforma() {
-  const me = (await currentUser())!;
+  const me = await currentUser();
+  if (!me) redirect('/login?area=plataforma');
   if (!me.platformAdmin) redirect('/');
+  if (me.user.requiresEmailVerification) redirect('/confirmar-email');
   const [{ companies, summary }, pays, settings, integ, visits] = await Promise.all([
     api<{ companies: Co[]; summary: { total: number; trial: number; active: number; pastDue: number; suspended: number; mrrMinor: number; mrrByModule: Record<'hr' | 'modeling' | 'valuation', number>; modules: Record<'hr' | 'modeling' | 'valuation', { trial: number; active: number; pastDue: number }> } }>('/v1/platform/companies'),
     api<Pay[]>('/v1/platform/payment-requests'),
@@ -35,7 +38,7 @@ export default async function Plataforma() {
   const st = integ.status;
   const sandbox = st.proxypay.enabled && st.proxypay.environment === 'sandbox';
   return (
-    <>
+    <PlatformShell current="platform">
       <h1>Plataforma Kianda</h1>
       <p className="sub">Empresas clientes, licenças e pagamentos · administradores: {settings.admins.join(', ')}</p>
       <div className="grid">
@@ -110,6 +113,6 @@ export default async function Plataforma() {
         <h2>Emails recentes</h2>
         {integ.emails.length ? <table className="dense"><tbody>{integ.emails.map((e) => <tr key={e.id}><td className="muted">{when(e.createdAt)}</td><td>{e.toAddress}</td><td>{e.subject}</td><td><span className={MAIL[e.status] ?? 'tag'}>{e.status === 'sent' ? 'Enviado' : e.status === 'skipped' ? 'Não enviado' : 'Falhou'}</span>{e.error && e.status === 'failed' && <div className="muted" style={{ fontSize: 12 }}>{e.error}</div>}</td></tr>)}</tbody></table> : <div className="empty">Ainda não há emails.</div>}
       </div>
-    </>
+    </PlatformShell>
   );
 }

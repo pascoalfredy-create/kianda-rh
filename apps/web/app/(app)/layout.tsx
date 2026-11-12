@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { longDate } from '@/lib/humane';
 import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/api';
 import { Suspense } from 'react';
@@ -29,6 +28,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const me = await currentUser();
   if (!me) redirect('/login');
   if (me.user.requiresEmailVerification) redirect('/confirmar-email');
+  if (me.platformAdmin) redirect('/plataforma');
   const counts = me.notifications ?? { absences: 0, expenses: 0, tasks: 0, acks: 0 };
   return <Suspense fallback={<div className="empty">A abrir o Kianda…</div>}>
     <WorkspaceState key={workspaceScope(me.company?.id, me.user.sub)} scope={workspaceScope(me.company?.id, me.user.sub)}><DocumentExportAccess allowed={canExportDocuments(me.modules.hr.status)}><AppShell me={me} counts={counts}>

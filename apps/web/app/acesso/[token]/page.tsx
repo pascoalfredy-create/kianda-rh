@@ -5,7 +5,7 @@ import { KiandaMark } from '@/components/kianda-mark';
 import { AuthNavigation } from '../../../components/auth-navigation';
 import { jsonRequest } from '../../../lib/json-request';
 
-interface Info { kind: 'invite' | 'reset' | 'self_reset'; company: string; companyCode: string; role: string; roleLabel: string; name: string | null; number: string | null; email: string | null; phone: string | null; hasPin: boolean; pinAllowed: boolean; expiresAt: string }
+interface Info { kind: 'invite' | 'reset' | 'self_reset'; company: string; companyCode: string | null; platformAdmin?: boolean; role: string; roleLabel: string; name: string | null; number: string | null; email: string | null; phone: string | null; hasPin: boolean; pinAllowed: boolean; expiresAt: string }
 
 /** Aceitar um convite ou recuperar o acesso: escolhe email + palavra-passe ou PIN. */
 export default function Acesso({ params }: { params: Promise<{ token: string }> }) {
@@ -37,11 +37,11 @@ export default function Acesso({ params }: { params: Promise<{ token: string }> 
         setBusy(true); setError('');
         const { res, body: j } = await jsonRequest('/api/v1/auth/login/2fa', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ticket, code: otp }) });
         setBusy(false);
-        if (res.ok) return window.location.assign('/');
-        if (j.error === 'bilhete_expirado') return window.location.assign('/login');
+        if (res.ok) return window.location.assign(j.platformAdmin ? '/plataforma' : '/');
+        if (j.error === 'bilhete_expirado') return window.location.assign(info.platformAdmin ? '/login?area=plataforma' : '/login');
         setError(j.message ?? 'Código incorrecto');
       }}>
-        <AuthNavigation login />
+        <AuthNavigation login={!info.platformAdmin} />
         <h1 style={{ fontSize: 19, marginBottom: 4 }}>Palavra-passe alterada</h1>
         <p className="muted" style={{ marginTop: 0 }}>A verificação em dois passos continua activa. Escreva o código de 6 dígitos da aplicação autenticadora.</p>
         <label>Código<input inputMode="numeric" autoComplete="one-time-code" autoFocus maxLength={7} required value={otp} onChange={(e) => setOtp(e.target.value)} /></label>
@@ -62,13 +62,13 @@ export default function Acesso({ params }: { params: Promise<{ token: string }> 
         setBusy(false);
         if (!res.ok) return setError(j.issues?.map((i: { message: string }) => i.message).join(' · ') || j.message || 'Não foi possível concluir');
         if (j.twoFactor) return setTicket(j.ticket);
-        try { localStorage.setItem('kianda_company_code', info.companyCode); } catch { /* sem armazenamento */ }
-        window.location.assign('/');
+        try { if (info.companyCode) localStorage.setItem('kianda_company_code', info.companyCode); } catch { /* sem armazenamento */ }
+        window.location.assign(j.platformAdmin ? '/plataforma' : '/');
       }}>
-        <AuthNavigation login />
+        <AuthNavigation login={!info.platformAdmin} />
         <div className="logo" style={{ padding: 0, marginBottom: 14 }}>
           <KiandaMark size={34} />
-          <div><b style={{ color: 'var(--ink)' }}>Kianda RH</b><small style={{ color: 'var(--ink3)' }}>{info.company}</small></div>
+          <div><b style={{ color: 'var(--ink)' }}>{info.platformAdmin ? 'Kianda' : 'Kianda RH'}</b><small style={{ color: 'var(--ink3)' }}>{info.company}</small></div>
         </div>
         <h1 style={{ fontSize: 19, marginBottom: 4 }}>{info.kind === 'invite' ? `Bem-vindo(a)${info.name ? `, ${info.name.split(' ')[0]}` : ''}` : info.kind === 'self_reset' ? 'Nova palavra-passe' : 'Recuperar acesso'}</h1>
         <p className="muted" style={{ marginTop: 0 }}>{info.kind === 'invite' ? `Foi convidado(a) para a ${info.company} como ${info.roleLabel.toLowerCase()}. Escolha como vai entrar.` : info.kind === 'self_reset' ? `Defina uma nova palavra-passe para ${info.email ?? 'a sua conta'} (${info.company}).` : 'Defina uma nova forma de entrar.'}</p>

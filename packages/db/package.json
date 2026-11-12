@@ -17,12 +17,10 @@
     "seed": "tsx scripts/seed.ts",
     "platform-admins": "tsx scripts/platform-admins.ts",
     "reset-2fa": "tsx scripts/reset-two-factor.ts",
-    "modeling:review": "tsx scripts/modeling-review.ts",
     "studio": "drizzle-kit studio",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --passWithNoTests",
-    "internal-account": "tsx scripts/internal-account.ts"
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@kianda/core": "workspace:*",
