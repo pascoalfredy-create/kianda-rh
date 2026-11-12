@@ -1,7 +1,7 @@
 import { groupBy } from '../lib/group-by.js';
 import { createHash } from 'node:crypto';
 import {
-  allowanceAmount, convertUsdMinor, indexedBaseLabel, businessDays, calculatePayroll, fullMonthsBetween, monthlyDeductionCap, scheduledDays, scheduledMinutes, type Schedule, compensationAt, DEFAULT_PGC_ACCOUNTS, getPack, labourRules, lastDayOfMonth, NegativeNetError, overtimeHoursFromMinutes,
+  allowanceAmount, convertUsdMinor, indexedBaseLabel, businessDays, calculatePayroll, fullMonthsBetween, monthlyDeductionCap, scheduledDays, scheduledMinutes, scheduleStats, type Schedule, compensationAt, DEFAULT_PGC_ACCOUNTS, getPack, labourRules, lastDayOfMonth, NegativeNetError, overtimeHoursFromMinutes,
   payrollJournal, yearServiceFraction, type EarningInput, type PayrollResult, type PayrollTotals, type PgcAccountMap,
 } from '@kianda/core';
 import {
@@ -189,6 +189,8 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       // Regime do colaborador (turnos/rotação) ou o horário normal da empresa.
       const sched = e.scheduleId ? schedules.get(e.scheduleId) : undefined;
       const regime: Schedule = sched ? { kind: sched.kind as Schedule['kind'], pattern: sched.pattern, anchorDate: sched.anchorDate } : companyWeek;
+      const weeklyMinutes = scheduleStats(regime, pack.labour.weeklyHours).avgWeeklyMinutes;
+      const normalWeeklyHours = weeklyMinutes > 0 ? weeklyMinutes / 60 : undefined;
       const anchor = e.scheduleAnchor ?? sched?.anchorDate ?? null;
       const roster = publishedByEmployee.get(e.id);
       const minutesOn = (d: string) => roster?.has(d) ? roster.get(d)! : scheduledMinutes(regime, d, anchor);
@@ -203,7 +205,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       // Faltas injustificadas: dias de trabalho previstos (regime) dentro da falta, sem feriados.
       const myAbsences = (absencesByEmployee.get(e.id) ?? []).map((a) => ({ from: a.startDate < periodStart ? periodStart : a.startDate, to: a.endDate > periodEnd ? periodEnd : a.endDate }));
       const absenceDays = myAbsences.reduce((s, a) => s + (planned ? daysIn(a.from, a.to, holidaySet) : businessDays(a.from, a.to, [labourRules('AO', year)])), 0);
-      // Horas de falta pelo regime (valor-hora × horas, arts. 237.º e 240.º); sem regime: dias × 8 h.
+      // Horas de falta pelo horário normal ou pelos turnos publicados (arts. 237.º e 240.º).
       const minutesIn = (from: string, to: string) => {
         let m = 0;
         for (let t = Date.parse(from); t <= Date.parse(to); t += 86_400_000) {
@@ -212,7 +214,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
         }
         return m;
       };
-      const absenceHours = planned ? Math.round((myAbsences.reduce((s, a) => s + minutesIn(a.from, a.to), 0) / 60) * 100) / 100 : undefined;
+      const absenceHours = myAbsences.reduce((s, a) => s + minutesIn(a.from, a.to), 0) / 60;
       const unjustifiedThisMonth = absenceDays;
       const unjustifiedThisYear = (unjustifiedYearByEmployee.get(e.id) ?? []).reduce((s, a) => {
         const f = a.startDate < `${year}-01-01` ? `${year}-01-01` : a.startDate;
@@ -224,7 +226,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
         warnings.push({ employeeId: e.id, message: `${e.name}: ${unjustifiedThisMonth > disc.perMonth ? `${unjustifiedThisMonth} faltas injustificadas no mês` : `${unjustifiedThisYear} faltas injustificadas no ano`} — constitui infracção disciplinar` });
       }
       // Paternidade: 1 dia pago e o restante não remunerado (art. 218.º).
-      const workMinutesIn = (from: string, to: string) => (sched ? minutesIn(from, to) : businessDays(from, to, [labourRules('AO', year)]) * pack.labour.dailyHours * 60);
+      const workMinutesIn = minutesIn;
       let unpaidLeaveHours = 0;
       for (const a of (leavesByEmployee.get(e.id) ?? []).filter((x) => x.type === 'paternity')) {
         const from = a.startDate < periodStart ? periodStart : a.startDate;
@@ -340,7 +342,7 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
       let r: PayrollResult;
       try {
         r = calculatePayroll({
-          period, pack, baseMinor: pay.baseMinor, baseLabel, mealMinor: pay.mealMinor, transportMinor: pay.transportMinor,
+          period, pack, normalWeeklyHours, baseMinor: pay.baseMinor, baseLabel, mealMinor: pay.mealMinor, transportMinor: pay.transportMinor,
           overtimeHours, absenceDays, absenceHours, otherEarnings, advancesMinor, otherDeductionsMinor, otherDeductions, noticeDeductionMinor, holidaySubsidy, christmasSubsidy, workedDays,
           restDayHours, unpaidLeaveHours, unpaidLeaveLabel: unpaidLeaveHours ? `${unpaidLabel.charAt(0).toUpperCase()}${unpaidLabel.slice(1)} (${unpaidLeaveHours} h)` : undefined,
           vacationAllowanceCut, absenceAllowanceCut, latenessHours,

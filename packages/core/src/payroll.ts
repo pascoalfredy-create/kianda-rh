@@ -22,6 +22,8 @@ export interface PayrollInput {
   overtimeHours?: number;
   /** Faltas injustificadas descontadas, em dias. */
   absenceDays?: number;
+  /** Horário normal semanal do trabalhador (LGT, art. 237.º, n.º 7). */
+  normalWeeklyHours?: number;
   /** Horas de falta (regime de horário): desconto = valor-hora × horas (LGT, arts. 237.º, n.º 7 e 240.º). Sem isto: dias × horas diárias. */
   absenceHours?: number;
   /** Licença não remunerada (ex.: paternidade complementar, art. 218.º): horas a descontar ao valor-hora. */
@@ -97,13 +99,14 @@ export function irtGroupA(taxableMinor: Minor, pack: CountryPack): { amountMinor
 }
 
 /** Valor/hora = salário base × 12 / (52 × horas semanais). */
-export function hourlyRateMinor(baseMinor: Minor, pack: CountryPack): Minor {
-  return Math.round((baseMinor * 12) / (52 * pack.labour.weeklyHours));
+export function hourlyRateMinor(baseMinor: Minor, pack: CountryPack, normalWeeklyHours = pack.labour.weeklyHours): Minor {
+  if (!Number.isFinite(normalWeeklyHours) || normalWeeklyHours <= 0) throw new RangeError('horário semanal inválido');
+  return Math.round((baseMinor * 12) / (52 * normalWeeklyHours));
 }
 
-export function overtimeMinor(baseMinor: Minor, hours: number, pack: CountryPack): Minor {
+export function overtimeMinor(baseMinor: Minor, hours: number, pack: CountryPack, normalWeeklyHours?: number): Minor {
   if (hours < 0 || !Number.isFinite(hours)) throw new RangeError('horas extra inválidas');
-  const rate = hourlyRateMinor(baseMinor, pack);
+  const rate = hourlyRateMinor(baseMinor, pack, normalWeeklyHours);
   const { tier1MaxHoursPerMonth, tier1Bps, tier2Bps } = pack.labour.overtime;
   const h1 = Math.min(hours, tier1MaxHoursPerMonth);
   const h2 = Math.max(0, hours - tier1MaxHoursPerMonth);
@@ -177,8 +180,8 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   if (meal) { lines.push({ code: 'ALIM', name: `Subsídio de alimentação${vacationNote}`, kind: 'earning', amountMinor: meal }); irtBase += Math.max(0, meal - ex); if (input.allowancesInInss) inssBase += meal; }
   if (transport) { lines.push({ code: 'TRANSP', name: `Subsídio de transporte${vacationNote}`, kind: 'earning', amountMinor: transport }); irtBase += Math.max(0, transport - ex); if (input.allowancesInInss) inssBase += transport; }
   for (const o of input.otherEarnings ?? []) earn(o.code, o.name, assertMinor(o.amountMinor, o.name), o.inInss ?? true, o.inIrt ?? true);
-  if (input.overtimeHours) earn('HE', `Horas extraordinárias (${input.overtimeHours} h)`, overtimeMinor(fullBase, input.overtimeHours, pack), true, true);
-  const hourly = hourlyRateMinor(fullBase, pack);
+  if (input.overtimeHours) earn('HE', `Horas extraordinárias (${input.overtimeHours} h)`, overtimeMinor(fullBase, input.overtimeHours, pack, input.normalWeeklyHours), true, true);
+  const hourly = hourlyRateMinor(fullBase, pack, input.normalWeeklyHours);
   if (input.restDayHours) {
     const r = pack.labour.restDayWork;
     earn('HEDESC', `Trabalho em dia de descanso (${input.restDayHours} h, +${r.extraBps / 100}%)`, Math.round(input.restDayHours * hourly * (1 + r.extraBps / 10_000)), true, true);

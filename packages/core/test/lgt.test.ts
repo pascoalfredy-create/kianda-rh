@@ -31,6 +31,19 @@ describe('LGT — salário', () => {
     const r = calculatePayroll({ period: '2026-11', baseMinor: base, absenceDays: 2 });
     expect(r.lines.find((l) => l.code === 'FALTAS')!.amountMinor).toBe(-Math.round(16 * hourly));
   });
+  it('usa o horário normal semanal para acréscimos e descontos', () => {
+    const normalWeeklyHours = 40;
+    const rate = Math.round(base * 12 / (52 * normalWeeklyHours));
+    const r = calculatePayroll({
+      period: '2026-11', baseMinor: base, normalWeeklyHours, overtimeHours: 2,
+      absenceDays: 1, absenceHours: 7.5, restDayHours: 3, unpaidLeaveHours: 4, latenessHours: 0.5,
+    });
+    const by = Object.fromEntries(r.lines.map(l => [l.code, l.amountMinor]));
+    expect(by).toMatchObject({
+      HE: 3 * rate, FALTAS: -Math.round(7.5 * rate), HEDESC: Math.round(3 * rate * 1.75),
+      LICNR: -4 * rate, ATRASOS: -Math.round(0.5 * rate),
+    });
+  });
   it('descanso +75% (art. 194.º), feriado +1 dia (art. 200.º), paternidade complementar não paga (art. 218.º)', () => {
     const r = calculatePayroll({ period: '2026-11', baseMinor: base, restDayHours: 3, holidayWorkDays: 1, unpaidLeaveHours: 56, unpaidLeaveLabel: 'Paternidade (7 dias úteis não remunerados)' });
     const by = Object.fromEntries(r.lines.map((l) => [l.code, l.amountMinor]));
