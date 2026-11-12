@@ -38,12 +38,14 @@ function showBalancePreview() {
   let nextClose = D.fecho;
   while (res.months.includes(nextClose)) nextClose++;
   const byRubric = Object.entries(res.acc).map(([k, v]) => `<tr><td><span class="code">${LBL[k][0]}</span>${LBL[k][1]}</td>${res.months.map(m => `<td class="num">${v[m] == null ? '—' : f0(v[m])}</td>`).join('')}</tr>`).join('');
+  const movements = res.lines.flatMap(line => (line.movements ?? []).map(m => `<tr><td>${esc(line.code)}</td><td>${MES[m.month]}</td><td class="num">${f0(m.previous)}</td><td class="num">${f0(m.current)}</td><td class="num">${f0(m.movement)}</td></tr>`));
   const bad = res.control.filter(c => c.differenceKz != null && Math.abs(c.differenceKz) >= .01);
   const control = `<tr><td>Resultado do mês</td>${res.control.map(c => `<td class="num">${f0(c.resultKz / 1e6)}</td>`).join('')}</tr>
     <tr><td>Diferença de balanço</td>${res.control.map(c => `<td class="num">${c.differenceKz == null ? 'Não apurada' : f0(c.differenceKz / 1e6)}</td>`).join('')}</tr>`;
   importPane().innerHTML = `<h3 class="mt" style="font-size:13px">Pré-visualização — ${res.lines.length} contas mapeadas, ${res.ignored.length} ignoradas · valores em Kz</h3>
     <div class="tbl-scroll"><table><thead><tr><th>Rubrica</th>${res.months.map(m => `<th>${MES[m]}</th>`).join('')}</tr></thead><tbody>${byRubric}<tr class="sec"><td colspan="${res.months.length + 1}">Controlo antes de aplicar</td></tr>${control}</tbody></table></div>
     ${bad.length ? `<div class="note" style="border-color:var(--warn)">O balanço importado não fecha em ${bad.map(c => MES[c.month]).join(', ')}. Confirme as contas e os sinais antes de aplicar.</div>` : ''}
+    ${movements.length ? `<details><summary>Como foram calculados os movimentos do mês</summary><p class="hint">Valores em Kz com os sinais do ficheiro de origem, antes da classificação por rubrica.</p><div class="tbl-scroll"><table><thead><tr><th>Conta</th><th>Mês</th><th>Acumulado anterior</th><th>Acumulado actual</th><th>Diferença</th></tr></thead><tbody>${movements.join('')}</tbody></table></div></details>` : ''}
     ${res.warnings.map(w => `<p class="hint">${esc(w)}</p>`).join('')}
     ${res.ignored.length ? `<p class="hint">Contas e linhas ignoradas: ${esc(res.ignored.slice(0, 12).join(' · '))}${res.ignored.length > 12 ? ' …' : ''}</p>` : ''}
     <label class="hint">Rubricas dos meses importados <select id="impMode" class="sel"><option value="merge">Completar a grelha</option><option value="replace">Substituir todas as rubricas desses meses</option></select></label>
@@ -100,6 +102,8 @@ async function applyBalancePreview() {
       importPane().textContent = 'Os dados do ficheiro já constam da grelha.';
       return;
     }
+    const affectedMonths = [...new Set(cells.filter(c => c.before != null).map(c => c.month))];
+    if (affectedMonths.length && !confirm(`Esta importação altera valores já preenchidos em ${affectedMonths.map(m => MES[m]).join(', ')}. Aplicar as alterações?`)) return;
     for (const cell of cells) D.real[cell.key][cell.month] = cell.after;
     D.fecho = afterClose;
     balanceUndo = { analysis: CUR, cells, beforeClose, afterClose };

@@ -12,6 +12,9 @@ describe('relatórios financeiros congeláveis', () => {
           if (b.chronological && report.key === 'demonstracoes') expect(b.columns).toHaveLength(m.horizonte + 2);
         }
       }
+      const funding = bundle.reports.sumario.blocks.find(b => b.kind === 'table' && b.title === 'Financiamento e cobertura por cenário');
+      if (funding?.kind !== 'table') throw new Error('sem quadro de financiamento');
+      expect(funding.rows.map(row => row.cells[1]!.value)).toEqual(Object.values(bundle.scenarios).map(scenario => Math.max(...(m.capitalAutomatico ? scenario.k.eqAuto : scenario.k.unfunded))));
       const dr = bundle.reports.demonstracoes.blocks.find((b) => b.kind === 'table')!;
       if (dr.kind !== 'table') throw new Error('sem demonstração');
       expect(dr.rows[0]!.cells.slice(1).map((c) => c.value)).toEqual(bundle.result.k.rev);
