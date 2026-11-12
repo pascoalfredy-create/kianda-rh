@@ -163,6 +163,13 @@ jobs:
         if: vars.KIANDA_HOSTNAME != ''
         run: node scripts/cf-ratelimit.mjs "$PRIMARY_HOST"
 
+      - name: DMARC das notificações do Kianda
+        if: vars.KIANDA_MAIL_FROM != ''
+        continue-on-error: true
+        run: node scripts/cf-email-dmarc.mjs
+        env:
+          MAIL_FROM: ${{ vars.KIANDA_MAIL_FROM }}
+
       - name: Armazenamento de ficheiros (R2, opcional)
         working-directory: apps/api
         run: |
