@@ -33,3 +33,20 @@ Para a mudança do IRT para o IRPS na folha:
    Testar os limites dos escalões e os pagamentos que atravessam a transição, incluindo
    retroactivos, acertos e subsídios. Preservar o regime e os valores das folhas fechadas.
 4. Publicar o regime após validação com as tabelas e os formatos oficiais aplicáveis.
+
+## Valor diário e valor-hora
+
+- **Mês incompleto e aviso prévio contado em dias de calendário**: o Kianda aplica
+  salário-base ÷ 30, como convenção operacional do processamento e da cessação.
+- **Férias vencidas e proporcionais na cessação**: o Kianda usa a proporção sobre
+  22 dias úteis. Os artigos 204.º, 212.º e 213.º da LGT distinguem a duração, os
+  dias devidos e a remuneração de férias. Os complementos técnicos e de
+  disponibilidade aplicáveis devem ser conferidos no fecho de contas.
+- **Faltas, atrasos, licenças não remuneradas e acréscimos horários**: o valor-hora
+  segue o artigo 237.º, n.º 7: base × 12 ÷ (52 × horário normal semanal).
+  Usam-se as horas do regime do trabalhador ou, na sua ausência, do horário normal
+  da empresa. Nos regimes cíclicos usa-se a média semanal do ciclo cadastrado.
+  A escala publicada determina as horas de ausência nos dias abrangidos.
+- **Feriado trabalhado**: o processamento mantém o aviso de revisão manual do
+  acréscimo de um dia de salário normal e do descanso compensatório, conforme o
+  artigo 200.º, atendendo às excepções do regime aplicável.
