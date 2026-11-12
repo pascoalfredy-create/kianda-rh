@@ -620,6 +620,14 @@ export const payrollRuns = pgTable('payroll_runs', {
   period: text('period').notNull(),
   status: payrollStatusEnum('status').notNull().default('draft'),
   packVersion: text('pack_version').notNull(),
+  /** Metadados do cálculo aplicado, sem efeito na selecção da regra. */
+  withholdingRule: jsonb('withholding_rule').$type<{
+    tax: 'IRT';
+    group: 'A';
+    packVersion: string;
+    allowanceExemptionMinor: number;
+    brackets: [upper: number | null, fixed: number, rateBps: number, excessFrom: number][];
+  }>(),
   preparedBy: text('prepared_by'),
   closedAt: timestamp('closed_at', { withTimezone: true }),
   closedBy: text('closed_by'),

@@ -38,12 +38,16 @@ describe.skipIf(!process.env.DATABASE_URL)('folha a partir da escala publicada',
     });
     expect((await call('POST', '/v1/payroll-runs', { period: '2026-03' })).statusCode).toBe(201);
     const run = (await call('GET', '/v1/payroll-runs/opening?period=2026-03')).json().run;
+    expect(run.withholdingRule).toMatchObject({ tax: 'IRT', group: 'A', packVersion: run.packVersion });
+    expect(run.withholdingRule.brackets.at(-1)[0]).toBeNull();
     const allowance = (employeeId: string) => (run.lines.find((l: any) => l.employeeId === employeeId).breakdown as any[]).find(b => b.code === 'SUBTURNO');
     expect(allowance(ids[0]!).name).toContain('(3 dia(s))');
     expect(allowance(ids[0]!).amountMinor).toBe(300_000);
     expect(allowance(ids[1]!).name).toContain('(22 dia(s))');
     const closed = await call('POST', `/v1/payroll-runs/${run.id}/close`);
     expect(closed.statusCode, closed.body).toBe(200);
+    const stored = (await call('GET', '/v1/payroll-runs/opening?period=2026-03')).json().run;
+    expect(stored.withholdingRule).toEqual(run.withholdingRule);
     const payslips = await call('GET', `/v1/payslips?employeeId=${ids[0]}`);
     expect(payslips.json()[0]).toMatchObject({ period: '2026-03', netMinor: run.lines[0].employeeId === ids[0] ? run.lines[0].netMinor : run.lines[1].netMinor });
     const irt = await call('GET', `/v1/payroll-runs/${run.id}/maps/irt`);
