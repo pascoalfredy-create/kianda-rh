@@ -58,7 +58,14 @@ test('Valora: cria uma análise, edita o orçamento e os dados ficam no servidor
   await page.locator('#impUnit').selectOption('kz');
   await expect(page.locator('#imp-prev')).toContainText('4 contas mapeadas');
   await expect(page.locator('#imp-prev')).toContainText(/1\s000\s000,25/);
-  await page.locator('#btnApply').click();
+  const dismissImport = page.waitForEvent('dialog').then(async dialog => {
+    expect(dialog.message()).toContain('altera valores já preenchidos');
+    await dialog.dismiss();
+  });
+  await Promise.all([dismissImport, page.locator('#btnApply').click()]);
+  await expect(page.locator('#imp-prev')).toContainText('4 contas mapeadas');
+  const acceptImport = page.waitForEvent('dialog').then(dialog => dialog.accept());
+  await Promise.all([acceptImport, page.locator('#btnApply').click()]);
   await expect(page.locator('#imp-prev')).toContainText('ao cêntimo');
   await expect.poll(async () => (await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}`)).body.data.real.v61[0], { timeout: 15_000 }).toBeCloseTo(1.00000025, 10);
   expect((await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}`)).body.data.fecho).toBe(Math.max(initialClose, 1));
