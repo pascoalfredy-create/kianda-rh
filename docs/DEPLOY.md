@@ -118,6 +118,8 @@ Cada integração liga-se sozinha quando o secret existir no GitHub (o deploy se
 
 **Resend:** criar conta, verificar o domínio de envio (registos DNS na Cloudflare) e gerar a chave. Os emails também ficam registados na consola (enviados, não enviados, falhados).
 
+Se o remetente estiver em `notificacoes.yelaperformance.com`, a publicação verifica o DMARC desse subdomínio e do domínio principal. Se ambos estiverem livres, cria o TXT `_dmarc.notificacoes.yelaperformance.com` com `v=DMARC1; p=none`. O token de publicação precisa de leitura da zona e edição DNS. Confirme os registos públicos e o resultado DMARC numa nova mensagem de teste.
+
 **Cegid Vendus:** a factura tem de ser emitida em software certificado pela AGT (Decreto Presidencial n.º 71/25 — facturação electrónica; hoje obrigatória só para fornecedores do Estado, regime geral a partir de Janeiro). Até lá a factura pode continuar a ser emitida fora e o n.º registado ao confirmar o pagamento. Conta Vendus Angola → APPS → API → chave. Comece em `tests`; na consola defina o imposto da licença de software (taxa normal, ou isenção com código e fundamento legal — decisão do dono, que é o contabilista), o id do meio de pagamento e, se quiser, a emissão automática. Pagamentos sem factura aparecem na consola com "Emitir factura".
 
 **Tarefas agendadas do Worker da API:** `*/30 * * * *` (sincronização Multicaixa) e `0 7 * * *` (avisos de licença às 08:00 de Luanda).
