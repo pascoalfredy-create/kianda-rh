@@ -30,7 +30,7 @@ function showBalancePreview() {
   if (!balanceRows || !valoraCanWrite()) return;
   $('#impErp').hidden = !isErpBalance(balanceRows);
   const res = parseBalance(balanceRows, {
-    unit: $('#impUnit').value, signed: $('#signConv').checked, cumulative: $('#impCum').checked, year: EX,
+    mapping: VS?.balanceMapping, unit: $('#impUnit').value, signed: $('#signConv').checked, cumulative: $('#impCum').checked, year: EX,
     erpMonth: Number($('#impMonth').value), erpMonthly: $('#impErpMonthly').checked,
   });
   if (res.error) return balanceError(res.error);
@@ -131,6 +131,50 @@ function undoBalanceImport() {
   balanceUndo = null;
   refresh();
   importPane().textContent = 'Importação desfeita. As rubricas e o mês de fecho afectados foram repostos.';
+}
+
+function mountBalanceMapping() {
+  if (VS?.user.role !== 'owner') return;
+  const mappingPanel = document.createElement('details');
+  mappingPanel.className = 'mt';
+  mappingPanel.innerHTML = `<summary>Mapeamento de contas da empresa</summary>
+    <form class="row-actions">
+      <label>Conta <input name="account" inputmode="numeric" pattern="[0-9]{1,20}" required></label>
+      <label>Rubrica <select name="rubric" class="sel"><option value="">Repor mapeamento padrão</option>${BALANCE_KEYS.map(key => `<option value="${key}">${esc(LBL[key][1])}</option>`).join('')}</select></label>
+      <button type="submit" class="btn">Guardar mapeamento</button>
+    </form>
+    <p class="hint" role="status"></p><ul></ul>`;
+  importPane().before(mappingPanel);
+  const mappingForm = mappingPanel.querySelector('form');
+  const status = mappingPanel.querySelector('[role=status]');
+  const renderMappings = () => {
+    mappingPanel.querySelector('ul').innerHTML = Object.entries(VS.balanceMapping ?? {}).sort().map(([account, key]) =>
+      `<li><button type="button" class="btn" data-account="${esc(account)}">${esc(account)}</button> ${esc(LBL[key]?.[1] ?? key)}</li>`).join('');
+  };
+  renderMappings();
+  mappingPanel.addEventListener('click', e => {
+    if (!e.target.dataset.account) return;
+    mappingForm.elements.account.value = e.target.dataset.account;
+    mappingForm.elements.rubric.value = VS.balanceMapping[e.target.dataset.account];
+  });
+  mappingForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!valoraCanWrite() || balanceApplying) return;
+    const button = mappingForm.querySelector('button[type=submit]');
+    button.disabled = true;
+    try {
+      VS.balanceMapping = await api('/balance-mapping', { method: 'PUT', body: {
+        account: mappingForm.elements.account.value, rubric: mappingForm.elements.rubric.value || null,
+      } });
+      status.textContent = 'Mapeamento guardado para as próximas importações da empresa.';
+      renderMappings();
+      if (balanceRows) showBalancePreview();
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
 }
 
 $('#file').addEventListener('change', e => { void readBalanceFile(e.target.files[0]); });

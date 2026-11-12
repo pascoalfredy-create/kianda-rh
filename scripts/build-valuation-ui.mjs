@@ -216,7 +216,7 @@ source = '\n' + engineFile + '\n' + source.slice(engineAt);
 const adapter = await readFile(new URL('valuation/adapter.js', web), 'utf8');
 const imports = [
   `import {setupNumberFields,parseNumberInput} from '${fileURLToPath(new URL('lib/number-fields.ts', web))}';`,
-  `import {isErpBalance,parseBalance,readBalanceDocument} from '${fileURLToPath(new URL('valuation/balance-import.ts', web))}';`,
+  `import {BALANCE_KEYS,isErpBalance,parseBalance,readBalanceDocument} from '${fileURLToPath(new URL('valuation/balance-import.ts', web))}';`,
   `import {readXlsxRows,utils as xlsxUtils,write as xlsxWrite} from '${fileURLToPath(new URL('valuation/xlsx.ts', web))}';`,
   `import {blankValuationData,valuationDataIssue} from '${fileURLToPath(new URL('packages/core/src/valuation.ts', root))}';`,
   `import {endSession,reloadPrivatePageOnRestore} from '${fileURLToPath(new URL('lib/session-client.ts', web))}';`,
