@@ -8,6 +8,7 @@ import { currentPeriod, monthLabel, shiftMonth } from '@/lib/format';
 import { PAYROLL_ROLES, VARIABLE_LABEL, type JournalRow, type PayrollBatchPerson, type PayrollLineRow, type PayrollRunDetail, type PayrollVariableRow } from '@/lib/types';
 import { VariableEntry, CloseButton, DeleteVariable, PrepareButton, SubsidyToggle } from './actions';
 import { EditVariable } from './edit-variable';
+import { MaternityEstimate } from './maternity-estimate';
 
 export const dynamic = 'force-dynamic';
 
@@ -143,6 +144,7 @@ function Sheet({ run, editable }: { run: PayrollRunDetail; editable: boolean }) 
 function Variables({ period, rows, editable, people }: { period: string; rows: PayrollVariableRow[]; editable: boolean; people: { id: string; name: string }[] }) {
   return (
     <>
+      {editable && <MaternityEstimate key={period} />}
       {editable && <div style={{ marginBottom: 14 }}><VariableEntry key={period} period={period} people={people} /></div>}
       <div className="card">
         <MapDisclosure title="Mapa de variáveis"><table>
