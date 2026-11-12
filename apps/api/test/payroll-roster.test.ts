@@ -1,3 +1,4 @@
+import { getPack } from '@kianda/core';
 import { afterAll, describe, expect, it } from 'vitest';
 import { allowanceTypes, closeDb, employeeAllowances, getDb, shiftAssignments, shiftTypes, withTenant } from '@kianda/db';
 import { buildApp } from '../src/app.js';
@@ -39,7 +40,7 @@ describe.skipIf(!process.env.DATABASE_URL)('folha a partir da escala publicada',
     expect((await call('POST', '/v1/payroll-runs', { period: '2026-03' })).statusCode).toBe(201);
     const run = (await call('GET', '/v1/payroll-runs/opening?period=2026-03')).json().run;
     expect(run.withholdingRule).toMatchObject({ tax: 'IRT', group: 'A', packVersion: run.packVersion });
-    expect(run.withholdingRule.brackets.at(-1)[0]).toBeNull();
+    expect(run.withholdingRule.brackets).toEqual(getPack('AO', 2026).irt.brackets);
     const allowance = (employeeId: string) => (run.lines.find((l: any) => l.employeeId === employeeId).breakdown as any[]).find(b => b.code === 'SUBTURNO');
     expect(allowance(ids[0]!).name).toContain('(3 dia(s))');
     expect(allowance(ids[0]!).amountMinor).toBe(300_000);
@@ -55,5 +56,12 @@ describe.skipIf(!process.env.DATABASE_URL)('folha a partir da escala publicada',
     const bank = await call('GET', `/v1/payroll-runs/${run.id}/bank-file?format=json`);
     expect(bank.statusCode, bank.body).toBe(200);
     expect(bank.json().excluded).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Turno 2', reason: 'sem IBAN' })]));
+    const paymentPath = `/v1/payroll-runs/${run.id}/payments`;
+    const request = { kind: 'salaries', paidOn: '2026-03-31' };
+    const payments = await Promise.all([call('POST', paymentPath, request), call('POST', paymentPath, request)]);
+    expect(payments.map(r => r.statusCode).sort()).toEqual([201, 409]);
+    const reverse = () => call('POST', `${paymentPath}/salaries/reverse`, { note: 'Estorno de ensaio' });
+    const reversals = await Promise.all([reverse(), reverse()]);
+    expect(reversals.map(r => r.statusCode).sort()).toEqual([200, 404]);
   });
 });

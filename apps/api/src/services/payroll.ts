@@ -495,7 +495,7 @@ export async function closePayroll(db: Db, companyId: string, runId: string, act
       const t = byCc.get(key) ?? { costCenter: key, baseMinor: 0, allowancesMinor: 0, overtimeAndBonusMinor: 0, holidayChristmasMinor: 0, employerInssMinor: 0, terminationMinor: 0 };
       for (const item of linesOf(l)) {
         if (item.kind !== 'earning') continue;
-        if (item.code === 'BASE' || item.code === 'FALTAS' || item.code === 'LICNR' || item.code === 'CORTE' || item.code === 'SUSP' || item.code === 'FERNG' || item.code === 'FERPROP') t.baseMinor += item.amountMinor;
+        if (item.code === 'BASE' || item.code === 'FALTAS' || item.code === 'ATRASOS' || item.code === 'LICNR' || item.code === 'CORTE' || item.code === 'SUSP' || item.code === 'FERNG' || item.code === 'FERPROP') t.baseMinor += item.amountMinor;
         else if (item.code === 'SUBFER' || item.code === 'SUBNAT' || item.code === 'SUBFERPROP') t.holidayChristmasMinor += item.amountMinor;
         else if (item.code === 'COMP' || item.code === 'COMPEXC' || item.code === 'AVISO') t.terminationMinor = (t.terminationMinor ?? 0) + item.amountMinor;
         else if (item.code === 'HE' || item.code === 'HEDESC' || item.code === 'FERTRAB' || item.code.startsWith('BONUS')) t.overtimeAndBonusMinor += item.amountMinor;

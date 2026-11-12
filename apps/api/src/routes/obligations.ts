@@ -58,12 +58,13 @@ export function obligationRoutes() {
     const { note } = z.object({ note: z.string().trim().min(3, 'Indique o motivo do estorno') }).parse(await body(c));
     const db = getDb();
     const run = await closedRun(db, actor.companyId, c.req.param('id'));
-    const [p] = await db.select().from(payrollPayments).where(and(eq(payrollPayments.runId, run.id), eq(payrollPayments.kind, kind)));
-    if (!p) return c.json({ error: 'nao_encontrado', message: 'Não há pagamento registado' }, 404);
-    const original = p.journalEntryId ? await db.query.journalEntries.findFirst({ where: eq(journalEntries.id, p.journalEntryId), with: { lines: true } }) : null;
-    const today = luandaDate(new Date());
-    const ref = `ES-${KIND_CODE[kind]}-${run.period.replace('-', '')}-${Date.now().toString(36).toUpperCase()}`;
-    await db.transaction(async (tx) => {
+    return db.transaction(async (tx) => {
+      await tx.select({ id: payrollRuns.id }).from(payrollRuns).where(eq(payrollRuns.id, run.id)).for('update');
+      const [p] = await tx.select().from(payrollPayments).where(and(eq(payrollPayments.runId, run.id), eq(payrollPayments.kind, kind)));
+      if (!p) return c.json({ error: 'nao_encontrado', message: 'Não há pagamento registado' }, 404);
+      const original = p.journalEntryId ? await tx.query.journalEntries.findFirst({ where: eq(journalEntries.id, p.journalEntryId), with: { lines: true } }) : null;
+      const today = luandaDate(new Date());
+      const ref = `ES-${KIND_CODE[kind]}-${run.period.replace('-', '')}-${Date.now().toString(36).toUpperCase()}`;
       if (original) {
         const [je] = await tx.insert(journalEntries).values({ companyId: actor.companyId, date: today, journal: 'Bancos', reference: ref, description: `Estorno de ${original.reference}: ${note}`, source: 'payroll_payment' }).returning();
         await tx.insert(journalLines).values(original.lines.map((l) => ({ entryId: je!.id, account: l.account, description: `Estorno: ${l.description}`, debitMinor: l.creditMinor, creditMinor: l.debitMinor })));
@@ -73,8 +74,8 @@ export function obligationRoutes() {
       const col = kind === 'salaries' ? { paidSalariesAt: null } : kind === 'irt' ? { paidIrtAt: null } : { paidInssAt: null };
       await tx.update(payrollRuns).set(col).where(eq(payrollRuns.id, run.id));
       await tx.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'reverse_payment', entity: 'payroll_run', entityId: run.id, before: { ...p }, after: { note, journal: ref } });
+      return c.json({ ok: true, journalReference: ref });
     });
-    return c.json({ ok: true, journalReference: ref });
   });
 
   /** Mapa de IRT (Grupo A) por colaborador. JSON ou CSV (?format=csv). */
