@@ -133,7 +133,8 @@ function undoBalanceImport() {
   importPane().textContent = 'Importação desfeita. As rubricas e o mês de fecho afectados foram repostos.';
 }
 
-if (VS?.user.role === 'owner') {
+function mountBalanceMapping() {
+  if (VS?.user.role !== 'owner') return;
   const mappingPanel = document.createElement('details');
   mappingPanel.className = 'mt';
   mappingPanel.innerHTML = `<summary>Mapeamento de contas da empresa</summary>

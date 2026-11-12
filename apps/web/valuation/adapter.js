@@ -329,3 +329,5 @@ async function valoraStart(){
 }
 try{setupNumberFields(document);}catch{}
 valoraStart();
+
+mountBalanceMapping();
