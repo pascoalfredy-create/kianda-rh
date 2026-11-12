@@ -45,6 +45,9 @@ test('administração entra directamente na consola e mantém a conta de empresa
   await page.goto('/plataforma');
   await expect(page).toHaveURL(/\/login\?area=plataforma$/);
   await expect(page.getByRole('heading', { name: 'Entrar na administração' })).toBeVisible();
+  await page.evaluate(async () => {
+    await (await caches.open('kianda-pages-v1')).put('/recibos', new Response('Recibo da sessão anterior'));
+  });
   await page.getByLabel('Email', { exact: true }).fill(customer.email);
   await page.getByLabel('Palavra-passe', { exact: true }).fill(PASSWORD);
   await page.getByRole('button', { name: 'Entrar', exact: true }).click();
@@ -52,6 +55,7 @@ test('administração entra directamente na consola e mantém a conta de empresa
   const nav = page.getByRole('navigation', { name: 'Administração da plataforma' });
   await expect(nav.getByRole('link')).toHaveText(['Plataforma', 'A minha conta']);
   await expect(page.getByRole('heading', { name: 'Plataforma Kianda' })).toBeVisible();
+  await expect.poll(() => page.evaluate(async () => Boolean(await caches.match('/recibos')))).toBe(false);
   await expect(page.getByRole('link', { name: 'Módulos e licenças' })).toHaveCount(0);
   for (const route of ['/', '/colaboradores', '/licenca', '/modelagem', '/valora']) {
     await page.goto(route);

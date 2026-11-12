@@ -17,6 +17,7 @@ export function PwaSetup({ invite = true }: { invite?: boolean }) {
   const [hidden, setHidden] = useState(true);
 
   useEffect(() => {
+    const platform = Boolean(document.querySelector('.platform-app'));
     const stopRestoreGuard = reloadPrivatePageOnRestore(() => !!document.querySelector('.rh-app, .platform-app'));
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).catch(() => {});
     const update = () => setOffline(!navigator.onLine);
@@ -27,7 +28,7 @@ export function PwaSetup({ invite = true }: { invite?: boolean }) {
     let dismissed = false;
     try { dismissed = localStorage.getItem('kianda_install_dismissed') === '1'; } catch { /* sem armazenamento */ }
     const mobile = window.matchMedia('(max-width: 820px)').matches;
-    if (!standalone && !dismissed && mobile && invite && !document.querySelector('.platform-app')) {
+    if (!standalone && !dismissed && mobile && invite && !platform) {
       setIos(/iphone|ipad|ipod/i.test(navigator.userAgent) && !/crios|fxios/i.test(navigator.userAgent));
       setHidden(false);
     }
