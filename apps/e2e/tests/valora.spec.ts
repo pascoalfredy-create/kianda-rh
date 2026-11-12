@@ -135,7 +135,8 @@ test('Valora: reutiliza o mapeamento da empresa e mostra o movimento no controlo
   await valoraGo(page, 'dados');
   await page.getByText('Mapeamento de contas da empresa', { exact: true }).click();
   await page.getByLabel('Conta', { exact: true }).fill('61001');
-  await page.getByLabel('Rubrica', { exact: true }).selectOption('v62');
+  const mapping = page.locator('details').filter({ has: page.getByText('Mapeamento de contas da empresa', { exact: true }) });
+  await mapping.locator('select[name="rubric"]').selectOption('v62', { timeout: 10_000 });
   await page.getByRole('button', { name: 'Guardar mapeamento' }).click();
   await expect(page.getByText('Mapeamento guardado para as próximas importações da empresa.')).toBeVisible();
   await page.reload();
