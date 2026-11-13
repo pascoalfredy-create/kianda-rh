@@ -104,6 +104,7 @@ test('Integra no telemóvel: menu, pressupostos e versões em cartões dentro do
   await page.goto('/modelagem');
   await page.click('#integra-menu-toggle');
   await expect(page.locator('#integra-side')).toBeVisible();
+  await expect(page.locator('#integra-side')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await page.click('[data-go="pressupostos"]');
   await expect(page.locator('#integra-side')).toBeHidden();
   await page.click('header [data-act="versions"]');
