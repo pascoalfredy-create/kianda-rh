@@ -32,6 +32,18 @@ describe('relatórios financeiros congeláveis', () => {
     expect(JSON.stringify(bundle)).toBe(copy);
     expect(bundle.inputAssumptions.customNote).toBe('Texto original');
   });
+  it('congela a interpretação e o comentário do cenário, mesmo com um teste de WACC inválido', () => {
+    const m = financialTemplate('mineracao').assumptions;
+    const input = { ...m, cen: 'pess', sens: 20, wacc: { ...m.wacc, modo: 'manual', manual: 10 }, tv: { metodo: 'gordon', g: 9, mult: 0 }, valorResidualLiquido: 0, libertarFundoManeio: false, interpretationNotes: { base: 'Nota base', pess: 'Confirmar vendas' } };
+    const bundle = buildFinancialReportBundle(input, source);
+    expect(bundle.sensitivity.find(s => s.driver === 'wacc')).toMatchObject({ low: null, impact: null });
+    for (const key of ['sumario', 'comite'] as const) {
+      const sections = bundle.reports[key].blocks.filter(b => b.kind === 'paragraph');
+      expect(sections).toContainEqual({ kind: 'paragraph', title: 'Comentário do responsável', text: 'Confirmar vendas' });
+      expect(sections).toContainEqual(expect.objectContaining({ title: 'Interpretação · Significado do resultado', text: expect.stringContaining('Cenário Pessimista') }));
+      expect(JSON.stringify(sections)).not.toContain('Nota base');
+    }
+  });
   it('a análise económico-financeira usa apenas as demonstrações projectadas do projecto', () => {
     expect(FINANCIAL_REPORT_KEYS).toContain('analise');
     const m = financialTemplate('industria').assumptions, r = runFinancialModel(m), a = analyzeFinancialProjection(r);

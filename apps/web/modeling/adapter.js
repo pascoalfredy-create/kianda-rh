@@ -182,6 +182,33 @@ function protect() {
   $('#integra-logout').textContent=signingOut?'A terminar sessão…':'Terminar sessão';
   $('#mSel').title=notice||((($('#mSel').selectedOptions?.[0]?.textContent)||'')+' — Projectos da empresa. Escolha Gerir projectos… para consultar, arquivar ou restaurar.').replace(/^ — /,'');
 }
+function integraInterpretationSections(model,result) {
+  if(versionView)return versionView.interpretation;
+  return interpretFinancialResult(model,result,model.moeda);
+}
+function integraInterpretationPanel(model,result) {
+  const sections=integraInterpretationSections(model,result);
+  const note=versionView?versionView.interpretationNote:financialInterpretationNote(model,result.scenario);
+  const editable=!versionView&&store.canEdit(model.id);
+  return `<details class="card" style="margin-bottom:16px"><summary class="hd" style="cursor:pointer"><b>Interpretar resultado</b></summary>
+    <div class="bd">${sections.map(s=>`<p><b>${esc(s.title.slice(INTERPRETATION_SECTION_PREFIX.length))}</b><br>${esc(s.text)}</p>`).join('')||'<p>Esta versão foi aprovada antes da inclusão da interpretação.</p>'}
+    ${!versionView?`<p><a href="#sensibilidade" data-go="sensibilidade">Cenários e sensibilidade</a> · <a href="#credito" data-go="credito">Financiamento e crédito</a></p>`:''}
+    ${editable?`<label for="integra-interpretation-note"><b>${INTERPRETATION_NOTE_TITLE}</b> · incluído no PDF do cenário activo</label>
+    <textarea class="inp" id="integra-interpretation-note" maxlength="${INTERPRETATION_NOTE_LIMIT}" rows="3" style="display:block;width:100%;height:auto;margin-top:6px">${esc(note)}</textarea>`:note?`<p><b>${INTERPRETATION_NOTE_TITLE}</b><br>${esc(note)}</p>`:''}</div></details>`;
+}
+function integraInterpretationReport(model,result) {
+  const sections=integraInterpretationSections(model,result);
+  const note=versionView?versionView.interpretationNote:financialInterpretationNote(model,result.scenario);
+  return sections.map(s=>`<h3>${esc(s.title)}</h3><p>${esc(s.text)}</p>`).join('')+
+    (note?`<h3>${INTERPRETATION_NOTE_TITLE}</h3><p style="white-space:pre-wrap">${esc(note)}</p>`:'');
+}
+document.addEventListener('input',event=>{
+  if(event.target.id!=='integra-interpretation-note'||versionView)return;
+  const model=M();
+  if(!model||!store.canEdit(model.id))return;
+  model.interpretationNotes={...model.interpretationNotes,[model.cen]:event.target.value.slice(0,INTERPRETATION_NOTE_LIMIT)};
+  save();
+});
 function render() {
   if(!session)return;
   rememberModelingLocation();
@@ -277,7 +304,10 @@ async function openVersion(versionId){
   const model=presentModel({id:context.modelId,name:String(p.source.projectName??''),sector:String(p.source.sector??''),currency:String(p.source.currency??''),assumptions:p.inputAssumptions,revision:v.sourceRevision,createdAt:v.approvedAt,archivedAt:null});
   // O ecrã recalcula com o motor actual; confirma-se que reproduz o valor aprovado.
   let matches=false;try{const npv=run(model,{cen:p.result.scenario}).npv;matches=p.result.engineVersion===FINANCIAL_ENGINE_VERSION&&Math.abs(npv-p.result.npv)<=Math.max(1,Math.abs(p.result.npv))*1e-9;}catch{matches=false;}
-  versionView={modelId:context.modelId,versionId:v.id,number:v.versionNumber,label:v.label,approvedAt:v.approvedAt,approvedByName:v.approvedByName,engine:p.result.engineVersion,matches};
+  const summary=p.reports?.sumario?.blocks||[];
+  const interpretation=summary.filter(b=>b.kind==='paragraph'&&b.title?.startsWith(INTERPRETATION_SECTION_PREFIX));
+  const interpretationNote=summary.find(b=>b.kind==='paragraph'&&b.title===INTERPRETATION_NOTE_TITLE)?.text||'';
+  versionView={interpretation,interpretationNote,modelId:context.modelId,versionId:v.id,number:v.versionNumber,label:v.label,approvedAt:v.approvedAt,approvedByName:v.approvedByName,engine:p.result.engineVersion,matches};
   previewModel=model;notice='';
   closeModal();render();toast(`A consultar a versão v${v.versionNumber} (só leitura).`);
 }
