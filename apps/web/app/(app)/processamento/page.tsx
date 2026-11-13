@@ -95,18 +95,19 @@ function Sheet({ run, editable }: { run: PayrollRunDetail; editable: boolean }) 
       <div className="card" style={{ overflowX: 'auto' }}>
         <MapDisclosure title="Mapa de processamento salarial"><table className="dense">
           <thead><tr>
-            <th>Colaborador</th><th className="num">Base</th><th className="num">Subs. alim./transp.</th><th className="num">H. extra</th><th>Subsídios</th><th className="num">Prémios/abonos</th>
-            <th className="num">Faltas</th><th className="num">Ilíquido</th><th className="num">INSS trabalhador</th><th className="num">IRT</th><th className="num">Outros desc.</th><th className="num">Líquido</th><th className="num">INSS empresa</th><th className="num">Custo empresa</th><th />
+            <th>Colaborador</th><th className="num">Base</th><th className="num">Subs. alim./transp.</th><th className="num">Trabalho adicional</th><th>Subsídios</th><th className="num">Prémios/abonos</th>
+            <th className="num">Faltas e ausências</th><th className="num">Ilíquido</th><th className="num">INSS trabalhador</th><th className="num">IRT</th><th className="num">Outros desc.</th><th className="num">Líquido</th><th className="num">INSS empresa</th><th className="num">Custo empresa</th><th />
           </tr></thead>
           <tbody>
             {run.lines.map((l) => {
               const ov = run.subsidyOverrides[l.employeeId] ?? {};
+              const absenceDiscount = sumCode(l, 'FALTAS', 'ATRASOS', 'LICNR', 'CORTE', 'SUSP');
               return (
                 <tr key={l.id}>
                   <td><b>{l.employee.name}</b><div className="muted">N.º {l.employee.number} · escalão {l.irtBracket}</div></td>
                   <td className="num">{k(sumCode(l, 'BASE'))}</td>
                   <td className="num">{k(sumCode(l, 'ALIM', 'TRANSP'))}</td>
-                  <td className="num">{Number(l.overtimeHours) ? <>{k(sumCode(l, 'HE'))}<div className="muted">{l.overtimeHours} h</div></> : '—'}</td>
+                  <td className="num">{k(sumCode(l, 'HE', 'HEDESC', 'FERTRAB'))}{Number(l.overtimeHours) > 0 && <div className="muted">{l.overtimeHours} h extra</div>}</td>
                   <td>
                     {editable ? (
                       <>
@@ -117,11 +118,11 @@ function Sheet({ run, editable }: { run: PayrollRunDetail; editable: boolean }) 
                     {sumCode(l, 'SUBFER', 'SUBNAT') ? <div className="muted">{k(sumCode(l, 'SUBFER', 'SUBNAT'))}</div> : !editable && '—'}
                   </td>
                   <td className="num">{k(sumCode(l, 'BONUS', 'OUTABON'))}</td>
-                  <td className="num">{l.absenceDays ? <span style={{ color: 'var(--red)' }}>{k(sumCode(l, 'FALTAS'))}<div className="muted">{l.absenceDays} dia(s)</div></span> : '—'}</td>
+                  <td className="num">{absenceDiscount || l.absenceDays ? <span style={{ color: 'var(--red)' }}>{k(absenceDiscount)}{l.absenceDays > 0 && <div className="muted">{l.absenceDays} dia(s) de falta</div>}</span> : '—'}</td>
                   <td className="num"><b>{k(l.grossMinor)}</b></td>
                   <td className="num">{k(l.inssEmployeeMinor)}</td>
                   <td className="num">{k(l.irtMinor)}</td>
-                  <td className="num">{k(sumCode(l, 'ADIANT', 'OUTDESC'))}</td>
+                  <td className="num">{k(sumCode(l, 'ADIANT', 'OUTDESC', 'AVISODESC'))}</td>
                   <td className="num"><b style={{ color: 'var(--brand)' }}>{k(l.netMinor)}</b></td>
                   <td className="num">{k(l.inssEmployerMinor)}</td>
                   <td className="num">{k(l.grossMinor + l.inssEmployerMinor)}</td>

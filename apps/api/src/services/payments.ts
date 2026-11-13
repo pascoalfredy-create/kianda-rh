@@ -70,8 +70,6 @@ export async function registerPayment(
   const { kind, paidOn } = input;
   if (paidOn > luandaDate(new Date())) throw new DomainError('data_futura', 'A data de pagamento não pode ser futura', 400);
   if (paidOn < `${run.period}-01`) throw new DomainError('data_invalida', 'A data de pagamento é anterior ao mês processado', 400);
-  const [exists] = await db.select({ id: payrollPayments.id }).from(payrollPayments).where(and(eq(payrollPayments.runId, run.id), eq(payrollPayments.kind, kind)));
-  if (exists) throw new DomainError('ja_pago', `${OBLIGATION_LABEL[kind]} de ${run.period} já está registado como pago`);
   const amount = obligationAmount(kind, await runTotals(db, run.id));
   if (input.expectedAmountMinor !== undefined && input.expectedAmountMinor !== amount) {
     throw new DomainError('valor_diferente', `O valor do extracto não coincide com ${OBLIGATION_LABEL[kind]} de ${run.period}`, 400);
@@ -81,6 +79,7 @@ export async function registerPayment(
   if (!bankAccountId) {
     const [first] = await db.select().from(bankAccounts).where(and(eq(bankAccounts.companyId, actor.companyId), eq(bankAccounts.active, true))).limit(2);
     bankAccountId = first?.id ?? null;
+    if (first) acc.bank = first.ledgerAccount;
   } else {
     const [ba] = await db.select().from(bankAccounts).where(and(eq(bankAccounts.id, bankAccountId), eq(bankAccounts.companyId, actor.companyId)));
     if (!ba) throw new DomainError('conta_inexistente', 'Conta bancária inexistente', 404);
@@ -89,10 +88,13 @@ export async function registerPayment(
   const payable = kind === 'salaries' ? acc.netPayable : kind === 'irt' ? acc.irtPayable : acc.socialSecurityPayable;
   // Depois de um estorno a referência original já existe: o novo pagamento leva sufixo (-2, -3…).
   const base = `PG-${KIND_CODE[kind]}-${run.period.replace('-', '')}`;
-  const used = await db.select({ r: journalEntries.reference }).from(journalEntries).where(and(eq(journalEntries.companyId, actor.companyId), like(journalEntries.reference, `${base}%`)));
-  const ref = used.length ? `${base}-${used.length + 1}` : base;
-  const entry = paymentJournal(paidOn, ref, `Pagamento ${OBLIGATION_LABEL[kind]} ${run.period}${input.reference ? ` (${input.reference})` : ''}`, payable, amount, acc);
-  const payment = await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
+    await tx.select({ id: payrollRuns.id }).from(payrollRuns).where(eq(payrollRuns.id, run.id)).for('update');
+    const [exists] = await tx.select({ id: payrollPayments.id }).from(payrollPayments).where(and(eq(payrollPayments.runId, run.id), eq(payrollPayments.kind, kind)));
+    if (exists) throw new DomainError('ja_pago', `${OBLIGATION_LABEL[kind]} de ${run.period} já está registado como pago`);
+    const used = await tx.select({ r: journalEntries.reference }).from(journalEntries).where(and(eq(journalEntries.companyId, actor.companyId), like(journalEntries.reference, `${base}%`)));
+    const ref = used.length ? `${base}-${used.length + 1}` : base;
+    const entry = paymentJournal(paidOn, ref, `Pagamento ${OBLIGATION_LABEL[kind]} ${run.period}${input.reference ? ` (${input.reference})` : ''}`, payable, amount, acc);
     const [je] = await tx.insert(journalEntries).values({ companyId: actor.companyId, date: entry.date, journal: entry.journal, reference: entry.reference, description: entry.description, source: 'payroll_payment' }).returning();
     await tx.insert(journalLines).values(entry.lines.map((l) => ({ entryId: je!.id, account: l.account, description: l.description, debitMinor: l.debitMinor, creditMinor: l.creditMinor })));
     const [p] = await tx.insert(payrollPayments).values({ companyId: actor.companyId, runId: run.id, kind, paidOn, amountMinor: amount, reference: input.reference ?? null, journalEntryId: je!.id, bankAccountId, createdBy: actor.actorId }).returning();
@@ -100,9 +102,8 @@ export async function registerPayment(
     await tx.update(payrollRuns).set(col).where(eq(payrollRuns.id, run.id));
     await tx.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'pay', entity: 'payroll_run', entityId: run.id, after: { ...p, journal: ref } });
     if (within) await within(tx, p!);
-    return p!;
+    return { ...p!, journalReference: ref };
   });
-  return { ...payment, journalReference: ref };
 }
 
 /** Desfaz uma correspondência: os movimentos voltam a "por conciliar" e o pagamento fica sem comprovativo. */

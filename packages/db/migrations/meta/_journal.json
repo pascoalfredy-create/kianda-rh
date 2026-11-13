@@ -456,6 +456,13 @@
       "when": 1794611200001,
       "tag": "0064_valuation_balance_mapping",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1794611200002,
+      "tag": "0065_payroll_withholding_rule",
+      "breakpoints": true
     }
   ]
 }

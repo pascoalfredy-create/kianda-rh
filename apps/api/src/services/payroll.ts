@@ -75,9 +75,10 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
     let [run] = await tx.select().from(payrollRuns).where(and(eq(payrollRuns.companyId, companyId), eq(payrollRuns.period, period))).for('update');
     if (run?.status === 'closed') throw new DomainError('processamento_fechado', 'O processamento deste período já está fechado');
     const selected = employeeIds ? new Set(employeeIds) : null;
+    let preserves = false;
     if (run && selected) {
       const existing = await tx.select({ employeeId: payrollLines.employeeId }).from(payrollLines).where(eq(payrollLines.runId, run.id));
-      const preserves = existing.some(l => !selected.has(l.employeeId));
+      preserves = existing.some(l => !selected.has(l.employeeId));
       if (preserves && (run.packVersion !== pack.version || (fx && (Number(run.fxRate ?? 0) !== fx.rate || run.fxDate !== fx.date)))) throw new DomainError('lote_requer_recalculo_total', 'A alteração do câmbio ou das regras exige Recalcular toda a folha, para manter os colaboradores no mesmo enquadramento.', 409);
     }
     run ??= (await tx.insert(payrollRuns).values({ companyId, period, packVersion: pack.version, preparedBy: actorId }).returning())[0]!;
@@ -405,7 +406,13 @@ export async function draftPayroll(db: Db, companyId: string, period: string, ac
     if (remove.length) await tx.delete(payrollLines).where(inArray(payrollLines.id, remove));
 
     const allWarnings = selected ? [...(run.warnings as PayrollWarning[]).filter(w => !w.employeeId || !selected.has(w.employeeId)), ...warnings] : warnings;
-    [run] = await tx.update(payrollRuns).set({ preparedBy: actorId, warnings: allWarnings, packVersion: pack.version }).where(eq(payrollRuns.id, run.id)).returning() as [typeof run];
+    const withholdingRule: typeof run.withholdingRule = preserves ? run.withholdingRule : {
+      tax: 'IRT', group: 'A', packVersion: pack.version,
+      allowanceExemptionMinor: pack.irt.allowanceExemptionMinor,
+      brackets: pack.irt.brackets.map(([upper, fixed, rateBps, excessFrom]) =>
+        [Number.isFinite(upper) ? upper : null, fixed, rateBps, excessFrom]),
+    };
+    [run] = await tx.update(payrollRuns).set({ preparedBy: actorId, warnings: allWarnings, packVersion: pack.version, withholdingRule }).where(eq(payrollRuns.id, run.id)).returning() as [typeof run];
     await tx.insert(auditLogs).values({ companyId, actorId, action: selected ? 'draft_batch' : 'draft', entity: 'payroll_run', entityId: run.id, after: { period, employees: results.length, totalEmployees: stale.length - remove.length, ...(selected ? { employeeIds } : {}), warnings: allWarnings.length } });
     return { run, lines: results.length, totalLines: stale.length - remove.length, warnings: allWarnings };
   });
@@ -488,7 +495,7 @@ export async function closePayroll(db: Db, companyId: string, runId: string, act
       const t = byCc.get(key) ?? { costCenter: key, baseMinor: 0, allowancesMinor: 0, overtimeAndBonusMinor: 0, holidayChristmasMinor: 0, employerInssMinor: 0, terminationMinor: 0 };
       for (const item of linesOf(l)) {
         if (item.kind !== 'earning') continue;
-        if (item.code === 'BASE' || item.code === 'FALTAS' || item.code === 'LICNR' || item.code === 'CORTE' || item.code === 'SUSP' || item.code === 'FERNG' || item.code === 'FERPROP') t.baseMinor += item.amountMinor;
+        if (item.code === 'BASE' || item.code === 'FALTAS' || item.code === 'ATRASOS' || item.code === 'LICNR' || item.code === 'CORTE' || item.code === 'SUSP' || item.code === 'FERNG' || item.code === 'FERPROP') t.baseMinor += item.amountMinor;
         else if (item.code === 'SUBFER' || item.code === 'SUBNAT' || item.code === 'SUBFERPROP') t.holidayChristmasMinor += item.amountMinor;
         else if (item.code === 'COMP' || item.code === 'COMPEXC' || item.code === 'AVISO') t.terminationMinor = (t.terminationMinor ?? 0) + item.amountMinor;
         else if (item.code === 'HE' || item.code === 'HEDESC' || item.code === 'FERTRAB' || item.code.startsWith('BONUS')) t.overtimeAndBonusMinor += item.amountMinor;
