@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { expect, request, type BrowserContext, type Page } from '@playwright/test';
 import pg from 'pg';
 
@@ -95,4 +96,12 @@ export async function openMaps(page: Page) {
     const summary = map.locator('summary').first();
     if (await summary.isVisible()) await summary.click();
   }
+}
+
+/** Durante a recuperação, confirma o conteúdo do próprio ficheiro descarregado. */
+export async function expectRecoveryPdf(download: { path(): Promise<string> }, section: string) {
+  if (!process.env.RECOVERY_OBJECTS) return;
+  const output = execFileSync('pdftotext', [await download.path(), '-'], { encoding: 'utf8' });
+  // Evita que um erro de teste coloque conteúdo de um PDF nos registos.
+  expect(output.includes(section)).toBe(true);
 }

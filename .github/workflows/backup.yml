@@ -17,11 +17,26 @@ jobs:
   backup:
     if: vars.KIANDA_DEPLOY == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       # Só para decidir se a cópia do R2 corre (os condicionais dos passos não lêem secrets directamente).
       R2_ACCESS_KEY_ID: ${{ secrets.KIANDA_R2_ACCESS_KEY_ID }}
     steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Preparar a aplicação para o ensaio
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @kianda/core build
+          pnpm --filter @kianda/db build
+          pnpm --filter @kianda/web build
+          pnpm --filter @kianda/e2e exec playwright install --with-deps chromium
+          sudo apt-get install -y poppler-utils
+
       - name: Verificar secrets
         run: |
           [ -n "$DATABASE_URL" ] || { echo "::error title=Cópia de segurança::Falta o secret KIANDA_DATABASE_URL"; exit 1; }
@@ -62,7 +77,7 @@ jobs:
           # Restauro real numa base Postgres isolada (contentor efémero, sem rede para fora do runner):
           # a cópia só conta se se reconstrói e responde às consultas essenciais.
           docker network create --internal kianda-restore >/dev/null
-          docker run -d --name kianda-restore --network kianda-restore -e POSTGRES_PASSWORD=restore -e POSTGRES_DB=kianda postgres:18 >/dev/null
+          docker run -d --name kianda-restore --network kianda-restore -p 127.0.0.1:15432:5432 -e POSTGRES_PASSWORD=restore -e POSTGRES_DB=kianda postgres:18 >/dev/null
           for i in $(seq 1 30); do docker exec kianda-restore pg_isready -U postgres -d kianda >/dev/null 2>&1 && break; sleep 2; done
           docker exec kianda-restore psql -U postgres -d kianda -qc "CREATE ROLE kianda_app NOLOGIN" >/dev/null
           if ! docker run --rm --network kianda-restore -v /tmp:/w -e PGPASSWORD=restore postgres:18 \
@@ -131,7 +146,6 @@ jobs:
           umask 077
           q "SELECT sha256 || '  ' || company_id || '/' || id FROM files WHERE storage = 'r2'" > /tmp/kianda-r2.sha256
           [ ! -s /tmp/kianda-r2.sha256 ] || [ -n "$R2_ACCESS_KEY_ID" ] || fail "A base contém anexos no R2 e falta a chave para copiar o bucket"
-          docker rm -f kianda-restore >/dev/null; docker network rm kianda-restore >/dev/null
           echo "Restauro verificado: $tables tabelas com dados; base reconstruída com $companies empresa(s), $users utilizador(es) e $migrations migrações."
         env:
           PASSPHRASE: ${{ secrets.KIANDA_BACKUP_PASSPHRASE }}
@@ -155,6 +169,7 @@ jobs:
             (cd "$backup_dir/restored/r2" && sha256sum --check --strict --quiet /tmp/kianda-r2.sha256) >/dev/null 2>&1 \
               || { echo "::error title=Restauro R2::Há anexos em falta ou com conteúdo diferente do registado na base restaurada"; exit 1; }
           fi
+          mv "$backup_dir/restored/r2" "$RUNNER_TEMP/kianda-recovery-objects"
           sha256sum "$archive" >> "/tmp/kianda-$STAMP.sha256"
           echo "R2: $count ficheiro(s) copiados, cifrados e restaurados em ambiente isolado."
           echo "Anexos R2 conferidos com a base restaurada: $(wc -l < /tmp/kianda-r2.sha256)."
@@ -163,6 +178,38 @@ jobs:
           R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           R2_BUCKET: ${{ vars.KIANDA_R2_BUCKET }}
           PASSPHRASE: ${{ secrets.KIANDA_BACKUP_PASSPHRASE }}
+
+      - name: Testar a aplicação com a base e os anexos restaurados
+        env:
+          DATABASE_URL: postgresql://postgres:restore@127.0.0.1:15432/kianda
+          RECOVERY_OBJECTS: ${{ runner.temp }}/kianda-recovery-objects
+        run: |
+          set -euo pipefail
+          umask 077
+          started=$SECONDS
+          mkdir -p "$RECOVERY_OBJECTS"
+          # A API de ensaio usa um segredo efémero e o ambiente fica sem credenciais de produção.
+          API_JWT_SECRET=$(openssl rand -hex 32)
+          echo "::add-mask::$API_JWT_SECRET"
+          export API_JWT_SECRET
+          unset RESEND_API_KEY PROXYPAY_API_KEY VENDUS_API_KEY APP_BASE_URL KIANDA_HOSTNAME
+          # Reaplicar as permissões das migrações omitidas pelo dump.
+          awk '/^(GRANT |REVOKE |ALTER DEFAULT PRIVILEGES )/ { sub(/--> statement-breakpoint.*$/, ""); print }' packages/db/migrations/*.sql |
+            docker exec -i kianda-restore psql -X -U postgres -d kianda -v ON_ERROR_STOP=1 -q > "$RUNNER_TEMP/kianda-recovery-grants.log" 2>&1
+          # Só os dados de ensaio passam pelos ecrãs e pelos relatórios do navegador.
+          if ! pnpm --filter @kianda/e2e e2e --project=computador recovery.spec.ts integra.spec.ts valora.spec.ts > "$RUNNER_TEMP/kianda-recovery-e2e.log" 2>&1; then
+            echo "::error title=Recuperação::Falhou a validação da aplicação com a cópia restaurada."
+            exit 1
+          fi
+          echo "Aplicação na base restaurada: login, anexos, isolamento e PDFs verificados em $((SECONDS - started)) segundos."
+
+      - name: Remover a instância e conteúdos temporários
+        if: always()
+        run: |
+          docker rm -f kianda-restore >/dev/null 2>&1 || true
+          docker network rm kianda-restore >/dev/null 2>&1 || true
+          rm -rf -- "$RUNNER_TEMP/kianda-recovery-objects" apps/e2e/test-results apps/e2e/playwright-report
+          rm -f "$RUNNER_TEMP"/kianda-recovery-{grants,e2e}.log /tmp/check.dump /tmp/kianda.dump /tmp/kianda-r2.sha256
 
       - uses: actions/upload-artifact@v4
         # Uma alteração ao workflow ensaia o restauro em main. A retenção continua diária e manual.
