@@ -74,14 +74,12 @@ jobs:
           [ "$tables" -ge 20 ] || fail "A cópia tem apenas $tables tabelas com dados"
           for t in companies users subscriptions financial_models; do grep -q " TABLE DATA public $t " /tmp/check.list || fail "Falta a tabela $t na cópia"; done
           rm -f /tmp/check.list
-          # Restauro real numa base Postgres isolada (contentor efémero, sem rede para fora do runner):
+          # Restauro numa base Postgres efémera, acessível à aplicação só via loopback:
           # a cópia só conta se se reconstrói e responde às consultas essenciais.
-          docker network create --internal kianda-restore >/dev/null
-          docker run -d --name kianda-restore --network kianda-restore -p 127.0.0.1:15432:5432 -e POSTGRES_PASSWORD=restore -e POSTGRES_DB=kianda postgres:18 >/dev/null
+          docker run -d --name kianda-restore -p 127.0.0.1:15432:5432 -e POSTGRES_PASSWORD=restore -e POSTGRES_DB=kianda postgres:18 >/dev/null
           for i in $(seq 1 30); do docker exec kianda-restore pg_isready -U postgres -d kianda >/dev/null 2>&1 && break; sleep 2; done
           docker exec kianda-restore psql -U postgres -d kianda -qc "CREATE ROLE kianda_app NOLOGIN" >/dev/null
-          if ! docker run --rm --network kianda-restore -v /tmp:/w -e PGPASSWORD=restore postgres:18 \
-            pg_restore --no-owner --no-privileges -h kianda-restore -U postgres -d kianda /w/check.dump > /tmp/restore.log 2>&1; then
+          if ! docker exec -i kianda-restore pg_restore --no-owner --no-privileges -U postgres -d kianda < /tmp/check.dump > /tmp/restore.log 2>&1; then
             # Os detalhes do restauro podem incluir dados de clientes. Registar apenas o estado no GitHub.
             errors=$(grep -c '^pg_restore: error:' /tmp/restore.log || true)
             benign=$(grep -cE '^pg_restore: error: .*(already exists|must be owner of (extension|schema))' /tmp/restore.log || true)
@@ -179,6 +177,18 @@ jobs:
           R2_BUCKET: ${{ vars.KIANDA_R2_BUCKET }}
           PASSPHRASE: ${{ secrets.KIANDA_BACKUP_PASSPHRASE }}
 
+      - uses: actions/upload-artifact@v4
+        # Conservar a cópia cifrada já verificada mesmo se a aplicação de ensaio falhar.
+        if: github.event_name != 'push'
+        with:
+          name: kianda-db-${{ env.STAMP }}
+          path: |
+            /tmp/kianda-${{ env.STAMP }}.dump.gpg
+            /tmp/kianda-r2-${{ env.STAMP }}.tgz.gpg
+            /tmp/kianda-${{ env.STAMP }}.sha256
+          retention-days: 30
+          if-no-files-found: error
+
       - name: Testar a aplicação com a base e os anexos restaurados
         env:
           DATABASE_URL: postgresql://postgres:restore@127.0.0.1:15432/kianda
@@ -196,8 +206,14 @@ jobs:
           # Reaplicar as permissões das migrações omitidas pelo dump.
           awk '/^(GRANT |REVOKE |ALTER DEFAULT PRIVILEGES )/ { sub(/--> statement-breakpoint.*$/, ""); print }' packages/db/migrations/*.sql |
             docker exec -i kianda-restore psql -X -U postgres -d kianda -v ON_ERROR_STOP=1 -q > "$RUNNER_TEMP/kianda-recovery-grants.log" 2>&1
+          # Confirma a ligação usada pela aplicação sem ler dados de clientes.
+          if ! timeout 5 bash -c 'echo > /dev/tcp/127.0.0.1/15432' 2>/dev/null; then
+            echo "::error title=Recuperação::PostgreSQL restaurado inacessível em loopback."
+            exit 1
+          fi
           # Só os dados de ensaio passam pelos ecrãs e pelos relatórios do navegador.
-          if ! pnpm --filter @kianda/e2e e2e --project=computador recovery.spec.ts integra.spec.ts valora.spec.ts > "$RUNNER_TEMP/kianda-recovery-e2e.log" 2>&1; then
+          if ! pnpm --filter @kianda/e2e e2e --project=computador --reporter=json recovery.spec.ts integra.spec.ts valora.spec.ts > "$RUNNER_TEMP/kianda-recovery-results.json" 2> "$RUNNER_TEMP/kianda-recovery-e2e.log"; then
+            node scripts/recovery-test-summary.mjs "$RUNNER_TEMP/kianda-recovery-results.json"
             echo "::error title=Recuperação::Falhou a validação da aplicação com a cópia restaurada."
             exit 1
           fi
@@ -206,19 +222,7 @@ jobs:
       - name: Remover a instância e conteúdos temporários
         if: always()
         run: |
+          rm -rf /tmp/e2e
           docker rm -f kianda-restore >/dev/null 2>&1 || true
-          docker network rm kianda-restore >/dev/null 2>&1 || true
           rm -rf -- "$RUNNER_TEMP/kianda-recovery-objects" apps/e2e/test-results apps/e2e/playwright-report
-          rm -f "$RUNNER_TEMP"/kianda-recovery-{grants,e2e}.log /tmp/check.dump /tmp/kianda.dump /tmp/kianda-r2.sha256
-
-      - uses: actions/upload-artifact@v4
-        # Uma alteração ao workflow ensaia o restauro em main. A retenção continua diária e manual.
-        if: github.event_name != 'push'
-        with:
-          name: kianda-db-${{ env.STAMP }}
-          path: |
-            /tmp/kianda-${{ env.STAMP }}.dump.gpg
-            /tmp/kianda-r2-${{ env.STAMP }}.tgz.gpg
-            /tmp/kianda-${{ env.STAMP }}.sha256
-          retention-days: 30
-          if-no-files-found: error
+          rm -f "$RUNNER_TEMP"/kianda-recovery-{grants,e2e}.log "$RUNNER_TEMP/kianda-recovery-results.json" /tmp/check.dump /tmp/kianda.dump /tmp/kianda-r2.sha256

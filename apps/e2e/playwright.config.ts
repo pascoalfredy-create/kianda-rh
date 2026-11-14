@@ -6,6 +6,7 @@ import { defineConfig, devices } from '@playwright/test';
  * Cada teste cria a sua própria empresa: não depende dos dados de demonstração nem da ordem.
  */
 const ci = !!process.env.CI;
+const recovery = !!process.env.RECOVERY_OBJECTS;
 const env = { ...process.env, API_JWT_SECRET: process.env.API_JWT_SECRET ?? 'segredo-e2e-com-mais-de-trinta-e-dois-caracteres', WEB_ORIGIN: 'http://localhost:3000' } as Record<string, string>;
 
 export default defineConfig({
@@ -17,13 +18,13 @@ export default defineConfig({
   retries: ci ? 1 : 0,
   forbidOnly: ci,
   reporter: ci ? [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]] : 'list',
-  use: { baseURL: 'http://localhost:3000', trace: 'retain-on-failure', screenshot: 'only-on-failure', locale: 'pt-PT', timezoneId: 'Africa/Luanda' },
+  use: { baseURL: 'http://localhost:3000', trace: recovery ? 'off' : 'retain-on-failure', screenshot: recovery ? 'off' : 'only-on-failure', locale: 'pt-PT', timezoneId: 'Africa/Luanda' },
   projects: [
     { name: 'computador', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } }, testIgnore: /mobile\.spec/ },
     { name: 'telemovel', use: { ...devices['Pixel 7'] }, testMatch: /mobile\.spec/ },
   ],
   webServer: [
-    { command: process.env.RECOVERY_OBJECTS ? 'pnpm exec tsx test/recovery-server.ts' : 'npx tsx src/server.ts', cwd: '../api', port: 4000, env, reuseExistingServer: !ci, timeout: 60_000 },
-    { command: 'npx next start -p 3000', cwd: '../web', url: 'http://localhost:3000/login', env: { ...env, API_URL: 'http://localhost:4000' }, reuseExistingServer: !ci, timeout: 120_000 },
+    { command: recovery ? 'pnpm exec tsx test/recovery-server.ts' : 'npx tsx src/server.ts', cwd: '../api', url: recovery ? 'http://127.0.0.1:4000/health' : 'http://localhost:4000/health', env, reuseExistingServer: !ci, timeout: 60_000 },
+    { command: recovery ? 'pnpm exec next start -H 127.0.0.1 -p 3000' : 'npx next start -p 3000', cwd: '../web', url: recovery ? 'http://127.0.0.1:3000/login' : 'http://localhost:3000/login', env: { ...env, API_URL: 'http://localhost:4000' }, reuseExistingServer: !ci, timeout: 120_000 },
   ],
 });
