@@ -1,6 +1,6 @@
 import { runFinancialModel } from './engine.js';
 import { validateFinancialAssumptions } from './validation.js';
-import type { FinancialOverrides, FinancialScenario } from './types.js';
+import { FinancialModelError, type FinancialOverrides, type FinancialScenario } from './types.js';
 
 export function financialScenarios(input: unknown) {
   const m = validateFinancialAssumptions(input);
@@ -8,11 +8,18 @@ export function financialScenarios(input: unknown) {
 }
 export function financialSensitivity(input: unknown, cen?: FinancialScenario) {
   const m = validateFinancialAssumptions(input), delta = m.sens / 100;
-  return (['preco', 'volume', 'cvar', 'fixos', 'capex', 'wacc'] as const).map((key) => ({
-    driver: key, delta: m.sens,
-    low: runFinancialModel(m, { cen: cen ?? m.cen, [key]: 1 - delta }).npv,
-    high: runFinancialModel(m, { cen: cen ?? m.cen, [key]: 1 + delta }).npv,
-  })).map((row) => ({ ...row, impact: Math.abs(row.high - row.low) })).sort((a, b) => b.impact - a.impact);
+  const test = (overrides: FinancialOverrides) => {
+    try { return runFinancialModel(m, overrides).npv; }
+    catch (error) {
+      if (error instanceof FinancialModelError && error.issues.every(issue => issue.path === 'tv.g')) return null;
+      throw error;
+    }
+  };
+  return (['preco', 'volume', 'cvar', 'fixos', 'capex', 'wacc'] as const).map((driver) => {
+    const low = test({ cen: cen ?? m.cen, [driver]: 1 - delta });
+    const high = test({ cen: cen ?? m.cen, [driver]: 1 + delta });
+    return { driver, delta: m.sens, low, high, impact: low === null || high === null ? null : Math.abs(high - low) };
+  }).sort((a, b) => (b.impact ?? -1) - (a.impact ?? -1));
 }
 /** Multiplicador do preço que anula o VAL; null se não há raiz no intervalo 0–512 vezes o preço base. */
 export function financialBreakEvenPrice(input: unknown, cen?: FinancialScenario): number | null {

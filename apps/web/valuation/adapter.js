@@ -12,6 +12,49 @@ let balanceCheckpoint=false,openingAnalysis=0;
 const ESC=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dateLbl=s=>{try{return new Date(s).toLocaleDateString('pt-PT',{day:'2-digit',month:'2-digit',year:'numeric'})}catch(e){return ''}};
 
+function valuationInterpretation(weightedResult) {
+  const d=R.dcf,p=D.dcf;
+  const value=(w,g,model=p)=>w>Math.max(-100,g)?dcf(R,model,w,g).eq:NaN;
+  return interpretValuation({
+    year:D.years[R.L],equity:weightedResult.eq,methods:weightedResult.rows,weights:D.w,
+    dcfEquity:d.eq,ev:d.ev,terminal:d.pvtv,
+    tests:[
+      {label:'WACC',low:value(d.w-1,p.gT),high:value(d.w+1,p.gT),check:'Confirme os prémios de risco e o custo da dívida usados no WACC.'},
+      {label:'Crescimento perpétuo',low:value(d.w,p.gT-1),high:value(d.w,p.gT+1),check:'Valide o crescimento perpétuo face à inflação, ao mercado e ao reinvestimento necessário.'},
+      {label:'Margem EBITDA-alvo',low:value(d.w,p.gT,{...p,mTarget:p.mTarget-1}),high:value(d.w,p.gT,{...p,mTarget:p.mTarget+1}),check:'Reconcilie a margem EBITDA-alvo com o histórico, o orçamento e as economias previstas.'},
+    ],
+    adverse:value(d.w+1,p.gT-1),
+  });
+}
+function managementInterpretation(month) {
+  if(month<0||month>=D.fecho)return interpretManagement(null);
+  const indices=MES.map((_,i)=>i).slice(0,month+1);
+  const actual=aggM('real',indices),budget=aggM('orc',indices);
+  const forecast=months('prev').map((m,i)=>({month:MESL[i],cash:m?.b.caixa})).slice(D.fecho)
+    .filter(m=>Number.isFinite(m.cash)).sort((a,b)=>a.cash-b.cash)[0];
+  return interpretManagement({
+    period:MESL[month]+' '+EX,revenue:actual.rec,budgetRevenue:budget.rec,ebitda:actual.ebitda,
+    budgetEbitda:budget.ebitda,cash:actual.b.caixa,cashMinimum:D.orc.cxMin,
+    adverseDeviations:topDev(actual,budget,1).unf,forecastLow:forecast?.cash??null,forecastMonth:forecast?.month,
+  });
+}
+function interpretationBlocks(lines) {
+  return [{t:'h1',text:VALUATION_INTERPRETATION_TITLE},{t:'bullets',items:lines}];
+}
+function renderInterpretation(selector,lines,report) {
+  const target=$(selector);
+  const open=target.querySelector('details')?.open;
+  target.innerHTML=`<details class="card mt"${open?' open':''}><summary style="cursor:pointer"><b>Interpretar resultado</b></summary>
+    <ul>${lines.map(line=>`<li>${ESC(line)}</li>`).join('')}</ul>
+    <a href="#relatorios" data-interpretation-report="${report}">Ver relatório e editar comentário</a></details>`;
+}
+document.addEventListener('click',event=>{
+  const link=event.target.closest('[data-interpretation-report]');
+  if(!link)return;
+  REP={id:link.dataset.interpretationReport,p:{}};
+  if(current()==='relatorios')renderRel();
+});
+
 function valoraEmptyOverviewKpis(){
   return [
     ...['Receita real','EBITDA real','Resultado líquido real','Tesouraria real'].map(label=>kpi(label,'—','Mkz','Sem meses reais encerrados')),

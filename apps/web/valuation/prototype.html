@@ -216,6 +216,7 @@ td.fut{color:var(--ink-3);background:var(--surface-2)}
 <section class="view" id="v-visao">
   <p class="intro">Leitura executiva: execução do exercício corrente face ao orçamento, posição de tesouraria e tendência histórica. O seletor de período e cenário no topo aplica-se às demonstrações, rácios, análise de gestão e tesouraria.</p>
   <div class="grid g6" id="kpis26"></div>
+  <div id="management-interpretation"></div>
   <div class="grid g2 mt">
     <div class="card"><h3>Receita mensal — real vs orçamento</h3><p class="sub" id="sub-rv"></p><div class="legend" id="lg-rv"></div><div class="chart" id="ch-rv"></div></div>
     <div class="card"><h3>Saldo de tesouraria</h3><p class="sub">Mkz · fim de mês · com caixa mínima definida no orçamento</p><div class="legend" id="lg-cxv"></div><div class="chart" id="ch-cxv"></div></div>
@@ -360,7 +361,7 @@ td.fut{color:var(--ink-3);background:var(--surface-2)}
       <div class="mt"><div class="hint">Valor ponderado dos capitais próprios</div><div class="big" id="w-val">—</div><div class="hint" id="w-ev"></div></div>
     </div>
   </div>
-  <div class="card mt"><h3>Notas do avaliador</h3><div id="memo"></div></div>
+  <div id="valuation-interpretation"></div>
 </section>
 
 <!-- RELATÓRIOS -->
@@ -747,6 +748,7 @@ function renderVisao(){
   const labs=[...yrs,String(EX)+'P',...fut.map(r=>String(r.y))];
   groupedBars('#ch-rev',labs,[{n:'Receita',c:css('--s1'),v:[...R.rec,fy.rec,...fut.map(r=>r.rev)]},{n:'EBITDA',c:css('--s2'),v:[...R.ebitda,fy.ebitda,...fut.map(r=>r.ebitda)]}],{projFrom:yrs.length});
   legend('#lg-rev',[[css('--s1'),'Receita (61+62)'],[css('--s2'),'EBITDA']]);
+  renderInterpretation('#management-interpretation',managementInterpretation(D.fecho-1),'pack');
   $('#flags').innerHTML=diag().map(([s,t,p])=>{const [c,ic]=stOf(s);return `<div class="flag"><div class="ic" style="background:${c}">${ic}</div><div><b>${t}</b> ${badge(s)}<p>${p}</p></div></div>`}).join('');
 }
 function cashLines(id,lg,h){
@@ -1062,20 +1064,15 @@ function renderAtivos(){
 }
 function ffRows(){
   const d=R.dcf,vals=[-1,0,1].flatMap(a=>[-1,0,1].map(b=>dcf(R,D.dcf,d.w+a,D.dcf.gT+b).eq)).filter(isFinite),m=R.mult,A=R.assets;
-  return [{k:'dcf',n:'DCF (WACC ±1, g ±1)',lo:Math.min(...vals),mid:d.eq,hi:Math.max(...vals),c:css('--s1')},{k:'ev',n:'EV/EBITDA',lo:m[0].lo,mid:m[0].mid,hi:m[0].hi,c:css('--s2')},{k:'evs',n:'EV/Vendas',lo:m[1].lo,mid:m[1].mid,hi:m[1].hi,c:css('--s2')},{k:'pe',n:'P/L (PER)',lo:m[2].lo,mid:m[2].mid,hi:m[2].hi,c:css('--s2')},{k:'nav',n:'Ativo líquido ajustado',lo:A.nav*.9,mid:A.nav,hi:A.nav*1.1,c:css('--s3')}];
+  return [{k:'dcf',n:'DCF (WACC ±1, g ±1)',lo:Math.min(...vals),mid:d.eq,hi:Math.max(...vals),c:css('--s1')},{k:'ev',n:'EV/EBITDA',lo:m[0].lo,mid:m[0].mid,hi:m[0].hi,c:css('--s2')},{k:'evs',n:'EV/Vendas',lo:m[1].lo,mid:m[1].mid,hi:m[1].hi,c:css('--s2')},{k:'pe',n:'P/L (PER)',lo:m[2].lo,mid:m[2].mid,hi:m[2].hi,c:css('--s2')},{k:'nav',n:'Ativo líquido ajustado',lo:Math.min(A.nav*.9,A.nav*1.1),mid:A.nav,hi:Math.max(A.nav*.9,A.nav*1.1),c:css('--s3')}];
 }
-function weighted(){const rows=ffRows(),W=D.w,tw=sum(rows.map(r=>W[r.k]||0));return {eq:tw?sum(rows.map(r=>r.mid*(W[r.k]||0)))/tw:NaN,tw,rows}}
+function weighted(){const rows=ffRows(),W=D.w,tw=sum(rows.map(r=>W[r.k]||0));return {eq:tw?rows.filter(r=>W[r.k]>0).reduce((total,r)=>total+r.mid*W[r.k],0)/tw:NaN,tw,rows}}
 function renderSintese(){
   const wv=weighted(),L=R.L;football('#ch-ff',wv.rows,{weighted:wv.eq});
   $('#w-inputs').innerHTML=wv.rows.map(r=>`<div class="ctrl" style="grid-template-columns:1fr 80px"><label>${r.n}</label><input type="number" style="width:80px" data-w="${r.k}" value="${D.w[r.k]||0}" min="0" max="100" step="5"></div>`).join('')+`<div class="hint">Soma dos pesos: <b>${wv.tw}%</b>${wv.tw!==100?' — normalizado para 100%':''}</div>`;
   $('#w-val').textContent=f0(wv.eq)+' Mkz';const ev=wv.eq+R.dl[L]-D.bal.invfin[L];
   $('#w-ev').innerHTML=`EV implícito ${f0(ev)} Mkz · ${f1(ev/R.ebitda[L])}x EBITDA ${D.years[L]} · ${f1(ev/R.fy.ebitda)}x EBITDA ${EX} prev. · ${f2(wv.eq/R.cp[L])}x capital próprio`;
-  const d=R.dcf,rows=wv.rows,spread=Math.max(...rows.map(r=>r.mid))/Math.min(...rows.map(r=>r.mid))-1,fc=R.fc[L];
-  $('#memo').innerHTML=[['Qualidade dos resultados',`A conversão do EBITDA em caixa operacional foi de ${pct(fc.cfo/R.ebitda[L])} em ${D.years[L]}. ${fc.cfo/R.ebitda[L]<.7?'O crescimento está a reter caixa em stocks e clientes.':'O lucro converte-se em caixa de forma saudável.'}`],
-    ['Execução de '+EX,`A previsão aponta para receita de ${f0(R.fy.rec)} Mkz (${pct(R.fy.rec/R.fyO.rec-1)} vs orçamento) e EBITDA de ${f0(R.fy.ebitda)} Mkz. ${D.dcf.anchor?'O primeiro ano do DCF está ancorado nesta previsão.':'O DCF não está ancorado na previsão.'}`],
-    ['Dependência do valor terminal',`${pct(d.tvShare)} do EV depende da perpetuidade, com múltiplo de saída implícito de ${f1(d.exitMult)}x EBITDA.`],
-    ['Dispersão entre métodos',`Os valores centrais variam ${pct(spread)} entre mínimo e máximo. ${spread>.6?'Dispersão elevada: documentar a ponderação.':'Dispersão aceitável.'}`]
-  ].map(([t,p])=>`<div class="flag"><div class="ic" style="background:var(--accent)">i</div><div><b>${t}</b><p>${p}</p></div></div>`).join('');
+  renderInterpretation('#valuation-interpretation',valuationInterpretation(wv),'val');
 }
 
 /* ================= ORQUESTRAÇÃO ================= */
@@ -1181,7 +1178,7 @@ function topDev(r,o,n=3){const L=[['Vendas',p=>p.f.v61,'p'],['Prestações de se
 const REPORTS={
  pack:{t:'Relatório de gestão mensal',d:'Pack mensal para a administração: sumário, DR com orçamento e acumulado, balanço, fluxos de caixa, tesouraria, rácios e alertas.',o:'p',
   params:()=>[{k:'m',l:'Mês de reporte',opts:MES.slice(0,D.fecho).map((m,i)=>[i,m+' '+EX]),def:D.fecho-1}],
-  build(P){const m=+P.m,idx=MES.map((_,i)=>i).slice(0,m+1),pm=aggM('real',[m]),om=aggM('orc',[m]),py=aggM('real',idx),oy=aggM('orc',idx),fy=R.fy,fyo=R.fyO,h=R.H[R.L],M=months('prev'),mn=MES[m];
+  build(P){if(!D.fecho)return [{t:'cover',title:'Relatório de gestão',sub:String(EX)},...interpretationBlocks(managementInterpretation(-1)),{t:'note'}];const m=+P.m,idx=MES.map((_,i)=>i).slice(0,m+1),pm=aggM('real',[m]),om=aggM('orc',[m]),py=aggM('real',idx),oy=aggM('orc',idx),fy=R.fy,fyo=R.fyO,h=R.H[R.L],M=months('prev'),mn=MES[m];
    const dRec=py.rec/oy.rec-1,dE=py.ebitda-oy.ebitda,cred=Math.max(0,...M.slice(D.fecho).map(x=>x.credit)),minC=Math.min(...M.slice(m).map(x=>x.b.caixa)),{unf,fav}=topDev(py,oy);
    const S=[
     `Receita de ${MESL[m]}: ${f0(pm.rec)} Mkz (${pct(pm.rec/om.rec-1)} vs orçamento). Acumulado Jan–${mn}: ${f0(py.rec)} Mkz (${pct(dRec)}).`,
@@ -1192,7 +1189,7 @@ const REPORTS={
     `Prazo médio de recebimento de ${f0(py.pmr)} dias vs ${f0(oy.pmr)} orçamentados; ciclo de caixa de ${f0(py.ccc)} dias.`,
     `Previsão para ${EX}: receita ${f0(fy.rec)} Mkz (${pct(fy.rec/fyo.rec-1)} vs orçamento) e resultado líquido ${f0(fy.rl)} Mkz.`];
    const B=[{t:'cover',title:'Relatório de gestão',sub:`${MESL[m][0].toUpperCase()+MESL[m].slice(1)} de ${EX}`},
-    {t:'h1',text:'1. Sumário executivo'},{t:'bullets',items:S},{t:'note'},
+    {t:'h1',text:'1. Sumário executivo'},{t:'bullets',items:S},...interpretationBlocks(managementInterpretation(m)),{t:'note'},
     {t:'h1',text:'2. Indicadores-chave'},{t:'kpis',items:[[`Receita ${mn}`,f0(pm.rec)+' Mkz',`${pct(pm.rec/om.rec-1)} vs orç.`],[`EBITDA ${mn}`,f0(pm.ebitda)+' Mkz',`Margem ${pct(pm.margE)}`],['Receita acumulada',f0(py.rec)+' Mkz',`${pct(dRec)} vs orç.`],['Resultado líquido acum.',f0(py.rl)+' Mkz',`${pct(py.rl/oy.rl-1)} vs orç.`],['Meios monetários',f0(pm.b.caixa)+' Mkz',`Orç. ${f0(om.b.caixa)}`],['Dívida líquida',f0(pm.dl)+' Mkz',`${f2(pm.dlE)}x EBITDA anual.`],['Ciclo de caixa',f0(py.ccc)+' dias',`PMR ${f0(py.pmr)} · PMS ${f0(py.pms)}`],['Previsão RL '+EX,f0(fy.rl)+' Mkz',`Orç. ${f0(fyo.rl)}`]]},
     {t:'chart',title:'Receita mensal — real vs orçamento (Mkz)',draw:s=>{const O=months('orc'),Rm=months('real');groupedBars(s,MES,[{n:'Orçamento',c:css('--s2'),v:O.map(x=>x.f.v61+x.f.v62)},{n:'Real',c:css('--s1'),v:Rm.map((x,i)=>x&&i<=m?x.f.v61+x.f.v62:null)}],{h:230})},legend:[['--s2','Orçamento'],['--s1','Real']]},
     {t:'h1',text:'3. Demonstração de resultados'},
@@ -1254,10 +1251,11 @@ const REPORTS={
     {t:'table',title:'Novos financiamentos',head:['Financiamento','Mês','Valor (Mkz)','Prazo (meses)'],rows:o.loans.map(c=>({cells:[c.d,MES[c.m-1],{v:+c.v,k:'n'},{v:+c.prazo,k:'n'}]}))}];}},
  val:{t:'Relatório de avaliação',d:'Avaliação dos capitais próprios: DCF, múltiplos, ativo líquido ajustado, sensibilidade, reconciliação, conclusão e limitações.',o:'p',
   params:()=>[],
-  build(){const d=R.dcf,wv=weighted(),L=R.L,W=d.W,rows=wv.rows,lo=Math.min(...rows.filter(r=>D.w[r.k]>0).map(r=>r.lo)),hi=Math.max(...rows.filter(r=>D.w[r.k]>0).map(r=>r.hi));
+  build(){const d=R.dcf,wv=weighted(),L=R.L,W=d.W,rows=wv.rows;
    const ws=[-1,0,1].map(x=>d.w+x),gs=[-1,0,1].map(x=>D.dcf.gT+x);
    return [{t:'cover',title:'Relatório de avaliação',sub:`Capitais próprios · data de referência 31/12/${D.years[L]}`},
-    {t:'h1',text:'1. Objeto e conclusão'},{t:'p',text:`O presente relatório estima o valor de mercado dos capitais próprios da ${meta().ent} com referência a 31 de dezembro de ${D.years[L]}, numa ótica de continuidade das operações. Com base na ponderação dos métodos aplicados, o valor dos capitais próprios estimado é de ${f0(wv.eq)} Mkz, num intervalo entre ${f0(lo)} e ${f0(hi)} Mkz.`},
+    {t:'h1',text:'1. Objecto e conclusão'},{t:'p',text:`Avaliação dos capitais próprios da ${meta().ent} a 31 de dezembro de ${D.years[L]}, na óptica de continuidade das operações.`},
+    ...interpretationBlocks(valuationInterpretation(wv)),
     {t:'kpis',items:[['Valor dos capitais próprios',f0(wv.eq)+' Mkz','Ponderado'],['Valor da empresa (EV)',f0(wv.eq+R.dl[L]-D.bal.invfin[L])+' Mkz',f1((wv.eq+R.dl[L]-D.bal.invfin[L])/R.ebitda[L])+'x EBITDA '+D.years[L]],['WACC',f2(d.w)+'%','Kwanzas nominais'],['Múltiplo implícito P/L',f1(wv.eq/R.rl[L])+'x','Capital próprio '+f2(wv.eq/R.cp[L])+'x']]},{t:'note'},
     {t:'h1',text:'2. Informação financeira histórica'},{t:'table',title:'Principais agregados (Mkz)',head:['Indicador',...D.years.map(String)],rows:[['Receita',R.rec],['EBITDA',R.ebitda],['Margem EBITDA',R.margE,'pct'],['Resultado líquido',R.rl],['Capital próprio',R.cp],['Dívida financeira líquida',R.dl],['ROE',R.roe,'pct']].map(([l,a,k])=>({cells:[l,...a.map(v=>({v,k:k||'n'}))]}))},
     {t:'h1',text:'3. Metodologia'},{t:'bullets',items:['Fluxos de caixa descontados (FCFF) em Kwanzas nominais, a 5 anos, com valor terminal pelo modelo de Gordon, descontados ao custo médio ponderado do capital.','Múltiplos de empresas comparáveis (EV/EBITDA, EV/Vendas e P/L), com intervalo interquartil e desconto por iliquidez e dimensão.','Ativo líquido ajustado: capital próprio contabilístico corrigido pelo justo valor dos ativos fixos tangíveis, líquido de imposto diferido.',`Ponderação: ${rows.filter(r=>D.w[r.k]>0).map(r=>`${r.n} ${D.w[r.k]}%`).join(', ')}.`]},
@@ -1293,7 +1291,7 @@ function renderRel(){
   $('#rep-list').innerHTML=Object.entries(REPORTS).map(([k,r])=>`<button class="rep-item ${k===REP.id?'on':''}" data-rep="${k}"><b>${r.t}</b><span>${r.d}</span><i>${r.o==='l'?'A4 horizontal':'A4 vertical'}</i></button>`).join('');
   const ps=repParams();
   $('#rep-params').innerHTML=(ps.length?ps.map(x=>`<div class="ctrl" style="grid-template-columns:1fr 1.4fr"><label>${x.l}</label><select class="sel" data-rp="${x.k}">${x.opts.map(([v,l])=>`<option value="${v}" ${String(v)===String(REP.p[x.k])?'selected':''}>${l}</option>`).join('')}</select></div>`).join(''):'<p class="hint">Sem parâmetros: usa a avaliação atual.</p>')+
-   `<label class="hint" style="display:block;margin-top:10px">Comentário do CFO (incluído no documento)</label><textarea class="paste" id="rep-note" style="height:90px;font-family:inherit" placeholder="Escreva a sua leitura, decisões propostas ou ressalvas…">${esc(D.rnotes[REP.id]||'')}</textarea>`;
+   `<label for="rep-note" class="hint" style="display:block;margin-top:10px">Comentário do CFO (incluído no documento)</label><textarea class="paste" id="rep-note" maxlength="1200" style="height:90px;font-family:inherit" placeholder="Escreva a sua leitura, decisões propostas ou ressalvas…">${esc(D.rnotes[REP.id]||'')}</textarea>`;
   $('#rep-meta').innerHTML=[['ent','Entidade'],['nif','NIF'],['prep','Elaborado por'],['dest','Destinatário']].map(([k,l])=>`<div class="ctrl" style="grid-template-columns:110px 1fr"><label>${l}</label><input class="cell txt" style="width:100%;border:1px solid var(--line-2)" data-meta="${k}" value="${esc(m[k]||'')}"></div>`).join('');
   renderPreview();
 }
