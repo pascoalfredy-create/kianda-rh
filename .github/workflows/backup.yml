@@ -80,19 +80,45 @@ jobs:
           [ "$users" -ge 1 ] || fail "Base restaurada sem utilizadores"
           [ "$migrations" -ge 50 ] || fail "Base restaurada sem o registo de migrações ($migrations)"
           q "select count(*) from pg_policies where policyname = 'empresa'" | grep -qv '^0$' || fail "Base restaurada sem as políticas RLS por empresa"
-          # A cópia usa --no-privileges. Recria os acessos de leitura do papel restrito e confirma que o isolamento funciona.
-          docker exec -i kianda-restore psql -U postgres -d kianda -v ON_ERROR_STOP=1 -q >/dev/null <<'SQL'
-          GRANT USAGE ON SCHEMA public TO kianda_app;
-          GRANT SELECT ON users TO kianda_app;
+          # Os GRANT não vêm no dump. O ensaio concede leitura só às tabelas que verifica.
+          docker exec -i kianda-restore psql -X -U postgres -d kianda -v ON_ERROR_STOP=1 -q >/dev/null <<'SQL'
           BEGIN;
-          SELECT set_config('app.company_id', (SELECT company_id FROM users LIMIT 1), true);
-          SET LOCAL ROLE kianda_app;
+          GRANT USAGE ON SCHEMA public TO kianda_app;
+          GRANT SELECT ON companies, users, employees, payroll_runs, payroll_lines, financial_models,
+            financial_model_versions, valuation_analyses, valuation_versions, files, file_blobs TO kianda_app;
           DO $$
+          DECLARE
+            t record;
+            tenant text;
+            expected bigint;
+            actual bigint;
           BEGIN
-            IF NOT EXISTS (SELECT 1 FROM users WHERE company_id = kianda_tenant())
-               OR EXISTS (SELECT 1 FROM users WHERE company_id <> kianda_tenant()) THEN
-              RAISE EXCEPTION 'Isolamento da empresa falhou na base restaurada';
-            END IF;
+            FOR t IN SELECT * FROM (VALUES
+              ('companies', 'id'), ('users', 'company_id'), ('employees', 'company_id'),
+              ('payroll_runs', 'company_id'), ('payroll_lines', '(SELECT company_id FROM public.payroll_runs WHERE id = item.run_id)'),
+              ('financial_models', 'company_id'), ('financial_model_versions', 'company_id'),
+              ('valuation_analyses', 'company_id'), ('valuation_versions', 'company_id'),
+              ('files', 'company_id'), ('file_blobs', 'company_id')
+            ) AS tables(name, tenant_expression) LOOP
+              IF NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'public' AND c.relname = t.name AND c.relrowsecurity) THEN
+                RAISE EXCEPTION 'RLS ausente: %', t.name;
+              END IF;
+              PERFORM set_config('app.company_id', '', true);
+              SET LOCAL ROLE kianda_app;
+              EXECUTE format('SELECT count(*) FROM public.%I', t.name) INTO actual;
+              RESET ROLE;
+              IF actual <> 0 THEN RAISE EXCEPTION 'Leitura sem empresa: %', t.name; END IF;
+              FOR tenant IN SELECT id FROM public.companies ORDER BY id LIMIT 2 LOOP
+                EXECUTE format('SELECT count(*) FROM public.%I AS item WHERE %s = $1', t.name, t.tenant_expression)
+                  INTO expected USING tenant;
+                PERFORM set_config('app.company_id', tenant, true);
+                SET LOCAL ROLE kianda_app;
+                EXECUTE format('SELECT count(*) FROM public.%I', t.name) INTO actual;
+                RESET ROLE;
+                IF actual <> expected THEN RAISE EXCEPTION 'Isolamento da empresa falhou: %', t.name; END IF;
+              END LOOP;
+            END LOOP;
           END $$;
           ROLLBACK;
           SQL

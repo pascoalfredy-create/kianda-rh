@@ -69,6 +69,17 @@ jobs:
       - run: pnpm --filter @kianda/core build
       - run: pnpm --filter @kianda/db build
       - run: pnpm db:migrate
+      - name: Reconstruir a base de ensaio antes dos testes no navegador
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          started=$SECONDS
+          docker exec "$POSTGRES_CONTAINER" createdb -U kianda kianda_restored
+          docker exec "$POSTGRES_CONTAINER" pg_dump -U kianda -Fc kianda |
+            docker exec -i "$POSTGRES_CONTAINER" pg_restore -U kianda --exit-on-error -d kianda_restored
+          echo "DATABASE_URL=postgresql://kianda:kianda@localhost:5432/kianda_restored" >> "$GITHUB_ENV"
+          echo "Base de ensaio restaurada em $((SECONDS - started)) segundo(s)."
       - name: Build da web (Next)
         run: pnpm --filter @kianda/web build
       - name: Chromium do Playwright

@@ -463,6 +463,13 @@
       "when": 1794611200002,
       "tag": "0065_payroll_withholding_rule",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1794611200003,
+      "tag": "0066_storage_recovery",
+      "breakpoints": true
     }
   ]
 }
