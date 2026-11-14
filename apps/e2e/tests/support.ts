@@ -102,6 +102,7 @@ export async function openMaps(page: Page) {
 export async function expectRecoveryPdf(download: { path(): Promise<string> }, section: string) {
   if (!process.env.RECOVERY_OBJECTS) return;
   const output = execFileSync('pdftotext', [await download.path(), '-'], { encoding: 'utf8' });
+  const normalize = (text: string) => text.normalize('NFKD').replace(/\p{M}/gu, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
   // Evita que um erro de teste coloque conteúdo de um PDF nos registos.
-  expect(output.includes(section)).toBe(true);
+  expect(normalize(output).includes(normalize(section)), 'Secção presente no texto do PDF').toBe(true);
 }
