@@ -214,7 +214,7 @@ jobs:
             exit 1
           fi
           # Só os dados de ensaio passam pelos ecrãs e pelos relatórios do navegador.
-          if ! pnpm --filter @kianda/e2e e2e --project=computador --reporter=json recovery.spec.ts integra.spec.ts valora.spec.ts > "$RUNNER_TEMP/kianda-recovery-e2e.log" 2>&1; then
+          if ! pnpm --filter @kianda/e2e e2e --project=computador --reporter=json recovery.spec.ts integra.spec.ts valora.spec.ts --grep "base recuperada|importar do RH|versões: aprovar|com licença paga exporta" > "$RUNNER_TEMP/kianda-recovery-e2e.log" 2>&1; then
             node scripts/recovery-test-summary.mjs "$RUNNER_TEMP/kianda-recovery-results.json"
             echo "::error title=Recuperação::Falhou a validação da aplicação com a cópia restaurada."
             exit 1

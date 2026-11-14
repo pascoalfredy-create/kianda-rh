@@ -10,6 +10,7 @@ try {
 function classify(error) {
   const text = typeof error?.message === 'string' ? error.message : '';
   if (/webServer|ECONNREFUSED|EADDRINUSE/i.test(text)) return 'arranque ou ligação ao servidor';
+  if (text.includes('Secção presente no texto do PDF')) return 'secção esperada ausente do PDF';
   if (/Timeout|timed out/i.test(text)) return 'tempo limite';
   return 'falha do teste';
 }
