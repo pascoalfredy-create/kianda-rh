@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { apiAs, closePool, registerCompany, signIn, sql, watchErrors, valoraGo } from './support.js';
+import { apiAs, closePool, expectRecoveryPdf, registerCompany, signIn, sql, watchErrors, valoraGo } from './support.js';
 
 /** Kianda Valora: o protótipo aprovado a funcionar dentro da plataforma, com os dados no servidor. */
 test.afterAll(closePool);
@@ -212,6 +212,7 @@ test('Valora: com licença paga exporta o relatório em PDF descarregado no nave
   await page.locator('[data-exp="pdf"]').first().click();
   const file = await download;
   expect(file.suggestedFilename()).toMatch(/^Relatorio_de_gestao_mensal_Entidade_\d{4}-\d{2}-\d{2}\.pdf$/);
+  await expectRecoveryPdf(file, 'Interpretação dos resultados');
   await page.screenshot({ path: '/tmp/e2e/valora-04-relatorios.png', fullPage: false });
   for (const [kind, ext] of [['docx', 'docx'], ['xlsx', 'xlsx']] as const) {
     const next = page.waitForEvent('download', { timeout: 30_000 });

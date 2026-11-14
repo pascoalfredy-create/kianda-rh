@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { addUser, apiAs, closePool, registerCompany, signIn, sql, watchErrors, type Company } from './support.js';
+import { addUser, apiAs, closePool, expectRecoveryPdf, registerCompany, signIn, sql, watchErrors, type Company } from './support.js';
 
 /**
  * Integra: importação dos custos com pessoal do RH, aprovação e consulta de versões, PDF da versão
@@ -72,6 +72,7 @@ test('versões: aprovar, descarregar o PDF aprovado, consultar em só leitura e 
   await expect(page.locator('#modal tbody tr').first()).toContainText('Dona E2E');
   const [download] = await Promise.all([page.waitForEvent('download'), page.click('[data-act="versionPdf"]')]);
   expect(download.suggestedFilename()).toMatch(/-v1-sumario\.pdf$/);
+  await expectRecoveryPdf(download, 'Significado do resultado');
   await page.click('#modal [data-act="close"]');
 
   // O rascunho muda depois da aprovação; a versão continua igual.

@@ -23,7 +23,7 @@ export default defineConfig({
     { name: 'telemovel', use: { ...devices['Pixel 7'] }, testMatch: /mobile\.spec/ },
   ],
   webServer: [
-    { command: 'npx tsx src/server.ts', cwd: '../api', port: 4000, env, reuseExistingServer: !ci, timeout: 60_000 },
+    { command: process.env.RECOVERY_OBJECTS ? 'pnpm exec tsx test/recovery-server.ts' : 'npx tsx src/server.ts', cwd: '../api', port: 4000, env, reuseExistingServer: !ci, timeout: 60_000 },
     { command: 'npx next start -p 3000', cwd: '../web', url: 'http://localhost:3000/login', env: { ...env, API_URL: 'http://localhost:4000' }, reuseExistingServer: !ci, timeout: 120_000 },
   ],
 });
