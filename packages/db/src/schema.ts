@@ -5,7 +5,7 @@
 import { relations, sql } from 'drizzle-orm';
 import type { AtsCriterion, CandidateProfile } from '@kianda/core';
 import {
-  bigint, boolean, customType, date, doublePrecision, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex,
+  bigint, boolean, customType, date, doublePrecision, foreignKey, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, unique, uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
 const money = (name: string) => bigint(name, { mode: 'number' }).notNull().default(0);
@@ -346,6 +346,12 @@ export const files = pgTable('files', {
   uploadedBy: text('uploaded_by').notNull(),
   createdAt: createdAt(),
 }, (t) => [index('files_entity').on(t.companyId, t.entity, t.entityId), index('files_employee').on(t.employeeId)]);
+
+/** Fila técnica: as chaves sobrevivem à eliminação da empresa até o R2 confirmar a remoção. */
+export const r2DeletionQueue = pgTable('r2_deletion_queue', {
+  objectKey: text('object_key').primaryKey(),
+  nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('r2_deletion_queue_due').on(t.nextAttemptAt, t.objectKey)]);
 
 export const fileBlobs = pgTable('file_blobs', {
   fileId: text('file_id').primaryKey().references(() => files.id, { onDelete: 'cascade' }),
@@ -1427,13 +1433,13 @@ export const valuationAnalyses = pgTable('valuation_analyses', {
   updatedBy: text('updated_by').notNull(),
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index('valuation_analyses_company').on(t.companyId, t.updatedAt)]);
+}, (t) => [index('valuation_analyses_company').on(t.companyId, t.updatedAt), unique('valuation_analyses_company_id_id_unique').on(t.companyId, t.id)]);
 
 /** Versões anteriores de uma análise do Valora: estado completo antes de uma sessão de alterações, de uma importação ou de uma reposição. */
 export const valuationVersions = pgTable('valuation_versions', {
   id: id(),
   companyId: text('company_id').notNull().references(() => companies.id),
-  analysisId: text('analysis_id').notNull().references(() => valuationAnalyses.id, { onDelete: 'cascade' }),
+  analysisId: text('analysis_id').notNull(),
   revision: integer('revision').notNull(),
   name: text('name').notNull(),
   data: jsonb('data').$type<Record<string, unknown>>().notNull(),
@@ -1441,7 +1447,8 @@ export const valuationVersions = pgTable('valuation_versions', {
   reason: text('reason').notNull(),
   savedBy: text('saved_by').notNull(),
   createdAt: createdAt(),
-}, (t) => [index('valuation_versions_analysis_idx').on(t.analysisId, t.createdAt)]);
+}, (t) => [index('valuation_versions_analysis_idx').on(t.analysisId, t.createdAt),
+  foreignKey({ name: 'valuation_versions_company_analysis_fk', columns: [t.companyId, t.analysisId], foreignColumns: [valuationAnalyses.companyId, valuationAnalyses.id] }).onDelete('cascade')]);
 
 export type ValuationMemberRow = typeof valuationMembers.$inferSelect;
 export type ValuationAnalysisRow = typeof valuationAnalyses.$inferSelect;

@@ -1,4 +1,3 @@
-import { deleteObjects, r2KeysOf } from './storage.js';
 import { sql, type Db } from '@kianda/db';
 
 /**
@@ -71,8 +70,7 @@ export async function exportCompany(db: Db, companyId: string) {
 
 /** Elimina todos os dados da empresa (irreversível). Corre numa transacção: ou sai tudo, ou nada. */
 export async function purgeCompany(db: Db, companyId: string) {
-  const keys = await r2KeysOf(db, companyId);
-  const deleted = await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
     const deleted: Record<string, number> = {};
     for (const s of COMPANY_TABLES_PURGE_ORDER) {
       const r = await tx.execute(sql`delete from ${sql.identifier(s.table)} where ${where(s, companyId)}`);
@@ -82,7 +80,4 @@ export async function purgeCompany(db: Db, companyId: string) {
     deleted.companies = r.rowCount ?? 0;
     return deleted;
   });
-  // Conteúdos no R2: só depois de a transacção confirmar (se falhar, nada foi apagado).
-  await deleteObjects(keys);
-  return deleted;
 }

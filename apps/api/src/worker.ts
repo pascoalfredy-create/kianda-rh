@@ -11,7 +11,7 @@ import { syncGatewayPayments } from './services/billing.js';
 import { dailyReminders } from './services/jobs.js';
 import { dispatchPush, setPushRunner } from './services/push.js';
 import { dispatchRecruitmentMail, setRecruitmentMailRunner } from './services/recruitment-mail.js';
-import { r2Store, setObjectStore, type R2BucketLike } from './services/storage.js';
+import { drainR2Deletions, r2Store, setObjectStore, type R2BucketLike } from './services/storage.js';
 
 interface Env {
   /** Hyperdrive (produção): pool de ligações do Cloudflare à base de dados PostgreSQL (Neon). */
@@ -56,6 +56,7 @@ export default {
     if (!connectionString) return;
     await withRequestDb(connectionString, async () => {
       const db = getDb();
+      console.log('r2_deletions', JSON.stringify(await drainR2Deletions(db)));
       if (event.cron === '0 7 * * *') {
         await db.delete(revokedSessions).where(lte(revokedSessions.expiresAt, new Date()));
         console.log('avisos', JSON.stringify(await dailyReminders(db, luandaDate(new Date()))));

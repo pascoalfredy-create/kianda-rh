@@ -130,7 +130,8 @@ O workflow **Cópia de segurança** (`.github/workflows/backup.yml`) está agend
 
 - **Secret obrigatório:** `KIANDA_BACKUP_PASSPHRASE` — frase longa (20+ caracteres), gerada e guardada fora do GitHub (gestor de palavras-passe). Sem ela não há cópia (nunca se guardam dados de clientes sem cifra). **Perder a frase = perder as cópias.**
 - **Verificação da cópia SQL.** O workflow decifra o ficheiro com a frase gravada e lê o inventário com `pg_restore --list`. Exige pelo menos 20 tabelas com dados, incluindo `companies`, `users`, `subscriptions` e `financial_models`.
-- **Restauro real em cada cópia:** o workflow reconstrói a cópia numa base Postgres 18 isolada, consulta os registos essenciais e confirma que o papel `kianda_app` só lê utilizadores da empresa seleccionada. Erros de restauro ou de isolamento falham a execução.
+- **Restauro real em cada cópia:** o workflow reconstrói a cópia numa base Postgres 18 isolada, consulta os registos essenciais e confirma que o papel `kianda_app` só lê as linhas esperadas em 11 tabelas de RH, Integra, Valora e anexos, incluindo uma sessão sem empresa e até duas empresas restauradas. Erros de restauro ou de isolamento falham a execução.
+- **Ensaio da aplicação no CI.** Os testes de navegador correm sobre uma base sintética restaurada antes de arrancar a API e a web. A recuperação do serviço com uma cópia de produção e um bucket privado segue o procedimento abaixo.
 - **Ficheiros no R2.** Com os secrets `KIANDA_R2_ACCESS_KEY_ID` e `KIANDA_R2_SECRET_ACCESS_KEY` (chave S3 só de leitura) e o `CLOUDFLARE_ACCOUNT_ID`, o workflow copia o bucket, cifra o arquivo e junta-o ao artefacto. Depois de decifrar e extrair, compara os ficheiros com a cópia de origem e os SHA-256 dos anexos com os registos da base restaurada. Também valida os anexos guardados directamente na base. A execução falha se existirem referências ao R2 sem a chave de leitura ou se faltar um anexo registado.
 
 Para recuperar o serviço, faça o ensaio numa base vazia e num bucket privado de recuperação. Use o SQL e o R2 da mesma execução.
@@ -154,7 +155,7 @@ Cópias de documentos, justificativos de ausências e comprovativos de despesas.
 - **Com R2** (recomendado): active o R2 na conta Cloudflare (**R2 → Enable**, sem custo até 10 GB) e dê ao token a permissão *Workers R2 Storage: Edit*. O passo "Armazenamento de ficheiros" do CI mostra `R2: bucket kianda-files ligado`.
 - **Sem R2**: o CI mostra um aviso e os ficheiros ficam na base de dados (Neon), com limite de 250 MB por empresa. Os dois modos convivem: quando o R2 for activado, os ficheiros novos vão para lá e os antigos continuam legíveis.
 
-A consola da plataforma mostra o modo em uso, o número de ficheiros e o espaço ocupado. A cópia de segurança diária da base de dados inclui os ficheiros guardados na base de dados, mas não o R2 (o R2 tem a sua própria durabilidade).
+A consola da plataforma mostra o modo em uso, o número de ficheiros e o espaço ocupado. A eliminação de anexos no R2 é registada na mesma transacção dos metadados. O Worker agendado processa a fila após a confirmação e volta a tentar quando o R2 falha. A cópia de segurança diária da base de dados inclui os ficheiros guardados na base de dados, mas não o R2 (o R2 tem a sua própria durabilidade).
 A cópia independente do R2 é verificada no mesmo workflow quando as credenciais de leitura estão configuradas.
 
 ## Disponibilidade pública

@@ -1,6 +1,6 @@
-import { candidates, closeDb, employees as employeesTable, getDb, jobOpenings, platformSettings, sql, withTenant } from '@kianda/db';
+import { candidates, closeDb, employees as employeesTable, getDb, eq, files, jobOpenings, platformSettings, sql, withTenant } from '@kianda/db';
 import { COMPANY_TABLES_PURGE_ORDER } from '../src/services/privacy.js';
-import { setObjectStore, type ObjectStore } from '../src/services/storage.js';
+import { drainR2Deletions, removeFiles, setObjectStore, type ObjectStore } from '../src/services/storage.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { luandaDate, totp } from '@kianda/core';
 import { buildApp } from '../src/app.js';
@@ -1850,10 +1850,12 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect((await get(financeUser, `/v1/files?entity=expense_claim&entityId=${id}`)).json()).toMatchObject({ canUpload: false, files: [{}] });
     });
 
-    it('com R2: conteúdo no armazenamento de objectos, apagado com o registo', async () => {
+    it('com R2: preserva o anexo no rollback e retoma uma eliminação falhada', async () => {
       const objects = new Map<string, Uint8Array>();
+      let failDelete = false;
       const fake: ObjectStore = {
-        async put(k, d) { objects.set(k, d); }, async get(k) { return objects.get(k) ?? null; }, async delete(ks) { for (const k of ks) objects.delete(k); },
+        async put(k, d) { objects.set(k, d); }, async get(k) { return objects.get(k) ?? null; },
+        async delete(ks) { if (failDelete) throw new Error('R2 indisponível'); for (const k of ks) objects.delete(k); },
       };
       setObjectStore(fake);
       try {
@@ -1863,8 +1865,27 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
         const [n] = (await getDb().execute(sql`select count(*)::int as n from file_blobs where file_id = ${f.json().id}`)).rows;
         expect(n!.n).toBe(0);
         expect((await get(owner, `/v1/files/${f.json().id}`)).body).toContain('r2');
-        expect((await app.inject({ method: 'DELETE', url: `/v1/files/${f.json().id}`, headers: as(owner) })).statusCode).toBe(200);
-        expect(objects.size).toBe(0);
+        const fileId = f.json().id as string;
+        const db = getDb(), [file] = await db.select().from(files).where(eq(files.id, fileId));
+        const key = `${file!.companyId}/${fileId}`;
+        await expect(withTenant(file!.companyId, async () => {
+          await removeFiles(getDb(), [file!]);
+          throw new Error('rollback de ensaio');
+        })).rejects.toThrow('rollback de ensaio');
+        expect(objects.has(key)).toBe(true);
+        expect((await db.execute(sql`select object_key from r2_deletion_queue where object_key = ${key}`)).rows).toEqual([]);
+        expect((await get(owner, `/v1/files/${fileId}`)).statusCode).toBe(200);
+        expect((await app.inject({ method: 'DELETE', url: `/v1/files/${fileId}`, headers: as(owner) })).statusCode).toBe(200);
+        expect(objects.has(key)).toBe(true);
+        expect((await get(owner, `/v1/files/${fileId}`)).statusCode).toBe(404);
+        failDelete = true;
+        const now = new Date();
+        await drainR2Deletions(db, now);
+        expect(objects.has(key)).toBe(true);
+        expect((await db.execute(sql`select object_key from r2_deletion_queue where object_key = ${key}`)).rows).toHaveLength(1);
+        failDelete = false;
+        await drainR2Deletions(db, new Date(now.getTime() + 31 * 60_000));
+        expect(objects.has(key)).toBe(false);
       } finally {
         setObjectStore(null);
       }

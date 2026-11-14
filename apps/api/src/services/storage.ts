@@ -4,7 +4,7 @@
  * - Sem R2 (desenvolvimento, testes, conta sem R2 activo), o conteúdo fica na tabela file_blobs (com RLS).
  * Cada ficheiro guarda onde ficou (files.storage), por isso os dois modos convivem.
  */
-import { and, eq, fileBlobs, files, sql, type Db } from '@kianda/db';
+import { and, asc, eq, fileBlobs, files, inArray, lte, r2DeletionQueue, sql, type Db } from '@kianda/db';
 import { DomainError } from './payroll.js';
 import { WORD_MIME, wordArchive } from '@kianda/core';
 
@@ -113,18 +113,33 @@ export async function readFileData(db: Db, f: typeof files.$inferSelect): Promis
   throw new DomainError('ficheiro_indisponivel', 'O conteúdo deste ficheiro não está disponível', 404);
 }
 
-/** Apaga registos e conteúdos (R2 incluído). Para chamar com os ficheiros já seleccionados. */
+/** A eliminação dos metadados e a entrada na fila R2 fazem parte da mesma transacção. */
 export async function removeFiles(db: Db, list: (typeof files.$inferSelect)[]) {
-  if (!list.length) return 0;
-  for (const f of list) await db.delete(files).where(eq(files.id, f.id));
-  const r2 = list.filter((f) => f.storage === 'r2').map((f) => keyOf(f.companyId, f.id));
-  if (r2.length && objectStore) await objectStore.delete(r2);
+  for (const f of list) await db.delete(files).where(and(eq(files.id, f.id), eq(files.companyId, f.companyId)));
   return list.length;
 }
 
-/** Chaves R2 de uma empresa (para apagar depois de eliminar a empresa). */
-export async function r2KeysOf(db: Db, companyId: string) {
-  const rows = await db.select({ id: files.id }).from(files).where(and(eq(files.companyId, companyId), eq(files.storage, 'r2')));
-  return rows.map((r) => keyOf(companyId, r.id));
+/** Executado com a ligação de sistema. A remoção de uma chave já ausente é idempotente. */
+export async function drainR2Deletions(db: Db, now = new Date()) {
+  const store = objectStore;
+  if (!store) return { deleted: 0, deferred: 0 };
+  return db.transaction(async tx => {
+    const rows = await tx.select({ key: r2DeletionQueue.objectKey }).from(r2DeletionQueue)
+      .where(lte(r2DeletionQueue.nextAttemptAt, now))
+      .orderBy(asc(r2DeletionQueue.nextAttemptAt), asc(r2DeletionQueue.objectKey))
+      .limit(250).for('update', { skipLocked: true });
+    const keys = rows.map(row => row.key);
+    if (!keys.length) return { deleted: 0, deferred: 0 };
+    try {
+      await store.delete(keys);
+    } catch {
+      await tx.update(r2DeletionQueue).set({ nextAttemptAt: new Date(now.getTime() + 30 * 60_000) })
+        .where(inArray(r2DeletionQueue.objectKey, keys));
+      return { deleted: 0, deferred: keys.length };
+    }
+    await tx.delete(r2DeletionQueue).where(inArray(r2DeletionQueue.objectKey, keys));
+    return { deleted: keys.length, deferred: 0 };
+  });
 }
+
 export async function deleteObjects(keys: string[]) { if (keys.length && objectStore) await objectStore.delete(keys); }
