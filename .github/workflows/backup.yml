@@ -193,6 +193,8 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:restore@127.0.0.1:15432/kianda
           RECOVERY_OBJECTS: ${{ runner.temp }}/kianda-recovery-objects
+          NODE_OPTIONS: --dns-result-order=ipv4first
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ runner.temp }}/kianda-recovery-results.json
         run: |
           set -euo pipefail
           umask 077
@@ -212,7 +214,7 @@ jobs:
             exit 1
           fi
           # Só os dados de ensaio passam pelos ecrãs e pelos relatórios do navegador.
-          if ! pnpm --filter @kianda/e2e e2e --project=computador --reporter=json recovery.spec.ts integra.spec.ts valora.spec.ts > "$RUNNER_TEMP/kianda-recovery-results.json" 2> "$RUNNER_TEMP/kianda-recovery-e2e.log"; then
+          if ! pnpm --filter @kianda/e2e e2e --project=computador --reporter=json recovery.spec.ts integra.spec.ts valora.spec.ts > "$RUNNER_TEMP/kianda-recovery-e2e.log" 2>&1; then
             node scripts/recovery-test-summary.mjs "$RUNNER_TEMP/kianda-recovery-results.json"
             echo "::error title=Recuperação::Falhou a validação da aplicação com a cópia restaurada."
             exit 1
