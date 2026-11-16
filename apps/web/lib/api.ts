@@ -89,8 +89,19 @@ export interface Me {
     paidUntil: string | null;
   } | null;
   platformAdmin?: boolean;
+  /** Novidades do Kianda ainda por ver. */
+  news?: ReleaseNote[];
   notifications?: { absences: number; expenses: number; tasks?: number; acks?: number };
   modules: CompanyModulesOverview;
+}
+
+export interface ReleaseNote {
+  slug: string;
+  title: string;
+  body: string;
+  url: string | null;
+  publishedAt: string;
+  unread: boolean;
 }
 
 export const currentUser = cache(async (): Promise<Me | null> => {

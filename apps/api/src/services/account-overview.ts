@@ -13,6 +13,7 @@ import {
 import type { Actor } from '../plugins/tenant.js';
 import { licenceFromRows } from './licence.js';
 import { companyModulesOverview } from './modules.js';
+import { releaseNotesFor } from './release-notes.js';
 import { ackCountColumn, notificationColumns, taskCountColumn } from './notification-counts.js';
 
 const unavailable = {
@@ -41,7 +42,7 @@ const noModules: CompanyModulesOverview = {
 
 /** Uma leitura para a estrutura da empresa. A consola tem identidade própria e prescinde de licenças. */
 export async function accountOverview(db: Db, actor: Actor) {
-  if (actor.platformAdmin) return { company: null, licence: null, modules: noModules, platformAdmin: true };
+  if (actor.platformAdmin) return { company: null, licence: null, modules: noModules, platformAdmin: true, news: [] };
   const rows = await db
     .select({
       company: {
@@ -92,6 +93,8 @@ export async function accountOverview(db: Db, actor: Actor) {
     },
     modules,
     platformAdmin: false,
+    /** Novidades por ver (aviso no topo do Kianda até a pessoa as fechar). */
+    news: await releaseNotesFor(db, actor, modules, { unreadOnly: true }),
     notifications: modules.hr.canAccess
       ? {
           absences: first?.absences ?? 0,

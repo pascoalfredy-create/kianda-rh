@@ -145,6 +145,8 @@ export const users = pgTable(
     totpSecret: text('totp_secret'),
     totpEnabledAt: timestamp('totp_enabled_at', { withTimezone: true }),
     failedAttempts: integer('failed_attempts').notNull().default(0),
+    /** Última vez que viu as novidades: só aparecem as publicadas depois desta data (contas novas não herdam as antigas). */
+    releaseNotesSeenAt: timestamp('release_notes_seen_at', { withTimezone: true }).notNull().defaultNow(),
     /** Versão das sessões: incrementa ao mudar a palavra-passe ou ao terminar todas as sessões (tokens antigos deixam de valer). */
     sessionVersion: integer('session_version').notNull().default(0),
     lockedUntil: timestamp('locked_until', { withTimezone: true }),
@@ -1271,6 +1273,23 @@ export const platformSettings = pgTable('platform_settings', {
   key: text('key').primaryKey(),
   value: jsonb('value').notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Novidades do Kianda (globais, sem empresa): gravadas só no fim de uma publicação verificada; a aplicação só lê. */
+export const releaseNotes = pgTable('release_notes', {
+  slug: text('slug').primaryKey(),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  modules: text('modules')
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
+  roles: text('roles')
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
+  url: text('url'),
+  publishedAt: timestamp('published_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 /** Portal do colaborador: pedidos de declarações. */

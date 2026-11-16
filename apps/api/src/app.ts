@@ -38,6 +38,7 @@ import { employeeRoutes } from './routes/employees.js';
 import { payrollRoutes } from './routes/payroll.js';
 import { publicRoutes } from './routes/public.js';
 import { pushRoutes } from './routes/push.js';
+import { releaseNoteRoutes } from './routes/release-notes.js';
 import { runPushInBackground, takePushFlag } from './services/push.js';
 import { runRecruitmentMailInBackground, takeRecruitmentMailFlag } from './services/recruitment-mail.js';
 import { DomainError } from './services/payroll.js';
@@ -104,6 +105,7 @@ export function buildApp(opts: { logger?: boolean; rateLimit?: boolean } = {}) {
 
   app.route('/', publicRoutes());
   app.route('/', pushRoutes());
+  app.route('/', releaseNoteRoutes());
   app.route('/', authRoutes());
   app.route('/', employeeRoutes());
   app.route('/', fileRoutes());

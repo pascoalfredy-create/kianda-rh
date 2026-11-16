@@ -470,6 +470,13 @@
       "when": 1794611200003,
       "tag": "0066_storage_recovery",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1794611200004,
+      "tag": "0067_release_notes",
+      "breakpoints": true
     }
   ]
 }

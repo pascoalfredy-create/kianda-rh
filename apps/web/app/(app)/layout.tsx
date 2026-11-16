@@ -8,6 +8,7 @@ import { DocumentExportAccess } from '@/components/document-export';
 import { WorkspaceState } from '@/components/workspace-state';
 import { workspaceScope } from '@/lib/workspace-memory';
 import { trialBannerText } from '@/lib/trial-banner';
+import { NewsBanner } from '@/components/release-notes';
 
 /** Área autenticada: sem sessão válida (verificada pela API), redirecciona para o login. */
 /** Aviso de licença: experimental a terminar, pagamento em atraso ou só consulta. */
@@ -63,6 +64,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <DocumentExportAccess allowed={canExportDocuments(me.modules.hr.status)}>
           <AppShell me={me} counts={counts}>
             <LicenceBanner me={me} />
+            <NewsBanner notes={me.news ?? []} />
             {children}
           </AppShell>
         </DocumentExportAccess>

@@ -122,6 +122,7 @@ export function AppShell({
           <b>{me.user.name}</b>
           <small>{ROLE_LABEL[me.user.role] ?? me.user.role}</small>
           <Link href="/conta">A minha conta</Link>
+          <Link href="/novidades">Novidades</Link>
           <LogoutButton />
         </div>
       </aside>

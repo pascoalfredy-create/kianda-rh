@@ -745,3 +745,13 @@ details.optional-changes[open]>summary{margin-bottom:10px}
   .effect-page .effect-sign { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12mm; margin-top: 14mm; font-size: 8pt; }
   .effect-sign div { border-top: 1px solid #1b1f27; padding-top: 1.5mm; }
 }
+
+/* Novidades do Kianda: aviso no topo até ser fechado, e histórico em /novidades. */
+.news-banner { border: 1px solid #c7d7ee; background: #f2f7fd; border-radius: 10px; padding: 12px 16px; margin: 0 0 16px; }
+.news-banner .news-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 4px; color: #1d4e89; }
+.news-item p { margin: 4px 0 6px; color: var(--ink2); font-size: 13px; line-height: 1.5; }
+.news-banner .news-item { padding: 6px 0; border-top: 1px solid #dde7f4; }
+.news-banner .news-item:first-of-type { border-top: 0; }
+.news-list { display: grid; gap: 12px; }
+.news-list .news-item { padding: 16px; }
+.news-list .news-item h2 { font-size: 15px; margin: 4px 0 0; }
