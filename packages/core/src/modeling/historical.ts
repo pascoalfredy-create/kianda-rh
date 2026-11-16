@@ -126,14 +126,8 @@ function csvRows(text: string, delimiter: string): string[][] {
   if (rows.length > 5001) fail('balancete', 'O limite é de 5 000 contas por balancete.');
   return rows;
 }
-export function parseHistoricalTrialBalance(text: string, path = 'N'): HistoricalTrialBalance {
-  if (typeof text !== 'string' || !text.trim())
-    return fail(
-      path,
-      `O balancete ${path === 'N1' ? 'comparativo N−1' : path === 'N' ? 'do período actual (N)' : path} está vazio. Carregue o ficheiro e confirme a leitura antes de analisar.`,
-    );
-  if (text.length > 250_000) return fail(path, 'O texto do balancete excede 250 000 caracteres.');
-  text = text.replace(/^\ufeff/, '');
+/** Separador do CSV: o mais frequente na primeira linha, fora de aspas (ponto e vírgula, tabulação ou vírgula). */
+function detectDelimiter(text: string) {
   const first = text.split(/\r?\n/).find(v => v.trim())!;
   const counts = new Map([
     [';', 0],
@@ -147,49 +141,77 @@ export function parseHistoricalTrialBalance(text: string, path = 'N'): Historica
       else quoted = !quoted;
     } else if (!quoted && counts.has(first[i]!)) counts.set(first[i]!, counts.get(first[i]!)! + 1);
   }
-  const delimiter = [...counts.keys()].sort((a, b) => counts.get(b)! - counts.get(a)!)[0]!;
-  const rows = csvRows(text, delimiter),
-    header = rows[0]!.map(norm);
+  return [...counts.keys()].sort((a, b) => counts.get(b)! - counts.get(a)!)[0]!;
+}
+
+/** Colunas do balancete: conta, designação e saldos (devedor/credor, débito/crédito acumulados ou saldo com sinal). */
+function trialColumns(rows: string[][], path: string) {
+  const header = rows[0]!.map(norm);
   const account = header.findIndex(v => /^(?:CONTA|CODIGO)(?: DA CONTA)?$/.test(v)),
     hasHeader = account >= 0;
   const index = (re: RegExp) => {
+    if (!hasHeader) return -1;
     const matches = header.flatMap((v, i) => (re.test(v) ? [i] : []));
     if (matches.length > 1) fail(path, 'Colunas de saldo ambíguas.');
     return matches[0] ?? -1;
   };
   const name = hasHeader ? index(/^(?:DESIGNACAO|DESCRICAO|NOME)(?: DA CONTA)?$/) : 1;
-  const sd = hasHeader ? index(/^(?:SALDO )?DEVEDOR$/) : -1,
-    sc = hasHeader ? index(/^(?:SALDO )?CREDOR$/) : -1;
-  const d = hasHeader ? index(/^DEBITO$/) : -1,
-    cr = hasHeader ? index(/^CREDITO$/) : -1,
+  const sd = index(/^(?:SALDO )?DEVEDOR$/),
+    sc = index(/^(?:SALDO )?CREDOR$/);
+  const d = index(/^DEBITO$/),
+    cr = index(/^CREDITO$/),
     signed = hasHeader ? index(/^SALDO$/) : rows[0]!.length === 3 ? 2 : -1;
-  const debit = sd >= 0 || sc >= 0 ? sd : d,
-    credit = sd >= 0 || sc >= 0 ? sc : cr;
+  const balances = sd >= 0 || sc >= 0;
+  const debit = balances ? sd : d,
+    credit = balances ? sc : cr;
+  const cols = {
+    account: hasHeader ? account : 0,
+    hasHeader,
+    name,
+    signed,
+    /** Saldo com sinal numa só coluna (sem colunas devedor/credor). */
+    useSigned: signed >= 0 && debit < 0,
+    debit: hasHeader ? debit : 2,
+    credit: hasHeader ? credit : 3,
+    /** Saldos devedor e credor exclusivos (um dos dois a zero). */
+    exclusive: balances || !hasHeader,
+    accumulated: hasHeader && sd < 0 && sc < 0 && d >= 0,
+  };
   if (hasHeader && signed < 0 && (debit < 0 || credit < 0))
-    return fail(path, 'Indique Saldo Devedor e Saldo Credor, Débito e Crédito acumulados, ou Saldo com sinal.');
-  const accounts = new Map<string, { code: string; g: string; nome: string; cents: number }>();
-  for (const [i, row] of rows.slice(hasHeader ? 1 : 0).entries()) {
-    const raw = row[hasHeader ? account : 0] ?? '',
-      linePath = `${path}.linha${i + (hasHeader ? 2 : 1)}`;
+    fail(path, 'Indique Saldo Devedor e Saldo Credor, Débito e Crédito acumulados, ou Saldo com sinal.');
+  return cols;
+}
+type TrialColumns = ReturnType<typeof trialColumns>;
+
+/** Saldo da linha em cêntimos (devedor positivo). */
+function rowCents(row: string[], cols: TrialColumns, linePath: string) {
+  const at = (ix: number) => {
+    if (ix < 0 || ix >= row.length) return fail(linePath, 'Faltam colunas de saldo.');
+    return historicalAmount(row[ix]!, linePath);
+  };
+  if (cols.useSigned) return at(cols.signed);
+  const dr = at(cols.debit),
+    co = at(cols.credit);
+  if (dr < 0 || co < 0 || (cols.exclusive && dr > 0 && co > 0))
+    return fail(linePath, 'Os saldos devedor/credor devem ser não negativos e apenas um pode estar preenchido.');
+  return safe(dr - co, linePath);
+}
+
+type TrialAccount = { code: string; g: string; nome: string; cents: number };
+
+/** Contas do balancete com classificação PGC suportada; recusa códigos inválidos, repetidos ou classes já apuradas. */
+function readTrialAccounts(rows: string[][], cols: TrialColumns, path: string) {
+  const accounts = new Map<string, TrialAccount>();
+  for (const [i, row] of rows.slice(cols.hasHeader ? 1 : 0).entries()) {
+    const raw = row[cols.account] ?? '',
+      linePath = `${path}.linha${i + (cols.hasHeader ? 2 : 1)}`;
     if (/^(?:TOTAL|TOTAIS|TOTAL GERAL|TOTAL DO BALANCETE|TRANSPORTE)$/i.test(raw)) continue;
     if (!/^\d[\d.\s-]*$/.test(raw)) return fail(linePath, 'Código de conta inválido.');
     const code = raw.replace(/[.\s-]/g, '');
     if (code.length < 2 || code.length > 18) return fail(linePath, 'Use contas PGC com pelo menos dois dígitos.');
     if (accounts.has(code)) return fail(linePath, `Conta ${raw} repetida.`);
     const g = code.slice(0, 2);
-    const at = (ix: number) => {
-      if (ix < 0 || ix >= row.length) return fail(linePath, 'Faltam colunas de saldo.');
-      return historicalAmount(row[ix]!, linePath);
-    };
-    let cents: number;
-    if (signed >= 0 && debit < 0) cents = at(signed);
-    else {
-      const dr = at(hasHeader ? debit : 2),
-        co = at(hasHeader ? credit : 3);
-      if (dr < 0 || co < 0 || ((sd >= 0 || sc >= 0 || !hasHeader) && dr > 0 && co > 0))
-        return fail(linePath, 'Os saldos devedor/credor devem ser não negativos e apenas um pode estar preenchido.');
-      cents = safe(dr - co, linePath);
-    }
+    const cents = rowCents(row, cols, linePath);
     if (!groups.has(g)) {
       if (cents !== 0)
         return fail(
@@ -200,8 +222,13 @@ export function parseHistoricalTrialBalance(text: string, path = 'N'): Historica
         );
       continue;
     }
-    accounts.set(code, { code: raw, g, nome: name >= 0 ? (row[name] ?? '') : '', cents });
+    accounts.set(code, { code: raw, g, nome: cols.name >= 0 ? (row[cols.name] ?? '') : '', cents });
   }
+  return accounts;
+}
+
+/** Contas de último nível; cada conta-mãe presente tem de igualar a soma das suas subcontas. */
+function leafAccounts(accounts: Map<string, TrialAccount>, path: string) {
   const codes = [...accounts.keys()].sort(),
     leaves = codes.filter((v, i) => {
       for (let j = i + 1; j < codes.length && codes[j]!.startsWith(v); j++)
@@ -222,15 +249,29 @@ export function parseHistoricalTrialBalance(text: string, path = 'N'): Historica
         path,
         `A conta-mãe ${accounts.get(parent)!.code} não corresponde às subcontas. Inclua todas as subcontas ou apenas o total.`,
       );
-  const lines = leaves.map(v => {
-    const a = accounts.get(v)!;
-    return { code: a.code, g: a.g, nome: a.nome, v: a.cents / 100 };
-  });
+  return leaves;
+}
+
+export function parseHistoricalTrialBalance(text: string, path = 'N'): HistoricalTrialBalance {
+  if (typeof text !== 'string' || !text.trim())
+    return fail(
+      path,
+      `O balancete ${path === 'N1' ? 'comparativo N−1' : path === 'N' ? 'do período actual (N)' : path} está vazio. Carregue o ficheiro e confirme a leitura antes de analisar.`,
+    );
+  if (text.length > 250_000) return fail(path, 'O texto do balancete excede 250 000 caracteres.');
+  text = text.replace(/^﻿/, '');
+  const rows = csvRows(text, detectDelimiter(text));
+  const cols = trialColumns(rows, path);
+  const accounts = readTrialAccounts(rows, cols, path);
+  const leaves = leafAccounts(accounts, path);
   return {
-    lines,
+    lines: leaves.map(v => {
+      const a = accounts.get(v)!;
+      return { code: a.code, g: a.g, nome: a.nome, v: a.cents / 100 };
+    }),
     diff: leaves.reduce((s, v) => safe(s + accounts.get(v)!.cents, path), 0) / 100,
     ignoredParents: accounts.size - leaves.length,
-    basis: hasHeader && sd < 0 && sc < 0 && d >= 0 ? 'accumulated' : 'balance',
+    basis: cols.accumulated ? 'accumulated' : 'balance',
   };
 }
 
