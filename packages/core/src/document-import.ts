@@ -135,132 +135,178 @@ function xmlText(raw: string): string {
   });
 }
 
-/** Conserva as células vazias e os parágrafos. Não converte XML em HTML nem segue relações externas. */
-export function wordDocumentRows(xml: string): string[][] {
-  if (!xml || xml.length > DOCUMENT_XML_LIMIT || /<!DOCTYPE|<!ENTITY/i.test(xml))
-    return invalid('O texto Word é demasiado grande ou contém declarações XML não suportadas.');
+const WORD_NAMESPACES = [
+  'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+  'http://purl.oclc.org/ooxml/wordprocessingml/main',
+];
+const WORD_TOKENS = /<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<!\[CDATA\[[\s\S]*?\]\]>|<[^>]*>|[^<]+/g;
+const WORD_TAG = /^<\/?([A-Za-z_][\w:.-]*)(?:\s+[A-Za-z_][\w:.-]*\s*=\s*(?:"[^"<]*"|'[^'<]*'))*\s*\/?>$/;
+
+/** Prefixo do elemento raiz do Word; recusa documentos sem o espaço de nomes do WordprocessingML. */
+function wordPrefix(xml: string) {
   const root = /<([\w.-]+:)?document\b([^>]*)>/.exec(xml),
     prefix = root?.[1] || '';
   const ns = root?.[2]?.match(
     new RegExp(`xmlns${prefix ? ':' + prefix.slice(0, -1) : ''}\\s*=\\s*["']([^"']+)["']`),
   )?.[1];
-  if (
-    ![
-      'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
-      'http://purl.oclc.org/ooxml/wordprocessingml/main',
-    ].includes(ns || '')
-  )
-    return invalid();
-  const rows: string[][] = [],
-    stack: string[] = [];
-  let paragraph = '',
-    cell = '',
-    tableRow: string[] | null = null,
-    inBody = false,
-    inText = false,
-    inCell = false,
-    tables = 0,
-    span = 1,
-    ignored = 0,
-    chars = 0,
-    at = 0,
-    roots = 0,
-    bodies = 0;
-  const tokens = /<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<!\[CDATA\[[\s\S]*?\]\]>|<[^>]*>|[^<]+/g;
-  const close = (name: string) => {
-    if (ignored) {
-      ignored--;
+  if (!WORD_NAMESPACES.includes(ns || '')) invalid();
+  return prefix;
+}
+
+/** Leitor sequencial do XML do Word: parágrafos e células de tabela, ignorando desenhos e objectos. */
+class WordReader {
+  readonly rows: string[][] = [];
+  private readonly stack: string[] = [];
+  private paragraph = '';
+  private cell = '';
+  private tableRow: string[] | null = null;
+  private inBody = false;
+  private inText = false;
+  private inCell = false;
+  private tables = 0;
+  private span = 1;
+  private ignored = 0;
+  private chars = 0;
+  private roots = 0;
+  private bodies = 0;
+
+  constructor(private readonly prefix: string) {}
+
+  token(token: string) {
+    if (token.startsWith('<!--') || token.startsWith('<?')) return;
+    if (!token.startsWith('<') || token.startsWith('<![CDATA[')) return this.text(token);
+    const tag = WORD_TAG.exec(token);
+    if (!tag) invalid('O Word contém XML inválido.');
+    const name = tag![1]!;
+    if (token.startsWith('</')) {
+      if (!/^<\/[\w:.-]+\s*>$/.test(token) || this.stack.pop() !== name) invalid();
+      this.close(name);
       return;
     }
-    if (name === prefix + 't') inText = false;
-    if (name === prefix + 'p' && !ignored) {
-      if (inCell) cell += (cell ? ' ' : '') + paragraph.trim();
-      else if (paragraph.trim()) rows.push([paragraph.trim()]);
-      paragraph = '';
+    this.open(name, token);
+    if (token.endsWith('/>')) {
+      this.stack.pop();
+      this.close(name);
     }
-    if (name === prefix + 'tc') {
-      if (!tableRow) return invalid();
-      tableRow.push(cell.trim(), ...Array<string>(span - 1).fill(''));
-      cell = '';
-      inCell = false;
-      span = 1;
+    if (this.rows.length > 10000) invalid('O Word excede 10 000 linhas.');
+  }
+
+  finished() {
+    return !this.stack.length;
+  }
+
+  private text(token: string) {
+    if (!this.inBody || !this.inText || this.ignored) return;
+    const text = token.startsWith('<!') ? token.slice(9, -3) : xmlText(token);
+    this.paragraph += text;
+    if ((this.chars += text.length) > 2_000_000) invalid('O texto do Word excede o limite de importação.');
+  }
+
+  private open(name: string, token: string) {
+    const p = this.prefix;
+    if (!this.stack.length && (name !== p + 'document' || ++this.roots !== 1)) invalid();
+    this.stack.push(name);
+    if (this.stack.length > 100) invalid();
+    if (this.ignored) this.ignored++;
+    else if ([p + 'drawing', p + 'pict', p + 'object'].includes(name)) this.ignored = 1;
+    if (name === p + 'body') {
+      if (++this.bodies > 1) invalid();
+      this.inBody = true;
     }
-    if (name === prefix + 'tr') {
-      if (!tableRow) return invalid();
-      rows.push(tableRow);
-      tableRow = null;
+    if (this.inBody && !this.ignored) this.openContent(name.startsWith(p) ? name.slice(p.length) : '', token);
+  }
+
+  /** Elementos de conteúdo: tabelas simples, células (com colunas unidas), parágrafos, texto e quebras. */
+  private openContent(local: string, token: string) {
+    if (['ins', 'del', 'moveFrom', 'moveTo', 'altChunk', 'vMerge'].includes(local))
+      invalid(
+        'O Word tem revisões, células unidas verticalmente ou conteúdo incorporado. Aceite as revisões e exporte uma tabela simples antes de importar.',
+      );
+    if (local === 'tbl' && ++this.tables > 1)
+      invalid('O Word contém tabelas dentro de outras tabelas. Exporte uma tabela simples.');
+    switch (local) {
+      case 'tr':
+        if (this.tableRow) invalid();
+        this.tableRow = [];
+        break;
+      case 'tc':
+        this.inCell = true;
+        this.cell = '';
+        this.span = 1;
+        break;
+      case 'gridSpan': {
+        this.span = Number(token.match(/(?:\w+:)?val\s*=\s*["'](\d+)["']/)?.[1]);
+        if (!Number.isInteger(this.span) || this.span < 1 || this.span > 50) invalid();
+        break;
+      }
+      case 'p':
+        this.paragraph = '';
+        break;
+      case 't':
+        this.inText = true;
+        break;
+      case 'tab':
+        this.paragraph += '\t';
+        break;
+      case 'br':
+      case 'cr':
+        this.paragraph += ' ';
+        break;
     }
-    if (name === prefix + 'tbl') tables--;
-    if (name === prefix + 'body') inBody = false;
-  };
-  for (const match of xml.matchAll(tokens)) {
+  }
+
+  private close(name: string) {
+    if (this.ignored) {
+      this.ignored--;
+      return;
+    }
+    const local = name.startsWith(this.prefix) ? name.slice(this.prefix.length) : '';
+    if (name !== this.prefix + local) return;
+    switch (local) {
+      case 't':
+        this.inText = false;
+        break;
+      case 'p':
+        if (this.inCell) this.cell += (this.cell ? ' ' : '') + this.paragraph.trim();
+        else if (this.paragraph.trim()) this.rows.push([this.paragraph.trim()]);
+        this.paragraph = '';
+        break;
+      case 'tc':
+        if (!this.tableRow) invalid();
+        this.tableRow!.push(this.cell.trim(), ...Array<string>(this.span - 1).fill(''));
+        this.cell = '';
+        this.inCell = false;
+        this.span = 1;
+        break;
+      case 'tr':
+        if (!this.tableRow) invalid();
+        this.rows.push(this.tableRow!);
+        this.tableRow = null;
+        break;
+      case 'tbl':
+        this.tables--;
+        break;
+      case 'body':
+        this.inBody = false;
+        break;
+    }
+  }
+}
+
+/** Conserva as células vazias e os parágrafos. Não converte XML em HTML nem segue relações externas. */
+export function wordDocumentRows(xml: string): string[][] {
+  if (!xml || xml.length > DOCUMENT_XML_LIMIT || /<!DOCTYPE|<!ENTITY/i.test(xml))
+    return invalid('O texto Word é demasiado grande ou contém declarações XML não suportadas.');
+  const reader = new WordReader(wordPrefix(xml));
+  let at = 0;
+  for (const match of xml.matchAll(WORD_TOKENS)) {
     if (match.index !== at) return invalid();
     at += match[0].length;
-    const token = match[0];
-    if (token.startsWith('<!--') || token.startsWith('<?')) continue;
-    if (!token.startsWith('<') || token.startsWith('<![CDATA[')) {
-      if (inBody && inText && !ignored) {
-        const text = token.startsWith('<!') ? token.slice(9, -3) : xmlText(token);
-        paragraph += text;
-        if ((chars += text.length) > 2_000_000) return invalid('O texto do Word excede o limite de importação.');
-      }
-      continue;
-    }
-    const tag = /^<\/?([A-Za-z_][\w:.-]*)(?:\s+[A-Za-z_][\w:.-]*\s*=\s*(?:"[^"<]*"|'[^'<]*'))*\s*\/?>$/.exec(token);
-    if (!tag) return invalid('O Word contém XML inválido.');
-    const name = tag[1]!,
-      ending = token.startsWith('</'),
-      single = token.endsWith('/>');
-    if (ending) {
-      if (!/^<\/[\w:.-]+\s*>$/.test(token) || stack.pop() !== name) return invalid();
-      close(name);
-      continue;
-    }
-    if (!stack.length && (name !== prefix + 'document' || ++roots !== 1)) return invalid();
-    stack.push(name);
-    if (stack.length > 100) return invalid();
-    if (ignored) ignored++;
-    else if ([prefix + 'drawing', prefix + 'pict', prefix + 'object'].includes(name)) ignored = 1;
-    if (name === prefix + 'body') {
-      if (++bodies > 1) return invalid();
-      inBody = true;
-    }
-    if (inBody && !ignored) {
-      const local = name.startsWith(prefix) ? name.slice(prefix.length) : '';
-      if (['ins', 'del', 'moveFrom', 'moveTo', 'altChunk', 'vMerge'].includes(local))
-        return invalid(
-          'O Word tem revisões, células unidas verticalmente ou conteúdo incorporado. Aceite as revisões e exporte uma tabela simples antes de importar.',
-        );
-      if (local === 'tbl' && ++tables > 1)
-        return invalid('O Word contém tabelas dentro de outras tabelas. Exporte uma tabela simples.');
-      if (local === 'tr') {
-        if (tableRow) return invalid();
-        tableRow = [];
-      }
-      if (local === 'tc') {
-        inCell = true;
-        cell = '';
-        span = 1;
-      }
-      if (local === 'gridSpan') {
-        const value = token.match(/(?:\w+:)?val\s*=\s*["'](\d+)["']/)?.[1];
-        span = Number(value);
-        if (!Number.isInteger(span) || span < 1 || span > 50) return invalid();
-      }
-      if (local === 'p') paragraph = '';
-      if (local === 't') inText = true;
-      if (local === 'tab') paragraph += '\t';
-      if (local === 'br' || local === 'cr') paragraph += ' ';
-    }
-    if (single) {
-      stack.pop();
-      close(name);
-    }
-    if (rows.length > 10000) return invalid('O Word excede 10 000 linhas.');
+    reader.token(match[0]);
   }
-  if (at !== xml.length || stack.length || !rows.some(r => r.some(Boolean)))
+  if (at !== xml.length || !reader.finished() || !reader.rows.some(r => r.some(Boolean)))
     return invalid('O Word não contém texto ou tabelas extraíveis. Documentos digitalizados precisam de OCR.');
-  return rows;
+  return reader.rows;
 }
 
 export const documentRowsCsv = (rows: string[][]): string =>
