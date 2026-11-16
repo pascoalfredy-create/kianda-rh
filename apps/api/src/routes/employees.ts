@@ -183,17 +183,15 @@ async function loadEmployee(db: Db, req: Actor, id: string) {
 }
 
 const audit = (db: Db, req: Actor, action: string, entity: string, entityId: string, before: unknown, after: unknown) =>
-  db
-    .insert(auditLogs)
-    .values({
-      companyId: req.companyId,
-      actorId: req.actorId,
-      action,
-      entity,
-      entityId,
-      before: before as object,
-      after: after as object,
-    });
+  db.insert(auditLogs).values({
+    companyId: req.companyId,
+    actorId: req.actorId,
+    action,
+    entity,
+    entityId,
+    before: before as object,
+    after: after as object,
+  });
 
 // ───────────────────────── Rotas ─────────────────────────
 
@@ -450,16 +448,14 @@ export function employeeRoutes() {
         reason: 'Admissão',
         createdBy: req.actorId,
       });
-      await tx
-        .insert(auditLogs)
-        .values({
-          companyId: req.companyId,
-          actorId: req.actorId,
-          action: 'create',
-          entity: 'employee',
-          entityId: e!.id,
-          after: { employee: e, contract: c },
-        });
+      await tx.insert(auditLogs).values({
+        companyId: req.companyId,
+        actorId: req.actorId,
+        action: 'create',
+        entity: 'employee',
+        entityId: e!.id,
+        after: { employee: e, contract: c },
+      });
       // Acolhimento: a lista de tarefas começa na admissão (se o modelo da empresa o prevê).
       await startChecklist(tx as unknown as Db, {
         companyId: req.companyId,
@@ -692,17 +688,15 @@ export function employeeRoutes() {
             contractId: c!.id,
           },
         });
-      await tx
-        .insert(auditLogs)
-        .values({
-          companyId: req.companyId,
-          actorId: req.actorId,
-          action: 'create',
-          entity: 'contract',
-          entityId: c!.id,
-          before: prev ?? null,
-          after: c,
-        });
+      await tx.insert(auditLogs).values({
+        companyId: req.companyId,
+        actorId: req.actorId,
+        action: 'create',
+        entity: 'contract',
+        entityId: c!.id,
+        before: prev ?? null,
+        after: c,
+      });
       return c;
     });
     return ctx.json(result, 201);

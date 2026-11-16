@@ -111,16 +111,14 @@ export async function completeLinkedTasks(
         note: `Aceite electronicamente no portal: ${o.title} (versão ${o.version})`,
       })
       .where(eq(checklistTasks.id, t.id));
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: o.companyId,
-        actorId: o.actorId,
-        action: 'complete',
-        entity: 'checklist_task',
-        entityId: t.id,
-        after: { via: 'ack', link, checklistId: t.checklistId },
-      });
+    await db.insert(auditLogs).values({
+      companyId: o.companyId,
+      actorId: o.actorId,
+      action: 'complete',
+      entity: 'checklist_task',
+      entityId: t.id,
+      after: { via: 'ack', link, checklistId: t.checklistId },
+    });
     await syncChecklistStatus(db, t.checklistId);
   }
   return tasks.length;

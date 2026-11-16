@@ -371,17 +371,15 @@ export function portalRoutes() {
         .set({ status: 'approved', decidedBy: actor.actorId, decidedAt: new Date() })
         .where(eq(profileChangeRequests.id, r.id))
         .returning();
-      await tx
-        .insert(auditLogs)
-        .values({
-          companyId: actor.companyId,
-          actorId: actor.actorId,
-          action: 'update',
-          entity: 'employee',
-          entityId: r.employeeId,
-          before: r.previous as object,
-          after: { ...(r.changes as object), via: 'portal', requestId: r.id },
-        });
+      await tx.insert(auditLogs).values({
+        companyId: actor.companyId,
+        actorId: actor.actorId,
+        action: 'update',
+        entity: 'employee',
+        entityId: r.employeeId,
+        before: r.previous as object,
+        after: { ...(r.changes as object), via: 'portal', requestId: r.id },
+      });
       return x!;
     });
     return c.json(u);

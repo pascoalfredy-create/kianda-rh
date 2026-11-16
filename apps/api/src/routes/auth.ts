@@ -254,15 +254,13 @@ export function authRoutes() {
         .returning();
       // Período experimental com o escalão adequado à dimensão declarada.
       const trialEnd = trialEndDate(luandaDate(co!.createdAt));
-      await tx
-        .insert(subscriptions)
-        .values({
-          companyId: co!.id,
-          status: hasHr ? 'trial' : 'cancelled',
-          tierKey: hrTier.key,
-          cycle: b.hrPlan?.cycle ?? 'monthly',
-          trialEndsAt: hasHr ? trialEnd : null,
-        });
+      await tx.insert(subscriptions).values({
+        companyId: co!.id,
+        status: hasHr ? 'trial' : 'cancelled',
+        tierKey: hrTier.key,
+        cycle: b.hrPlan?.cycle ?? 'monthly',
+        trialEndsAt: hasHr ? trialEnd : null,
+      });
       const [u] = await tx
         .insert(users)
         .values({
@@ -274,65 +272,61 @@ export function authRoutes() {
           emailVerificationRequired: true,
         })
         .returning();
-      await tx
-        .insert(companyModules)
-        .values([
-          { companyId: co!.id, module: 'hr', enabled: hasHr, status: hasHr ? 'trial' : 'cancelled' },
-          ...(hasValuation
-            ? [
-                {
-                  companyId: co!.id,
-                  module: 'valuation',
-                  enabled: true,
-                  status: 'trial',
-                  trialEndsAt: trialEnd,
-                  projectLimit: valuationPlan.analysisLimit,
-                  planKey: valuationPlan.key,
-                  cycle: valuationCycle,
-                },
-              ]
-            : []),
-          ...(hasModeling
-            ? [
-                {
-                  companyId: co!.id,
-                  module: 'modeling',
-                  enabled: true,
-                  status: 'trial',
-                  trialEndsAt: trialEnd,
-                  planKey: modelingPlan.key,
-                  cycle: modelingCycle,
-                  projectLimit: modelingPlan.projectLimit,
-                  primarySector,
-                  modelingSectors,
-                },
-              ]
-            : []),
-        ]);
+      await tx.insert(companyModules).values([
+        { companyId: co!.id, module: 'hr', enabled: hasHr, status: hasHr ? 'trial' : 'cancelled' },
+        ...(hasValuation
+          ? [
+              {
+                companyId: co!.id,
+                module: 'valuation',
+                enabled: true,
+                status: 'trial',
+                trialEndsAt: trialEnd,
+                projectLimit: valuationPlan.analysisLimit,
+                planKey: valuationPlan.key,
+                cycle: valuationCycle,
+              },
+            ]
+          : []),
+        ...(hasModeling
+          ? [
+              {
+                companyId: co!.id,
+                module: 'modeling',
+                enabled: true,
+                status: 'trial',
+                trialEndsAt: trialEnd,
+                planKey: modelingPlan.key,
+                cycle: modelingCycle,
+                projectLimit: modelingPlan.projectLimit,
+                primarySector,
+                modelingSectors,
+              },
+            ]
+          : []),
+      ]);
       if (hasModeling) await tx.insert(modelingMembers).values({ companyId: co!.id, userId: u!.id, addedBy: u!.id });
       if (hasValuation) await tx.insert(valuationMembers).values({ companyId: co!.id, userId: u!.id, addedBy: u!.id });
       // Pré-configuração do sector: regimes de horário e subsídios sugeridos (a empresa ajusta depois).
       if (hasHr) await applySectorPreset(tx, co!.id, co!.sector, u!.id);
-      await tx
-        .insert(auditLogs)
-        .values({
-          companyId: co!.id,
-          actorId: u!.id,
-          action: 'register',
-          entity: 'company',
-          entityId: co!.id,
-          after: {
-            company: co,
-            owner: { id: u!.id, email: u!.email },
-            terms: { accepted: true, version: REGISTRATION_TERMS_VERSION, acceptedAt: new Date().toISOString() },
-            modules: b.modules,
-            hrPlan: hasHr ? { tierKey: hrTier.key, cycle: b.hrPlan?.cycle ?? 'monthly' } : null,
-            modelingPlan: hasModeling ? { key: modelingPlan.key, cycle: modelingCycle } : null,
-            valuation: hasValuation
-              ? { planKey: valuationPlan.key, cycle: valuationCycle, analysisLimit: valuationPlan.analysisLimit }
-              : null,
-          },
-        });
+      await tx.insert(auditLogs).values({
+        companyId: co!.id,
+        actorId: u!.id,
+        action: 'register',
+        entity: 'company',
+        entityId: co!.id,
+        after: {
+          company: co,
+          owner: { id: u!.id, email: u!.email },
+          terms: { accepted: true, version: REGISTRATION_TERMS_VERSION, acceptedAt: new Date().toISOString() },
+          modules: b.modules,
+          hrPlan: hasHr ? { tierKey: hrTier.key, cycle: b.hrPlan?.cycle ?? 'monthly' } : null,
+          modelingPlan: hasModeling ? { key: modelingPlan.key, cycle: modelingCycle } : null,
+          valuation: hasValuation
+            ? { planKey: valuationPlan.key, cycle: valuationCycle, analysisLimit: valuationPlan.analysisLimit }
+            : null,
+        },
+      });
       return { company: co!, user: u!, trialEnd };
     });
     const token = await startSession(c, {
@@ -465,15 +459,13 @@ export function authRoutes() {
       .update(users)
       .set({ passwordHash: await hashPassword(b.next), sessionVersion: sql`${users.sessionVersion} + 1` })
       .where(eq(users.id, u.id));
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'change_password',
-        entity: 'user',
-        entityId: u.id,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'change_password',
+      entity: 'user',
+      entityId: u.id,
+    });
     await startSession(c, actor.session);
     return c.json({ ok: true });
   });
@@ -486,15 +478,13 @@ export function authRoutes() {
       .update(users)
       .set({ sessionVersion: sql`${users.sessionVersion} + 1` })
       .where(eq(users.id, actor.actorId));
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'end_sessions',
-        entity: 'user',
-        entityId: actor.actorId,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'end_sessions',
+      entity: 'user',
+      entityId: actor.actorId,
+    });
     await startSession(c, actor.session);
     return c.json({ ok: true });
   });
@@ -569,16 +559,14 @@ export function authRoutes() {
         employeeId: b.employeeId,
       })
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'create',
-        entity: 'user',
-        entityId: u!.id,
-        after: { email: u!.email, role: u!.role },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'create',
+      entity: 'user',
+      entityId: u!.id,
+      after: { email: u!.email, role: u!.role },
+    });
     return c.json({ id: u!.id, name: u!.name, email: u!.email, role: u!.role, employeeId: u!.employeeId }, 201);
   });
 

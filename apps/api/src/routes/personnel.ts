@@ -133,16 +133,14 @@ export function personnelRoutes() {
         'Os pressupostos foram alterados por outro utilizador. Recarregue a página antes de gravar.',
         409,
       );
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'update',
-        entity: 'personnel_cash_plan',
-        entityId: rows[0]!.id,
-        after: b,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'update',
+      entity: 'personnel_cash_plan',
+      entityId: rows[0]!.id,
+      after: b,
+    });
     return c.json(rows[0]);
   });
   return app;

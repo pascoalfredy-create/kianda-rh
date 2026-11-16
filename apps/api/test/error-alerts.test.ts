@@ -49,18 +49,16 @@ describe.skipIf(!process.env.DATABASE_URL)('envio limitado aos administradores d
       mails.filter(m => m.kind === 'alerta_erro' && m.subject === 'Kianda · erro interno em POST /v1/teste'),
     ).toHaveLength(1);
     const later = new Date(base + 24 * 3600_000 * 400);
-    await db
-      .insert(outboundEmails)
-      .values(
-        Array.from({ length: ERROR_ALERTS_PER_HOUR }, (_, i) => ({
-          toAddress: 'x@kianda.test',
-          subject: 's',
-          kind: 'alerta_erro',
-          status: 'skipped',
-          dedupeKey: `teto-${later.getTime()}-${i}-${admin}`,
-          createdAt: new Date(later.getTime() - 60_000),
-        })),
-      );
+    await db.insert(outboundEmails).values(
+      Array.from({ length: ERROR_ALERTS_PER_HOUR }, (_, i) => ({
+        toAddress: 'x@kianda.test',
+        subject: 's',
+        kind: 'alerta_erro',
+        status: 'skipped',
+        dedupeKey: `teto-${later.getTime()}-${i}-${admin}`,
+        createdAt: new Date(later.getTime() - 60_000),
+      })),
+    );
     expect(await alertServerError({ method: 'GET', path: '/v1/outro', error: err, at: later })).toBe('limited');
     await db.delete(platformAdmins).where(eq(platformAdmins.email, admin));
   }, 20_000);

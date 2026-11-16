@@ -24,13 +24,11 @@ test('uma empresa migra o Excel, remove a prévia errada e confirma as fichas se
   await page.getByRole('link', { name: 'Importar colaboradores', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Importar colaboradores', exact: true })).toBeVisible();
   const upload = async () => {
-    await page
-      .getByLabel('Ficheiro de colaboradores')
-      .setInputFiles({
-        name: 'Pessoal.xlsx',
-        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        buffer: Buffer.from(bytes),
-      });
+    await page.getByLabel('Ficheiro de colaboradores').setInputFiles({
+      name: 'Pessoal.xlsx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      buffer: Buffer.from(bytes),
+    });
     await page.getByLabel('Folha do Excel').selectOption('1');
     await expect(page.getByLabel('Coluna: Nome completo', { exact: true })).toHaveValue('1');
     await page.getByRole('button', { name: 'Validar e pré-visualizar', exact: true }).click();

@@ -321,16 +321,14 @@ export function bankRoutes() {
         ledgerAccount: b.ledgerAccount,
       })
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'create',
-        entity: 'bank_account',
-        entityId: a!.id,
-        after: a,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'create',
+      entity: 'bank_account',
+      entityId: a!.id,
+      after: a,
+    });
     return c.json(a, 201);
   });
 
@@ -348,17 +346,15 @@ export function bankRoutes() {
       .set({ ...b, iban: b.iban === undefined ? undefined : b.iban ? b.iban.replace(/\s/g, '').toUpperCase() : null })
       .where(eq(bankAccounts.id, before.id))
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'update',
-        entity: 'bank_account',
-        entityId: before.id,
-        before,
-        after: a,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'update',
+      entity: 'bank_account',
+      entityId: before.id,
+      before,
+      after: a,
+    });
     return c.json(a);
   });
 
@@ -432,16 +428,14 @@ export function bankRoutes() {
           })),
         );
       }
-      await tx
-        .insert(auditLogs)
-        .values({
-          companyId: actor.companyId,
-          actorId: actor.actorId,
-          action: 'import',
-          entity: 'bank_statement',
-          entityId: st!.id,
-          after: { fileName: b.fileName, lines: s.rows.length, new: fresh.length, duplicates },
-        });
+      await tx.insert(auditLogs).values({
+        companyId: actor.companyId,
+        actorId: actor.actorId,
+        action: 'import',
+        entity: 'bank_statement',
+        entityId: st!.id,
+        after: { fileName: b.fileName, lines: s.rows.length, new: fresh.length, duplicates },
+      });
       return st!;
     });
     const { matched } = await autoMatch(db, actor, acc.id);
@@ -493,16 +487,14 @@ export function bankRoutes() {
     await db.transaction(async tx => {
       await tx.delete(bankLines).where(eq(bankLines.statementId, st.id));
       await tx.delete(bankStatements).where(eq(bankStatements.id, st.id));
-      await tx
-        .insert(auditLogs)
-        .values({
-          companyId: actor.companyId,
-          actorId: actor.actorId,
-          action: 'delete',
-          entity: 'bank_statement',
-          entityId: st.id,
-          before: st,
-        });
+      await tx.insert(auditLogs).values({
+        companyId: actor.companyId,
+        actorId: actor.actorId,
+        action: 'delete',
+        entity: 'bank_statement',
+        entityId: st.id,
+        before: st,
+      });
     });
     return c.json({ ok: true });
   });
@@ -666,16 +658,14 @@ export function bankRoutes() {
         .returning();
       await tx.update(bankLines).set({ status: 'matched', matchId: bm!.id }).where(inArray(bankLines.id, b.lineIds));
       await setPaymentMatch(tx, p.id, bm!.id, b.accountId);
-      await tx
-        .insert(auditLogs)
-        .values({
-          companyId: actor.companyId,
-          actorId: actor.actorId,
-          action: 'reconcile',
-          entity: p.id.startsWith('exp:') ? 'expense_claim' : 'payroll_payment',
-          entityId: p.id,
-          after: { matchId: bm!.id, lineIds: b.lineIds },
-        });
+      await tx.insert(auditLogs).values({
+        companyId: actor.companyId,
+        actorId: actor.actorId,
+        action: 'reconcile',
+        entity: p.id.startsWith('exp:') ? 'expense_claim' : 'payroll_payment',
+        entityId: p.id,
+        after: { matchId: bm!.id, lineIds: b.lineIds },
+      });
       return bm!;
     });
     return c.json(m, 201);
@@ -691,16 +681,14 @@ export function bankRoutes() {
     if (!m) throw new DomainError('nao_encontrado', 'Conciliação inexistente', 404);
     await db.transaction(async tx => {
       await undoMatch(tx, actor.companyId, m.id);
-      await tx
-        .insert(auditLogs)
-        .values({
-          companyId: actor.companyId,
-          actorId: actor.actorId,
-          action: 'unreconcile',
-          entity: 'bank_match',
-          entityId: m.id,
-          before: m,
-        });
+      await tx.insert(auditLogs).values({
+        companyId: actor.companyId,
+        actorId: actor.actorId,
+        action: 'unreconcile',
+        entity: 'bank_match',
+        entityId: m.id,
+        before: m,
+      });
     });
     return c.json({ ok: true });
   });
@@ -726,16 +714,14 @@ export function bankRoutes() {
         ),
       )
       .returning({ id: bankLines.id });
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'ignore',
-        entity: 'bank_lines',
-        entityId: r[0]?.id ?? '-',
-        after: { count: r.length, note: b.note },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'ignore',
+      entity: 'bank_lines',
+      entityId: r[0]?.id ?? '-',
+      after: { count: r.length, note: b.note },
+    });
     return c.json({ ignored: r.length });
   });
 

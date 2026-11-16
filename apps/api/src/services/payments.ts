@@ -188,17 +188,15 @@ export async function registerPayment(
         source: 'payroll_payment',
       })
       .returning();
-    await tx
-      .insert(journalLines)
-      .values(
-        entry.lines.map(l => ({
-          entryId: je!.id,
-          account: l.account,
-          description: l.description,
-          debitMinor: l.debitMinor,
-          creditMinor: l.creditMinor,
-        })),
-      );
+    await tx.insert(journalLines).values(
+      entry.lines.map(l => ({
+        entryId: je!.id,
+        account: l.account,
+        description: l.description,
+        debitMinor: l.debitMinor,
+        creditMinor: l.creditMinor,
+      })),
+    );
     const [p] = await tx
       .insert(payrollPayments)
       .values({
@@ -220,16 +218,14 @@ export async function registerPayment(
           ? { paidIrtAt: paidOn }
           : { paidInssAt: paidOn };
     await tx.update(payrollRuns).set(col).where(eq(payrollRuns.id, run.id));
-    await tx
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'pay',
-        entity: 'payroll_run',
-        entityId: run.id,
-        after: { ...p, journal: ref },
-      });
+    await tx.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'pay',
+      entity: 'payroll_run',
+      entityId: run.id,
+      after: { ...p, journal: ref },
+    });
     if (within) await within(tx, p!);
     return { ...p!, journalReference: ref };
   });

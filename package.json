@@ -13,6 +13,8 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint packages/core/src packages/db/src apps/api/src apps/web",
+    "format": "prettier --write \"packages/*/src/**/*.{ts,tsx}\" \"packages/*/test/**/*.ts\" \"apps/api/src/**/*.ts\" \"apps/api/test/**/*.ts\" \"apps/web/**/*.{ts,tsx}\" \"apps/e2e/**/*.ts\"",
+    "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx}\" \"packages/*/test/**/*.ts\" \"apps/api/src/**/*.ts\" \"apps/api/test/**/*.ts\" \"apps/web/**/*.{ts,tsx}\" \"apps/e2e/**/*.ts\"",
     "db:up": "docker compose up -d postgres",
     "db:generate": "pnpm --filter @kianda/db generate",
     "db:migrate": "pnpm --filter @kianda/db migrate",

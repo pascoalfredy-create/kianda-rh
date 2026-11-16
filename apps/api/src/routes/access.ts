@@ -117,16 +117,14 @@ async function createLink(
       createdBy: actor.actorId,
     })
     .returning();
-  await db
-    .insert(auditLogs)
-    .values({
-      companyId: actor.companyId,
-      actorId: actor.actorId,
-      action: v.kind === 'invite' ? 'invite' : 'access_reset',
-      entity: 'access_link',
-      entityId: l!.id,
-      after: { role: v.role, employeeId: v.employeeId, userId: v.userId },
-    });
+  await db.insert(auditLogs).values({
+    companyId: actor.companyId,
+    actorId: actor.actorId,
+    action: v.kind === 'invite' ? 'invite' : 'access_reset',
+    entity: 'access_link',
+    entityId: l!.id,
+    after: { role: v.role, employeeId: v.employeeId, userId: v.userId },
+  });
   // Com email configurado e endereço conhecido, a ligação segue também por email (a partilha manual continua possível).
   let emailed = false;
   const base = appBaseUrl();
@@ -308,15 +306,13 @@ export function accessRoutes() {
           createdBy: u.id,
         })
         .returning();
-      await db
-        .insert(auditLogs)
-        .values({
-          companyId: u.companyId,
-          actorId: u.id,
-          action: 'password_reset_requested',
-          entity: 'access_link',
-          entityId: l!.id,
-        });
+      await db.insert(auditLogs).values({
+        companyId: u.companyId,
+        actorId: u.id,
+        action: 'password_reset_requested',
+        entity: 'access_link',
+        entityId: l!.id,
+      });
       await sendMail(db, {
         to: u.email,
         companyId: u.companyId,
@@ -436,17 +432,14 @@ export function accessRoutes() {
           .where(eq(users.id, l.userId!));
       }
       await tx.update(accessLinks).set({ usedAt: new Date() }).where(eq(accessLinks.id, l.id));
-      await tx
-        .insert(auditLogs)
-        .values({
-          companyId: l.companyId,
-          actorId: id!,
-          action:
-            l.kind === 'invite' ? 'accept_invite' : l.kind === 'self_reset' ? 'password_reset' : 'access_recovered',
-          entity: 'user',
-          entityId: id!,
-          after: { method: b.method },
-        });
+      await tx.insert(auditLogs).values({
+        companyId: l.companyId,
+        actorId: id!,
+        action: l.kind === 'invite' ? 'accept_invite' : l.kind === 'self_reset' ? 'password_reset' : 'access_recovered',
+        entity: 'user',
+        entityId: id!,
+        after: { method: b.method },
+      });
       return id!;
     });
     const [row] = await db
@@ -640,17 +633,15 @@ export function accessRoutes() {
       })
       .where(eq(users.id, u.id))
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'update_access',
-        entity: 'user',
-        entityId: u.id,
-        before: { role: u.role, disabled: Boolean(u.disabledAt) },
-        after: b,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'update_access',
+      entity: 'user',
+      entityId: u.id,
+      before: { role: u.role, disabled: Boolean(u.disabledAt) },
+      after: b,
+    });
     return c.json({ id: x!.id, role: x!.role, disabled: Boolean(x!.disabledAt) });
   });
 
@@ -690,15 +681,13 @@ export function accessRoutes() {
     if (!(await verifyTotp(u.totpSecret, code)))
       throw new DomainError('codigo_invalido', 'Código incorrecto. Confirme que a hora do telemóvel está certa.', 400);
     await db.update(users).set({ totpEnabledAt: new Date() }).where(eq(users.id, u.id));
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: '2fa_enabled',
-        entity: 'user',
-        entityId: u.id,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: '2fa_enabled',
+      entity: 'user',
+      entityId: u.id,
+    });
     return c.json({ ok: true });
   });
 
@@ -712,15 +701,13 @@ export function accessRoutes() {
     if (!(await verifyPassword(b.password, u.passwordHash)) || !(await verifyTotp(u.totpSecret, b.code)))
       throw new DomainError('credenciais_invalidas', 'Palavra-passe ou código incorrectos', 400);
     await db.update(users).set({ totpSecret: null, totpEnabledAt: null }).where(eq(users.id, u.id));
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: '2fa_disabled',
-        entity: 'user',
-        entityId: u.id,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: '2fa_disabled',
+      entity: 'user',
+      entityId: u.id,
+    });
     return c.json({ ok: true });
   });
 

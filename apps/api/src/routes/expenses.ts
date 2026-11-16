@@ -250,16 +250,14 @@ export function expenseRoutes() {
             })
             .returning();
           await writeLines(tx, x!.id, lines);
-          await tx
-            .insert(auditLogs)
-            .values({
-              companyId: actor.companyId,
-              actorId: actor.actorId,
-              action: 'create',
-              entity: 'expense_claim',
-              entityId: x!.id,
-              after: { ...x, lines: lines.length },
-            });
+          await tx.insert(auditLogs).values({
+            companyId: actor.companyId,
+            actorId: actor.actorId,
+            action: 'create',
+            entity: 'expense_claim',
+            entityId: x!.id,
+            after: { ...x, lines: lines.length },
+          });
           return x!;
         });
         return c.json(claim, 201);
@@ -296,17 +294,15 @@ export function expenseRoutes() {
         .where(eq(expenseClaims.id, claim.id))
         .returning();
       await writeLines(tx, claim.id, lines);
-      await tx
-        .insert(auditLogs)
-        .values({
-          companyId: actor.companyId,
-          actorId: actor.actorId,
-          action: 'update',
-          entity: 'expense_claim',
-          entityId: claim.id,
-          before: claim,
-          after: { ...x, lines: lines.length },
-        });
+      await tx.insert(auditLogs).values({
+        companyId: actor.companyId,
+        actorId: actor.actorId,
+        action: 'update',
+        entity: 'expense_claim',
+        entityId: claim.id,
+        before: claim,
+        after: { ...x, lines: lines.length },
+      });
       return x!;
     });
     return c.json(updated);
@@ -325,16 +321,14 @@ export function expenseRoutes() {
       .set({ status: 'submitted', submittedAt: new Date(), decidedBy: null, decidedAt: null, decisionNote: null })
       .where(eq(expenseClaims.id, claim.id))
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'submit',
-        entity: 'expense_claim',
-        entityId: claim.id,
-        after: x,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'submit',
+      entity: 'expense_claim',
+      entityId: claim.id,
+      after: x,
+    });
     const [owner] = await db
       .select({ id: employees.id, name: employees.name, managerId: employees.managerId })
       .from(employees)
@@ -392,18 +386,16 @@ export function expenseRoutes() {
             source: 'expense',
           })
           .returning();
-        await tx
-          .insert(journalLines)
-          .values(
-            entry.lines.map(l => ({
-              entryId: je!.id,
-              account: l.account,
-              description: l.description,
-              costCenter: l.costCenter ?? null,
-              debitMinor: l.debitMinor,
-              creditMinor: l.creditMinor,
-            })),
-          );
+        await tx.insert(journalLines).values(
+          entry.lines.map(l => ({
+            entryId: je!.id,
+            account: l.account,
+            description: l.description,
+            costCenter: l.costCenter ?? null,
+            debitMinor: l.debitMinor,
+            creditMinor: l.creditMinor,
+          })),
+        );
         journalId = je!.id;
       }
       const [x] = await tx
@@ -417,16 +409,14 @@ export function expenseRoutes() {
         })
         .where(eq(expenseClaims.id, claim.id))
         .returning();
-      await tx
-        .insert(auditLogs)
-        .values({
-          companyId: actor.companyId,
-          actorId: actor.actorId,
-          action: b.approve ? 'approve' : 'reject',
-          entity: 'expense_claim',
-          entityId: claim.id,
-          after: x,
-        });
+      await tx.insert(auditLogs).values({
+        companyId: actor.companyId,
+        actorId: actor.actorId,
+        action: b.approve ? 'approve' : 'reject',
+        entity: 'expense_claim',
+        entityId: claim.id,
+        after: x,
+      });
       return x!;
     });
     await notifyEmployees(db, actor.companyId, [claim.employeeId], {
@@ -500,17 +490,15 @@ export function expenseRoutes() {
           source: 'expense_payment',
         })
         .returning();
-      await tx
-        .insert(journalLines)
-        .values(
-          entry.lines.map(l => ({
-            entryId: je!.id,
-            account: l.account,
-            description: l.description,
-            debitMinor: l.debitMinor,
-            creditMinor: l.creditMinor,
-          })),
-        );
+      await tx.insert(journalLines).values(
+        entry.lines.map(l => ({
+          entryId: je!.id,
+          account: l.account,
+          description: l.description,
+          debitMinor: l.debitMinor,
+          creditMinor: l.creditMinor,
+        })),
+      );
       const [u] = await tx
         .update(expenseClaims)
         .set({
@@ -522,16 +510,14 @@ export function expenseRoutes() {
         })
         .where(eq(expenseClaims.id, claim.id))
         .returning();
-      await tx
-        .insert(auditLogs)
-        .values({
-          companyId: actor.companyId,
-          actorId: actor.actorId,
-          action: 'pay',
-          entity: 'expense_claim',
-          entityId: claim.id,
-          after: u,
-        });
+      await tx.insert(auditLogs).values({
+        companyId: actor.companyId,
+        actorId: actor.actorId,
+        action: 'pay',
+        entity: 'expense_claim',
+        entityId: claim.id,
+        after: u,
+      });
       return u!;
     });
     await notifyEmployees(db, actor.companyId, [claim.employeeId], {
@@ -569,34 +555,30 @@ export function expenseRoutes() {
             source: 'expense_payment',
           })
           .returning();
-        await tx
-          .insert(journalLines)
-          .values(
-            original.lines.map(l => ({
-              entryId: je!.id,
-              account: l.account,
-              description: `Estorno: ${l.description}`,
-              debitMinor: l.creditMinor,
-              creditMinor: l.debitMinor,
-            })),
-          );
+        await tx.insert(journalLines).values(
+          original.lines.map(l => ({
+            entryId: je!.id,
+            account: l.account,
+            description: `Estorno: ${l.description}`,
+            debitMinor: l.creditMinor,
+            creditMinor: l.debitMinor,
+          })),
+        );
       }
       if (claim.matchId) await undoMatch(tx, actor.companyId, claim.matchId);
       await tx
         .update(expenseClaims)
         .set({ status: 'approved', paidOn: null, paidReference: null, paymentJournalId: null, matchId: null })
         .where(eq(expenseClaims.id, claim.id));
-      await tx
-        .insert(auditLogs)
-        .values({
-          companyId: actor.companyId,
-          actorId: actor.actorId,
-          action: 'reverse_payment',
-          entity: 'expense_claim',
-          entityId: claim.id,
-          before: claim,
-          after: { note },
-        });
+      await tx.insert(auditLogs).values({
+        companyId: actor.companyId,
+        actorId: actor.actorId,
+        action: 'reverse_payment',
+        entity: 'expense_claim',
+        entityId: claim.id,
+        before: claim,
+        after: { note },
+      });
     });
     return c.json({ ok: true });
   });
@@ -614,16 +596,14 @@ export function expenseRoutes() {
       .set({ status: 'cancelled' })
       .where(eq(expenseClaims.id, claim.id))
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'cancel',
-        entity: 'expense_claim',
-        entityId: claim.id,
-        before: claim,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'cancel',
+      entity: 'expense_claim',
+      entityId: claim.id,
+      before: claim,
+    });
     return c.json(x);
   });
 

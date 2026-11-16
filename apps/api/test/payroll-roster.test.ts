@@ -62,17 +62,15 @@ describe.skipIf(!process.env.DATABASE_URL)('folha a partir da escala publicada',
         .insert(allowanceTypes)
         .values({ companyId, code: 'SUBTURNO', label: 'Subsídio de turno', calc: 'per_day', valueMinor: 100_000 })
         .returning();
-      await db
-        .insert(employeeAllowances)
-        .values(
-          ids.map(employeeId => ({
-            companyId,
-            employeeId,
-            typeId: type!.id,
-            startDate: '2026-01-01',
-            createdBy: userId,
-          })),
-        );
+      await db.insert(employeeAllowances).values(
+        ids.map(employeeId => ({
+          companyId,
+          employeeId,
+          typeId: type!.id,
+          startDate: '2026-01-01',
+          createdBy: userId,
+        })),
+      );
       const [shift] = await db
         .insert(shiftTypes)
         .values({ companyId, code: 'N', name: 'Noite', startTime: '22:00', endTime: '06:00', breakMinutes: 30 })

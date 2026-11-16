@@ -254,16 +254,14 @@ export async function issueDocument(
           issuedBy: actor.actorId,
         })
         .returning();
-      await db
-        .insert(auditLogs)
-        .values({
-          companyId: actor.companyId,
-          actorId: actor.actorId,
-          action: 'issue',
-          entity: 'issued_document',
-          entityId: doc!.id,
-          after: { number: doc!.number, template: r.template.key, employeeId },
-        });
+      await db.insert(auditLogs).values({
+        companyId: actor.companyId,
+        actorId: actor.actorId,
+        action: 'issue',
+        entity: 'issued_document',
+        entityId: doc!.id,
+        after: { number: doc!.number, template: r.template.key, employeeId },
+      });
       return doc!;
     } catch (err) {
       if (
@@ -343,16 +341,14 @@ export function documentRoutes() {
           createdBy: actor.actorId,
         })
         .returning();
-      await tx
-        .insert(auditLogs)
-        .values({
-          companyId: actor.companyId,
-          actorId: actor.actorId,
-          action: 'update',
-          entity: 'document_template',
-          entityId: x!.id,
-          after: { key, version: x!.version, sourceFileName: b.sourceFileName ?? null },
-        });
+      await tx.insert(auditLogs).values({
+        companyId: actor.companyId,
+        actorId: actor.actorId,
+        action: 'update',
+        entity: 'document_template',
+        entityId: x!.id,
+        after: { key, version: x!.version, sourceFileName: b.sourceFileName ?? null },
+      });
       return x!;
     });
     return c.json(row);
@@ -449,16 +445,14 @@ export function documentRoutes() {
       )
       .returning();
     if (!d) throw new DomainError('nao_encontrado', 'Documento inexistente, anulado ou já assinado', 404);
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'request_signature',
-        entity: 'issued_document',
-        entityId: d.id,
-        after: { number: d.number },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'request_signature',
+      entity: 'issued_document',
+      entityId: d.id,
+      after: { number: d.number },
+    });
     return c.json(d);
   });
 
@@ -505,16 +499,14 @@ export function documentRoutes() {
       .where(and(eq(issuedDocuments.id, row.d.id), sql`${issuedDocuments.signedAt} is null`))
       .returning();
     if (!d) throw new DomainError('ja_assinado', 'Este documento já está assinado', 409);
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'sign',
-        entity: 'issued_document',
-        entityId: d.id,
-        after: { number: d.number, signedName: d.signedName, signedHash: hash, signedIp: d.signedIp },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'sign',
+      entity: 'issued_document',
+      entityId: d.id,
+      after: { number: d.number, signedName: d.signedName, signedHash: hash, signedIp: d.signedIp },
+    });
     return c.json(d);
   });
 
@@ -534,16 +526,14 @@ export function documentRoutes() {
       )
       .returning();
     if (!d) throw new DomainError('nao_encontrado', 'Documento inexistente ou já anulado', 404);
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'revoke',
-        entity: 'issued_document',
-        entityId: d.id,
-        after: { note },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'revoke',
+      entity: 'issued_document',
+      entityId: d.id,
+      after: { note },
+    });
     return c.json(d);
   });
 

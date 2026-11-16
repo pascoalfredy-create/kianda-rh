@@ -136,34 +136,30 @@ export function obligationRoutes() {
             source: 'payroll_payment',
           })
           .returning();
-        await tx
-          .insert(journalLines)
-          .values(
-            original.lines.map(l => ({
-              entryId: je!.id,
-              account: l.account,
-              description: `Estorno: ${l.description}`,
-              debitMinor: l.creditMinor,
-              creditMinor: l.debitMinor,
-            })),
-          );
+        await tx.insert(journalLines).values(
+          original.lines.map(l => ({
+            entryId: je!.id,
+            account: l.account,
+            description: `Estorno: ${l.description}`,
+            debitMinor: l.creditMinor,
+            creditMinor: l.debitMinor,
+          })),
+        );
       }
       if (p.matchId) await undoMatch(tx, actor.companyId, p.matchId);
       await tx.delete(payrollPayments).where(eq(payrollPayments.id, p.id));
       const col =
         kind === 'salaries' ? { paidSalariesAt: null } : kind === 'irt' ? { paidIrtAt: null } : { paidInssAt: null };
       await tx.update(payrollRuns).set(col).where(eq(payrollRuns.id, run.id));
-      await tx
-        .insert(auditLogs)
-        .values({
-          companyId: actor.companyId,
-          actorId: actor.actorId,
-          action: 'reverse_payment',
-          entity: 'payroll_run',
-          entityId: run.id,
-          before: { ...p },
-          after: { note, journal: ref },
-        });
+      await tx.insert(auditLogs).values({
+        companyId: actor.companyId,
+        actorId: actor.actorId,
+        action: 'reverse_payment',
+        entity: 'payroll_run',
+        entityId: run.id,
+        before: { ...p },
+        after: { note, journal: ref },
+      });
       return c.json({ ok: true, journalReference: ref });
     });
   });

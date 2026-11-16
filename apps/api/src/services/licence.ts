@@ -126,17 +126,15 @@ export async function ensureEmployeeCapacity(
   if (lic.status === 'trial' && lic.sub && lic.sub.tierKey !== 'custom') {
     const tier = tierFor(lic.activeEmployees + adding);
     await db.update(subscriptions).set({ tierKey: tier.key }).where(eq(subscriptions.companyId, companyId));
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId,
-        actorId: actorId ?? 'sistema',
-        action: 'trial_tier_adjusted',
-        entity: 'subscription',
-        entityId: companyId,
-        before: { tierKey: lic.sub.tierKey },
-        after: { tierKey: tier.key, activeEmployees: lic.activeEmployees + adding },
-      });
+    await db.insert(auditLogs).values({
+      companyId,
+      actorId: actorId ?? 'sistema',
+      action: 'trial_tier_adjusted',
+      entity: 'subscription',
+      entityId: companyId,
+      before: { tierKey: lic.sub.tierKey },
+      after: { tierKey: tier.key, activeEmployees: lic.activeEmployees + adding },
+    });
     return { ok: true, tierChanged: tier.label };
   }
   return { ok: false, limit: lic.limit, activeEmployees: lic.activeEmployees };

@@ -245,16 +245,14 @@ export function careersRoutes() {
           'applied',
           ev!.id,
         );
-        await tx
-          .insert(auditLogs)
-          .values({
-            companyId,
-            actorId: 'public-careers',
-            action: 'public_apply',
-            entity: 'candidate',
-            entityId: created!.id,
-            after: { openingId, ipHash, hasAttachment: Boolean(cv), consentAt: now.toISOString() },
-          });
+        await tx.insert(auditLogs).values({
+          companyId,
+          actorId: 'public-careers',
+          action: 'public_apply',
+          entity: 'candidate',
+          entityId: created!.id,
+          after: { openingId, ipHash, hasAttachment: Boolean(cv), consentAt: now.toISOString() },
+        });
         if (cv)
           stored = await storeFile(tx as unknown as Db, {
             companyId,

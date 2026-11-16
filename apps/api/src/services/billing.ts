@@ -293,16 +293,14 @@ export async function confirmPaymentRequest(
       })
       .where(eq(paymentRequests.id, r.id))
       .returning();
-    await tx
-      .insert(auditLogs)
-      .values({
-        companyId: r.companyId,
-        actorId: o.actorId,
-        action: 'confirm_payment',
-        entity: 'payment_request',
-        entityId: r.id,
-        after: { ...x, via: o.via },
-      });
+    await tx.insert(auditLogs).values({
+      companyId: r.companyId,
+      actorId: o.actorId,
+      action: 'confirm_payment',
+      entity: 'payment_request',
+      entityId: r.id,
+      after: { ...x, via: o.via },
+    });
     return x!;
   });
 }

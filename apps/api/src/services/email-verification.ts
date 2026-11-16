@@ -45,15 +45,13 @@ export async function issueEmailVerification(db: Db, userId: string) {
           isNull(emailVerifications.revokedAt),
         ),
       );
-    await tx
-      .insert(emailVerifications)
-      .values({
-        companyId: u.companyId,
-        userId: u.id,
-        email: u.email,
-        tokenHash: await sha256Hex(token),
-        expiresAt: new Date(now.getTime() + EMAIL_VERIFICATION_HOURS * 3_600_000),
-      });
+    await tx.insert(emailVerifications).values({
+      companyId: u.companyId,
+      userId: u.id,
+      email: u.email,
+      tokenHash: await sha256Hex(token),
+      expiresAt: new Date(now.getTime() + EMAIL_VERIFICATION_HOURS * 3_600_000),
+    });
     return { user: u };
   });
   if (!target) return { sent: false, unavailable: false, retryAfter: 0 };
@@ -135,16 +133,14 @@ export async function confirmEmail(db: Db, token: string) {
           ),
         );
     }
-    await tx
-      .insert(auditLogs)
-      .values({
-        companyId: row.u.companyId,
-        actorId: row.u.id,
-        action: 'email_confirmed',
-        entity: 'user',
-        entityId: row.u.id,
-        after: { email: maskEmail(row.u.email) },
-      });
+    await tx.insert(auditLogs).values({
+      companyId: row.u.companyId,
+      actorId: row.u.id,
+      action: 'email_confirmed',
+      entity: 'user',
+      entityId: row.u.id,
+      after: { email: maskEmail(row.u.email) },
+    });
     return { ok: true, message: 'Email confirmado. A sua conta está pronta para começar.' };
   });
 }

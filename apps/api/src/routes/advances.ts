@@ -259,16 +259,14 @@ export function advanceRoutes() {
         writtenRequestAt: new Date(),
       })
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'request',
-        entity: 'salary_advance',
-        entityId: row!.id,
-        after: row,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'request',
+      entity: 'salary_advance',
+      entityId: row!.id,
+      after: row,
+    });
     return c.json(row, 201);
   });
 
@@ -313,17 +311,15 @@ export function advanceRoutes() {
       .set({ ...values, decidedBy: actor.actorId, decidedAt: new Date(), decisionNote: b.note ?? null })
       .where(eq(salaryAdvances.id, a.id))
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: b.approve ? 'approve' : 'reject',
-        entity: 'salary_advance',
-        entityId: a.id,
-        before: a,
-        after: u,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: b.approve ? 'approve' : 'reject',
+      entity: 'salary_advance',
+      entityId: a.id,
+      before: a,
+      after: u,
+    });
     return c.json(u);
   });
 
@@ -402,17 +398,15 @@ export function advanceRoutes() {
         source: 'salary_advance',
       })
       .returning();
-    await db
-      .insert(journalLines)
-      .values(
-        entry.lines.map(l => ({
-          entryId: je!.id,
-          account: l.account,
-          description: l.description,
-          debitMinor: l.debitMinor,
-          creditMinor: l.creditMinor,
-        })),
-      );
+    await db.insert(journalLines).values(
+      entry.lines.map(l => ({
+        entryId: je!.id,
+        account: l.account,
+        description: l.description,
+        debitMinor: l.debitMinor,
+        creditMinor: l.creditMinor,
+      })),
+    );
     await db.insert(payrollVariables).values(
       plan.map((p, i) => ({
         companyId: actor.companyId,
@@ -432,16 +426,14 @@ export function advanceRoutes() {
       .set({ status: 'paid', paidOn: b.paidOn, paidBy: actor.actorId, bankAccountId, journalEntryId: je!.id })
       .where(eq(salaryAdvances.id, a.a.id))
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'pay',
-        entity: 'salary_advance',
-        entityId: a.a.id,
-        after: { ...u, journal: entry.reference, plan },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'pay',
+      entity: 'salary_advance',
+      entityId: a.a.id,
+      after: { ...u, journal: entry.reference, plan },
+    });
     return c.json(u);
   });
 
@@ -470,17 +462,15 @@ export function advanceRoutes() {
       .set({ status: 'cancelled' })
       .where(eq(salaryAdvances.id, a.id))
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'cancel',
-        entity: 'salary_advance',
-        entityId: a.id,
-        before: a,
-        after: u,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'cancel',
+      entity: 'salary_advance',
+      entityId: a.id,
+      before: a,
+      after: u,
+    });
     return c.json(u);
   });
 

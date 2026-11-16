@@ -316,16 +316,14 @@ export function billingRoutes() {
           createdBy: actor.actorId,
         } as typeof paymentRequests.$inferInsert)
         .returning();
-      await tx
-        .insert(auditLogs)
-        .values({
-          companyId: actor.companyId,
-          actorId: actor.actorId,
-          action: 'create',
-          entity: 'payment_request',
-          entityId: x!.id,
-          after: x,
-        });
+      await tx.insert(auditLogs).values({
+        companyId: actor.companyId,
+        actorId: actor.actorId,
+        action: 'create',
+        entity: 'payment_request',
+        entityId: x!.id,
+        after: x,
+      });
       return x!;
     });
     // Referência Multicaixa (se configurado) e instruções por email; o pedido anterior deixa de poder ser pago.
@@ -446,15 +444,13 @@ export function billingRoutes() {
     if (m[2]!.length * 0.75 > 300_000)
       throw new DomainError('demasiado_grande', 'Logotipo demasiado grande (máx. 300 KB)', 400);
     await getDb().update(companies).set({ logoDataUrl: dataUrl }).where(eq(companies.id, actor.companyId));
-    await getDb()
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'update',
-        entity: 'company_logo',
-        entityId: actor.companyId,
-      });
+    await getDb().insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'update',
+      entity: 'company_logo',
+      entityId: actor.companyId,
+    });
     return c.json({ ok: true });
   });
 
@@ -571,17 +567,15 @@ export function platformRoutes() {
           set: { ...values, updatedAt: new Date() },
         })
         .returning();
-      await db
-        .insert(auditLogs)
-        .values({
-          companyId,
-          actorId: c.get('actor').actorId,
-          action: 'module_subscription',
-          entity: 'company_module',
-          entityId: grant!.id,
-          before: before ?? null,
-          after: grant,
-        });
+      await db.insert(auditLogs).values({
+        companyId,
+        actorId: c.get('actor').actorId,
+        action: 'module_subscription',
+        entity: 'company_module',
+        entityId: grant!.id,
+        before: before ?? null,
+        after: grant,
+      });
       return c.json(grant);
     });
   });
@@ -849,17 +843,15 @@ export function platformRoutes() {
           .insert(subscriptions)
           .values({ companyId: id, ...b })
           .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: id,
-        actorId: actor.actorId,
-        action: 'platform_update',
-        entity: 'subscription',
-        entityId: id,
-        before: before ?? null,
-        after: u,
-      });
+    await db.insert(auditLogs).values({
+      companyId: id,
+      actorId: actor.actorId,
+      action: 'platform_update',
+      entity: 'subscription',
+      entityId: id,
+      before: before ?? null,
+      after: u,
+    });
     return c.json(u);
   });
 
@@ -904,16 +896,14 @@ export function platformRoutes() {
       throw new DomainError('nao_cancelada', 'Cancele também a licença do Valora antes de eliminar a empresa.');
     if (confirmNif !== co.nif) throw new DomainError('confirmacao', 'Para confirmar, escreva o NIF da empresa', 422);
     const deleted = await purgeCompany(db, id);
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'purge_company',
-        entity: 'company',
-        entityId: id,
-        after: { name: co.name, nif: co.nif, deleted },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'purge_company',
+      entity: 'company',
+      entityId: id,
+      after: { name: co.name, nif: co.nif, deleted },
+    });
     return c.json({ ok: true, deleted });
   });
 

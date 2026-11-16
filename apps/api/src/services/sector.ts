@@ -28,18 +28,16 @@ export async function applySectorPreset(
   const newS = scheduleKeys.map(k => SCHEDULE_PRESETS[k]!).filter(s => !existingS.some(e => e.name === s.name));
   const newA = allowanceKeys.map(k => ALLOWANCE_PRESETS[k]!).filter(a => !existingA.some(e => e.code === a.code));
   if (newS.length) {
-    await tx
-      .insert(workSchedules)
-      .values(
-        newS.map(s => ({
-          companyId,
-          name: s.name,
-          kind: s.kind,
-          pattern: s.pattern,
-          note: s.note ?? null,
-          presetKey: s.key,
-        })),
-      );
+    await tx.insert(workSchedules).values(
+      newS.map(s => ({
+        companyId,
+        name: s.name,
+        kind: s.kind,
+        pattern: s.pattern,
+        note: s.note ?? null,
+        presetKey: s.key,
+      })),
+    );
   }
   if (newA.length) {
     await tx.insert(allowanceTypes).values(
@@ -58,16 +56,14 @@ export async function applySectorPreset(
     );
   }
   if (newS.length || newA.length) {
-    await tx
-      .insert(auditLogs)
-      .values({
-        companyId,
-        actorId,
-        action: 'apply_preset',
-        entity: 'company',
-        entityId: companyId,
-        after: { sector, schedules: newS.map(s => s.key), allowances: newA.map(a => a.key) },
-      });
+    await tx.insert(auditLogs).values({
+      companyId,
+      actorId,
+      action: 'apply_preset',
+      entity: 'company',
+      entityId: companyId,
+      after: { sector, schedules: newS.map(s => s.key), allowances: newA.map(a => a.key) },
+    });
   }
   return { schedules: newS.length, allowances: newA.length };
 }

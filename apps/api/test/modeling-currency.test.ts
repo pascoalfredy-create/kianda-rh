@@ -43,16 +43,14 @@ describe.skipIf(!process.env.DATABASE_URL)('conversão monetária atómica por e
       expect(result.statusCode).toBe(201);
       const cookie = 'kianda_session=' + result.cookies.find(c => c.name === 'kianda_session')!.value;
       const me = (await req('GET', '/v1/auth/me', undefined, cookie)).json();
-      await getDb()
-        .insert(companyModules)
-        .values({
-          companyId: me.company.id,
-          module: 'modeling',
-          enabled: true,
-          status: 'active',
-          paidUntil: '2099-12-31',
-          projectLimit: 2,
-        });
+      await getDb().insert(companyModules).values({
+        companyId: me.company.id,
+        module: 'modeling',
+        enabled: true,
+        status: 'active',
+        paidUntil: '2099-12-31',
+        projectLimit: 2,
+      });
       if (!i) {
         owner = cookie;
         companyId = me.company.id;

@@ -109,15 +109,13 @@ export function modelingRoutes() {
           .insert(modelingMembers)
           .values({ companyId: a.companyId, userId: a.actorId, addedBy: a.actorId })
           .returning();
-        await db
-          .insert(auditLogs)
-          .values({
-            companyId: a.companyId,
-            actorId: a.actorId,
-            action: 'activate',
-            entity: 'modeling_member',
-            entityId: member!.id,
-          });
+        await db.insert(auditLogs).values({
+          companyId: a.companyId,
+          actorId: a.actorId,
+          action: 'activate',
+          entity: 'modeling_member',
+          entityId: member!.id,
+        });
       }
     }
     if (!member?.enabled)
@@ -371,22 +369,20 @@ export function modelingRoutes() {
         approvedAt,
       })
       .returning(versionMetadata);
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: a.companyId,
-        actorId: a.actorId,
-        action: 'approve_version',
-        entity: 'financial_model_version',
-        entityId: id,
-        after: {
-          modelId: model.id,
-          versionNumber,
-          label: input.label,
-          sourceRevision: model.revision,
-          sourceHash: payload.source.sourceHash,
-        },
-      });
+    await db.insert(auditLogs).values({
+      companyId: a.companyId,
+      actorId: a.actorId,
+      action: 'approve_version',
+      entity: 'financial_model_version',
+      entityId: id,
+      after: {
+        modelId: model.id,
+        versionNumber,
+        label: input.label,
+        sourceRevision: model.revision,
+        sourceHash: payload.source.sourceHash,
+      },
+    });
     return c.json(version, 201);
   });
   app.get('/v1/modeling/models/:id/reports', async c => {
@@ -460,23 +456,21 @@ export function modelingRoutes() {
     const data = query.format === 'pdf' ? renderFinancialPdf(bundle, key) : renderFinancialXlsx(bundle, key);
     const ref = bundle.source.versionNumber ? 'v' + bundle.source.versionNumber : 'r' + bundle.source.revision;
     const filename = `Integra-${model.id.slice(0, 8)}-${ref}-${key}.${query.format}`;
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: a.companyId,
-        actorId: a.actorId,
-        action: 'export_report',
-        entity: 'financial_model',
-        entityId: model.id,
-        after: {
-          report: key,
-          format: query.format,
-          versionId: bundle.source.versionId ?? null,
-          sourceRevision: bundle.source.revision,
-          sourceHash: bundle.source.sourceHash,
-          historicalHash: bundle.source.historicalHash ?? null,
-        },
-      });
+    await db.insert(auditLogs).values({
+      companyId: a.companyId,
+      actorId: a.actorId,
+      action: 'export_report',
+      entity: 'financial_model',
+      entityId: model.id,
+      after: {
+        report: key,
+        format: query.format,
+        versionId: bundle.source.versionId ?? null,
+        sourceRevision: bundle.source.revision,
+        sourceHash: bundle.source.sourceHash,
+        historicalHash: bundle.source.historicalHash ?? null,
+      },
+    });
     return new Response(new Uint8Array(data), {
       headers: {
         'content-type':
@@ -606,30 +600,26 @@ export function modelingRoutes() {
       .where(and(eq(modelingProjectAccess.companyId, a.companyId), eq(modelingProjectAccess.userId, userId)));
     const projects = input.scope === 'selected' ? input.projects : [];
     if (projects.length)
-      await db
-        .insert(modelingProjectAccess)
-        .values(
-          projects.map(p => ({
-            companyId: a.companyId,
-            userId,
-            modelId: p.modelId,
-            permission: p.permission,
-            addedBy: a.actorId,
-          })),
-        );
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: a.companyId,
-        actorId: a.actorId,
-        action: 'change_access',
-        entity: 'modeling_member',
-        entityId: member!.id,
-        before: before
-          ? { ...before, projects: beforeProjects.map(({ modelId, permission }) => ({ modelId, permission })) }
-          : null,
-        after: { ...member, projects },
-      });
+      await db.insert(modelingProjectAccess).values(
+        projects.map(p => ({
+          companyId: a.companyId,
+          userId,
+          modelId: p.modelId,
+          permission: p.permission,
+          addedBy: a.actorId,
+        })),
+      );
+    await db.insert(auditLogs).values({
+      companyId: a.companyId,
+      actorId: a.actorId,
+      action: 'change_access',
+      entity: 'modeling_member',
+      entityId: member!.id,
+      before: before
+        ? { ...before, projects: beforeProjects.map(({ modelId, permission }) => ({ modelId, permission })) }
+        : null,
+      after: { ...member, projects },
+    });
     return c.json({ ...member, projects });
   });
 
@@ -670,16 +660,14 @@ export function modelingRoutes() {
       .values({ ...input, companyId: a.companyId, createdBy: a.actorId })
       .returning();
     await grantCreator(db, c.get('modelingMember'), a.role, model!.id);
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: a.companyId,
-        actorId: a.actorId,
-        action: 'create',
-        entity: 'financial_model',
-        entityId: model!.id,
-        after: { revision: 1 },
-      });
+    await db.insert(auditLogs).values({
+      companyId: a.companyId,
+      actorId: a.actorId,
+      action: 'create',
+      entity: 'financial_model',
+      entityId: model!.id,
+      after: { revision: 1 },
+    });
     return c.json({ ...model!, permission: 'editor' }, 201);
   });
   app.post('/v1/modeling/models/:id/archive', async c => {
@@ -701,16 +689,14 @@ export function modelingRoutes() {
       .set({ archivedAt: input.archived ? new Date() : null, revision: current.revision + 1, updatedAt: new Date() })
       .where(eq(financialModels.id, current.id))
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: a.companyId,
-        actorId: a.actorId,
-        action: input.archived ? 'archive' : 'restore',
-        entity: 'financial_model',
-        entityId: current.id,
-        after: { revision: model!.revision },
-      });
+    await db.insert(auditLogs).values({
+      companyId: a.companyId,
+      actorId: a.actorId,
+      action: input.archived ? 'archive' : 'restore',
+      entity: 'financial_model',
+      entityId: current.id,
+      after: { revision: model!.revision },
+    });
     return c.json(model);
   });
   app.get('/v1/modeling/models/:id', async c => {
@@ -777,16 +763,14 @@ export function modelingRoutes() {
         'Modelo inexistente ou alterado por outro utilizador. Volte a carregá-lo.',
         409,
       );
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: a.companyId,
-        actorId: a.actorId,
-        action: 'update',
-        entity: 'financial_model',
-        entityId: model.id,
-        after: { revision: model.revision },
-      });
+    await db.insert(auditLogs).values({
+      companyId: a.companyId,
+      actorId: a.actorId,
+      action: 'update',
+      entity: 'financial_model',
+      entityId: model.id,
+      after: { revision: model.revision },
+    });
     return c.json(model);
   });
 
@@ -1005,17 +989,15 @@ export function modelingRoutes() {
         importedAt,
       })
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: a.companyId,
-        actorId: a.actorId,
-        action: 'import_personnel',
-        entity: 'financial_model',
-        entityId: model.id,
-        before: { pessoal: (model.assumptions as Record<string, unknown>).pessoal ?? null },
-        after: { importId: record!.id, revision: updated.revision, pessoal: annualPersonnel },
-      });
+    await db.insert(auditLogs).values({
+      companyId: a.companyId,
+      actorId: a.actorId,
+      action: 'import_personnel',
+      entity: 'financial_model',
+      entityId: model.id,
+      before: { pessoal: (model.assumptions as Record<string, unknown>).pessoal ?? null },
+      after: { importId: record!.id, revision: updated.revision, pessoal: annualPersonnel },
+    });
     return c.json({ model: updated, import: record }, 201);
   });
   return app;

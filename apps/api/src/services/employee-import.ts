@@ -298,39 +298,35 @@ export async function commitEmployeeImport(db: Db, actor: Actor, input: CommitIn
           };
         }),
       );
-      await tx
-        .insert(contracts)
-        .values(
-          group.map(({ row: { data }, employeeId, contractId }) => ({
-            id: contractId,
-            employeeId,
-            salaryKnownFrom: data.salaryEffectiveDate,
-            type: data.contract.type,
-            startDate: data.contract.startDate,
-            endDate: data.contract.endDate,
-            termJustification: data.contract.termJustification,
-            baseMinor: kz(data.contract.base),
-            mealMinor: kz(data.contract.meal),
-            transportMinor: kz(data.contract.transport),
-            ...salaryCols(data.contract),
-          })),
-        );
-      await tx
-        .insert(compensationChanges)
-        .values(
-          group.map(({ row: { data }, employeeId, contractId }) => ({
-            companyId: actor.companyId,
-            employeeId,
-            contractId,
-            effectiveDate: data.salaryEffectiveDate,
-            baseMinor: kz(data.contract.base),
-            mealMinor: kz(data.contract.meal),
-            transportMinor: kz(data.contract.transport),
-            ...salaryCols(data.contract),
-            reason: 'Migração inicial de colaboradores',
-            createdBy: actor.actorId,
-          })),
-        );
+      await tx.insert(contracts).values(
+        group.map(({ row: { data }, employeeId, contractId }) => ({
+          id: contractId,
+          employeeId,
+          salaryKnownFrom: data.salaryEffectiveDate,
+          type: data.contract.type,
+          startDate: data.contract.startDate,
+          endDate: data.contract.endDate,
+          termJustification: data.contract.termJustification,
+          baseMinor: kz(data.contract.base),
+          mealMinor: kz(data.contract.meal),
+          transportMinor: kz(data.contract.transport),
+          ...salaryCols(data.contract),
+        })),
+      );
+      await tx.insert(compensationChanges).values(
+        group.map(({ row: { data }, employeeId, contractId }) => ({
+          companyId: actor.companyId,
+          employeeId,
+          contractId,
+          effectiveDate: data.salaryEffectiveDate,
+          baseMinor: kz(data.contract.base),
+          mealMinor: kz(data.contract.meal),
+          transportMinor: kz(data.contract.transport),
+          ...salaryCols(data.contract),
+          reason: 'Migração inicial de colaboradores',
+          createdBy: actor.actorId,
+        })),
+      );
     }
     // Migração de vínculos existentes: sem acolhimento retroactivo nem criação automática de contas/convites.
     const published = await tx
@@ -357,21 +353,19 @@ export async function commitEmployeeImport(db: Db, actor: Actor, input: CommitIn
       departmentsCreated: preview.newDepartments.length,
       replayed: false,
     };
-    await tx
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'import',
-        entity: 'employee_import',
-        entityId: input.importId,
-        after: {
-          fingerprint: hash,
-          sourceName: input.sourceName,
-          result,
-          employees: prepared.map(p => ({ id: p.employeeId, line: p.row.line })),
-        },
-      });
+    await tx.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'import',
+      entity: 'employee_import',
+      entityId: input.importId,
+      after: {
+        fingerprint: hash,
+        sourceName: input.sourceName,
+        result,
+        employees: prepared.map(p => ({ id: p.employeeId, line: p.row.line })),
+      },
+    });
     return result;
   });
 }

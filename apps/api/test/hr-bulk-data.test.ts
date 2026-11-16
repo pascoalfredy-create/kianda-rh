@@ -72,26 +72,22 @@ describe.skipIf(!process.env.DATABASE_URL)('leituras RH em conjunto: resultados,
             .insert(employees)
             .values({ companyId: r.json().company.id, number: '1', name: 'Outra empresa', jobTitle: 'Técnico' })
             .returning();
-          await getDb()
-            .insert(absences)
-            .values({
-              companyId: e!.companyId,
-              employeeId: e!.id,
-              type: 'training',
-              startDate: '2026-09-10',
-              endDate: '2026-09-10',
-              workingDays: 1,
-            });
-          await getDb()
-            .insert(expenseClaims)
-            .values({
-              companyId: e!.companyId,
-              employeeId: e!.id,
-              number: '1',
-              title: 'Despesa externa',
-              createdBy: r.json().user.id,
-              status: 'submitted',
-            });
+          await getDb().insert(absences).values({
+            companyId: e!.companyId,
+            employeeId: e!.id,
+            type: 'training',
+            startDate: '2026-09-10',
+            endDate: '2026-09-10',
+            workingDays: 1,
+          });
+          await getDb().insert(expenseClaims).values({
+            companyId: e!.companyId,
+            employeeId: e!.id,
+            number: '1',
+            title: 'Despesa externa',
+            createdBy: r.json().user.id,
+            status: 'submitted',
+          });
         });
       }
     }
@@ -110,27 +106,21 @@ describe.skipIf(!process.env.DATABASE_URL)('leituras RH em conjunto: resultados,
         .returning();
       ids = people.map(e => e.id);
       await db.update(employees).set({ managerId: ids[0] }).where(eq(employees.id, ids[1]!));
-      await db
-        .insert(contracts)
-        .values(
-          ids
-            .slice(0, 3)
-            .map(employeeId => ({
-              employeeId,
-              type: 'indefinite' as const,
-              startDate: '2025-01-01',
-              baseMinor: 42000000,
-            })),
-        );
-      await db
-        .insert(contracts)
-        .values({
-          employeeId: ids[1]!,
-          type: 'fixed_term',
-          startDate: '2026-06-01',
-          endDate: '2026-12-31',
-          baseMinor: 43000000,
-        });
+      await db.insert(contracts).values(
+        ids.slice(0, 3).map(employeeId => ({
+          employeeId,
+          type: 'indefinite' as const,
+          startDate: '2025-01-01',
+          baseMinor: 42000000,
+        })),
+      );
+      await db.insert(contracts).values({
+        employeeId: ids[1]!,
+        type: 'fixed_term',
+        startDate: '2026-06-01',
+        endDate: '2026-12-31',
+        baseMinor: 43000000,
+      });
       const [schedule] = await db
         .insert(workSchedules)
         .values({
@@ -185,40 +175,34 @@ describe.skipIf(!process.env.DATABASE_URL)('leituras RH em conjunto: resultados,
           status: 'rejected',
         },
       ]);
-      await db
-        .insert(attendanceEntries)
-        .values({
+      await db.insert(attendanceEntries).values({
+        companyId,
+        employeeId: ids[1]!,
+        workDate: '2026-09-01',
+        clockIn: new Date('2026-09-01T07:00:00Z'),
+        clockOut: new Date('2026-09-01T15:00:00Z'),
+        createdBy: actorId,
+      });
+      await db.insert(attendanceMonths).values({
+        companyId,
+        employeeId: ids[1]!,
+        period: '2026-09',
+        workedMinutes: 480,
+        expectedMinutes: 7200,
+        overtimeMinutes: 0,
+        approvedOvertimeMinutes: 0,
+        approvedBy: actorId,
+      });
+      await db.insert(expenseClaims).values(
+        ids.map((employeeId, i) => ({
           companyId,
-          employeeId: ids[1]!,
-          workDate: '2026-09-01',
-          clockIn: new Date('2026-09-01T07:00:00Z'),
-          clockOut: new Date('2026-09-01T15:00:00Z'),
+          employeeId,
+          number: String(i + 1),
+          title: 'Despesa sintética',
           createdBy: actorId,
-        });
-      await db
-        .insert(attendanceMonths)
-        .values({
-          companyId,
-          employeeId: ids[1]!,
-          period: '2026-09',
-          workedMinutes: 480,
-          expectedMinutes: 7200,
-          overtimeMinutes: 0,
-          approvedOvertimeMinutes: 0,
-          approvedBy: actorId,
-        });
-      await db
-        .insert(expenseClaims)
-        .values(
-          ids.map((employeeId, i) => ({
-            companyId,
-            employeeId,
-            number: String(i + 1),
-            title: 'Despesa sintética',
-            createdBy: actorId,
-            status: 'submitted' as const,
-          })),
-        );
+          status: 'submitted' as const,
+        })),
+      );
       await db
         .insert(expenseClaims)
         .values({ companyId, employeeId: ids[1]!, number: '5', title: 'Já paga', createdBy: actorId, status: 'paid' });
@@ -480,31 +464,25 @@ describe.skipIf(!process.env.DATABASE_URL)('leituras RH em conjunto: resultados,
         .insert(payrollRuns)
         .values({ companyId, period: '2026-01', status: 'closed', packVersion: 'AO-2026' })
         .returning();
-      await db
-        .insert(payrollLines)
-        .values(
-          ids
-            .slice(0, 2)
-            .map(employeeId => ({
-              runId: run!.id,
-              employeeId,
-              netMinor: 3000000000,
-              irtMinor: 200,
-              inssEmployeeMinor: 100,
-              inssEmployerMinor: 400,
-            })),
-        );
-      await db
-        .insert(payrollPayments)
-        .values({
-          companyId,
+      await db.insert(payrollLines).values(
+        ids.slice(0, 2).map(employeeId => ({
           runId: run!.id,
-          kind: 'salaries',
-          paidOn: '2026-01-31',
-          amountMinor: 6000000000,
-          reference: 'TRF sintética',
-          createdBy: actorId,
-        });
+          employeeId,
+          netMinor: 3000000000,
+          irtMinor: 200,
+          inssEmployeeMinor: 100,
+          inssEmployerMinor: 400,
+        })),
+      );
+      await db.insert(payrollPayments).values({
+        companyId,
+        runId: run!.id,
+        kind: 'salaries',
+        paidOn: '2026-01-31',
+        amountMinor: 6000000000,
+        reference: 'TRF sintética',
+        createdBy: actorId,
+      });
     });
     const small = await measureQueries(() => request(owner, 'GET', '/v1/obligations'));
     expect(small.value.statusCode).toBe(200);

@@ -183,16 +183,14 @@ export function fileRoutes() {
       uploadedBy: actor.actorId,
       data,
     });
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'file_upload',
-        entity: t.entity,
-        entityId: t.entityId,
-        after: { fileId: f.id, name: f.name, sizeBytes: f.sizeBytes, sha256: f.sha256 },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'file_upload',
+      entity: t.entity,
+      entityId: t.entityId,
+      after: { fileId: f.id, name: f.name, sizeBytes: f.sizeBytes, sha256: f.sha256 },
+    });
     return c.json(view(f), 201);
   });
 
@@ -220,16 +218,14 @@ export function fileRoutes() {
     const { f, access } = await fileById(db, actor, c.req.param('id'));
     if (!access.write) throw new DomainError('sem_permissao', 'Não pode remover ficheiros deste registo', 403);
     await removeFiles(db, [f]);
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'file_delete',
-        entity: f.entity,
-        entityId: f.entityId,
-        before: { fileId: f.id, name: f.name, sha256: f.sha256 },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'file_delete',
+      entity: f.entity,
+      entityId: f.entityId,
+      before: { fileId: f.id, name: f.name, sha256: f.sha256 },
+    });
     return c.json({ ok: true });
   });
 

@@ -112,17 +112,15 @@ const audit = (
   before: unknown,
   after: unknown,
 ) =>
-  db
-    .insert(auditLogs)
-    .values({
-      companyId: actor.companyId,
-      actorId: actor.actorId,
-      action,
-      entity,
-      entityId: id,
-      before: before as object,
-      after: after as object,
-    });
+  db.insert(auditLogs).values({
+    companyId: actor.companyId,
+    actorId: actor.actorId,
+    action,
+    entity,
+    entityId: id,
+    before: before as object,
+    after: after as object,
+  });
 
 async function loadEmployee(db: Db, actor: Actor, id: string) {
   const [e] = await db

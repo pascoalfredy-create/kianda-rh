@@ -335,16 +335,14 @@ export function terminationRoutes() {
         createdBy: actor.actorId,
       })
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'create',
-        entity: 'termination',
-        entityId: t!.id,
-        after: t,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'create',
+      entity: 'termination',
+      entityId: t!.id,
+      after: t,
+    });
     // Saída: a lista de tarefas começa ao registar a cessação, com prazos contados da data de cessação.
     await startChecklist(db, {
       companyId: actor.companyId,
@@ -387,17 +385,15 @@ export function terminationRoutes() {
       })
       .where(eq(terminations.id, t.id))
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'update',
-        entity: 'termination',
-        entityId: t.id,
-        before: t,
-        after: u,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'update',
+      entity: 'termination',
+      entityId: t.id,
+      before: t,
+      after: u,
+    });
     await shiftTerminationChecklist(db, actor.companyId, t.id, u!.effectiveDate, actor.actorId);
     return c.json(u);
   });
@@ -495,16 +491,14 @@ export function terminationRoutes() {
         .set({ status: 'confirmed', confirmedBy: actor.actorId, confirmedAt: new Date() })
         .where(eq(terminations.id, t.id))
         .returning();
-      await tx
-        .insert(auditLogs)
-        .values({
-          companyId: actor.companyId,
-          actorId: actor.actorId,
-          action: 'confirm',
-          entity: 'termination',
-          entityId: t.id,
-          after: u,
-        });
+      await tx.insert(auditLogs).values({
+        companyId: actor.companyId,
+        actorId: actor.actorId,
+        action: 'confirm',
+        entity: 'termination',
+        entityId: t.id,
+        after: u,
+      });
       return u!;
     });
     return c.json({ ...result, payrollDraftNeedsRefresh: Boolean(run) });
@@ -550,17 +544,15 @@ export function terminationRoutes() {
         .set({ status: 'cancelled', cancelledBy: actor.actorId, cancelledAt: new Date(), cancelNote: note })
         .where(eq(terminations.id, t.id))
         .returning();
-      await tx
-        .insert(auditLogs)
-        .values({
-          companyId: actor.companyId,
-          actorId: actor.actorId,
-          action: 'cancel',
-          entity: 'termination',
-          entityId: t.id,
-          before: t,
-          after: x,
-        });
+      await tx.insert(auditLogs).values({
+        companyId: actor.companyId,
+        actorId: actor.actorId,
+        action: 'cancel',
+        entity: 'termination',
+        entityId: t.id,
+        before: t,
+        after: x,
+      });
       await cancelTerminationChecklist(tx as unknown as Db, actor.companyId, t.id, actor.actorId);
       return x!;
     });

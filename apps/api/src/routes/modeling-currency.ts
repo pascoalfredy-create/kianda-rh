@@ -80,21 +80,19 @@ export function modelingCurrencyRoutes() {
       })
       .where(eq(financialModels.id, current.id))
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: a.companyId,
-        actorId: a.actorId,
-        action: 'convert_currency',
-        entity: 'financial_model',
-        entityId: current.id,
-        before: {
-          revision: current.revision,
-          currency: current.currency,
-          assumptionsHash: financialFingerprint(current.assumptions),
-        },
-        after: { revision: model!.revision, conversion, assumptionsHash: financialFingerprint(model!.assumptions) },
-      });
+    await db.insert(auditLogs).values({
+      companyId: a.companyId,
+      actorId: a.actorId,
+      action: 'convert_currency',
+      entity: 'financial_model',
+      entityId: current.id,
+      before: {
+        revision: current.revision,
+        currency: current.currency,
+        assumptionsHash: financialFingerprint(current.assumptions),
+      },
+      after: { revision: model!.revision, conversion, assumptionsHash: financialFingerprint(model!.assumptions) },
+    });
     return c.json(model);
   });
   return app;

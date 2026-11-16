@@ -205,19 +205,17 @@ const draftOnly = (b: { status: string }) => {
 async function saveCells(db: Db, budgetId: string, companyId: string, cells: BudgetCell[]) {
   await db.delete(personnelBudgetLines).where(eq(personnelBudgetLines.budgetId, budgetId));
   if (cells.length) {
-    await db
-      .insert(personnelBudgetLines)
-      .values(
-        cells.map(c => ({
-          budgetId,
-          companyId,
-          departmentId: c.departmentId,
-          period: c.period,
-          headcount: String(c.headcount),
-          grossMinor: c.grossMinor,
-          costMinor: c.costMinor,
-        })),
-      );
+    await db.insert(personnelBudgetLines).values(
+      cells.map(c => ({
+        budgetId,
+        companyId,
+        departmentId: c.departmentId,
+        period: c.period,
+        headcount: String(c.headcount),
+        grossMinor: c.grossMinor,
+        costMinor: c.costMinor,
+      })),
+    );
   }
 }
 
@@ -324,16 +322,14 @@ export function budgetRoutes() {
       })
       .returning();
     await saveCells(db, b!.id, actor.companyId, cells);
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'create',
-        entity: 'personnel_budget',
-        entityId: b!.id,
-        after: { year: a.year, total: cells.reduce((s, x) => s + x.costMinor, 0) },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'create',
+      entity: 'personnel_budget',
+      entityId: b!.id,
+      after: { year: a.year, total: cells.reduce((s, x) => s + x.costMinor, 0) },
+    });
     return c.json(b, 201);
   });
 
@@ -350,16 +346,14 @@ export function budgetRoutes() {
       .update(personnelBudgets)
       .set({ assumptions: a, updatedAt: new Date() })
       .where(eq(personnelBudgets.id, b.id));
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'regenerate',
-        entity: 'personnel_budget',
-        entityId: b.id,
-        after: { total: cells.reduce((s, x) => s + x.costMinor, 0) },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'regenerate',
+      entity: 'personnel_budget',
+      entityId: b.id,
+      after: { total: cells.reduce((s, x) => s + x.costMinor, 0) },
+    });
     return c.json({ ok: true });
   });
 
@@ -402,16 +396,14 @@ export function budgetRoutes() {
     }
     await saveCells(db, b.id, actor.companyId, [...map.values()]);
     await db.update(personnelBudgets).set({ updatedAt: new Date() }).where(eq(personnelBudgets.id, b.id));
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'adjust',
-        entity: 'personnel_budget',
-        entityId: b.id,
-        after: { cells: lines.length },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'adjust',
+      entity: 'personnel_budget',
+      entityId: b.id,
+      after: { cells: lines.length },
+    });
     return c.json({ ok: true });
   });
 
@@ -425,15 +417,13 @@ export function budgetRoutes() {
       .update(personnelBudgets)
       .set({ status: 'approved', approvedBy: actor.actorId, approvedAt: new Date(), updatedAt: new Date() })
       .where(eq(personnelBudgets.id, b.id));
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'approve',
-        entity: 'personnel_budget',
-        entityId: b.id,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'approve',
+      entity: 'personnel_budget',
+      entityId: b.id,
+    });
     return c.json({ ok: true });
   });
 
@@ -446,15 +436,13 @@ export function budgetRoutes() {
       .update(personnelBudgets)
       .set({ status: 'draft', approvedBy: null, approvedAt: null, updatedAt: new Date() })
       .where(eq(personnelBudgets.id, b.id));
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'reopen',
-        entity: 'personnel_budget',
-        entityId: b.id,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'reopen',
+      entity: 'personnel_budget',
+      entityId: b.id,
+    });
     return c.json({ ok: true });
   });
 
@@ -464,16 +452,14 @@ export function budgetRoutes() {
     const b = await budgetOf(db, actor, c.req.param('id'));
     draftOnly(b);
     await db.delete(personnelBudgets).where(eq(personnelBudgets.id, b.id));
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'delete',
-        entity: 'personnel_budget',
-        entityId: b.id,
-        before: { year: b.year },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'delete',
+      entity: 'personnel_budget',
+      entityId: b.id,
+      before: { year: b.year },
+    });
     return c.json({ ok: true });
   });
 

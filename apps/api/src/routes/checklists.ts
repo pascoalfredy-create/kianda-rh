@@ -257,17 +257,15 @@ export function checklistRoutes() {
         }
       : { doneAt: null, doneBy: null, note: b.note === undefined ? task.note : b.note };
     const [u] = await db.update(checklistTasks).set(values).where(eq(checklistTasks.id, task.id)).returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: b.done ? 'complete' : 'reopen',
-        entity: 'checklist_task',
-        entityId: task.id,
-        before: { doneAt: task.doneAt, note: task.note },
-        after: { doneAt: u!.doneAt, note: u!.note, checklistId: list.id },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: b.done ? 'complete' : 'reopen',
+      entity: 'checklist_task',
+      entityId: task.id,
+      before: { doneAt: task.doneAt, note: task.note },
+      after: { doneAt: u!.doneAt, note: u!.note, checklistId: list.id },
+    });
     const synced = await syncChecklistStatus(db, list.id);
     return c.json({
       task: presentTask(actor, emp, u!, luandaDate(new Date()), await names(db, [u!.doneBy])),
@@ -307,16 +305,14 @@ export function checklistRoutes() {
         dueDate: b.dueDate,
       })
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'create',
-        entity: 'checklist_task',
-        entityId: t!.id,
-        after: t,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'create',
+      entity: 'checklist_task',
+      entityId: t!.id,
+      after: t,
+    });
     await syncChecklistStatus(db, list.id);
     return c.json(t, 201);
   });
@@ -336,16 +332,14 @@ export function checklistRoutes() {
         'Uma tarefa feita fica no registo; desmarque-a primeiro se foi marcada por engano.',
       );
     await db.delete(checklistTasks).where(eq(checklistTasks.id, task.id));
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'delete',
-        entity: 'checklist_task',
-        entityId: task.id,
-        before: task,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'delete',
+      entity: 'checklist_task',
+      entityId: task.id,
+      before: task,
+    });
     await syncChecklistStatus(db, list.id);
     return c.json({ ok: true });
   });
@@ -361,17 +355,15 @@ export function checklistRoutes() {
       .set({ status: 'cancelled', cancelledAt: new Date(), cancelReason: reason })
       .where(eq(employeeChecklists.id, list.id))
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'cancel',
-        entity: 'employee_checklist',
-        entityId: list.id,
-        before: { status: list.status },
-        after: { status: 'cancelled', reason },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'cancel',
+      entity: 'employee_checklist',
+      entityId: list.id,
+      before: { status: list.status },
+      after: { status: 'cancelled', reason },
+    });
     return c.json(u);
   });
 
@@ -425,17 +417,15 @@ export function checklistRoutes() {
       .set({ name: b.name, autoStart: b.autoStart, items, updatedBy: actor.actorId, updatedAt: new Date() })
       .where(eq(checklistTemplates.id, before.id))
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'update',
-        entity: 'checklist_template',
-        entityId: before.id,
-        before: { name: before.name, autoStart: before.autoStart, items: before.items },
-        after: { name: u!.name, autoStart: u!.autoStart, items: u!.items },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'update',
+      entity: 'checklist_template',
+      entityId: before.id,
+      before: { name: before.name, autoStart: before.autoStart, items: before.items },
+      after: { name: u!.name, autoStart: u!.autoStart, items: u!.items },
+    });
     return c.json({ kind, name: u!.name, autoStart: u!.autoStart, items: u!.items, updatedAt: u!.updatedAt });
   });
 

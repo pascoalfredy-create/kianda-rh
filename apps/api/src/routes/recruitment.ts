@@ -249,16 +249,14 @@ export function recruitmentRoutes() {
         closedAt: b.status === 'closed' ? new Date() : null,
       })
       .returning();
-    await getDb()
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'create',
-        entity: 'job_opening',
-        entityId: o!.id,
-        after: o,
-      });
+    await getDb().insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'create',
+      entity: 'job_opening',
+      entityId: o!.id,
+      after: o,
+    });
     return c.json(openingView(o!), 201);
   });
 
@@ -299,17 +297,15 @@ export function recruitmentRoutes() {
         'A vaga foi alterada entretanto. Actualize o ecrã e tente novamente.',
         409,
       );
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'update',
-        entity: 'job_opening',
-        entityId: before.id,
-        before,
-        after: o,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'update',
+      entity: 'job_opening',
+      entityId: before.id,
+      before,
+      after: o,
+    });
     return c.json(openingView(o));
   });
 
@@ -642,16 +638,14 @@ export function recruitmentRoutes() {
       kind: 'offer',
       text: `${b.kind === 'accept_expected' ? 'Aceitação da pretensão' : 'Contraproposta'} preparada · versão ${offer!.version} · base bruta ${formatKz(offer!.baseMinor)}.`,
     });
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'create_offer',
-        entity: 'candidate',
-        entityId: x.id,
-        after: offer,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'create_offer',
+      entity: 'candidate',
+      entityId: x.id,
+      after: offer,
+    });
     return c.json(offer, 201);
   });
 
@@ -756,16 +750,14 @@ export function recruitmentRoutes() {
       kind: 'offer',
       text: `Resposta à proposta v${offer.version}: ${b.status === 'accepted' ? 'aceite' : b.status === 'declined' ? 'recusada' : `contrapretensão ${formatKz(toMinor(b.counter)!)}`}. ${b.note}`,
     });
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'offer_response',
-        entity: 'candidate',
-        entityId: x.id,
-        after: { offerId: offer.id, ...b },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'offer_response',
+      entity: 'candidate',
+      entityId: x.id,
+      after: { offerId: offer.id, ...b },
+    });
     return c.json({ ok: true });
   });
 

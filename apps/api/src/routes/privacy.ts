@@ -35,16 +35,14 @@ export function privacyRoutes() {
     const actor = c.get('actor');
     const db = getDb();
     const data = await exportCompany(db, actor.companyId);
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'export',
-        entity: 'company',
-        entityId: actor.companyId,
-        after: { counts: data.counts },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'export',
+      entity: 'company',
+      entityId: actor.companyId,
+      after: { counts: data.counts },
+    });
     return new Response(JSON.stringify(data, null, 1), {
       headers: {
         'content-type': 'application/json; charset=utf-8',
@@ -123,16 +121,14 @@ export function privacyRoutes() {
         disabledAt: now,
       })
       .where(and(eq(users.companyId, actor.companyId), eq(users.employeeId, e.id)));
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'minimize_personal_data',
-        entity: 'employee',
-        entityId: e.id,
-        after: { documentsDeleted: docs.length, filesDeleted },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'minimize_personal_data',
+      entity: 'employee',
+      entityId: e.id,
+      after: { documentsDeleted: docs.length, filesDeleted },
+    });
     return c.json({
       ok: true,
       kept: ['nome', 'n.º', 'BI', 'NIF', 'n.º INSS', 'contratos', 'processamentos', 'lançamentos'],
@@ -157,15 +153,13 @@ export function privacyRoutes() {
     await removeFiles(db, attachments);
     await db.delete(candidateEvents).where(eq(candidateEvents.candidateId, cand.id));
     await db.delete(candidates).where(eq(candidates.id, cand.id));
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'delete_candidate',
-        entity: 'candidate',
-        entityId: cand.id,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'delete_candidate',
+      entity: 'candidate',
+      entityId: cand.id,
+    });
     return c.json({ ok: true });
   });
 

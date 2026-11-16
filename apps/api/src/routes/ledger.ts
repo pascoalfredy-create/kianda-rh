@@ -199,17 +199,15 @@ export function ledgerRoutes() {
             set: { account: m.account, label: m.label },
           });
       }
-      await tx
-        .insert(auditLogs)
-        .values({
-          companyId: actor.companyId,
-          actorId: actor.actorId,
-          action: 'update',
-          entity: 'chart_of_accounts',
-          entityId: actor.companyId,
-          before: before as unknown as object,
-          after: mappings as unknown as object,
-        });
+      await tx.insert(auditLogs).values({
+        companyId: actor.companyId,
+        actorId: actor.actorId,
+        action: 'update',
+        entity: 'chart_of_accounts',
+        entityId: actor.companyId,
+        before: before as unknown as object,
+        after: mappings as unknown as object,
+      });
     });
     return c.json(await chart(db, actor.companyId));
   });
@@ -284,16 +282,14 @@ export function ledgerRoutes() {
         ),
       )
       .returning({ id: journalEntries.id });
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'export',
-        entity: 'journal',
-        entityId: actor.companyId,
-        after: { ...q, entries: marked.length },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'export',
+      entity: 'journal',
+      entityId: actor.companyId,
+      after: { ...q, entries: marked.length },
+    });
     return c.json({ marked: marked.length });
   });
 

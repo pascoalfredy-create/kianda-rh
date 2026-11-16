@@ -183,28 +183,24 @@ export function performanceRoutes() {
     });
     if (!staff.length) throw new DomainError('sem_colaboradores', 'Não há colaboradores activos para avaliar');
     await db.transaction(async tx => {
-      await tx
-        .insert(reviews)
-        .values(
-          staff.map(e => ({
-            companyId: actor.companyId,
-            cycleId: x.id,
-            employeeId: e.id,
-            reviewerEmployeeId: e.managerId,
-            status: x.selfReview ? 'self' : 'manager',
-          })),
-        );
-      await tx.update(reviewCycles).set({ status: 'open', launchedAt: new Date() }).where(eq(reviewCycles.id, x.id));
-      await tx
-        .insert(auditLogs)
-        .values({
+      await tx.insert(reviews).values(
+        staff.map(e => ({
           companyId: actor.companyId,
-          actorId: actor.actorId,
-          action: 'launch',
-          entity: 'review_cycle',
-          entityId: x.id,
-          after: { reviews: staff.length },
-        });
+          cycleId: x.id,
+          employeeId: e.id,
+          reviewerEmployeeId: e.managerId,
+          status: x.selfReview ? 'self' : 'manager',
+        })),
+      );
+      await tx.update(reviewCycles).set({ status: 'open', launchedAt: new Date() }).where(eq(reviewCycles.id, x.id));
+      await tx.insert(auditLogs).values({
+        companyId: actor.companyId,
+        actorId: actor.actorId,
+        action: 'launch',
+        entity: 'review_cycle',
+        entityId: x.id,
+        after: { reviews: staff.length },
+      });
     });
     return c.json({ ok: true, reviews: staff.length });
   });
@@ -476,16 +472,14 @@ export function performanceRoutes() {
       .where(eq(reviews.id, r.id))
       .returning();
     if (b.submit)
-      await db
-        .insert(auditLogs)
-        .values({
-          companyId: actor.companyId,
-          actorId: actor.actorId,
-          action: 'submit',
-          entity: 'review',
-          entityId: r.id,
-          after: { finalScore: s.final },
-        });
+      await db.insert(auditLogs).values({
+        companyId: actor.companyId,
+        actorId: actor.actorId,
+        action: 'submit',
+        entity: 'review',
+        entityId: r.id,
+        after: { finalScore: s.final },
+      });
     return c.json(u);
   });
 
@@ -516,16 +510,14 @@ export function performanceRoutes() {
       .set({ status: 'manager', acknowledgedAt: null, updatedAt: new Date() })
       .where(eq(reviews.id, r.id))
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'reopen',
-        entity: 'review',
-        entityId: r.id,
-        before: r,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'reopen',
+      entity: 'review',
+      entityId: r.id,
+      before: r,
+    });
     return c.json(u);
   });
 

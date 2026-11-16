@@ -203,17 +203,15 @@ async function companyTypes(db: Db, companyId: string) {
 }
 
 const audit = (db: Db, actor: Actor, action: string, entity: string, id: string, before: unknown, after: unknown) =>
-  db
-    .insert(auditLogs)
-    .values({
-      companyId: actor.companyId,
-      actorId: actor.actorId,
-      action,
-      entity,
-      entityId: id,
-      before: before as object,
-      after: after as object,
-    });
+  db.insert(auditLogs).values({
+    companyId: actor.companyId,
+    actorId: actor.actorId,
+    action,
+    entity,
+    entityId: id,
+    before: before as object,
+    after: after as object,
+  });
 
 export interface ShiftChange {
   employeeId: string;

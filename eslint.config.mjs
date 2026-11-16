@@ -1,6 +1,7 @@
 // Análise estática do código TypeScript (com tipos). Corre no CI: `pnpm lint`.
 import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
+import sonarjs from 'eslint-plugin-sonarjs';
 
 export default tseslint.config(
   {
@@ -12,9 +13,11 @@ export default tseslint.config(
   ...tseslint.configs.recommendedTypeChecked,
   {
     languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
-    plugins: { 'react-hooks': reactHooks },
+    plugins: { 'react-hooks': reactHooks, sonarjs },
     rules: {
       'react-hooks/rules-of-hooks': 'error',
+      // Manutenibilidade: nenhuma função pode ultrapassar a complexidade cognitiva 50 (alvo habitual: até 25).
+      'sonarjs/cognitive-complexity': ['error', 50],
       'react-hooks/exhaustive-deps': 'warn',
       // Promessas: nenhuma pode ficar sem tratamento; handlers assíncronos em atributos JSX são aceites.
       '@typescript-eslint/no-floating-promises': 'error',

@@ -103,16 +103,14 @@ export async function startChecklist(db: Db, o: StartChecklist) {
       })),
     );
   }
-  await db
-    .insert(auditLogs)
-    .values({
-      companyId: o.companyId,
-      actorId: o.actorId,
-      action: o.automatic ? 'auto_create' : 'create',
-      entity: 'employee_checklist',
-      entityId: list!.id,
-      after: { kind: o.kind, employeeId: o.employeeId, referenceDate: o.referenceDate, tasks: template.items.length },
-    });
+  await db.insert(auditLogs).values({
+    companyId: o.companyId,
+    actorId: o.actorId,
+    action: o.automatic ? 'auto_create' : 'create',
+    entity: 'employee_checklist',
+    entityId: list!.id,
+    after: { kind: o.kind, employeeId: o.employeeId, referenceDate: o.referenceDate, tasks: template.items.length },
+  });
   return list!;
 }
 
@@ -139,17 +137,15 @@ export async function shiftTerminationChecklist(
       .set({ dueDate: shiftDueDate(t.dueDate, list.referenceDate, toReference) })
       .where(eq(checklistTasks.id, t.id));
   await db.update(employeeChecklists).set({ referenceDate: toReference }).where(eq(employeeChecklists.id, list.id));
-  await db
-    .insert(auditLogs)
-    .values({
-      companyId,
-      actorId,
-      action: 'reschedule',
-      entity: 'employee_checklist',
-      entityId: list.id,
-      before: { referenceDate: list.referenceDate },
-      after: { referenceDate: toReference, shifted: pending.length },
-    });
+  await db.insert(auditLogs).values({
+    companyId,
+    actorId,
+    action: 'reschedule',
+    entity: 'employee_checklist',
+    entityId: list.id,
+    before: { referenceDate: list.referenceDate },
+    after: { referenceDate: toReference, shifted: pending.length },
+  });
 }
 
 /** A cessação foi anulada: a lista de saída em curso deixa de fazer sentido. */
@@ -163,16 +159,14 @@ export async function cancelTerminationChecklist(db: Db, companyId: string, term
     .update(employeeChecklists)
     .set({ status: 'cancelled', cancelledAt: new Date(), cancelReason: 'Cessação anulada' })
     .where(eq(employeeChecklists.id, list.id));
-  await db
-    .insert(auditLogs)
-    .values({
-      companyId,
-      actorId,
-      action: 'cancel',
-      entity: 'employee_checklist',
-      entityId: list.id,
-      after: { reason: 'Cessação anulada' },
-    });
+  await db.insert(auditLogs).values({
+    companyId,
+    actorId,
+    action: 'cancel',
+    entity: 'employee_checklist',
+    entityId: list.id,
+    after: { reason: 'Cessação anulada' },
+  });
 }
 
 /** Fecha a lista quando a última tarefa é feita; reabre-a se uma tarefa voltar a ficar por fazer. */

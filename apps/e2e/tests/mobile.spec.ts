@@ -20,13 +20,11 @@ test('portal de candidatura no telefone: abre o link sem conta e recebe CV Word 
   await page.getByLabel('Nome completo', { exact: true }).fill('Candidata Telemóvel');
   await page.getByLabel('Email', { exact: true }).fill(`mobile.${Date.now()}@e2e.kianda.test`);
   await page.getByLabel('Telefone', { exact: true }).fill('923000444');
-  await page
-    .getByLabel('Currículo (CV)', { exact: true })
-    .setInputFiles({
-      name: 'curriculo-telemovel.docx',
-      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      buffer: Buffer.from(fixtureWord([['CV sintético no telefone']])),
-    });
+  await page.getByLabel('Currículo (CV)', { exact: true }).setInputFiles({
+    name: 'curriculo-telemovel.docx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    buffer: Buffer.from(fixtureWord([['CV sintético no telefone']])),
+  });
   await page.getByText('Dados profissionais (opcional)', { exact: true }).click();
   await page.getByLabel('Função actual', { exact: true }).fill('Técnica');
   expect(await page.evaluate<number>('document.documentElement.scrollWidth - window.innerWidth')).toBeLessThanOrEqual(

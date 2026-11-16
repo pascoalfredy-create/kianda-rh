@@ -92,17 +92,15 @@ async function keepVersion(
     )
       return;
   }
-  await db
-    .insert(valuationVersions)
-    .values({
-      companyId: row.companyId,
-      analysisId: row.id,
-      revision: row.revision,
-      name: row.name,
-      data: row.data,
-      reason,
-      savedBy: actorId,
-    });
+  await db.insert(valuationVersions).values({
+    companyId: row.companyId,
+    analysisId: row.id,
+    revision: row.revision,
+    name: row.name,
+    data: row.data,
+    reason,
+    savedBy: actorId,
+  });
   const old = await db
     .select({ id: valuationVersions.id })
     .from(valuationVersions)
@@ -147,15 +145,13 @@ export function valuationRoutes() {
           .insert(valuationMembers)
           .values({ companyId: a.companyId, userId: a.actorId, addedBy: a.actorId })
           .returning();
-        await db
-          .insert(auditLogs)
-          .values({
-            companyId: a.companyId,
-            actorId: a.actorId,
-            action: 'activate',
-            entity: 'valuation_member',
-            entityId: member!.id,
-          });
+        await db.insert(auditLogs).values({
+          companyId: a.companyId,
+          actorId: a.actorId,
+          action: 'activate',
+          entity: 'valuation_member',
+          entityId: member!.id,
+        });
       }
     }
     if (!member?.enabled)
@@ -225,16 +221,14 @@ export function valuationRoutes() {
     if (Object.keys(mapping).length > 500)
       throw new DomainError('limite_mapeamento', 'O mapeamento admite até 500 contas.', 422);
     await db.update(companies).set({ valuationBalanceMapping: mapping }).where(eq(companies.id, a.companyId));
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: a.companyId,
-        actorId: a.actorId,
-        action: 'update',
-        entity: 'valuation_balance_mapping',
-        entityId: a.companyId,
-        after: input,
-      });
+    await db.insert(auditLogs).values({
+      companyId: a.companyId,
+      actorId: a.actorId,
+      action: 'update',
+      entity: 'valuation_balance_mapping',
+      entityId: a.companyId,
+      after: input,
+    });
     return c.json(mapping);
   });
   app.get('/v1/valuation/session', async c => c.json(await session(c)));
@@ -291,16 +285,14 @@ export function valuationRoutes() {
         updatedBy: a.actorId,
       })
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: a.companyId,
-        actorId: a.actorId,
-        action: 'create',
-        entity: 'valuation_analysis',
-        entityId: row!.id,
-        after: { name: row!.name, ownCompany: row!.ownCompany, source: input.source },
-      });
+    await db.insert(auditLogs).values({
+      companyId: a.companyId,
+      actorId: a.actorId,
+      action: 'create',
+      entity: 'valuation_analysis',
+      entityId: row!.id,
+      after: { name: row!.name, ownCompany: row!.ownCompany, source: input.source },
+    });
     return c.json(row, 201);
   });
 
@@ -356,25 +348,23 @@ export function valuationRoutes() {
         409,
       );
     // A auditoria regista quem gravou e a revisão; os valores ficam na própria análise.
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: a.companyId,
-        actorId: a.actorId,
-        action: input.importBalance ? 'import_balance' : 'update',
-        entity: 'valuation_analysis',
-        entityId: row.id,
-        before: {
-          revision: current.revision,
-          ...(input.name !== undefined && input.name !== current.name ? { name: current.name } : {}),
-          ...(input.ownCompany !== undefined ? { ownCompany: current.ownCompany } : {}),
-        },
-        after: {
-          revision: row.revision,
-          ...(input.name !== undefined && input.name !== current.name ? { name: row.name } : {}),
-          ...(input.ownCompany !== undefined ? { ownCompany: row.ownCompany } : {}),
-        },
-      });
+    await db.insert(auditLogs).values({
+      companyId: a.companyId,
+      actorId: a.actorId,
+      action: input.importBalance ? 'import_balance' : 'update',
+      entity: 'valuation_analysis',
+      entityId: row.id,
+      before: {
+        revision: current.revision,
+        ...(input.name !== undefined && input.name !== current.name ? { name: current.name } : {}),
+        ...(input.ownCompany !== undefined ? { ownCompany: current.ownCompany } : {}),
+      },
+      after: {
+        revision: row.revision,
+        ...(input.name !== undefined && input.name !== current.name ? { name: row.name } : {}),
+        ...(input.ownCompany !== undefined ? { ownCompany: row.ownCompany } : {}),
+      },
+    });
     return c.json({
       id: row.id,
       name: row.name,
@@ -444,22 +434,20 @@ export function valuationRoutes() {
         ),
       )
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: a.companyId,
-        actorId: a.actorId,
-        action: 'restore_version',
-        entity: 'valuation_analysis',
-        entityId: current.id,
-        before: { revision: current.revision },
-        after: {
-          revision: row!.revision,
-          versionId: version.id,
-          versionRevision: version.revision,
-          versionDate: version.createdAt,
-        },
-      });
+    await db.insert(auditLogs).values({
+      companyId: a.companyId,
+      actorId: a.actorId,
+      action: 'restore_version',
+      entity: 'valuation_analysis',
+      entityId: current.id,
+      before: { revision: current.revision },
+      after: {
+        revision: row!.revision,
+        versionId: version.id,
+        versionRevision: version.revision,
+        versionDate: version.createdAt,
+      },
+    });
     return c.json(row);
   });
 
@@ -473,16 +461,14 @@ export function valuationRoutes() {
       .set({ archivedAt: new Date(), updatedBy: a.actorId })
       .where(and(eq(valuationAnalyses.id, current.id), eq(valuationAnalyses.companyId, a.companyId)))
       .returning(summary);
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: a.companyId,
-        actorId: a.actorId,
-        action: 'archive',
-        entity: 'valuation_analysis',
-        entityId: current.id,
-        after: { name: current.name },
-      });
+    await db.insert(auditLogs).values({
+      companyId: a.companyId,
+      actorId: a.actorId,
+      action: 'archive',
+      entity: 'valuation_analysis',
+      entityId: current.id,
+      after: { name: current.name },
+    });
     return c.json({ ...row, usage: await valuationUsage(db, a.companyId) });
   });
   app.post('/v1/valuation/analyses/:id/restore', async c => {
@@ -501,16 +487,14 @@ export function valuationRoutes() {
       .set({ archivedAt: null, restoredAt: new Date(), updatedBy: a.actorId })
       .where(and(eq(valuationAnalyses.id, current.id), eq(valuationAnalyses.companyId, a.companyId)))
       .returning(summary);
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: a.companyId,
-        actorId: a.actorId,
-        action: 'restore',
-        entity: 'valuation_analysis',
-        entityId: current.id,
-        after: { name: current.name },
-      });
+    await db.insert(auditLogs).values({
+      companyId: a.companyId,
+      actorId: a.actorId,
+      action: 'restore',
+      entity: 'valuation_analysis',
+      entityId: current.id,
+      after: { name: current.name },
+    });
     return c.json({ ...row, usage: await valuationUsage(db, a.companyId) });
   });
 
@@ -606,17 +590,15 @@ export function valuationRoutes() {
         ),
       )
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: a.companyId,
-        actorId: a.actorId,
-        action: 'import_personnel',
-        entity: 'valuation_analysis',
-        entityId: current.id,
-        before: { revision: current.revision, c72: analysis.real.c72 ?? null },
-        after: { revision: row!.revision, year, months },
-      });
+    await db.insert(auditLogs).values({
+      companyId: a.companyId,
+      actorId: a.actorId,
+      action: 'import_personnel',
+      entity: 'valuation_analysis',
+      entityId: current.id,
+      before: { revision: current.revision, c72: analysis.real.c72 ?? null },
+      after: { revision: row!.revision, year, months },
+    });
     return c.json({ analysis: row, year, months });
   });
 
@@ -669,17 +651,15 @@ export function valuationRoutes() {
       .values({ ...values, userId, companyId: a.companyId, addedBy: a.actorId })
       .onConflictDoUpdate({ target: [valuationMembers.companyId, valuationMembers.userId], set: values })
       .returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: a.companyId,
-        actorId: a.actorId,
-        action: 'change_access',
-        entity: 'valuation_member',
-        entityId: member!.id,
-        before: before ?? null,
-        after: member,
-      });
+    await db.insert(auditLogs).values({
+      companyId: a.companyId,
+      actorId: a.actorId,
+      action: 'change_access',
+      entity: 'valuation_member',
+      entityId: member!.id,
+      before: before ?? null,
+      after: member,
+    });
     return c.json(member);
   });
   return app;

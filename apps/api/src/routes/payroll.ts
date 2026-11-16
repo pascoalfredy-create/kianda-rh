@@ -205,16 +205,14 @@ export function payrollRoutes() {
         throw new DomainError('processamento_fechado', 'Um processamento fechado não pode ser apagado.', 409);
       await tx.delete(payrollLines).where(eq(payrollLines.runId, run.id));
       await tx.delete(payrollRuns).where(eq(payrollRuns.id, run.id));
-      await tx
-        .insert(auditLogs)
-        .values({
-          companyId,
-          actorId,
-          action: 'delete',
-          entity: 'payroll_run',
-          entityId: run.id,
-          before: { period: run.period, status: run.status },
-        });
+      await tx.insert(auditLogs).values({
+        companyId,
+        actorId,
+        action: 'delete',
+        entity: 'payroll_run',
+        entityId: run.id,
+        before: { period: run.period, status: run.status },
+      });
     });
     return c.json({ ok: true });
   });
@@ -319,17 +317,15 @@ export function payrollRoutes() {
     if (Object.keys(cur).length) overrides[b.employeeId] = cur;
     else delete overrides[b.employeeId];
     await db.update(payrollRuns).set({ subsidyOverrides: overrides }).where(eq(payrollRuns.id, run.id));
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId,
-        actorId,
-        action: 'subsidy_override',
-        entity: 'payroll_run',
-        entityId: run.id,
-        before: run.subsidyOverrides as object,
-        after: overrides,
-      });
+    await db.insert(auditLogs).values({
+      companyId,
+      actorId,
+      action: 'subsidy_override',
+      entity: 'payroll_run',
+      entityId: run.id,
+      before: run.subsidyOverrides as object,
+      after: overrides,
+    });
     return c.json(await draftPayroll(db, companyId, run.period, actorId));
   });
 
@@ -372,16 +368,14 @@ export function payrollRoutes() {
       );
     // Desconto na remuneração (cálculo manual: maternidade, suspensões…): abono negativo que reduz as bases de INSS e IRT.
     const [v] = await db.insert(payrollVariables).values(variableValues(actor, b)).returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'create',
-        entity: 'payroll_variable',
-        entityId: v!.id,
-        after: { ...v },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'create',
+      entity: 'payroll_variable',
+      entityId: v!.id,
+      after: { ...v },
+    });
     return c.json(v, 201);
   });
 
@@ -502,18 +496,16 @@ export function payrollRoutes() {
         );
       }
       const inserted = await tx.insert(payrollVariables).values(rows).returning();
-      await tx
-        .insert(auditLogs)
-        .values(
-          inserted.map(v => ({
-            companyId: actor.companyId,
-            actorId: actor.actorId,
-            action: 'create',
-            entity: 'payroll_variable',
-            entityId: v.id,
-            after: { ...v, batchId: b.requestId },
-          })),
-        );
+      await tx.insert(auditLogs).values(
+        inserted.map(v => ({
+          companyId: actor.companyId,
+          actorId: actor.actorId,
+          action: 'create',
+          entity: 'payroll_variable',
+          entityId: v.id,
+          after: { ...v, batchId: b.requestId },
+        })),
+      );
       return {
         batchId: b.requestId,
         count: summary.count,
@@ -565,17 +557,15 @@ export function payrollRoutes() {
       ...values
     } = variableValues(actor, { ...b, employeeId: before.employeeId, period: before.period });
     const [after] = await db.update(payrollVariables).set(values).where(eq(payrollVariables.id, before.id)).returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'update',
-        entity: 'payroll_variable',
-        entityId: before.id,
-        before: { ...before },
-        after: { ...after },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'update',
+      entity: 'payroll_variable',
+      entityId: before.id,
+      before: { ...before },
+      after: { ...after },
+    });
     return c.json(after);
   });
 
@@ -606,16 +596,14 @@ export function payrollRoutes() {
     if (run?.status === 'closed')
       throw new DomainError('processamento_fechado', 'O processamento deste mês já está fechado');
     await db.delete(payrollVariables).where(eq(payrollVariables.id, v.id));
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'delete',
-        entity: 'payroll_variable',
-        entityId: v.id,
-        before: { ...v },
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'delete',
+      entity: 'payroll_variable',
+      entityId: v.id,
+      before: { ...v },
+    });
     return c.body(null, 204);
   });
 
@@ -738,17 +726,15 @@ export function payrollRoutes() {
     const db = getDb();
     const [before] = await db.select().from(companies).where(eq(companies.id, actor.companyId));
     const [after] = await db.update(companies).set(b).where(eq(companies.id, actor.companyId)).returning();
-    await db
-      .insert(auditLogs)
-      .values({
-        companyId: actor.companyId,
-        actorId: actor.actorId,
-        action: 'update',
-        entity: 'company',
-        entityId: actor.companyId,
-        before: before as object,
-        after: after as object,
-      });
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'update',
+      entity: 'company',
+      entityId: actor.companyId,
+      before: before as object,
+      after: after as object,
+    });
     return c.json(after);
   });
 
