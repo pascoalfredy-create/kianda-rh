@@ -13,7 +13,7 @@ import {
 import type { Actor } from '../plugins/tenant.js';
 import { licenceFromRows } from './licence.js';
 import { companyModulesOverview } from './modules.js';
-import { releaseNotesFor } from './release-notes.js';
+import { unreadReleaseNotesColumn, visibleReleaseNotes } from './release-notes.js';
 import { ackCountColumn, notificationColumns, taskCountColumn } from './notification-counts.js';
 
 const unavailable = {
@@ -60,6 +60,7 @@ export async function accountOverview(db: Db, actor: Actor) {
       ...notificationColumns(actor),
       tasks: taskCountColumn(actor),
       acks: ackCountColumn(actor),
+      news: unreadReleaseNotesColumn(actor),
     })
     .from(companies)
     .leftJoin(subscriptions, eq(subscriptions.companyId, companies.id))
@@ -94,7 +95,7 @@ export async function accountOverview(db: Db, actor: Actor) {
     modules,
     platformAdmin: false,
     /** Novidades por ver (aviso no topo do Kianda até a pessoa as fechar). */
-    news: await releaseNotesFor(db, actor, modules, { unreadOnly: true }),
+    news: visibleReleaseNotes(first?.news ?? [], actor, modules),
     notifications: modules.hr.canAccess
       ? {
           absences: first?.absences ?? 0,
