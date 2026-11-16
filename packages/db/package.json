@@ -16,6 +16,7 @@
     "migrate": "tsx scripts/migrate.ts",
     "seed": "tsx scripts/seed.ts",
     "platform-admins": "tsx scripts/platform-admins.ts",
+    "release-notes": "tsx scripts/release-notes.ts",
     "reset-2fa": "tsx scripts/reset-two-factor.ts",
     "studio": "drizzle-kit studio",
     "build": "tsc -p tsconfig.json",

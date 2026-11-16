@@ -275,3 +275,10 @@ jobs:
           rm -f /tmp/login.json /tmp/login.out
         env:
           PW: ${{ secrets.KIANDA_SEED_OWNER_PASSWORD }}
+
+      # Só depois de tudo publicado e verificado: as novidades novas passam a aparecer aos utilizadores.
+      - name: Anunciar novidades
+        run: pnpm --filter @kianda/db release-notes
+        env:
+          DATABASE_URL: ${{ secrets.KIANDA_DATABASE_URL }}
+          DATABASE_CA_CERT: ${{ secrets.KIANDA_DATABASE_CA_CERT }}
