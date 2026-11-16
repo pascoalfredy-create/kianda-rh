@@ -4,6 +4,7 @@ export function isDocumentExport(path: string, format: string | undefined): bool
   if (/^\/v1\/(?:ledger\/export(?:\/mark)?|budgets\/[^/]+\/export|expenses-bank-file|shifts\/export)\/?$/.test(path))
     return true;
   if (/^\/v1\/payroll-runs\/[^/]+\/bank-file\/?$/.test(path)) return format !== 'json';
+  if (/^\/v1\/attendance\/effectiveness\/?$/.test(path)) return ['xlsx', 'pdf'].includes(format ?? '');
   if (/^\/v1\/(?:payroll-runs\/[^/]+\/maps\/(?:agt|irt|inss)|reports\/people|ledger\/trial-balance)\/?$/.test(path))
     return ['csv', 'xlsx'].includes(format ?? '');
   return false;

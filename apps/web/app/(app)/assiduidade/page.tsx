@@ -52,6 +52,13 @@ export default async function Assiduidade({ searchParams }: { searchParams: Prom
       </div>
       <div style={{ borderBottom: '1px solid var(--line)', marginBottom: 16 }} />
       {tab === 'equipa' && staff && <Overview period={period} rows={opening.data.rows ?? []} />}
+      {tab === 'equipa' && staff && (
+        <p className="no-print" style={{ marginTop: 10 }}>
+          <Link href={`/relatorios/efectividade?mes=${period}`}>
+            Ver o mapa de efectividade de {monthLabel(period)} →
+          </Link>
+        </p>
+      )}
       {tab === 'equipa' && staff && (opening.data.rows ?? []).some(r => r.locationIssues) && (
         <LocationIssues rows={await api<LocationIssueRow[]>(`/v1/attendance-locations/issues?period=${period}`)} />
       )}

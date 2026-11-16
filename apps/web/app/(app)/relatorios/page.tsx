@@ -186,6 +186,28 @@ export default async function Relatorios({ searchParams }: { searchParams: Promi
         <h1>Relatórios</h1>
         <p className="sub">Quanto custa a equipa, quem entra e quem sai, e quanto se falta.</p>
         <PeopleSnapshot data={overview} />
+        <div
+          className="card"
+          style={{
+            padding: '12px 16px',
+            margin: '14px 0',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div>
+            <b>Mapa de efectividade</b>
+            <div className="muted" style={{ fontSize: 12 }}>
+              Presenças, faltas, férias e licenças de cada pessoa, dia a dia. Excel, PDF e impressão A4.
+            </div>
+          </div>
+          <Link className="btn sm" href="/relatorios/efectividade">
+            Abrir mapa →
+          </Link>
+        </div>
         <div className="card empty">
           Os relatórios usam os processamentos fechados — ainda não há nenhum.{' '}
           <Link href="/processamento" style={{ color: 'var(--brand)' }}>
@@ -276,6 +298,28 @@ export default async function Relatorios({ searchParams }: { searchParams: Promi
         )}
       </div>
 
+      <div
+        className="card"
+        style={{
+          padding: '12px 16px',
+          margin: '14px 0',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}
+      >
+        <div>
+          <b>Mapa de efectividade</b>
+          <div className="muted" style={{ fontSize: 12 }}>
+            Presenças, faltas, férias e licenças de cada pessoa, dia a dia. Excel, PDF e impressão A4.
+          </div>
+        </div>
+        <Link className="btn sm" href="/relatorios/efectividade">
+          Abrir mapa →
+        </Link>
+      </div>
       <div className="card" style={{ padding: 16, marginTop: 14 }}>
         <h2 style={{ fontSize: 14, marginTop: 0 }}>Custo com pessoal por mês</h2>
         <CostChart months={r.months} labels={r.groupLabels} />
