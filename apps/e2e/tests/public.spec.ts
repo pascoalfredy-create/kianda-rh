@@ -18,7 +18,9 @@ test('o login permite regressar ao início antes de carregar o JavaScript', asyn
 
 test('o registo incompleto permite regressar ao início sem criar uma conta', async ({ page }) => {
   let registrations = 0;
-  page.on('request', r => { if (r.method() === 'POST' && r.url().endsWith('/v1/auth/register')) registrations++; });
+  page.on('request', r => {
+    if (r.method() === 'POST' && r.url().endsWith('/v1/auth/register')) registrations++;
+  });
   await page.goto('/registo?modulo=valuation&plano=corporate&ciclo=annual');
   await page.getByLabel('Denominação social').fill('Empresa em preparação');
   await page.getByRole('link', { name: '← Página inicial', exact: true }).click();
@@ -54,22 +56,37 @@ test('a página pública abre e leva ao início de sessão', async ({ page }) =>
   expect(errors).toEqual([]);
 });
 
-test('página pública: o Valora aparece como terceiro módulo e os planos levam ao registo com a escolha', async ({ page }) => {
+test('página pública: o Valora aparece como terceiro módulo e os planos levam ao registo com a escolha', async ({
+  page,
+}) => {
   const errors = watchErrors(page);
   await page.goto('/');
   await expect(page.getByText('Uma conta. Três caminhos para gerir.')).toBeVisible();
-  await page.getByRole('button', { name: /Kianda Valora/ }).first().click();
+  await page
+    .getByRole('button', { name: /Kianda Valora/ })
+    .first()
+    .click();
   await expect(page.getByRole('heading', { name: 'Conheça o valor da empresa. Controle o exercício.' })).toBeVisible();
   await page.screenshot({ path: '/tmp/e2e/publico-01-valora.png', fullPage: false });
   await page.getByRole('button', { name: 'Ver condições do Kianda Valora' }).click();
   const dialog = page.locator('dialog[open]');
   await expect(dialog.getByRole('button', { name: 'Kianda Valora' })).toHaveAttribute('aria-pressed', 'true');
-  for (const text of ['ATÉ 3 ANÁLISES ACTIVAS', 'PME / Grupo', 'Profissional', 'SEM LIMITE DE ANÁLISES', '10.000 Kz/mês']) await expect(dialog).toContainText(text);
+  for (const text of [
+    'ATÉ 3 ANÁLISES ACTIVAS',
+    'PME / Grupo',
+    'Profissional',
+    'SEM LIMITE DE ANÁLISES',
+    '10.000 Kz/mês',
+  ])
+    await expect(dialog).toContainText(text);
   await expect(dialog).toContainText(/129\s900,00/);
   await dialog.getByLabel('Pagamento').selectOption('annual');
   await expect(dialog).toContainText(/1\s324\s980,00/);
   await page.screenshot({ path: '/tmp/e2e/publico-02-planos-valora.png', fullPage: false });
-  await dialog.locator('article', { hasText: 'Corporate' }).getByRole('link', { name: /Escolher Valora/ }).click();
+  await dialog
+    .locator('article', { hasText: 'Corporate' })
+    .getByRole('link', { name: /Escolher Valora/ })
+    .click();
   await expect(page).toHaveURL(/\/registo\?modulo=valuation&plano=corporate&ciclo=annual/);
   await expect(page.getByLabel('Plano do Valora')).toHaveCount(0);
   await expect(page.getByLabel('Pagamento do Valora')).toHaveCount(0);
@@ -88,10 +105,10 @@ test('login: palavra-passe errada é recusada e a certa entra na conta', async (
   await expect(page).toHaveURL(/\/login/);
   await page.fill('input[type=password]', PASSWORD);
   await page.getByRole('button', { name: 'Entrar' }).click();
-  await page.waitForURL((u) => !u.pathname.startsWith('/login'));
+  await page.waitForURL(u => !u.pathname.startsWith('/login'));
   await expect(page.locator('body')).toContainText(company.name);
   // O 401 da tentativa errada é a resposta esperada da API (o navegador regista-o na consola).
-  expect(errors.filter((e) => !/status of 401/.test(e))).toEqual([]);
+  expect(errors.filter(e => !/status of 401/.test(e))).toEqual([]);
 });
 
 test('sem sessão, a área privada e a Modelagem pedem início de sessão', async ({ page }) => {

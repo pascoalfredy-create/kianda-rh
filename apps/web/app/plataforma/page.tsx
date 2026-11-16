@@ -1,27 +1,129 @@
-import { CYCLES, DEFAULT_TIERS, LEGACY_CUSTOM_TIER, MODELING_PLANS, VALUATION_PLANS, SUBSCRIPTION_STATUS, formatKz, type CompanyModulesOverview } from '@kianda/core';
+import {
+  CYCLES,
+  DEFAULT_TIERS,
+  LEGACY_CUSTOM_TIER,
+  MODELING_PLANS,
+  VALUATION_PLANS,
+  SUBSCRIPTION_STATUS,
+  formatKz,
+  type CompanyModulesOverview,
+} from '@kianda/core';
 import { redirect } from 'next/navigation';
 import { api, currentUser } from '@/lib/api';
 import { PlatformShell } from '@/components/platform-shell';
 import { PurgeCompany } from '@/components/privacy-actions';
 import { Visits, type VisitsSummary } from './visits';
-import { ConfirmPayment, EditSubscription, EditValuation, InvoicingForm, IssueInvoice, JobButtons, MockPayment, SettingsForm } from './forms';
+import {
+  ConfirmPayment,
+  EditSubscription,
+  EditValuation,
+  InvoicingForm,
+  IssueInvoice,
+  JobButtons,
+  MockPayment,
+  SettingsForm,
+} from './forms';
 
 export const dynamic = 'force-dynamic';
 
-interface Co { id: string; name: string; nif: string; sectorLabel: string | null; code: string | null; createdAt: string | null; owner: { email: string; name: string } | null; activeEmployees: number; status: string; statusLabel: string; tierKey: string | null; tierLabel: string; cycle: string | null; limit: number | null; trialEndsAt: string | null; paidUntil: string | null; notes: string | null; monthlyMinor: number | null; pendingPayments: number; modules: CompanyModulesOverview }
-interface Pay { id: string; number: string; company: string; nif: string; kind: string; tierKey: string | null; cycle: string | null; seats: number | null; projectLimit: number | null; extraUsers: number | null; periodStart: string | null; periodEnd: string | null; amountMinor: number; payerReference: string | null; payerNote: string | null; createdAt: string; gatewayEntity: string | null; gatewayReference: string | null; gatewayError: string | null }
+interface Co {
+  id: string;
+  name: string;
+  nif: string;
+  sectorLabel: string | null;
+  code: string | null;
+  createdAt: string | null;
+  owner: { email: string; name: string } | null;
+  activeEmployees: number;
+  status: string;
+  statusLabel: string;
+  tierKey: string | null;
+  tierLabel: string;
+  cycle: string | null;
+  limit: number | null;
+  trialEndsAt: string | null;
+  paidUntil: string | null;
+  notes: string | null;
+  monthlyMinor: number | null;
+  pendingPayments: number;
+  modules: CompanyModulesOverview;
+}
+interface Pay {
+  id: string;
+  number: string;
+  company: string;
+  nif: string;
+  kind: string;
+  tierKey: string | null;
+  cycle: string | null;
+  seats: number | null;
+  projectLimit: number | null;
+  extraUsers: number | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  amountMinor: number;
+  payerReference: string | null;
+  payerNote: string | null;
+  createdAt: string;
+  gatewayEntity: string | null;
+  gatewayReference: string | null;
+  gatewayError: string | null;
+}
 interface Integrations {
-  status: { proxypay: { enabled: boolean; environment: string | null; entity: string | null }; email: { enabled: boolean; from: string | null }; vendus: { enabled: boolean; mode: string | null }; baseUrl: string | null; files?: { mode: string; count: number; bytes: number } };
-  invoicing: { autoIssue: boolean; taxId: 'NOR' | 'ISE'; exemptionCode: string | null; exemptionLaw: string | null; paymentMethodId: number | null; registerId: number | null };
-  events: { id: string; externalId: string; reference: string | null; amountMinor: number | null; outcome: string; message: string | null; createdAt: string }[];
-  emails: { id: string; toAddress: string; subject: string; kind: string; status: string; error: string | null; createdAt: string }[];
+  status: {
+    proxypay: { enabled: boolean; environment: string | null; entity: string | null };
+    email: { enabled: boolean; from: string | null };
+    vendus: { enabled: boolean; mode: string | null };
+    baseUrl: string | null;
+    files?: { mode: string; count: number; bytes: number };
+  };
+  invoicing: {
+    autoIssue: boolean;
+    taxId: 'NOR' | 'ISE';
+    exemptionCode: string | null;
+    exemptionLaw: string | null;
+    paymentMethodId: number | null;
+    registerId: number | null;
+  };
+  events: {
+    id: string;
+    externalId: string;
+    reference: string | null;
+    amountMinor: number | null;
+    outcome: string;
+    message: string | null;
+    createdAt: string;
+  }[];
+  emails: {
+    id: string;
+    toAddress: string;
+    subject: string;
+    kind: string;
+    status: string;
+    error: string | null;
+    createdAt: string;
+  }[];
   invoiceIssues: { id: string; number: string; error: string | null; company: string }[];
 }
-const OUTCOME: Record<string, string> = { applied: 'Aplicado', duplicate: 'Repetido', unmatched: 'Sem pedido', amount_mismatch: 'Montante diferente', not_pending: 'Pedido já tratado', retired_request: 'Cobrança descontinuada' };
+const OUTCOME: Record<string, string> = {
+  applied: 'Aplicado',
+  duplicate: 'Repetido',
+  unmatched: 'Sem pedido',
+  amount_mismatch: 'Montante diferente',
+  not_pending: 'Pedido já tratado',
+  retired_request: 'Cobrança descontinuada',
+};
 const MAIL: Record<string, string> = { sent: 'st approved', skipped: 'tag', failed: 'st rejected' };
-const when = (d: string) => new Date(d).toLocaleString('pt-PT', { timeZone: 'Africa/Luanda', dateStyle: 'short', timeStyle: 'short' });
+const when = (d: string) =>
+  new Date(d).toLocaleString('pt-PT', { timeZone: 'Africa/Luanda', dateStyle: 'short', timeStyle: 'short' });
 const pt = (d: string | null) => (d ? d.split('-').reverse().join('/') : '—');
-const ST: Record<string, string> = { trial: 'st pending', active: 'st approved', past_due: 'st pending', suspended: 'st rejected', cancelled: 'tag' };
+const ST: Record<string, string> = {
+  trial: 'st pending',
+  active: 'st approved',
+  past_due: 'st pending',
+  suspended: 'st rejected',
+  cancelled: 'tag',
+};
 
 export default async function Plataforma() {
   const me = await currentUser();
@@ -29,9 +131,26 @@ export default async function Plataforma() {
   if (!me.platformAdmin) redirect('/');
   if (me.user.requiresEmailVerification) redirect('/confirmar-email');
   const [{ companies, summary }, pays, settings, integ, visits] = await Promise.all([
-    api<{ companies: Co[]; summary: { total: number; trial: number; active: number; pastDue: number; suspended: number; mrrMinor: number; mrrByModule: Record<'hr' | 'modeling' | 'valuation', number>; modules: Record<'hr' | 'modeling' | 'valuation', { trial: number; active: number; pastDue: number }> } }>('/v1/platform/companies'),
+    api<{
+      companies: Co[];
+      summary: {
+        total: number;
+        trial: number;
+        active: number;
+        pastDue: number;
+        suspended: number;
+        mrrMinor: number;
+        mrrByModule: Record<'hr' | 'modeling' | 'valuation', number>;
+        modules: Record<'hr' | 'modeling' | 'valuation', { trial: number; active: number; pastDue: number }>;
+      };
+    }>('/v1/platform/companies'),
     api<Pay[]>('/v1/platform/payment-requests'),
-    api<{ bank: { holder: string; bankName: string; iban: string } | null; supportEmail: string | null; supportPhone: string | null; admins: string[] }>('/v1/platform/settings'),
+    api<{
+      bank: { holder: string; bankName: string; iban: string } | null;
+      supportEmail: string | null;
+      supportPhone: string | null;
+      admins: string[];
+    }>('/v1/platform/settings'),
     api<Integrations>('/v1/platform/integrations'),
     api<VisitsSummary>('/v1/platform/visits?days=30'),
   ]);
@@ -42,11 +161,41 @@ export default async function Plataforma() {
       <h1>Plataforma Kianda</h1>
       <p className="sub">Empresas clientes, licenças e pagamentos · administradores: {settings.admins.join(', ')}</p>
       <div className="grid">
-        <div className="card kpi"><div className="l">Empresas</div><div className="v">{summary.total}</div><div className="muted">{summary.trial} em experimental</div></div>
-        <div className="card kpi"><div className="l">RH: activas (pagas)</div><div className="v">{summary.active}</div><div className="muted">{summary.pastDue} em atraso · {summary.suspended} suspensas</div></div>
-        <div className="card kpi"><div className="l">Receita mensal recorrente</div><div className="v">{formatKz(summary.mrrMinor)}</div><div className="muted">ao preço do ciclo contratado · RH {formatKz(summary.mrrByModule.hr)} · Integra {formatKz(summary.mrrByModule.modeling)} · Valora {formatKz(summary.mrrByModule.valuation)}</div></div>
-        <div className="card kpi"><div className="l">Integra e Valora</div><div className="v">{summary.modules.modeling.active + summary.modules.valuation.active}</div><div className="muted">Integra: {summary.modules.modeling.active} pagas, {summary.modules.modeling.trial} em avaliação, {summary.modules.modeling.pastDue} em atraso · Valora: {summary.modules.valuation.active} pagas, {summary.modules.valuation.trial} em avaliação, {summary.modules.valuation.pastDue} em atraso</div></div>
-        <div className="card kpi" style={pays.length ? { borderColor: '#f3d9a6' } : undefined}><div className="l">Pagamentos por confirmar</div><div className="v" style={{ color: pays.length ? 'var(--amber)' : undefined }}>{pays.length}</div></div>
+        <div className="card kpi">
+          <div className="l">Empresas</div>
+          <div className="v">{summary.total}</div>
+          <div className="muted">{summary.trial} em experimental</div>
+        </div>
+        <div className="card kpi">
+          <div className="l">RH: activas (pagas)</div>
+          <div className="v">{summary.active}</div>
+          <div className="muted">
+            {summary.pastDue} em atraso · {summary.suspended} suspensas
+          </div>
+        </div>
+        <div className="card kpi">
+          <div className="l">Receita mensal recorrente</div>
+          <div className="v">{formatKz(summary.mrrMinor)}</div>
+          <div className="muted">
+            ao preço do ciclo contratado · RH {formatKz(summary.mrrByModule.hr)} · Integra{' '}
+            {formatKz(summary.mrrByModule.modeling)} · Valora {formatKz(summary.mrrByModule.valuation)}
+          </div>
+        </div>
+        <div className="card kpi">
+          <div className="l">Integra e Valora</div>
+          <div className="v">{summary.modules.modeling.active + summary.modules.valuation.active}</div>
+          <div className="muted">
+            Integra: {summary.modules.modeling.active} pagas, {summary.modules.modeling.trial} em avaliação,{' '}
+            {summary.modules.modeling.pastDue} em atraso · Valora: {summary.modules.valuation.active} pagas,{' '}
+            {summary.modules.valuation.trial} em avaliação, {summary.modules.valuation.pastDue} em atraso
+          </div>
+        </div>
+        <div className="card kpi" style={pays.length ? { borderColor: '#f3d9a6' } : undefined}>
+          <div className="l">Pagamentos por confirmar</div>
+          <div className="v" style={{ color: pays.length ? 'var(--amber)' : undefined }}>
+            {pays.length}
+          </div>
+        </div>
       </div>
       <Visits v={visits} />
       {pays.length > 0 && (
@@ -54,12 +203,59 @@ export default async function Plataforma() {
           <h2>Pagamentos por confirmar</h2>
           <table className="dense">
             <tbody>
-              {pays.map((p) => (
+              {pays.map(p => (
                 <tr key={p.id}>
-                  <td><b>{p.number}</b><div className="muted">{p.company} · NIF {p.nif}</div></td>
-                  <td>{p.kind === 'valuation_subscription' ? `Valora · ${VALUATION_PLANS.find(plan => plan.key === p.tierKey)?.label} · ${p.projectLimit === null ? 'análises ilimitadas' : `até ${p.projectLimit} análises`} · ${5 + (p.extraUsers ?? 0)} utilizadores · ${CYCLES[p.cycle as keyof typeof CYCLES]?.label} · ${pt(p.periodStart)}–${pt(p.periodEnd)}` : p.kind === 'modeling_subscription' ? `Modelagem · ${MODELING_PLANS.find(plan => plan.key === p.tierKey)?.label} · ${p.projectLimit === null ? 'projectos ilimitados' : `até ${p.projectLimit} projectos`} · ${5 + (p.extraUsers ?? 0)} utilizadores · ${CYCLES[p.cycle as keyof typeof CYCLES]?.label} · ${pt(p.periodStart)}–${pt(p.periodEnd)}` : p.kind === 'subscription' ? `RH · ${DEFAULT_TIERS.find((t) => t.key === p.tierKey)?.label ?? p.tierKey} · ${p.cycle} · ${pt(p.periodStart)}–${pt(p.periodEnd)}` : `RH · ${p.seats} extra`}<div><b>{formatKz(p.amountMinor)}</b></div></td>
-                  <td>{p.gatewayReference && <div>Multicaixa <b>{p.gatewayReference}</b>{sandbox && <> · <MockPayment id={p.id} /></>}</div>}{p.gatewayError && <div className="err" style={{ fontSize: 12 }}>Gateway: {p.gatewayError}</div>}{p.payerReference ? <>Ref.: <b>{p.payerReference}</b>{p.payerNote ? <div className="muted">{p.payerNote}</div> : null}</> : !p.gatewayReference && <span className="muted">sem referência indicada</span>}</td>
-                  <td className="num">{p.kind === 'extra_seats' ? <span className="tag">Cobrança descontinuada</span> : <ConfirmPayment id={p.id} />}</td>
+                  <td>
+                    <b>{p.number}</b>
+                    <div className="muted">
+                      {p.company} · NIF {p.nif}
+                    </div>
+                  </td>
+                  <td>
+                    {p.kind === 'valuation_subscription'
+                      ? `Valora · ${VALUATION_PLANS.find(plan => plan.key === p.tierKey)?.label} · ${p.projectLimit === null ? 'análises ilimitadas' : `até ${p.projectLimit} análises`} · ${5 + (p.extraUsers ?? 0)} utilizadores · ${CYCLES[p.cycle as keyof typeof CYCLES]?.label} · ${pt(p.periodStart)}–${pt(p.periodEnd)}`
+                      : p.kind === 'modeling_subscription'
+                        ? `Modelagem · ${MODELING_PLANS.find(plan => plan.key === p.tierKey)?.label} · ${p.projectLimit === null ? 'projectos ilimitados' : `até ${p.projectLimit} projectos`} · ${5 + (p.extraUsers ?? 0)} utilizadores · ${CYCLES[p.cycle as keyof typeof CYCLES]?.label} · ${pt(p.periodStart)}–${pt(p.periodEnd)}`
+                        : p.kind === 'subscription'
+                          ? `RH · ${DEFAULT_TIERS.find(t => t.key === p.tierKey)?.label ?? p.tierKey} · ${p.cycle} · ${pt(p.periodStart)}–${pt(p.periodEnd)}`
+                          : `RH · ${p.seats} extra`}
+                    <div>
+                      <b>{formatKz(p.amountMinor)}</b>
+                    </div>
+                  </td>
+                  <td>
+                    {p.gatewayReference && (
+                      <div>
+                        Multicaixa <b>{p.gatewayReference}</b>
+                        {sandbox && (
+                          <>
+                            {' '}
+                            · <MockPayment id={p.id} />
+                          </>
+                        )}
+                      </div>
+                    )}
+                    {p.gatewayError && (
+                      <div className="err" style={{ fontSize: 12 }}>
+                        Gateway: {p.gatewayError}
+                      </div>
+                    )}
+                    {p.payerReference ? (
+                      <>
+                        Ref.: <b>{p.payerReference}</b>
+                        {p.payerNote ? <div className="muted">{p.payerNote}</div> : null}
+                      </>
+                    ) : (
+                      !p.gatewayReference && <span className="muted">sem referência indicada</span>
+                    )}
+                  </td>
+                  <td className="num">
+                    {p.kind === 'extra_seats' ? (
+                      <span className="tag">Cobrança descontinuada</span>
+                    ) : (
+                      <ConfirmPayment id={p.id} />
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -68,50 +264,272 @@ export default async function Plataforma() {
       )}
       <div className="card" style={{ overflowX: 'auto' }}>
         <table className="dense">
-          <thead><tr><th>Empresa</th><th>Responsável</th><th>Licença</th><th className="num">Colaboradores</th><th>Validade</th><th /></tr></thead>
+          <thead>
+            <tr>
+              <th>Empresa</th>
+              <th>Responsável</th>
+              <th>Licença</th>
+              <th className="num">Colaboradores</th>
+              <th>Validade</th>
+              <th />
+            </tr>
+          </thead>
           <tbody>
-            {companies.map((c) => (
+            {companies.map(c => (
               <tr key={c.id} style={{ verticalAlign: 'top' }}>
-                <td><b>{c.name}</b><div className="muted">NIF {c.nif} · código {c.code ?? '—'}{c.sectorLabel ? ` · ${c.sectorLabel}` : ''}</div>{c.notes && <div className="muted">{c.notes}</div>}</td>
-                <td>{c.owner?.name ?? '—'}<div className="muted">{c.owner?.email}</div></td>
-                <td><b>RH</b> · <span className={ST[c.status]}>{c.modules.hr.subscribed ? c.statusLabel : 'Não subscrito'}</span><div className="muted">{c.tierLabel}{c.cycle ? ` · ${c.cycle}` : ''}</div><b>Modelagem</b> · <span className={ST[c.modules.modeling.status]}>{c.modules.modeling.subscribed ? SUBSCRIPTION_STATUS[c.modules.modeling.status] : 'Não subscrito'}</span><div className="muted">{MODELING_PLANS.find(p => p.key === c.modules.modeling.planKey)?.label ?? 'Contrato personalizado'} · {c.modules.modeling.projectLimit === null ? 'projectos ilimitados' : `${c.modules.modeling.projectLimit} projecto(s)`} · {c.modules.modeling.userLimit} utilizadores</div><b>Valora</b> · <span className={ST[c.modules.valuation.status]}>{c.modules.valuation.subscribed ? SUBSCRIPTION_STATUS[c.modules.valuation.status] : 'Não subscrito'}</span><div className="muted">{c.modules.valuation.analysisLimit === null ? 'análises ilimitadas' : `${c.modules.valuation.analysisLimit} análise(s)`} · {c.modules.valuation.userLimit} utilizadores{c.modules.valuation.planKey ? ` · ${VALUATION_PLANS.find(x => x.key === c.modules.valuation.planKey)?.label}` : ''}</div></td>
-                <td className="num">{c.activeEmployees}{c.limit ? ` / ${c.limit}` : ''}</td>
-                <td>RH: {c.modules.hr.subscribed ? c.status === 'trial' ? `experimental até ${pt(c.trialEndsAt)}` : `pago até ${pt(c.paidUntil)}` : '—'}<div>Modelagem: {c.modules.modeling.subscribed ? c.modules.modeling.status === 'trial' ? `experimental até ${pt(c.modules.modeling.trialEndsAt)}` : `pago até ${pt(c.modules.modeling.paidUntil)}` : '—'}</div><div>Valora: {c.modules.valuation.subscribed ? c.modules.valuation.status === 'trial' ? `experimental até ${pt(c.modules.valuation.trialEndsAt)}` : `pago até ${pt(c.modules.valuation.paidUntil)}` : '—'}</div>{c.pendingPayments ? <div><span className="tag future">{c.pendingPayments} pagamento(s) pendente(s)</span></div> : null}</td>
-                <td className="num"><EditSubscription c={c} tiers={[...DEFAULT_TIERS, LEGACY_CUSTOM_TIER]} /><EditValuation companyId={c.id} v={c.modules.valuation} /><PurgeCompany id={c.id} nif={c.nif} cancelled={c.status === 'cancelled' && (!c.modules.modeling.subscribed || c.modules.modeling.status === 'cancelled') && (!c.modules.valuation.subscribed || c.modules.valuation.status === 'cancelled')} /></td>
+                <td>
+                  <b>{c.name}</b>
+                  <div className="muted">
+                    NIF {c.nif} · código {c.code ?? '—'}
+                    {c.sectorLabel ? ` · ${c.sectorLabel}` : ''}
+                  </div>
+                  {c.notes && <div className="muted">{c.notes}</div>}
+                </td>
+                <td>
+                  {c.owner?.name ?? '—'}
+                  <div className="muted">{c.owner?.email}</div>
+                </td>
+                <td>
+                  <b>RH</b> ·{' '}
+                  <span className={ST[c.status]}>{c.modules.hr.subscribed ? c.statusLabel : 'Não subscrito'}</span>
+                  <div className="muted">
+                    {c.tierLabel}
+                    {c.cycle ? ` · ${c.cycle}` : ''}
+                  </div>
+                  <b>Modelagem</b> ·{' '}
+                  <span className={ST[c.modules.modeling.status]}>
+                    {c.modules.modeling.subscribed ? SUBSCRIPTION_STATUS[c.modules.modeling.status] : 'Não subscrito'}
+                  </span>
+                  <div className="muted">
+                    {MODELING_PLANS.find(p => p.key === c.modules.modeling.planKey)?.label ?? 'Contrato personalizado'}{' '}
+                    ·{' '}
+                    {c.modules.modeling.projectLimit === null
+                      ? 'projectos ilimitados'
+                      : `${c.modules.modeling.projectLimit} projecto(s)`}{' '}
+                    · {c.modules.modeling.userLimit} utilizadores
+                  </div>
+                  <b>Valora</b> ·{' '}
+                  <span className={ST[c.modules.valuation.status]}>
+                    {c.modules.valuation.subscribed ? SUBSCRIPTION_STATUS[c.modules.valuation.status] : 'Não subscrito'}
+                  </span>
+                  <div className="muted">
+                    {c.modules.valuation.analysisLimit === null
+                      ? 'análises ilimitadas'
+                      : `${c.modules.valuation.analysisLimit} análise(s)`}{' '}
+                    · {c.modules.valuation.userLimit} utilizadores
+                    {c.modules.valuation.planKey
+                      ? ` · ${VALUATION_PLANS.find(x => x.key === c.modules.valuation.planKey)?.label}`
+                      : ''}
+                  </div>
+                </td>
+                <td className="num">
+                  {c.activeEmployees}
+                  {c.limit ? ` / ${c.limit}` : ''}
+                </td>
+                <td>
+                  RH:{' '}
+                  {c.modules.hr.subscribed
+                    ? c.status === 'trial'
+                      ? `experimental até ${pt(c.trialEndsAt)}`
+                      : `pago até ${pt(c.paidUntil)}`
+                    : '—'}
+                  <div>
+                    Modelagem:{' '}
+                    {c.modules.modeling.subscribed
+                      ? c.modules.modeling.status === 'trial'
+                        ? `experimental até ${pt(c.modules.modeling.trialEndsAt)}`
+                        : `pago até ${pt(c.modules.modeling.paidUntil)}`
+                      : '—'}
+                  </div>
+                  <div>
+                    Valora:{' '}
+                    {c.modules.valuation.subscribed
+                      ? c.modules.valuation.status === 'trial'
+                        ? `experimental até ${pt(c.modules.valuation.trialEndsAt)}`
+                        : `pago até ${pt(c.modules.valuation.paidUntil)}`
+                      : '—'}
+                  </div>
+                  {c.pendingPayments ? (
+                    <div>
+                      <span className="tag future">{c.pendingPayments} pagamento(s) pendente(s)</span>
+                    </div>
+                  ) : null}
+                </td>
+                <td className="num">
+                  <EditSubscription c={c} tiers={[...DEFAULT_TIERS, LEGACY_CUSTOM_TIER]} />
+                  <EditValuation companyId={c.id} v={c.modules.valuation} />
+                  <PurgeCompany
+                    id={c.id}
+                    nif={c.nif}
+                    cancelled={
+                      c.status === 'cancelled' &&
+                      (!c.modules.modeling.subscribed || c.modules.modeling.status === 'cancelled') &&
+                      (!c.modules.valuation.subscribed || c.modules.valuation.status === 'cancelled')
+                    }
+                  />
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <div className="card section" style={{ marginTop: 16 }}><h2>Parâmetros comerciais</h2><SettingsForm s={settings} /></div>
+      <div className="card section" style={{ marginTop: 16 }}>
+        <h2>Parâmetros comerciais</h2>
+        <SettingsForm s={settings} />
+      </div>
 
       <div className="card section">
         <h2>Integrações</h2>
         <div className="grid" style={{ padding: '12px 16px 0', marginBottom: 0 }}>
-          <div className="card kpi"><div className="l">Multicaixa (ProxyPay)</div><div className="v" style={{ fontSize: 16 }}><span className={st.proxypay.enabled ? 'st approved' : 'tag'}>{st.proxypay.enabled ? (st.proxypay.environment === 'production' ? 'Produção' : 'Testes (sandbox)') : 'Desligado'}</span></div><div className="muted">{st.proxypay.enabled ? `entidade ${st.proxypay.entity ?? 'por indicar'}` : 'secret KIANDA_PROXYPAY_API_KEY'}</div></div>
-          <div className="card kpi"><div className="l">Email (Resend)</div><div className="v" style={{ fontSize: 16 }}><span className={st.email.enabled ? 'st approved' : 'tag'}>{st.email.enabled ? 'Ligado' : 'Desligado'}</span></div><div className="muted">{st.email.from ?? 'secret KIANDA_RESEND_API_KEY + variável KIANDA_MAIL_FROM'}</div></div>
-          <div className="card kpi"><div className="l">Ficheiros</div><div className="v" style={{ fontSize: 16 }}><span className={st.files?.mode === 'r2' ? 'st approved' : 'tag'}>{st.files?.mode === 'r2' ? 'Cloudflare R2' : 'Base de dados'}</span></div><div className="muted">{st.files ? `${st.files.count} ficheiro(s), ${(st.files.bytes / 1048576).toFixed(1)} MB` : '—'}{st.files?.mode !== 'r2' ? ' · limite 250 MB por empresa' : ''}</div></div>
-          <div className="card kpi"><div className="l">Facturação AGT (Cegid Vendus)</div><div className="v" style={{ fontSize: 16 }}><span className={st.vendus.enabled ? 'st approved' : 'tag'}>{st.vendus.enabled ? (st.vendus.mode === 'normal' ? 'Produção' : 'Modo de testes') : 'Desligado'}</span></div><div className="muted">{st.vendus.enabled ? 'factura-recibo (FR) certificada' : 'secret KIANDA_VENDUS_API_KEY'}</div></div>
+          <div className="card kpi">
+            <div className="l">Multicaixa (ProxyPay)</div>
+            <div className="v" style={{ fontSize: 16 }}>
+              <span className={st.proxypay.enabled ? 'st approved' : 'tag'}>
+                {st.proxypay.enabled
+                  ? st.proxypay.environment === 'production'
+                    ? 'Produção'
+                    : 'Testes (sandbox)'
+                  : 'Desligado'}
+              </span>
+            </div>
+            <div className="muted">
+              {st.proxypay.enabled
+                ? `entidade ${st.proxypay.entity ?? 'por indicar'}`
+                : 'secret KIANDA_PROXYPAY_API_KEY'}
+            </div>
+          </div>
+          <div className="card kpi">
+            <div className="l">Email (Resend)</div>
+            <div className="v" style={{ fontSize: 16 }}>
+              <span className={st.email.enabled ? 'st approved' : 'tag'}>
+                {st.email.enabled ? 'Ligado' : 'Desligado'}
+              </span>
+            </div>
+            <div className="muted">{st.email.from ?? 'secret KIANDA_RESEND_API_KEY + variável KIANDA_MAIL_FROM'}</div>
+          </div>
+          <div className="card kpi">
+            <div className="l">Ficheiros</div>
+            <div className="v" style={{ fontSize: 16 }}>
+              <span className={st.files?.mode === 'r2' ? 'st approved' : 'tag'}>
+                {st.files?.mode === 'r2' ? 'Cloudflare R2' : 'Base de dados'}
+              </span>
+            </div>
+            <div className="muted">
+              {st.files ? `${st.files.count} ficheiro(s), ${(st.files.bytes / 1048576).toFixed(1)} MB` : '—'}
+              {st.files?.mode !== 'r2' ? ' · limite 250 MB por empresa' : ''}
+            </div>
+          </div>
+          <div className="card kpi">
+            <div className="l">Facturação AGT (Cegid Vendus)</div>
+            <div className="v" style={{ fontSize: 16 }}>
+              <span className={st.vendus.enabled ? 'st approved' : 'tag'}>
+                {st.vendus.enabled ? (st.vendus.mode === 'normal' ? 'Produção' : 'Modo de testes') : 'Desligado'}
+              </span>
+            </div>
+            <div className="muted">
+              {st.vendus.enabled ? 'factura-recibo (FR) certificada' : 'secret KIANDA_VENDUS_API_KEY'}
+            </div>
+          </div>
         </div>
-        {st.proxypay.enabled && <p className="muted" style={{ padding: '10px 16px 0', fontSize: 12.5 }}>Webhook a indicar ao ProxyPay: <b>{st.baseUrl ?? 'https://<domínio>'}/api/v1/public/gateway/proxypay</b> (assinatura X-Signature).</p>}
+        {st.proxypay.enabled && (
+          <p className="muted" style={{ padding: '10px 16px 0', fontSize: 12.5 }}>
+            Webhook a indicar ao ProxyPay: <b>{st.baseUrl ?? 'https://<domínio>'}/api/v1/public/gateway/proxypay</b>{' '}
+            (assinatura X-Signature).
+          </p>
+        )}
         <JobButtons gateway={st.proxypay.enabled} />
-        {st.vendus.enabled && <><h2 style={{ fontSize: 12, padding: '6px 16px 0' }}>Facturação</h2><InvoicingForm v={integ.invoicing} enabled={st.vendus.enabled} /></>}
+        {st.vendus.enabled && (
+          <>
+            <h2 style={{ fontSize: 12, padding: '6px 16px 0' }}>Facturação</h2>
+            <InvoicingForm v={integ.invoicing} enabled={st.vendus.enabled} />
+          </>
+        )}
         {integ.invoiceIssues.length > 0 && (
-          <table className="dense"><thead><tr><th>Pago sem factura</th><th>Empresa</th><th>Último erro</th><th /></tr></thead>
-            <tbody>{integ.invoiceIssues.map((x) => <tr key={x.id}><td>{x.number}</td><td>{x.company}</td><td className="muted" style={{ maxWidth: 380 }}>{x.error ?? '—'}</td><td className="num">{st.vendus.enabled ? <IssueInvoice id={x.id} /> : <span className="muted">registe o n.º ao confirmar</span>}</td></tr>)}</tbody></table>
+          <table className="dense">
+            <thead>
+              <tr>
+                <th>Pago sem factura</th>
+                <th>Empresa</th>
+                <th>Último erro</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {integ.invoiceIssues.map(x => (
+                <tr key={x.id}>
+                  <td>{x.number}</td>
+                  <td>{x.company}</td>
+                  <td className="muted" style={{ maxWidth: 380 }}>
+                    {x.error ?? '—'}
+                  </td>
+                  <td className="num">
+                    {st.vendus.enabled ? (
+                      <IssueInvoice id={x.id} />
+                    ) : (
+                      <span className="muted">registe o n.º ao confirmar</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
 
       {integ.events.length > 0 && (
         <div className="card section">
           <h2>Pagamentos recebidos do Multicaixa</h2>
-          <table className="dense"><tbody>{integ.events.map((e) => <tr key={e.id}><td className="muted">{when(e.createdAt)}</td><td>Ref. {e.reference}</td><td className="num">{e.amountMinor !== null ? formatKz(e.amountMinor) : '—'}</td><td><span className={e.outcome === 'applied' ? 'st approved' : e.outcome === 'duplicate' ? 'tag' : 'st rejected'}>{OUTCOME[e.outcome] ?? e.outcome}</span></td><td className="muted">{e.message}</td></tr>)}</tbody></table>
+          <table className="dense">
+            <tbody>
+              {integ.events.map(e => (
+                <tr key={e.id}>
+                  <td className="muted">{when(e.createdAt)}</td>
+                  <td>Ref. {e.reference}</td>
+                  <td className="num">{e.amountMinor !== null ? formatKz(e.amountMinor) : '—'}</td>
+                  <td>
+                    <span
+                      className={
+                        e.outcome === 'applied' ? 'st approved' : e.outcome === 'duplicate' ? 'tag' : 'st rejected'
+                      }
+                    >
+                      {OUTCOME[e.outcome] ?? e.outcome}
+                    </span>
+                  </td>
+                  <td className="muted">{e.message}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
       <div className="card section">
         <h2>Emails recentes</h2>
-        {integ.emails.length ? <table className="dense"><tbody>{integ.emails.map((e) => <tr key={e.id}><td className="muted">{when(e.createdAt)}</td><td>{e.toAddress}</td><td>{e.subject}</td><td><span className={MAIL[e.status] ?? 'tag'}>{e.status === 'sent' ? 'Enviado' : e.status === 'skipped' ? 'Não enviado' : 'Falhou'}</span>{e.error && e.status === 'failed' && <div className="muted" style={{ fontSize: 12 }}>{e.error}</div>}</td></tr>)}</tbody></table> : <div className="empty">Ainda não há emails.</div>}
+        {integ.emails.length ? (
+          <table className="dense">
+            <tbody>
+              {integ.emails.map(e => (
+                <tr key={e.id}>
+                  <td className="muted">{when(e.createdAt)}</td>
+                  <td>{e.toAddress}</td>
+                  <td>{e.subject}</td>
+                  <td>
+                    <span className={MAIL[e.status] ?? 'tag'}>
+                      {e.status === 'sent' ? 'Enviado' : e.status === 'skipped' ? 'Não enviado' : 'Falhou'}
+                    </span>
+                    {e.error && e.status === 'failed' && (
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        {e.error}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="empty">Ainda não há emails.</div>
+        )}
       </div>
     </PlatformShell>
   );

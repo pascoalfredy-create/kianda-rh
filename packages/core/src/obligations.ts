@@ -26,7 +26,12 @@ export const OBLIGATION_LABEL: Record<ObligationKind, string> = {
   irt: 'IRT retido (Grupo A)',
 };
 
-export function obligationStatus(dueDate: string, paidAt: string | null, today: string, soonDays = 7): { status: ObligationStatus; daysLeft: number } {
+export function obligationStatus(
+  dueDate: string,
+  paidAt: string | null,
+  today: string,
+  soonDays = 7,
+): { status: ObligationStatus; daysLeft: number } {
   const daysLeft = daysBetween(today, dueDate);
   if (paidAt) return { status: 'paid', daysLeft };
   if (daysLeft < 0) return { status: 'overdue', daysLeft };
@@ -52,7 +57,14 @@ export function payrollObligations(input: {
   ];
   return items.map(([kind, amountMinor, dueDate]) => {
     const paidAt = input.paid[kind] ?? null;
-    return { kind, label: OBLIGATION_LABEL[kind], amountMinor, dueDate, paidAt, ...obligationStatus(dueDate, paidAt, input.today) };
+    return {
+      kind,
+      label: OBLIGATION_LABEL[kind],
+      amountMinor,
+      dueDate,
+      paidAt,
+      ...obligationStatus(dueDate, paidAt, input.today),
+    };
   });
 }
 
@@ -69,5 +81,5 @@ export function toCsv(header: string[], rows: (string | number | null | undefine
     const s = v == null ? '' : String(v);
     return /[;"\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  return '﻿' + [header, ...rows].map((r) => r.map(cell).join(';')).join('\r\n') + '\r\n';
+  return '﻿' + [header, ...rows].map(r => r.map(cell).join(';')).join('\r\n') + '\r\n';
 }

@@ -60,28 +60,43 @@ export function buildApp(opts: { logger?: boolean; rateLimit?: boolean } = {}) {
   }
 
   app.onError((err, c) => {
-    if (err instanceof FinancialModelError) return c.json({ error: 'pressupostos_invalidos', message: err.message, issues: err.issues }, 422);
-    if (err instanceof ZodError) return c.json({ error: 'dados_invalidos', issues: err.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) }, 400);
+    if (err instanceof FinancialModelError)
+      return c.json({ error: 'pressupostos_invalidos', message: err.message, issues: err.issues }, 422);
+    if (err instanceof ZodError)
+      return c.json(
+        { error: 'dados_invalidos', issues: err.issues.map(i => ({ path: i.path.join('.'), message: i.message })) },
+        400,
+      );
     if (err instanceof DomainError) return c.json({ error: err.code, message: err.message }, err.status as 400);
     if (err instanceof PackNotFoundError) return c.json({ error: 'pacote_inexistente', message: err.message }, 422);
     const e = err as { code?: string; cause?: { code?: string } };
-    if (e.code === '23505' || e.cause?.code === '23505') return c.json({ error: 'duplicado', message: 'Registo duplicado' }, 409);
+    if (e.code === '23505' || e.cause?.code === '23505')
+      return c.json({ error: 'duplicado', message: 'Registo duplicado' }, 409);
     console.error(err);
     // Alerta aos administradores da plataforma (agrupado e limitado), depois da resposta.
     if (process.env.NODE_ENV !== 'test') {
       const alert = alertServerError({ method: c.req.method, path: c.req.path, error: err });
-      try { c.executionCtx.waitUntil(alert); } catch { void alert; }
+      try {
+        c.executionCtx.waitUntil(alert);
+      } catch {
+        void alert;
+      }
     }
     return c.json({ error: 'erro_interno', message: 'Erro interno. Tente novamente.' }, 500);
   });
-  app.notFound((c) => c.json({ error: 'nao_encontrado', message: 'Rota inexistente' }, 404));
+  app.notFound(c => c.json({ error: 'nao_encontrado', message: 'Rota inexistente' }, 404));
 
   // Notificações: depois de um pedido que as gerou, envia-as sem atrasar a resposta.
   app.use('*', async (c, next) => {
     await next();
     if (c.req.method !== 'GET' && c.res.status < 400) {
       let waitUntil: ((p: Promise<unknown>) => void) | undefined;
-      try { const ctx = c.executionCtx; waitUntil = (p) => ctx.waitUntil(p); } catch { /* Node: sem contexto de execução */ }
+      try {
+        const ctx = c.executionCtx;
+        waitUntil = p => ctx.waitUntil(p);
+      } catch {
+        /* Node: sem contexto de execução */
+      }
       if (takePushFlag()) runPushInBackground(waitUntil);
       if (takeRecruitmentMailFlag()) runRecruitmentMailInBackground(waitUntil);
     }

@@ -22,8 +22,11 @@ export async function visibleEmployeeIds(db: Db, actor: Actor): Promise<string[]
   if (ALL_SCOPE.includes(actor.role)) return null;
   const own = actor.employeeId ? [actor.employeeId] : [];
   if (actor.role !== 'manager' || !actor.employeeId) return own;
-  const team = await db.select({ id: employees.id }).from(employees).where(and(eq(employees.companyId, actor.companyId), eq(employees.managerId, actor.employeeId)));
-  return [...own, ...team.map((t) => t.id)];
+  const team = await db
+    .select({ id: employees.id })
+    .from(employees)
+    .where(and(eq(employees.companyId, actor.companyId), eq(employees.managerId, actor.employeeId)));
+  return [...own, ...team.map(t => t.id)];
 }
 
 export async function canSee(db: Db, actor: Actor, employeeId: string): Promise<boolean> {

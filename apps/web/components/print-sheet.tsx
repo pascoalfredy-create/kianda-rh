@@ -9,9 +9,27 @@ export function PrintSheet({ children, footer }: { children: ReactNode; footer?:
   return (
     <div className="card doc a4">
       <table className="sheet" role="presentation">
-        <thead><tr><td><Letterhead /></td></tr></thead>
-        <tbody><tr><td>{children}</td></tr></tbody>
-        {footer && <tfoot><tr><td><div className="sheet-foot">{footer}</div></td></tr></tfoot>}
+        <thead>
+          <tr>
+            <td>
+              <Letterhead />
+            </td>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>{children}</td>
+          </tr>
+        </tbody>
+        {footer && (
+          <tfoot>
+            <tr>
+              <td>
+                <div className="sheet-foot">{footer}</div>
+              </td>
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
   );

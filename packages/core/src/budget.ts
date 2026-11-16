@@ -8,30 +8,71 @@
 import { applyBps, type Minor } from './money.js';
 import { workingDaysInMonth } from './reports.js';
 
-export interface BudgetAllowance { calc: 'fixed' | 'base_pct' | 'per_day'; valueMinor: Minor | null; bps: number | null; inInss: boolean; startDate: string; endDate: string | null }
-export interface BudgetEmployee {
-  id: string; departmentId: string | null; baseMinor: Minor; mealMinor: Minor; transportMinor: Minor; otherMinor: Minor;
-  startDate: string; endDate: string | null; allowances: BudgetAllowance[];
+export interface BudgetAllowance {
+  calc: 'fixed' | 'base_pct' | 'per_day';
+  valueMinor: Minor | null;
+  bps: number | null;
+  inInss: boolean;
+  startDate: string;
+  endDate: string | null;
 }
-export interface BudgetHire { departmentId: string | null; from: string; count: number; baseMinor: Minor; mealMinor: Minor; transportMinor: Minor; label?: string }
+export interface BudgetEmployee {
+  id: string;
+  departmentId: string | null;
+  baseMinor: Minor;
+  mealMinor: Minor;
+  transportMinor: Minor;
+  otherMinor: Minor;
+  startDate: string;
+  endDate: string | null;
+  allowances: BudgetAllowance[];
+}
+export interface BudgetHire {
+  departmentId: string | null;
+  from: string;
+  count: number;
+  baseMinor: Minor;
+  mealMinor: Minor;
+  transportMinor: Minor;
+  label?: string;
+}
 export interface BudgetAssumptions {
   year: number;
   /** Aumento do salário base (pontos base: 500 = 5%) a partir do mês indicado. */
-  increaseBps: number; increaseFrom: string;
+  increaseBps: number;
+  increaseFrom: string;
   hires: BudgetHire[];
   /** Mês (1–12) do subsídio de férias e do de Natal. */
-  holidayMonth: number; christmasMonth: number;
+  holidayMonth: number;
+  christmasMonth: number;
 }
-export interface BudgetRules { holidayBps: number; christmasBps: number; employerInssBps: number; holidayInInss: boolean; christmasInInss: boolean; dailyRateDivisor: number }
+export interface BudgetRules {
+  holidayBps: number;
+  christmasBps: number;
+  employerInssBps: number;
+  holidayInInss: boolean;
+  christmasInInss: boolean;
+  dailyRateDivisor: number;
+}
 
-export interface BudgetCell { period: string; departmentId: string | null; headcount: number; grossMinor: Minor; costMinor: Minor }
+export interface BudgetCell {
+  period: string;
+  departmentId: string | null;
+  headcount: number;
+  grossMinor: Minor;
+  costMinor: Minor;
+}
 
 const periodsOf = (year: number) => Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
-const monthEnd = (p: string) => { const [y, m] = p.split('-').map(Number) as [number, number]; return `${p}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`; };
+const monthEnd = (p: string) => {
+  const [y, m] = p.split('-').map(Number) as [number, number];
+  return `${p}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`;
+};
 
 /** Fracção do mês trabalhada (dias/30) para entradas e saídas a meio do mês. */
 function activeFraction(p: string, start: string, end: string | null, divisor: number): number {
-  const ms = `${p}-01`, me = monthEnd(p);
+  const ms = `${p}-01`,
+    me = monthEnd(p);
   if (start > me || (end && end < ms)) return 0;
   const from = start > ms ? Number(start.slice(8)) : 1;
   const to = end && end < me ? Number(end.slice(8)) : Number(me.slice(8));
@@ -68,18 +109,25 @@ export function budgetProjection(employees: BudgetEmployee[], a: BudgetAssumptio
       let inss = (base + e.otherMinor) * f;
       for (const al of e.allowances) {
         if (al.startDate > monthEnd(p) || (al.endDate && al.endDate < `${p}-01`)) continue;
-        const v = al.calc === 'fixed' ? (al.valueMinor ?? 0) * f : al.calc === 'base_pct' ? applyBps(base, al.bps ?? 0) * f : (al.valueMinor ?? 0) * Math.round(workingDaysInMonth(p) * f);
+        const v =
+          al.calc === 'fixed'
+            ? (al.valueMinor ?? 0) * f
+            : al.calc === 'base_pct'
+              ? applyBps(base, al.bps ?? 0) * f
+              : (al.valueMinor ?? 0) * Math.round(workingDaysInMonth(p) * f);
         gross += v;
         if (al.inInss) inss += v;
       }
       const month = Number(p.slice(5));
       if (month === a.holidayMonth) {
         const v = applyBps(base, r.holidayBps) * subsidyFraction(a.year, month, e.startDate, e.endDate);
-        gross += v; if (r.holidayInInss) inss += v;
+        gross += v;
+        if (r.holidayInInss) inss += v;
       }
       if (month === a.christmasMonth) {
         const v = applyBps(base, r.christmasBps) * subsidyFraction(a.year, month, e.startDate, e.endDate);
-        gross += v; if (r.christmasInInss) inss += v;
+        gross += v;
+        if (r.christmasInInss) inss += v;
       }
       add(p, e.departmentId, f * count, gross * count, inss * count);
     }
@@ -87,58 +135,136 @@ export function budgetProjection(employees: BudgetEmployee[], a: BudgetAssumptio
   for (const e of employees) person(e, 1, true);
   // Admissões: entram com o salário indicado na hipótese (sem o aumento geral).
   for (const h of a.hires) {
-    if (h.count > 0) person({ id: 'hire', departmentId: h.departmentId, baseMinor: h.baseMinor, mealMinor: h.mealMinor, transportMinor: h.transportMinor, otherMinor: 0, startDate: `${h.from}-01`, endDate: null, allowances: [] }, h.count, false);
+    if (h.count > 0)
+      person(
+        {
+          id: 'hire',
+          departmentId: h.departmentId,
+          baseMinor: h.baseMinor,
+          mealMinor: h.mealMinor,
+          transportMinor: h.transportMinor,
+          otherMinor: 0,
+          startDate: `${h.from}-01`,
+          endDate: null,
+          allowances: [],
+        },
+        h.count,
+        false,
+      );
   }
-  return [...cells.values()].sort((x, y) => (x.period === y.period ? (x.departmentId ?? '').localeCompare(y.departmentId ?? '') : x.period.localeCompare(y.period)));
+  return [...cells.values()].sort((x, y) =>
+    x.period === y.period
+      ? (x.departmentId ?? '').localeCompare(y.departmentId ?? '')
+      : x.period.localeCompare(y.period),
+  );
 }
 
 // ───────────────────────── Orçado vs real ─────────────────────────
 
-export interface ActualCell { period: string; departmentId: string | null; costMinor: Minor; headcount: number }
+export interface ActualCell {
+  period: string;
+  departmentId: string | null;
+  costMinor: Minor;
+  headcount: number;
+}
 export interface BudgetComparison {
-  months: { period: string; budgetMinor: Minor; actualMinor: Minor | null; varianceMinor: Minor | null; variancePct: number | null; budgetHeadcount: number; actualHeadcount: number | null }[];
-  departments: { departmentId: string | null; budgetYearMinor: Minor; budgetToDateMinor: Minor; actualToDateMinor: Minor; varianceMinor: Minor; variancePct: number | null }[];
+  months: {
+    period: string;
+    budgetMinor: Minor;
+    actualMinor: Minor | null;
+    varianceMinor: Minor | null;
+    variancePct: number | null;
+    budgetHeadcount: number;
+    actualHeadcount: number | null;
+  }[];
+  departments: {
+    departmentId: string | null;
+    budgetYearMinor: Minor;
+    budgetToDateMinor: Minor;
+    actualToDateMinor: Minor;
+    varianceMinor: Minor;
+    variancePct: number | null;
+  }[];
   totals: {
-    budgetYearMinor: Minor; budgetToDateMinor: Minor; actualToDateMinor: Minor; varianceMinor: Minor; variancePct: number | null;
+    budgetYearMinor: Minor;
+    budgetToDateMinor: Minor;
+    actualToDateMinor: Minor;
+    varianceMinor: Minor;
+    variancePct: number | null;
     /** Previsão de fecho: real dos meses fechados + orçado dos restantes. */
-    forecastMinor: Minor; closedMonths: number;
+    forecastMinor: Minor;
+    closedMonths: number;
   };
 }
 
 const vpct = (variance: number, budget: number) => (budget ? Math.round((variance / budget) * 10_000) / 100 : null);
 
 /** Desvio = real − orçado (positivo = gastou mais do que o previsto). Só os meses com processamento fechado contam como real. */
-export function budgetVsActual(budget: BudgetCell[], actual: ActualCell[], closedPeriods: string[], year: number): BudgetComparison {
-  const closed = new Set(closedPeriods.filter((p) => p.startsWith(`${year}-`)));
-  const months = periodsOf(year).map((period) => {
-    const b = budget.filter((c) => c.period === period);
-    const act = actual.filter((c) => c.period === period);
+export function budgetVsActual(
+  budget: BudgetCell[],
+  actual: ActualCell[],
+  closedPeriods: string[],
+  year: number,
+): BudgetComparison {
+  const closed = new Set(closedPeriods.filter(p => p.startsWith(`${year}-`)));
+  const months = periodsOf(year).map(period => {
+    const b = budget.filter(c => c.period === period);
+    const act = actual.filter(c => c.period === period);
     const budgetMinor = b.reduce((s, c) => s + c.costMinor, 0);
     const isClosed = closed.has(period);
     const actualMinor = isClosed ? act.reduce((s, c) => s + c.costMinor, 0) : null;
     const varianceMinor = actualMinor === null ? null : actualMinor - budgetMinor;
     return {
-      period, budgetMinor, actualMinor, varianceMinor, variancePct: varianceMinor === null ? null : vpct(varianceMinor, budgetMinor),
-      budgetHeadcount: Math.round(b.reduce((s, c) => s + c.headcount, 0) * 10) / 10, actualHeadcount: isClosed ? act.reduce((s, c) => s + c.headcount, 0) : null,
+      period,
+      budgetMinor,
+      actualMinor,
+      varianceMinor,
+      variancePct: varianceMinor === null ? null : vpct(varianceMinor, budgetMinor),
+      budgetHeadcount: Math.round(b.reduce((s, c) => s + c.headcount, 0) * 10) / 10,
+      actualHeadcount: isClosed ? act.reduce((s, c) => s + c.headcount, 0) : null,
     };
   });
-  const deptIds = [...new Set([...budget.map((c) => c.departmentId), ...actual.filter((c) => closed.has(c.period)).map((c) => c.departmentId)])];
-  const departments = deptIds.map((departmentId) => {
-    const mine = (c: { departmentId: string | null }) => c.departmentId === departmentId;
-    const budgetYearMinor = budget.filter(mine).reduce((s, c) => s + c.costMinor, 0);
-    const budgetToDateMinor = budget.filter((c) => mine(c) && closed.has(c.period)).reduce((s, c) => s + c.costMinor, 0);
-    const actualToDateMinor = actual.filter((c) => mine(c) && closed.has(c.period)).reduce((s, c) => s + c.costMinor, 0);
-    return { departmentId, budgetYearMinor, budgetToDateMinor, actualToDateMinor, varianceMinor: actualToDateMinor - budgetToDateMinor, variancePct: vpct(actualToDateMinor - budgetToDateMinor, budgetToDateMinor) };
-  }).sort((x, y) => y.budgetYearMinor - x.budgetYearMinor);
+  const deptIds = [
+    ...new Set([
+      ...budget.map(c => c.departmentId),
+      ...actual.filter(c => closed.has(c.period)).map(c => c.departmentId),
+    ]),
+  ];
+  const departments = deptIds
+    .map(departmentId => {
+      const mine = (c: { departmentId: string | null }) => c.departmentId === departmentId;
+      const budgetYearMinor = budget.filter(mine).reduce((s, c) => s + c.costMinor, 0);
+      const budgetToDateMinor = budget
+        .filter(c => mine(c) && closed.has(c.period))
+        .reduce((s, c) => s + c.costMinor, 0);
+      const actualToDateMinor = actual
+        .filter(c => mine(c) && closed.has(c.period))
+        .reduce((s, c) => s + c.costMinor, 0);
+      return {
+        departmentId,
+        budgetYearMinor,
+        budgetToDateMinor,
+        actualToDateMinor,
+        varianceMinor: actualToDateMinor - budgetToDateMinor,
+        variancePct: vpct(actualToDateMinor - budgetToDateMinor, budgetToDateMinor),
+      };
+    })
+    .sort((x, y) => y.budgetYearMinor - x.budgetYearMinor);
   const budgetYearMinor = months.reduce((s, m) => s + m.budgetMinor, 0);
-  const budgetToDateMinor = months.filter((m) => m.actualMinor !== null).reduce((s, m) => s + m.budgetMinor, 0);
+  const budgetToDateMinor = months.filter(m => m.actualMinor !== null).reduce((s, m) => s + m.budgetMinor, 0);
   const actualToDateMinor = months.reduce((s, m) => s + (m.actualMinor ?? 0), 0);
-  const remaining = months.filter((m) => m.actualMinor === null).reduce((s, m) => s + m.budgetMinor, 0);
+  const remaining = months.filter(m => m.actualMinor === null).reduce((s, m) => s + m.budgetMinor, 0);
   return {
-    months, departments,
+    months,
+    departments,
     totals: {
-      budgetYearMinor, budgetToDateMinor, actualToDateMinor, varianceMinor: actualToDateMinor - budgetToDateMinor,
-      variancePct: vpct(actualToDateMinor - budgetToDateMinor, budgetToDateMinor), forecastMinor: actualToDateMinor + remaining, closedMonths: closed.size,
+      budgetYearMinor,
+      budgetToDateMinor,
+      actualToDateMinor,
+      varianceMinor: actualToDateMinor - budgetToDateMinor,
+      variancePct: vpct(actualToDateMinor - budgetToDateMinor, budgetToDateMinor),
+      forecastMinor: actualToDateMinor + remaining,
+      closedMonths: closed.size,
     },
   };
 }

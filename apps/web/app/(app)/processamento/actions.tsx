@@ -10,7 +10,26 @@ import { BatchVariables, type BatchResult } from './batch-variables';
 import { PayrollSelection } from './payroll-selection';
 import type { PayrollBatchPerson } from '@/lib/types';
 
-export function PrepareButton({ period, prepared, runId, payrollPeople, processedIds, variableCount, indexed = 0, fx }: { period: string; prepared: boolean; runId?: string; people: { id: string; name: string }[]; payrollPeople: PayrollBatchPerson[]; processedIds: string[]; variableCount: number; indexed?: number; fx?: { rate: string | null; date: string | null; source: string | null } }) {
+export function PrepareButton({
+  period,
+  prepared,
+  runId,
+  payrollPeople,
+  processedIds,
+  variableCount,
+  indexed = 0,
+  fx,
+}: {
+  period: string;
+  prepared: boolean;
+  runId?: string;
+  people: { id: string; name: string }[];
+  payrollPeople: PayrollBatchPerson[];
+  processedIds: string[];
+  variableCount: number;
+  indexed?: number;
+  fx?: { rate: string | null; date: string | null; source: string | null };
+}) {
   const { busy, error, run } = useMutation();
   const draftKey = `payroll:${period}:preparation:`;
   const clearPreparation = useClearWorkspace(draftKey);
@@ -22,88 +41,309 @@ export function PrepareButton({ period, prepared, runId, payrollPeople, processe
   const [result, setResult] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
-  const [rate, setRate] = useWorkspaceState(`${draftKey}rate`, fx?.rate ? String(Number(fx.rate)).replace('.', ',') : '');
+  const [rate, setRate] = useWorkspaceState(
+    `${draftKey}rate`,
+    fx?.rate ? String(Number(fx.rate)).replace('.', ',') : '',
+  );
   const [date, setDate] = useWorkspaceState(`${draftKey}date`, fx?.date ?? today);
   const [source, setSource] = useWorkspaceState(`${draftKey}source`, fx?.source ?? 'BNA — câmbio de referência');
-  const indexedInScope = open && batchMode ? payrollPeople.filter(p => selected.includes(p.id) && p.salaryCurrency === 'USD' && !!p.baseForeignMinor).length : indexed;
+  const indexedInScope =
+    open && batchMode
+      ? payrollPeople.filter(p => selected.includes(p.id) && p.salaryCurrency === 'USD' && !!p.baseForeignMinor).length
+      : indexed;
   const needsFx = indexedInScope > 0;
-  const body = { period, ...(needsFx && rate.trim() ? { fx: { rate, date, source } } : {}), ...(open && batchMode ? { employeeIds: selected } : {}) };
-  const calculateDisabled = busy || (needsFx && !rate.trim() && !fx?.rate) || (open && batchMode && (selected.length === 0 || selected.length > 1000));
+  const body = {
+    period,
+    ...(needsFx && rate.trim() ? { fx: { rate, date, source } } : {}),
+    ...(open && batchMode ? { employeeIds: selected } : {}),
+  };
+  const calculateDisabled =
+    busy ||
+    (needsFx && !rate.trim() && !fx?.rate) ||
+    (open && batchMode && (selected.length === 0 || selected.length > 1000));
   function prepare(batch: boolean) {
-    setResult(''); setBatchMode(batch);
+    setResult('');
+    setBatchMode(batch);
     const pending = payrollPeople.filter(p => !processedIds.includes(p.id));
-    setSelected((pending.length ? pending : payrollPeople).slice(0, 1000).map(p => p.id)); setOpen(true);
+    setSelected((pending.length ? pending : payrollPeople).slice(0, 1000).map(p => p.id));
+    setOpen(true);
   }
   async function calculate() {
     if (calculateDisabled) return;
-    if (await run<{ lines: number; totalLines: number }>(open && batchMode ? '/v1/payroll-runs/batch' : '/v1/payroll-runs', 'POST', body, r => { if (r) setResult(`${open && batchMode ? 'Lote concluído' : 'Folha calculada'}: ${r.lines} colaborador(es) processado(s), ${r.totalLines} no total da folha mensal.`); })) { clearPreparation(); setOpen(false); setBatchMode(false); }
+    if (
+      await run<{ lines: number; totalLines: number }>(
+        open && batchMode ? '/v1/payroll-runs/batch' : '/v1/payroll-runs',
+        'POST',
+        body,
+        r => {
+          if (r)
+            setResult(
+              `${open && batchMode ? 'Lote concluído' : 'Folha calculada'}: ${r.lines} colaborador(es) processado(s), ${r.totalLines} no total da folha mensal.`,
+            );
+        },
+      )
+    ) {
+      clearPreparation();
+      setOpen(false);
+      setBatchMode(false);
+    }
   }
-  const fxFields = needsFx && <div className="fx-fields" role="group" aria-label="Câmbio do dia">
-    <label>Câmbio USD→Kz<input aria-label="Câmbio USD→Kz" inputMode="decimal" value={rate} placeholder="ex.: 912,50" onChange={e => setRate(e.target.value)} style={{ width: 110 }} /></label>
-    <label>Data<input aria-label="Data do câmbio" type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
-    <label>Fonte<input aria-label="Fonte do câmbio" value={source} maxLength={80} onChange={e => setSource(e.target.value)} style={{ width: 200 }} /></label>
-  </div>;
+  const fxFields = needsFx && (
+    <div className="fx-fields" role="group" aria-label="Câmbio do dia">
+      <label>
+        Câmbio USD→Kz
+        <input
+          aria-label="Câmbio USD→Kz"
+          inputMode="decimal"
+          value={rate}
+          placeholder="ex.: 912,50"
+          onChange={e => setRate(e.target.value)}
+          style={{ width: 110 }}
+        />
+      </label>
+      <label>
+        Data
+        <input aria-label="Data do câmbio" type="date" value={date} onChange={e => setDate(e.target.value)} />
+      </label>
+      <label>
+        Fonte
+        <input
+          aria-label="Fonte do câmbio"
+          value={source}
+          maxLength={80}
+          onChange={e => setSource(e.target.value)}
+          style={{ width: 200 }}
+        />
+      </label>
+    </div>
+  );
   return (
-    <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', ...(open ? { flexBasis: '100%', minWidth: 0 } : {}) }}>
-      {!open && <>
-        {prepared && fxFields}
-        <button type="button" className="btn" disabled={busy || (prepared && calculateDisabled)} onClick={() => prepared ? calculate() : prepare(false)}>{busy ? 'A calcular…' : prepared ? 'Recalcular' : 'Processar salários'}</button>
-        {prepared && <button type="button" className="btn ghost" disabled={busy} onClick={() => prepare(false)}>Rever ou processar mais</button>}
-        {prepared && runId && (confirmDelete
-          ? <span className="actions" role="group" aria-label="Confirmar apagar rascunho" style={{ gap: 6 }}><span className="muted">Apagar o rascunho de {monthLabel(period)}? As variáveis lançadas mantêm-se.</span>
-              <button type="button" className="btn danger sm" disabled={busy} onClick={async () => { if (await run(`/v1/payroll-runs/${runId}`, 'DELETE', undefined, () => setResult('Rascunho apagado. Pode preparar o processamento de novo.'))) { clearPreparation(); setConfirmDelete(false); } }}>Sim, apagar</button>
-              <button type="button" className="btn ghost sm" onClick={() => setConfirmDelete(false)}>Não</button></span>
-          : <button type="button" className="btn ghost" disabled={busy} onClick={() => setConfirmDelete(true)}>Apagar rascunho</button>)}
-      </>}
-      {open && <section aria-label="Preparação do processamento" style={{ width: '100%', minWidth: 0 }}>
-        <h2>Processar salários — {monthLabel(period)}</h2>
-        <div className="segmented" role="radiogroup" aria-label="Quem processar">
-          <label><input type="radio" name="payroll-scope" checked={!batchMode} onChange={() => prepare(false)} disabled={busy} /> Toda a equipa elegível</label>
-          <label><input type="radio" name="payroll-scope" checked={batchMode} onChange={() => prepare(true)} disabled={busy} /> Escolher colaboradores</label>
-        </div>
-        <p className="muted">{batchMode ? 'Escolha quem processar agora; os lotes juntam-se na mesma folha do mês.' : 'Calcula toda a equipa com a remuneração em vigor, as faltas e as horas extra aprovadas.'}</p>
-        <PayrollSelection draftKey={`${draftKey}roster:`} people={payrollPeople} selected={selected} onChange={setSelected} processedIds={processedIds} disabled={busy} mode={batchMode ? 'selected' : 'all'} />
-        <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', margin: '12px 0' }}>
-          <Link className="btn ghost sm" href="/colaboradores">Rever salários e contratos</Link>
-          <Link className="btn ghost sm" href={`/assiduidade?mes=${period}`}>Rever assiduidade</Link>
-        </div>
-        {fxFields}
-        <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', marginTop: 14 }}>
-          <button type="button" className="btn" disabled={calculateDisabled} onClick={calculate}>{busy ? 'A calcular…' : batchMode ? `Processar seleccionados (${selected.length})` : 'Calcular folha'}</button>
-          <button type="button" className="btn ghost" disabled={busy} onClick={() => { clearPreparation(); setOpen(false); setBatchMode(false); }}>Cancelar</button>
-        </div>
-        <p className="muted" style={{ marginTop: 10 }}>Prémios, abonos ou descontos pontuais lançam-se à parte, no separador <Link href={`/processamento?mes=${period}&s=variaveis`}>Variáveis ({variableCount})</Link>, e entram no cálculo seguinte. Sem variáveis, a folha é calculada com a remuneração habitual.</p>
-      </section>}
-      {needsFx && <span className="muted" style={{ fontSize: 12.5, flexBasis: '100%' }}>{indexedInScope} colaborador(es) com salário indexado ao dólar: a base é convertida a este câmbio no recibo.</span>}
-      {error && <span role="alert" style={{ color: 'var(--red)' }}>{error}</span>}
-      {result && !open && <p className="ok" role="status" style={{ flexBasis: '100%' }}>{result}</p>}
+    <div
+      className="actions"
+      style={{ justifyContent: 'flex-start', flexWrap: 'wrap', ...(open ? { flexBasis: '100%', minWidth: 0 } : {}) }}
+    >
+      {!open && (
+        <>
+          {prepared && fxFields}
+          <button
+            type="button"
+            className="btn"
+            disabled={busy || (prepared && calculateDisabled)}
+            onClick={() => (prepared ? calculate() : prepare(false))}
+          >
+            {busy ? 'A calcular…' : prepared ? 'Recalcular' : 'Processar salários'}
+          </button>
+          {prepared && (
+            <button type="button" className="btn ghost" disabled={busy} onClick={() => prepare(false)}>
+              Rever ou processar mais
+            </button>
+          )}
+          {prepared &&
+            runId &&
+            (confirmDelete ? (
+              <span className="actions" role="group" aria-label="Confirmar apagar rascunho" style={{ gap: 6 }}>
+                <span className="muted">
+                  Apagar o rascunho de {monthLabel(period)}? As variáveis lançadas mantêm-se.
+                </span>
+                <button
+                  type="button"
+                  className="btn danger sm"
+                  disabled={busy}
+                  onClick={async () => {
+                    if (
+                      await run(`/v1/payroll-runs/${runId}`, 'DELETE', undefined, () =>
+                        setResult('Rascunho apagado. Pode preparar o processamento de novo.'),
+                      )
+                    ) {
+                      clearPreparation();
+                      setConfirmDelete(false);
+                    }
+                  }}
+                >
+                  Sim, apagar
+                </button>
+                <button type="button" className="btn ghost sm" onClick={() => setConfirmDelete(false)}>
+                  Não
+                </button>
+              </span>
+            ) : (
+              <button type="button" className="btn ghost" disabled={busy} onClick={() => setConfirmDelete(true)}>
+                Apagar rascunho
+              </button>
+            ))}
+        </>
+      )}
+      {open && (
+        <section aria-label="Preparação do processamento" style={{ width: '100%', minWidth: 0 }}>
+          <h2>Processar salários — {monthLabel(period)}</h2>
+          <div className="segmented" role="radiogroup" aria-label="Quem processar">
+            <label>
+              <input
+                type="radio"
+                name="payroll-scope"
+                checked={!batchMode}
+                onChange={() => prepare(false)}
+                disabled={busy}
+              />{' '}
+              Toda a equipa elegível
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="payroll-scope"
+                checked={batchMode}
+                onChange={() => prepare(true)}
+                disabled={busy}
+              />{' '}
+              Escolher colaboradores
+            </label>
+          </div>
+          <p className="muted">
+            {batchMode
+              ? 'Escolha quem processar agora; os lotes juntam-se na mesma folha do mês.'
+              : 'Calcula toda a equipa com a remuneração em vigor, as faltas e as horas extra aprovadas.'}
+          </p>
+          <PayrollSelection
+            draftKey={`${draftKey}roster:`}
+            people={payrollPeople}
+            selected={selected}
+            onChange={setSelected}
+            processedIds={processedIds}
+            disabled={busy}
+            mode={batchMode ? 'selected' : 'all'}
+          />
+          <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', margin: '12px 0' }}>
+            <Link className="btn ghost sm" href="/colaboradores">
+              Rever salários e contratos
+            </Link>
+            <Link className="btn ghost sm" href={`/assiduidade?mes=${period}`}>
+              Rever assiduidade
+            </Link>
+          </div>
+          {fxFields}
+          <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', marginTop: 14 }}>
+            <button type="button" className="btn" disabled={calculateDisabled} onClick={calculate}>
+              {busy ? 'A calcular…' : batchMode ? `Processar seleccionados (${selected.length})` : 'Calcular folha'}
+            </button>
+            <button
+              type="button"
+              className="btn ghost"
+              disabled={busy}
+              onClick={() => {
+                clearPreparation();
+                setOpen(false);
+                setBatchMode(false);
+              }}
+            >
+              Cancelar
+            </button>
+          </div>
+          <p className="muted" style={{ marginTop: 10 }}>
+            Prémios, abonos ou descontos pontuais lançam-se à parte, no separador{' '}
+            <Link href={`/processamento?mes=${period}&s=variaveis`}>Variáveis ({variableCount})</Link>, e entram no
+            cálculo seguinte. Sem variáveis, a folha é calculada com a remuneração habitual.
+          </p>
+        </section>
+      )}
+      {needsFx && (
+        <span className="muted" style={{ fontSize: 12.5, flexBasis: '100%' }}>
+          {indexedInScope} colaborador(es) com salário indexado ao dólar: a base é convertida a este câmbio no recibo.
+        </span>
+      )}
+      {error && (
+        <span role="alert" style={{ color: 'var(--red)' }}>
+          {error}
+        </span>
+      )}
+      {result && !open && (
+        <p className="ok" role="status" style={{ flexBasis: '100%' }}>
+          {result}
+        </p>
+      )}
     </div>
   );
 }
 
-export function CloseButton({ runId, period, selfPrepared, manualWarnings = 0 }: { runId: string; period: string; selfPrepared: boolean; manualWarnings?: number }) {
+export function CloseButton({
+  runId,
+  period,
+  selfPrepared,
+  manualWarnings = 0,
+}: {
+  runId: string;
+  period: string;
+  selfPrepared: boolean;
+  manualWarnings?: number;
+}) {
   const { busy, error, run } = useMutation();
   const [confirm, setConfirm] = useState(false);
   const [review, setReview] = useState('');
   const needsReview = manualWarnings > 0;
   const reviewOk = !needsReview || review.trim().length >= 10;
-  if (!confirm) return <button className="btn" onClick={() => setConfirm(true)}>Fechar processamento</button>;
+  if (!confirm)
+    return (
+      <button className="btn" onClick={() => setConfirm(true)}>
+        Fechar processamento
+      </button>
+    );
   return (
     <span className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>
-      <span className="muted">Fechar {period}? Gera o lançamento PGC e os recibos; deixa de ser possível alterar. O fecho confirma que a folha corresponde aos dados actuais: se algo mudou depois do último cálculo, terá de recalcular.{selfPrepared ? ' (Preparado por si: só o proprietário pode fechar o que preparou.)' : ''}</span>
-      {needsReview && <label style={{ flexBasis: '100%', display: 'grid', gap: 4 }}>
-        <span><b>{manualWarnings} aviso(s) de cálculo manual.</b> Descreva o que reviu e lançou (fica no registo de auditoria).</span>
-        <textarea aria-label="Revisão dos cálculos manuais" rows={2} maxLength={2000} value={review} onChange={e => setReview(e.target.value)} placeholder="ex.: acréscimo do feriado lançado em Outro abono e conferido" />
-      </label>}
-      <button className="btn" disabled={busy || !reviewOk} onClick={() => run(`/v1/payroll-runs/${runId}/close`, 'POST', needsReview ? { manualReview: review.trim() } : {})}>Confirmar fecho</button>
-      <button className="btn ghost sm" onClick={() => setConfirm(false)}>Cancelar</button>
-      {error && <span role="alert" style={{ color: 'var(--red)', flexBasis: '100%' }}>{error}</span>}
+      <span className="muted">
+        Fechar {period}? Gera o lançamento PGC e os recibos; deixa de ser possível alterar. O fecho confirma que a folha
+        corresponde aos dados actuais: se algo mudou depois do último cálculo, terá de recalcular.
+        {selfPrepared ? ' (Preparado por si: só o proprietário pode fechar o que preparou.)' : ''}
+      </span>
+      {needsReview && (
+        <label style={{ flexBasis: '100%', display: 'grid', gap: 4 }}>
+          <span>
+            <b>{manualWarnings} aviso(s) de cálculo manual.</b> Descreva o que reviu e lançou (fica no registo de
+            auditoria).
+          </span>
+          <textarea
+            aria-label="Revisão dos cálculos manuais"
+            rows={2}
+            maxLength={2000}
+            value={review}
+            onChange={e => setReview(e.target.value)}
+            placeholder="ex.: acréscimo do feriado lançado em Outro abono e conferido"
+          />
+        </label>
+      )}
+      <button
+        className="btn"
+        disabled={busy || !reviewOk}
+        onClick={() =>
+          run(`/v1/payroll-runs/${runId}/close`, 'POST', needsReview ? { manualReview: review.trim() } : {})
+        }
+      >
+        Confirmar fecho
+      </button>
+      <button className="btn ghost sm" onClick={() => setConfirm(false)}>
+        Cancelar
+      </button>
+      {error && (
+        <span role="alert" style={{ color: 'var(--red)', flexBasis: '100%' }}>
+          {error}
+        </span>
+      )}
     </span>
   );
 }
 
 /** Forçar / excluir / automático para um subsídio de um colaborador (rascunho). */
-export function SubsidyToggle({ runId, employeeId, kind, paid, override }: { runId: string; employeeId: string; kind: 'holiday' | 'christmas'; paid: boolean; override?: boolean }) {
+export function SubsidyToggle({
+  runId,
+  employeeId,
+  kind,
+  paid,
+  override,
+}: {
+  runId: string;
+  employeeId: string;
+  kind: 'holiday' | 'christmas';
+  paid: boolean;
+  override?: boolean;
+}) {
   const { busy, run } = useMutation();
   const label = kind === 'holiday' ? 'SF' : 'SN';
   const title = kind === 'holiday' ? 'Subsídio de férias' : 'Subsídio de Natal';
@@ -121,50 +361,179 @@ export function SubsidyToggle({ runId, employeeId, kind, paid, override }: { run
   );
 }
 
-export function VariableEntry({ period, people, draftKey = `payroll:${period}:variables:`, initialOpen = false, preparing = false, disabled = false, onPendingChange, onSavingChange }: { period: string; people: { id: string; name: string }[]; draftKey?: string; initialOpen?: boolean; preparing?: boolean; disabled?: boolean; onPendingChange?: (pending: boolean) => void; onSavingChange?: (saving: boolean) => void }) {
-  const [batch, setBatch] = useWorkspaceState(`${draftKey}batch`, false), [pending, setPending] = useState(false);
+export function VariableEntry({
+  period,
+  people,
+  draftKey = `payroll:${period}:variables:`,
+  initialOpen = false,
+  preparing = false,
+  disabled = false,
+  onPendingChange,
+  onSavingChange,
+}: {
+  period: string;
+  people: { id: string; name: string }[];
+  draftKey?: string;
+  initialOpen?: boolean;
+  preparing?: boolean;
+  disabled?: boolean;
+  onPendingChange?: (pending: boolean) => void;
+  onSavingChange?: (saving: boolean) => void;
+}) {
+  const [batch, setBatch] = useWorkspaceState(`${draftKey}batch`, false),
+    [pending, setPending] = useState(false);
   const [saved, setSaved] = useState<BatchResult | null>(null);
-  const notify = useCallback((value: boolean) => { setPending(value); onPendingChange?.(value); }, [onPendingChange]);
-  return <section aria-label="Lançamento de variáveis" style={{ minWidth: 0, width: '100%' }}>
-    <div className="actions" style={{ justifyContent: 'flex-start', marginBottom: 10 }}><button type="button" className="btn ghost" disabled={disabled || pending} onClick={() => { setBatch(!batch); setSaved(null); }}>{batch ? 'Lançamento individual' : 'Lançar em lote'}</button></div>
-    {batch ? <BatchVariables draftKey={`${draftKey}lot:`} period={period} people={people} disabled={disabled} onPendingChange={notify} onSavingChange={onSavingChange} onCancel={() => { notify(false); setBatch(false); }} onSaved={(result) => { setSaved(result); notify(false); setBatch(false); }} />
-      : <AddVariable draftKey={`${draftKey}single:`} period={period} people={people} initialOpen={initialOpen} preparing={preparing} disabled={disabled} onPendingChange={notify} onSavingChange={onSavingChange} />}
-    {saved && <p role="status" className="ok">Lote {saved.replayed ? 'já confirmado' : 'guardado'}: {saved.count} variável(eis), total {formatKz(saved.totalMinor)}. {preparing ? 'Clique em Calcular folha.' : 'Clique em Recalcular para actualizar a folha.'}</p>}
-  </section>;
+  const notify = useCallback(
+    (value: boolean) => {
+      setPending(value);
+      onPendingChange?.(value);
+    },
+    [onPendingChange],
+  );
+  return (
+    <section aria-label="Lançamento de variáveis" style={{ minWidth: 0, width: '100%' }}>
+      <div className="actions" style={{ justifyContent: 'flex-start', marginBottom: 10 }}>
+        <button
+          type="button"
+          className="btn ghost"
+          disabled={disabled || pending}
+          onClick={() => {
+            setBatch(!batch);
+            setSaved(null);
+          }}
+        >
+          {batch ? 'Lançamento individual' : 'Lançar em lote'}
+        </button>
+      </div>
+      {batch ? (
+        <BatchVariables
+          draftKey={`${draftKey}lot:`}
+          period={period}
+          people={people}
+          disabled={disabled}
+          onPendingChange={notify}
+          onSavingChange={onSavingChange}
+          onCancel={() => {
+            notify(false);
+            setBatch(false);
+          }}
+          onSaved={result => {
+            setSaved(result);
+            notify(false);
+            setBatch(false);
+          }}
+        />
+      ) : (
+        <AddVariable
+          draftKey={`${draftKey}single:`}
+          period={period}
+          people={people}
+          initialOpen={initialOpen}
+          preparing={preparing}
+          disabled={disabled}
+          onPendingChange={notify}
+          onSavingChange={onSavingChange}
+        />
+      )}
+      {saved && (
+        <p role="status" className="ok">
+          Lote {saved.replayed ? 'já confirmado' : 'guardado'}: {saved.count} variável(eis), total{' '}
+          {formatKz(saved.totalMinor)}.{' '}
+          {preparing ? 'Clique em Calcular folha.' : 'Clique em Recalcular para actualizar a folha.'}
+        </p>
+      )}
+    </section>
+  );
 }
 
-export function AddVariable({ period, people, draftKey = `payroll:${period}:single:`, initialOpen = false, preparing = false, disabled = false, onPendingChange, onSavingChange }: { period: string; people: { id: string; name: string }[]; draftKey?: string; initialOpen?: boolean; preparing?: boolean; disabled?: boolean; onPendingChange?: (pending: boolean) => void; onSavingChange?: (saving: boolean) => void }) {
+export function AddVariable({
+  period,
+  people,
+  draftKey = `payroll:${period}:single:`,
+  initialOpen = false,
+  preparing = false,
+  disabled = false,
+  onPendingChange,
+  onSavingChange,
+}: {
+  period: string;
+  people: { id: string; name: string }[];
+  draftKey?: string;
+  initialOpen?: boolean;
+  preparing?: boolean;
+  disabled?: boolean;
+  onPendingChange?: (pending: boolean) => void;
+  onSavingChange?: (saving: boolean) => void;
+}) {
   const { busy, error, run } = useMutation();
   const clearDraft = useClearWorkspace(draftKey);
   const [kind, setKind] = useWorkspaceState(`${draftKey}kind`, 'bonus');
   const [open, setOpen] = useWorkspaceState(`${draftKey}open`, initialOpen);
-  const [fields, setFields] = useWorkspaceState(`${draftKey}fields`, { employeeId: people[0]?.id ?? '', amount: '', label: '', inInss: true, inIrt: true });
+  const [fields, setFields] = useWorkspaceState(`${draftKey}fields`, {
+    employeeId: people[0]?.id ?? '',
+    amount: '',
+    label: '',
+    inInss: true,
+    inIrt: true,
+  });
   const dirty = open && (!!fields.amount.trim() || !!fields.label.trim());
-  useEffect(() => { onPendingChange?.(dirty); }, [dirty, onPendingChange]);
+  useEffect(() => {
+    onPendingChange?.(dirty);
+  }, [dirty, onPendingChange]);
   const locked = busy || disabled;
   const earning = kind === 'bonus' || kind === 'other_earning';
-  if (!open) return <button className="btn ghost" disabled={locked} onClick={() => setOpen(true)}>Lançar variável</button>;
+  if (!open)
+    return (
+      <button className="btn ghost" disabled={locked} onClick={() => setOpen(true)}>
+        Lançar variável
+      </button>
+    );
   return (
     <form
       className="form card cols4"
       aria-label="Variável do processamento"
-      onSubmit={async (e) => {
+      onSubmit={async e => {
         e.preventDefault();
         onPendingChange?.(true);
         const f = formObject(e.currentTarget, ['amount']);
         onSavingChange?.(true);
         try {
-          const ok = await run('/v1/payroll-variables', 'POST', { ...f, period, inInss: f.inInss === 'on', inIrt: f.inIrt === 'on' });
-          if (ok) { clearDraft(); setOpen(false); onPendingChange?.(false); }
-        } finally { onSavingChange?.(false); }
+          const ok = await run('/v1/payroll-variables', 'POST', {
+            ...f,
+            period,
+            inInss: f.inInss === 'on',
+            inIrt: f.inIrt === 'on',
+          });
+          if (ok) {
+            clearDraft();
+            setOpen(false);
+            onPendingChange?.(false);
+          }
+        } finally {
+          onSavingChange?.(false);
+        }
       }}
     >
       <h3>Nova variável de {period}</h3>
-      <label className="span2">Colaborador
-        <select name="employeeId" required disabled={locked} value={fields.employeeId} onChange={e => setFields({ ...fields, employeeId: e.target.value })}>{people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+      <label className="span2">
+        Colaborador
+        <select
+          name="employeeId"
+          required
+          disabled={locked}
+          value={fields.employeeId}
+          onChange={e => setFields({ ...fields, employeeId: e.target.value })}
+        >
+          {people.map(p => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
       </label>
-      <label>Tipo
-        <select name="kind" disabled={locked} value={kind} onChange={(e) => setKind(e.target.value)}>
+      <label>
+        Tipo
+        <select name="kind" disabled={locked} value={kind} onChange={e => setKind(e.target.value)}>
           <option value="bonus">Prémio / gratificação</option>
           <option value="other_earning">Outro abono</option>
           <option value="advance">Adiantamento (desconto)</option>
@@ -172,25 +541,86 @@ export function AddVariable({ period, people, draftKey = `payroll:${period}:sing
           <option value="salary_cut">Desconto na remuneração (reduz INSS/IRT — cálculo manual)</option>
         </select>
       </label>
-      <label>Valor (Kz)<input name="amount" inputMode="decimal" required disabled={locked} value={fields.amount} onChange={e => setFields({ ...fields, amount: e.target.value })} /></label>
-      <label className="span2">Descrição<input name="label" required disabled={locked} value={fields.label} onChange={e => setFields({ ...fields, label: e.target.value })} placeholder={earning ? 'Ex.: Prémio de desempenho do trimestre' : 'Ex.: Prestação do empréstimo 3/10'} /></label>
+      <label>
+        Valor (Kz)
+        <input
+          name="amount"
+          inputMode="decimal"
+          required
+          disabled={locked}
+          value={fields.amount}
+          onChange={e => setFields({ ...fields, amount: e.target.value })}
+        />
+      </label>
+      <label className="span2">
+        Descrição
+        <input
+          name="label"
+          required
+          disabled={locked}
+          value={fields.label}
+          onChange={e => setFields({ ...fields, label: e.target.value })}
+          placeholder={earning ? 'Ex.: Prémio de desempenho do trimestre' : 'Ex.: Prestação do empréstimo 3/10'}
+        />
+      </label>
       {earning && (
         <div className="span2" style={{ display: 'flex', gap: 18, alignItems: 'end', paddingBottom: 8 }}>
-          <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><input type="checkbox" name="inInss" checked={fields.inInss} onChange={e => setFields({ ...fields, inInss: e.target.checked })} disabled={locked} style={{ height: 16 }} /> Incide INSS</label>
-          <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><input type="checkbox" name="inIrt" checked={fields.inIrt} onChange={e => setFields({ ...fields, inIrt: e.target.checked })} disabled={locked} style={{ height: 16 }} /> Incide IRT</label>
+          <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <input
+              type="checkbox"
+              name="inInss"
+              checked={fields.inInss}
+              onChange={e => setFields({ ...fields, inInss: e.target.checked })}
+              disabled={locked}
+              style={{ height: 16 }}
+            />{' '}
+            Incide INSS
+          </label>
+          <label style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <input
+              type="checkbox"
+              name="inIrt"
+              checked={fields.inIrt}
+              onChange={e => setFields({ ...fields, inIrt: e.target.checked })}
+              disabled={locked}
+              style={{ height: 16 }}
+            />{' '}
+            Incide IRT
+          </label>
         </div>
       )}
       <div className="form-actions">
         {error && <span className="err">{error}</span>}
-        <button type="button" className="btn ghost" disabled={locked} onClick={() => { clearDraft(); setOpen(false); onPendingChange?.(false); }}>Cancelar</button>
-        <button className="btn" disabled={locked}>Lançar</button>
+        <button
+          type="button"
+          className="btn ghost"
+          disabled={locked}
+          onClick={() => {
+            clearDraft();
+            setOpen(false);
+            onPendingChange?.(false);
+          }}
+        >
+          Cancelar
+        </button>
+        <button className="btn" disabled={locked}>
+          Lançar
+        </button>
       </div>
-      <p className="muted wide">Depois de lançar, carregue em “{preparing ? 'Calcular folha' : 'Recalcular'}” para actualizar o processamento.</p>
+      <p className="muted wide">
+        Depois de lançar, carregue em “{preparing ? 'Calcular folha' : 'Recalcular'}” para actualizar o processamento.
+      </p>
     </form>
   );
 }
 
 export function DeleteVariable({ id }: { id: string }) {
   const { busy, error, run } = useMutation();
-  return error ? <span style={{ color: 'var(--red)' }}>{error}</span> : <button className="btn danger" disabled={busy} onClick={() => run(`/v1/payroll-variables/${id}`, 'DELETE')}>Remover</button>;
+  return error ? (
+    <span style={{ color: 'var(--red)' }}>{error}</span>
+  ) : (
+    <button className="btn danger" disabled={busy} onClick={() => run(`/v1/payroll-variables/${id}`, 'DELETE')}>
+      Remover
+    </button>
+  );
 }

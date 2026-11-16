@@ -20,7 +20,8 @@ export function luandaTime(d: Date): string {
 
 /** Instante correspondente a uma data e hora de Luanda. */
 export function fromLuanda(date: string, time: string): Date {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new RangeError('data ou hora inválida');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time))
+    throw new RangeError('data ou hora inválida');
   return new Date(Date.parse(`${date}T${time}:00Z`) - LUANDA_OFFSET_MS);
 }
 
@@ -34,7 +35,10 @@ export function formatMinutes(min: number): string {
   return `${sign}${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`;
 }
 
-export interface Punch { clockIn: Date; clockOut: Date | null }
+export interface Punch {
+  clockIn: Date;
+  clockOut: Date | null;
+}
 
 /**
  * Arredondamento do trabalho extraordinário (LGT, art. 188.º, n.º 4): fracções < 15 min não contam;
@@ -47,7 +51,14 @@ export function roundOvertimeMinutes(raw: number): number {
   return hours * 60 + (rest < 15 ? 0 : rest < 45 ? 30 : 60);
 }
 
-export type DayFlag = 'open' | 'not_employed' | 'no_record' | 'rest_day_work' | 'holiday_work' | 'absence_work' | 'over_2h';
+export type DayFlag =
+  | 'open'
+  | 'not_employed'
+  | 'no_record'
+  | 'rest_day_work'
+  | 'holiday_work'
+  | 'absence_work'
+  | 'over_2h';
 
 export interface DaySummary {
   date: string;
@@ -100,23 +111,46 @@ export function summarizeDay(input: {
   const dailyMinutes = scheduled !== undefined ? scheduled : input.dailyMinutes;
   const restDay = scheduled !== undefined ? scheduled === 0 : isWeekend(date);
   const block = input.overtimeBlockMinutes;
-  const kind: DaySummary['kind'] = inactive ? 'inactive' : holiday ? 'holiday' : restDay ? 'rest' : absence ? 'absence' : 'workday';
-  const closed = punches.filter((p) => p.clockOut);
+  const kind: DaySummary['kind'] = inactive
+    ? 'inactive'
+    : holiday
+      ? 'holiday'
+      : restDay
+        ? 'rest'
+        : absence
+          ? 'absence'
+          : 'workday';
+  const closed = punches.filter(p => p.clockOut);
   const worked = closed.reduce((s, p) => s + minutesBetween(p.clockIn, p.clockOut!), 0);
   const expected = kind === 'workday' && date <= today ? dailyMinutes : 0;
   const rawOvertime = kind === 'workday' ? Math.max(0, worked - dailyMinutes) : worked;
-  const overtime = block === undefined ? roundOvertimeMinutes(rawOvertime) : block > 1 ? Math.floor(rawOvertime / block) * block : rawOvertime;
+  const overtime =
+    block === undefined
+      ? roundOvertimeMinutes(rawOvertime)
+      : block > 1
+        ? Math.floor(rawOvertime / block) * block
+        : rawOvertime;
   const restDayPaidMinutes = kind === 'rest' && overtime > 0 ? Math.max(overtime, input.restDayMinMinutes ?? 180) : 0;
   const flags: DayFlag[] = [];
   // Saída por registar só é pendência a partir do dia seguinte (hoje o colaborador ainda pode estar em serviço).
-  if (punches.some((p) => !p.clockOut) && date < today) flags.push('open');
+  if (punches.some(p => !p.clockOut) && date < today) flags.push('open');
   if (worked > 0 && kind === 'inactive') flags.push('not_employed');
   if (kind === 'workday' && !punches.length && date < today) flags.push('no_record');
   if (worked > 0 && kind === 'rest') flags.push('rest_day_work');
   if (worked > 0 && kind === 'holiday') flags.push('holiday_work');
   if (worked > 0 && kind === 'absence') flags.push('absence_work');
   if (kind === 'workday' && overtime > 120) flags.push('over_2h');
-  return { date, kind, holiday, absence, workedMinutes: worked, expectedMinutes: expected, overtimeMinutes: overtime, restDayPaidMinutes, flags };
+  return {
+    date,
+    kind,
+    holiday,
+    absence,
+    workedMinutes: worked,
+    expectedMinutes: expected,
+    overtimeMinutes: overtime,
+    restDayPaidMinutes,
+    flags,
+  };
 }
 
 export interface MonthSummary {
@@ -158,37 +192,44 @@ export function summarizeMonth(input: {
 }): MonthSummary {
   const [y, m] = input.period.split('-').map(Number) as [number, number];
   const n = new Date(Date.UTC(y, m, 0)).getUTCDate();
-  const hol = new Map(input.holidays.map((h) => [h.date, h.name]));
+  const hol = new Map(input.holidays.map(h => [h.date, h.name]));
   const days: DaySummary[] = [];
   for (let d = 1; d <= n; d++) {
     const date = `${input.period}-${String(d).padStart(2, '0')}`;
-    days.push(summarizeDay({
-      date, punches: input.punches.filter((p) => p.workDate === date), dailyMinutes: input.dailyMinutes,
-      holiday: input.shiftRegime ? undefined : hol.get(date), absence: input.absences[date], today: input.today,
-      overtimeBlockMinutes: input.overtimeBlockMinutes,
-      scheduledMinutes: (() => {
-        const sched = input.schedule?.(date);
-        const eve = !input.shiftRegime && input.familyEveMinutes !== undefined && /-12-(24|31)$/.test(date);
-        if (!eve) return sched;
-        const normal = sched ?? (isWeekend(date) ? 0 : input.dailyMinutes);
-        return Math.min(normal, input.familyEveMinutes!);
-      })(),
-      inactive: (!!input.employedFrom && date < input.employedFrom) || (!!input.employedUntil && date > input.employedUntil),
-    }));
+    days.push(
+      summarizeDay({
+        date,
+        punches: input.punches.filter(p => p.workDate === date),
+        dailyMinutes: input.dailyMinutes,
+        holiday: input.shiftRegime ? undefined : hol.get(date),
+        absence: input.absences[date],
+        today: input.today,
+        overtimeBlockMinutes: input.overtimeBlockMinutes,
+        scheduledMinutes: (() => {
+          const sched = input.schedule?.(date);
+          const eve = !input.shiftRegime && input.familyEveMinutes !== undefined && /-12-(24|31)$/.test(date);
+          if (!eve) return sched;
+          const normal = sched ?? (isWeekend(date) ? 0 : input.dailyMinutes);
+          return Math.min(normal, input.familyEveMinutes!);
+        })(),
+        inactive:
+          (!!input.employedFrom && date < input.employedFrom) || (!!input.employedUntil && date > input.employedUntil),
+      }),
+    );
   }
   const sum = (f: (d: DaySummary) => number) => days.reduce((s, d) => s + f(d), 0);
   return {
     period: input.period,
     days,
-    workedMinutes: sum((d) => d.workedMinutes),
-    expectedMinutes: sum((d) => d.expectedMinutes),
-    overtimeMinutes: sum((d) => d.overtimeMinutes),
-    restOrHolidayOvertimeMinutes: sum((d) => (d.kind === 'rest' || d.kind === 'holiday' ? d.overtimeMinutes : 0)),
-    workdayOvertimeMinutes: sum((d) => (d.kind === 'workday' ? d.overtimeMinutes : 0)),
-    restDayPaidMinutes: sum((d) => d.restDayPaidMinutes),
-    holidayWorkDays: days.filter((d) => d.kind === 'holiday' && d.workedMinutes > 0).length,
-    openDays: days.filter((d) => d.flags.includes('open')).length,
-    noRecordDays: days.filter((d) => d.flags.includes('no_record')).length,
+    workedMinutes: sum(d => d.workedMinutes),
+    expectedMinutes: sum(d => d.expectedMinutes),
+    overtimeMinutes: sum(d => d.overtimeMinutes),
+    restOrHolidayOvertimeMinutes: sum(d => (d.kind === 'rest' || d.kind === 'holiday' ? d.overtimeMinutes : 0)),
+    workdayOvertimeMinutes: sum(d => (d.kind === 'workday' ? d.overtimeMinutes : 0)),
+    restDayPaidMinutes: sum(d => d.restDayPaidMinutes),
+    holidayWorkDays: days.filter(d => d.kind === 'holiday' && d.workedMinutes > 0).length,
+    openDays: days.filter(d => d.flags.includes('open')).length,
+    noRecordDays: days.filter(d => d.flags.includes('no_record')).length,
   };
 }
 

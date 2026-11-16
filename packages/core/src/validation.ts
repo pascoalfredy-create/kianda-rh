@@ -7,7 +7,10 @@ export function isValidAngolanBI(value: string): boolean {
 
 export function normalizeIban(value: string): string {
   // Aceita espaços, pontos e traços (como aparecem em extractos e no multicaixa) e o prefixo "IBAN".
-  const s = value.toUpperCase().replace(/^IBAN[:\s]*/, '').replace(/[\s.\-]+/g, '');
+  const s = value
+    .toUpperCase()
+    .replace(/^IBAN[:\s]*/, '')
+    .replace(/[\s.\-]+/g, '');
   // Só os 21 dígitos da conta (NBA): os IBAN angolanos têm sempre o prefixo AO06.
   return /^\d{21}$/.test(s) ? `AO06${s}` : s;
 }
@@ -38,13 +41,17 @@ export function angolanIbanProblem(value: string): string | null {
   if (!s.startsWith('AO')) return 'O IBAN angolano começa por AO06';
   const digits = s.slice(2);
   if (!/^\d+$/.test(digits)) return 'O IBAN só pode ter números depois de "AO"';
-  if (s.length !== 25) return `O IBAN tem ${s.length - 4 > 0 ? s.length - 4 : 0} dígitos depois de AO06; devem ser 21 (total de 25 caracteres)`;
-  if (!isValidIban(s)) return 'Os dígitos de controlo não conferem: há um número trocado ou em falta. Copie o IBAN do extracto ou da app do banco';
+  if (s.length !== 25)
+    return `O IBAN tem ${s.length - 4 > 0 ? s.length - 4 : 0} dígitos depois de AO06; devem ser 21 (total de 25 caracteres)`;
+  if (!isValidIban(s))
+    return 'Os dígitos de controlo não conferem: há um número trocado ou em falta. Copie o IBAN do extracto ou da app do banco';
   return null;
 }
 
 export function formatIban(value: string): string {
-  return normalizeIban(value).replace(/(.{4})/g, '$1 ').trim();
+  return normalizeIban(value)
+    .replace(/(.{4})/g, '$1 ')
+    .trim();
 }
 
 /** NIF de pessoa colectiva angolana: 10 dígitos. Pessoa singular usa o número do BI. */

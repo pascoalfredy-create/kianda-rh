@@ -18,13 +18,20 @@ describe('interface aprovada e documento autenticado', () => {
   it('isola a sessão JSON de qualquer conteúdo HTML executável', () => {
     const session = { user: { name: '</script><script>alert(1)</script>' } } as ModelingSession;
     const html = modelingPage(session, 'a1');
-    expect(html).not.toContain(session.user.name); expect(html).toContain('\\u003c/script>');
+    expect(html).not.toContain(session.user.name);
+    expect(html).toContain('\\u003c/script>');
     expect(html).toContain('id="integra-session" type="application/json" nonce="a1"');
-    const json = html.split('nonce="a1">')[1]!.split('</script>')[0]!; expect(JSON.parse(json)).toEqual(session);
+    const json = html.split('nonce="a1">')[1]!.split('</script>')[0]!;
+    expect(JSON.parse(json)).toEqual(session);
   });
   it('recusa uma página executável sem sessão e escapa o erro de acesso', () => {
-    const html = modelingPage(null, 'nonce', '<img onerror="bad">'); expect(html).toContain('&lt;img'); expect(html).not.toContain('/modeling-runtime.js');
-    expect(modelingHeaders('nonce')).toMatchObject({ 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' });
+    const html = modelingPage(null, 'nonce', '<img onerror="bad">');
+    expect(html).toContain('&lt;img');
+    expect(html).not.toContain('/modeling-runtime.js');
+    expect(modelingHeaders('nonce')).toMatchObject({
+      'cache-control': 'private, no-store',
+      'x-content-type-options': 'nosniff',
+    });
     expect(modelingHeaders('nonce')['content-security-policy']).not.toContain("'unsafe-eval'");
     expect(modelingHeaders('nonce')['content-security-policy']).toContain("worker-src 'self'");
     expect(html).toContain('id="integra-space"');
@@ -43,14 +50,23 @@ describe('interface aprovada e documento autenticado', () => {
     expect(html).toContain('<a class="btn modules-link" href="/modulos">Módulos e licenças</a>');
   });
   it('explica a data de avaliação e o modo de consulta sem confundir a licença com o perfil de utilizador', () => {
-    const trial = modelingPage({ canWrite: false, licence: { status: 'trial', trialEndsAt: '2099-12-31', paidUntil: null } } as ModelingSession, 'nonce');
+    const trial = modelingPage(
+      { canWrite: false, licence: { status: 'trial', trialEndsAt: '2099-12-31', paidUntil: null } } as ModelingSession,
+      'nonce',
+    );
     expect(trial).toContain('Avaliação gratuita do Integra até 31/12/2099');
     expect(trial).not.toContain('regularize a licença com o proprietário');
     expect(trial).toContain('para exportar e imprimir, escolha um plano');
     expect(trial).toContain('@media print{body>*');
-    const expired = modelingPage({ licence: { status: 'suspended', trialEndsAt: '2026-01-01', paidUntil: null } } as ModelingSession, 'nonce');
+    const expired = modelingPage(
+      { licence: { status: 'suspended', trialEndsAt: '2026-01-01', paidUntil: null } } as ModelingSession,
+      'nonce',
+    );
     expect(expired).toContain('Módulo em consulta. Os dados guardados e a pré-visualização continuam disponíveis');
-    const viewer = modelingPage({ canWrite: false, licence: { status: 'active', trialEndsAt: null, paidUntil: '2099-12-31' } } as ModelingSession, 'nonce');
+    const viewer = modelingPage(
+      { canWrite: false, licence: { status: 'active', trialEndsAt: null, paidUntil: '2099-12-31' } } as ModelingSession,
+      'nonce',
+    );
     expect(viewer).not.toContain('regularize a licença com o proprietário');
   });
   it('o runtime distribuído não guarda pressupostos em armazenamento local nem exporta CSV/clipboard', () => {

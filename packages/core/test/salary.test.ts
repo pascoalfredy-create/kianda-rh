@@ -29,7 +29,12 @@ describe('simulador: líquido pretendido → salário base', () => {
     expect(r.result.irtBracket).toBe(5);
   });
   it('com subsídios, outros descontos e subsídios dentro do INSS', () => {
-    const input = { period: '2026-11', mealMinor: kz(40_000), transportMinor: kz(25_000), otherDeductionsMinor: kz(10_000) };
+    const input = {
+      period: '2026-11',
+      mealMinor: kz(40_000),
+      transportMinor: kz(25_000),
+      otherDeductionsMinor: kz(10_000),
+    };
     const out = baseForNet(input, kz(400_000))!;
     expect(out.result.netMinor).toBeGreaterThanOrEqual(kz(400_000));
     expect(out.result.netMinor - kz(400_000)).toBeLessThan(5);

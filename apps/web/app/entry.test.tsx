@@ -17,39 +17,55 @@ import sitemap from './sitemap';
 import manifest from './manifest';
 import { SITE_URL } from '../lib/site';
 
-beforeEach(() => { state.cookie = false; state.me.mockReset(); });
+beforeEach(() => {
+  state.cookie = false;
+  state.me.mockReset();
+});
 describe('entrada pública, sessão e descoberta do Kianda', () => {
   it('entrega conteúdo indexável dos três módulos sem depender da API nem de JavaScript no cliente', async () => {
-    const page = await EntryPage(), metadata = await generateMetadata();
-    expect(page.type).toBe(PublicHome); expect(state.me).not.toHaveBeenCalled();
+    const page = await EntryPage(),
+      metadata = await generateMetadata();
+    expect(page.type).toBe(PublicHome);
+    expect(state.me).not.toHaveBeenCalled();
     const html = renderToStaticMarkup(page);
-    expect(html).toContain('Kianda RH'); expect(html).toContain('Kianda Integra'); expect(html).toContain('Kianda Valora');
+    expect(html).toContain('Kianda RH');
+    expect(html).toContain('Kianda Integra');
+    expect(html).toContain('Kianda Valora');
     expect(html).toMatch(/<h1>Cuide da sua equipa\.<br\s*\/?><em>Prepare o próximo investimento\.<\/em><\/h1>/);
     expect(html).toContain('Recursos Humanos, Modelagem Financeira e Análise e Avaliação para empresas em Angola.');
-    expect(html).toContain('Ver planos'); expect(html).toContain('<dialog');
+    expect(html).toContain('Ver planos');
+    expect(html).toContain('<dialog');
     expect(html).not.toMatch(/<dialog[^>]*\sopen(?:[\s=>])/);
     expect(html).not.toContain('PROTÓTIPO PARA REVISÃO');
     expect(html).toContain('aria-label="Kianda — página inicial"');
-    expect(html).toContain('href="/login"'); expect(html).toContain('href="/registo"');
+    expect(html).toContain('href="/login"');
+    expect(html).toContain('href="/registo"');
     expect(html).toContain('application/ld+json');
     expect(metadata.robots).toEqual({ index: true, follow: true });
     expect(metadata.alternates?.canonical).toBe(SITE_URL);
   });
   it('mantém o mesmo painel, layout e permissões para quem tem sessão válida', async () => {
-    state.cookie = true; state.me.mockResolvedValue({ user: { sub: 'sintetico' } });
+    state.cookie = true;
+    state.me.mockResolvedValue({ user: { sub: 'sintetico' } });
     const page = await EntryPage();
-    expect(page.type).toBe(AppLayout); expect(page.props.children.type).toBe(Home);
+    expect(page.type).toBe(AppLayout);
+    expect(page.props.children.type).toBe(Home);
     expect((await generateMetadata()).robots).toEqual({ index: false, follow: false });
   });
   it('uma sessão expirada mostra apenas a apresentação pública', async () => {
-    state.cookie = true; state.me.mockResolvedValue(null);
+    state.cookie = true;
+    state.me.mockResolvedValue(null);
     expect((await EntryPage()).type).toBe(PublicHome);
     expect((await generateMetadata()).robots).toEqual({ index: true, follow: true });
   });
   it('o sitemap anuncia só a apresentação pública e o manifest permite abrir Integra sem criar novos acessos', () => {
     expect(sitemap().map(page => page.url)).toEqual([SITE_URL]);
-    expect(robots()).toEqual({ rules: { userAgent: '*', allow: '/', disallow: ['/api/'] }, sitemap: `${SITE_URL}/sitemap.xml` });
+    expect(robots()).toEqual({
+      rules: { userAgent: '*', allow: '/', disallow: ['/api/'] },
+      sitemap: `${SITE_URL}/sitemap.xml`,
+    });
     expect(manifest().shortcuts?.map(shortcut => shortcut.url)).toContain('/modelagem');
-    expect(manifest().scope).toBe('/'); expect(manifest().orientation).toBe('any');
+    expect(manifest().scope).toBe('/');
+    expect(manifest().orientation).toBe('any');
   });
 });

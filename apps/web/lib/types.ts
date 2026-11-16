@@ -1,6 +1,10 @@
 /** Formas das respostas da API usadas nas páginas (espelham apps/api/src/routes/employees.ts). */
 
-export interface Department { id: string; name: string; costCenter: string }
+export interface Department {
+  id: string;
+  name: string;
+  costCenter: string;
+}
 
 export interface EmployeeRow {
   id: string;
@@ -53,7 +57,12 @@ export interface IdDocument {
   notes: string | null;
 }
 
-export interface PersonRef { id: string; name: string; jobTitle: string; number?: string }
+export interface PersonRef {
+  id: string;
+  name: string;
+  jobTitle: string;
+  number?: string;
+}
 
 export interface Profile {
   id: string;
@@ -102,21 +111,61 @@ export interface HistoryEntry {
   actorName: string;
 }
 
-export interface OrgNode { id: string; name: string; jobTitle: string; number: string; department: string | null; reports: OrgNode[] }
+export interface OrgNode {
+  id: string;
+  name: string;
+  jobTitle: string;
+  number: string;
+  department: string | null;
+  reports: OrgNode[];
+}
 
-export const CONTRACT_LABEL: Record<string, string> = { indefinite: 'Indeterminado', fixed_term: 'A termo', internship: 'Estágio' };
+export const CONTRACT_LABEL: Record<string, string> = {
+  indefinite: 'Indeterminado',
+  fixed_term: 'A termo',
+  internship: 'Estágio',
+};
 export const STATUS_LABEL: Record<string, string> = { active: 'Activo', suspended: 'Suspenso', terminated: 'Cessado' };
 export const DOC_LABEL: Record<string, string> = {
-  bi: 'Bilhete de Identidade', passport: 'Passaporte', residence_card: 'Cartão de Residente', work_visa: 'Visto de Trabalho',
-  driving_licence: 'Carta de Condução', professional_card: 'Carteira Profissional', other: 'Outro',
+  bi: 'Bilhete de Identidade',
+  passport: 'Passaporte',
+  residence_card: 'Cartão de Residente',
+  work_visa: 'Visto de Trabalho',
+  driving_licence: 'Carta de Condução',
+  professional_card: 'Carteira Profissional',
+  other: 'Outro',
 };
 export const PROVINCES = [
-  'Bengo', 'Benguela', 'Bié', 'Cabinda', 'Cuando', 'Cuanza Norte', 'Cuanza Sul', 'Cubango', 'Cunene', 'Huambo', 'Huíla', 'Icolo e Bengo',
-  'Luanda', 'Lunda Norte', 'Lunda Sul', 'Malanje', 'Moxico', 'Moxico Leste', 'Namibe', 'Uíge', 'Zaire',
+  'Bengo',
+  'Benguela',
+  'Bié',
+  'Cabinda',
+  'Cuando',
+  'Cuanza Norte',
+  'Cuanza Sul',
+  'Cubango',
+  'Cunene',
+  'Huambo',
+  'Huíla',
+  'Icolo e Bengo',
+  'Luanda',
+  'Lunda Norte',
+  'Lunda Sul',
+  'Malanje',
+  'Moxico',
+  'Moxico Leste',
+  'Namibe',
+  'Uíge',
+  'Zaire',
 ];
 export const CAN_EDIT = ['owner', 'hr_admin'];
 export const ROLE_LABEL: Record<string, string> = {
-  owner: 'Proprietário', hr_admin: 'Administração de RH', payroll: 'Processamento salarial', finance: 'Finanças', manager: 'Chefia', employee: 'Colaborador',
+  owner: 'Proprietário',
+  hr_admin: 'Administração de RH',
+  payroll: 'Processamento salarial',
+  finance: 'Finanças',
+  manager: 'Chefia',
+  employee: 'Colaborador',
 };
 
 export type AbsenceStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
@@ -150,7 +199,12 @@ export interface BalanceRow {
   pending: number;
   available: number;
 }
-export const ABSENCE_STATUS_LABEL: Record<AbsenceStatus, string> = { pending: 'Pendente', approved: 'Aprovada', rejected: 'Recusada', cancelled: 'Cancelada' };
+export const ABSENCE_STATUS_LABEL: Record<AbsenceStatus, string> = {
+  pending: 'Pendente',
+  approved: 'Aprovada',
+  rejected: 'Recusada',
+  cancelled: 'Cancelada',
+};
 
 export interface DayRow {
   date: string;
@@ -163,10 +217,43 @@ export interface DayRow {
   flags: string[];
 }
 /** Localização gravada numa marcação (ver core/geofence.ts). */
-export interface PunchLocation { status: 'ok' | 'outside' | 'unavailable' | 'no_workplace'; method: 'gps' | 'kiosk' | 'none'; lat?: number; lng?: number; accuracy?: number; workplaceId: string | null; workplaceName: string | null; distance: number | null; mode: 'record' | 'alert' | 'block'; capturedAt: string; device?: string; country?: string; signals?: ('shared_device' | 'foreign_network')[] }
+export interface PunchLocation {
+  status: 'ok' | 'outside' | 'unavailable' | 'no_workplace';
+  method: 'gps' | 'kiosk' | 'none';
+  lat?: number;
+  lng?: number;
+  accuracy?: number;
+  workplaceId: string | null;
+  workplaceName: string | null;
+  distance: number | null;
+  mode: 'record' | 'alert' | 'block';
+  capturedAt: string;
+  device?: string;
+  country?: string;
+  signals?: ('shared_device' | 'foreign_network')[];
+}
 /** Excepção de localização para a lista da chefia. */
-export interface LocationIssueRow { id: string; employee: { id: string; name: string; number: string }; workDate: string; clockIn: string; clockOut: string | null; clockInLocation: PunchLocation | null; clockOutLocation: PunchLocation | null }
-export interface EntryRow { id: string; workDate: string; in: string; out: string | null; source: 'web' | 'manual' | 'offline'; note: string | null; offlineOut?: boolean; clockInLocation?: PunchLocation | null; clockOutLocation?: PunchLocation | null; locationIssue?: boolean }
+export interface LocationIssueRow {
+  id: string;
+  employee: { id: string; name: string; number: string };
+  workDate: string;
+  clockIn: string;
+  clockOut: string | null;
+  clockInLocation: PunchLocation | null;
+  clockOutLocation: PunchLocation | null;
+}
+export interface EntryRow {
+  id: string;
+  workDate: string;
+  in: string;
+  out: string | null;
+  source: 'web' | 'manual' | 'offline';
+  note: string | null;
+  offlineOut?: boolean;
+  clockInLocation?: PunchLocation | null;
+  clockOutLocation?: PunchLocation | null;
+  locationIssue?: boolean;
+}
 export interface MonthTotals {
   period: string;
   workedMinutes: number;
@@ -176,7 +263,13 @@ export interface MonthTotals {
   openDays: number;
   noRecordDays: number;
 }
-export interface Approval { approvedOvertimeMinutes: number; overtimeMinutes: number; note: string | null; approvedAt: string; approvedByName: string | null }
+export interface Approval {
+  approvedOvertimeMinutes: number;
+  overtimeMinutes: number;
+  note: string | null;
+  approvedAt: string;
+  approvedByName: string | null;
+}
 export interface Sheet {
   employee: { id: string; name: string; number: string; jobTitle: string };
   summary: MonthTotals & { days: DayRow[] };
@@ -223,13 +316,24 @@ export interface PayrollRunDetail {
   warnings: { employeeId?: string; message: string }[];
   subsidyOverrides: Record<string, { holiday?: boolean; christmas?: boolean }>;
   /** Câmbio USD→Kz do dia do processamento (salários indexados). */
-  fxRate?: string | null; fxDate?: string | null; fxSource?: string | null;
+  fxRate?: string | null;
+  fxDate?: string | null;
+  fxSource?: string | null;
   lines: PayrollLineRow[];
 }
 export interface PayrollBatchPerson {
-  id: string; name: string; number: string; department: string | null; jobTitle: string;
-  baseMinor: number; mealMinor: number; transportMinor: number; salaryCurrency: string;
-  baseForeignMinor: number | null; startDate: string; endDate: string | null;
+  id: string;
+  name: string;
+  number: string;
+  department: string | null;
+  jobTitle: string;
+  baseMinor: number;
+  mealMinor: number;
+  transportMinor: number;
+  salaryCurrency: string;
+  baseForeignMinor: number | null;
+  startDate: string;
+  endDate: string | null;
 }
 export interface PayrollVariableRow {
   code?: string | null;
@@ -245,19 +349,40 @@ export interface PayrollVariableRow {
   inIrt: boolean;
   employee: { id: string; name: string; number: string };
 }
-export interface JournalRow { id: string; reference: string; date: string; description: string; lines: { account: string; description: string; costCenter: string | null; debitMinor: number; creditMinor: number }[] }
+export interface JournalRow {
+  id: string;
+  reference: string;
+  date: string;
+  description: string;
+  lines: { account: string; description: string; costCenter: string | null; debitMinor: number; creditMinor: number }[];
+}
 export interface Payslip {
   leave?: { type: string; label: string; startDate: string; endDate: string; workingDays: number }[];
   absenceDays?: number;
   overtimeHours?: number;
-  termination?: { reasonLabel: string; hireDate: string | null; noticeDate: string | null; effectiveDate: string; seniority: string | null } | null;
+  termination?: {
+    reasonLabel: string;
+    hireDate: string | null;
+    noticeDate: string | null;
+    effectiveDate: string;
+    seniority: string | null;
+  } | null;
   id: string;
   period: string;
   status: 'draft' | 'closed';
   packVersion: string;
   closedAt: string | null;
   company: { name: string; nif: string; inssNumber: string | null; address: string | null };
-  employee: { name: string; number: string; jobTitle: string; department: string | null; nif: string | null; inssNumber: string | null; iban: string | null; bank: string | null };
+  employee: {
+    name: string;
+    number: string;
+    jobTitle: string;
+    department: string | null;
+    nif: string | null;
+    inssNumber: string | null;
+    iban: string | null;
+    bank: string | null;
+  };
   lines: PayrollLineRow['breakdown'];
   grossMinor: number;
   inssEmployeeMinor: number;
@@ -267,5 +392,10 @@ export interface Payslip {
   irtBracket: number;
   hash: string;
 }
-export const VARIABLE_LABEL: Record<string, string> = { bonus: 'Prémio', other_earning: 'Outro abono', advance: 'Adiantamento', other_deduction: 'Outro desconto' };
+export const VARIABLE_LABEL: Record<string, string> = {
+  bonus: 'Prémio',
+  other_earning: 'Outro abono',
+  advance: 'Adiantamento',
+  other_deduction: 'Outro desconto',
+};
 export const PAYROLL_ROLES = ['owner', 'payroll', 'finance', 'hr_admin'];

@@ -13,7 +13,10 @@ export function base32Encode(bytes: Uint8Array): string {
   for (const b of bytes) {
     value = (value << 8) | b;
     bits += 8;
-    while (bits >= 5) { out += B32[(value >>> (bits - 5)) & 31]; bits -= 5; }
+    while (bits >= 5) {
+      out += B32[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
   }
   if (bits > 0) out += B32[(value << (5 - bits)) & 31];
   return out;
@@ -29,7 +32,10 @@ export function base32Decode(s: string): Uint8Array {
     if (i < 0) throw new RangeError('base32 inválido');
     value = (value << 5) | i;
     bits += 5;
-    if (bits >= 8) { out.push((value >>> (bits - 8)) & 255); bits -= 8; }
+    if (bits >= 8) {
+      out.push((value >>> (bits - 8)) & 255);
+      bits -= 8;
+    }
   }
   return new Uint8Array(out);
 }
@@ -44,7 +50,13 @@ export async function totp(secretB32: string, atMs: number = Date.now(), step = 
   const msg = new Uint8Array(8);
   new DataView(msg.buffer).setUint32(0, Math.floor(counter / 2 ** 32));
   new DataView(msg.buffer).setUint32(4, counter >>> 0);
-  const key = await crypto.subtle.importKey('raw', base32Decode(secretB32) as Uint8Array<ArrayBuffer>, { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+  const key = await crypto.subtle.importKey(
+    'raw',
+    base32Decode(secretB32) as Uint8Array<ArrayBuffer>,
+    { name: 'HMAC', hash: 'SHA-1' },
+    false,
+    ['sign'],
+  );
   const h = new Uint8Array(await crypto.subtle.sign('HMAC', key, msg));
   const o = h[h.length - 1]! & 15;
   const bin = ((h[o]! & 127) << 24) | (h[o + 1]! << 16) | (h[o + 2]! << 8) | h[o + 3]!;
@@ -76,12 +88,12 @@ export function pinProblem(pin: string): string | null {
 
 /** Token aleatório para convites e recuperação (só o hash é guardado). */
 export function randomToken(bytes = 24): string {
-  return [...crypto.getRandomValues(new Uint8Array(bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return [...crypto.getRandomValues(new Uint8Array(bytes))].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 export async function sha256Hex(s: string): Promise<string> {
   const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
-  return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 /** Telefone angolano normalizado (9 dígitos, sem indicativo): "+244 923 456 789" → "923456789". */

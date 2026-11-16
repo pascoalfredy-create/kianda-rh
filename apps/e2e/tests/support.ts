@@ -16,18 +16,43 @@ export async function sql<T = Record<string, unknown>>(text: string, params: unk
 let seq = 0;
 const unique = () => `${Date.now()}${process.pid % 1000}${seq++}`;
 
-export interface Company { id: string; email: string; token: string; name: string }
+export interface Company {
+  id: string;
+  email: string;
+  token: string;
+  name: string;
+}
 type Modules = ('hr' | 'modeling' | 'valuation')[];
 
 /** Regista uma empresa nova pela API (cada teste trabalha isolado). */
-export async function registerCompany(opts: { name?: string; modules?: Modules; sectors?: string[] } = {}): Promise<Company> {
+export async function registerCompany(
+  opts: { name?: string; modules?: Modules; sectors?: string[] } = {},
+): Promise<Company> {
   const api = await request.newContext({ baseURL: API });
-  const id = unique(), name = opts.name ?? `Empresa E2E ${id.slice(-6)}`, email = `dona.${id}@e2e.kianda.test`;
+  const id = unique(),
+    name = opts.name ?? `Empresa E2E ${id.slice(-6)}`,
+    email = `dona.${id}@e2e.kianda.test`;
   const modules = opts.modules ?? ['hr'];
-  const res = await api.post('/v1/auth/register', { data: { acceptTerms: true,
-    company: { name, sector: 'services', nif: id.slice(-10).padStart(10, '0') }, name: 'Dona E2E', email, password: PASSWORD, modules,
-    ...(modules.includes('modeling') ? { modelingPlan: { key: 'pme', cycle: 'monthly', primarySector: 'servicos', sectors: opts.sectors ?? ['servicos', 'comercio'] } } : {}),
-  } });
+  const res = await api.post('/v1/auth/register', {
+    data: {
+      acceptTerms: true,
+      company: { name, sector: 'services', nif: id.slice(-10).padStart(10, '0') },
+      name: 'Dona E2E',
+      email,
+      password: PASSWORD,
+      modules,
+      ...(modules.includes('modeling')
+        ? {
+            modelingPlan: {
+              key: 'pme',
+              cycle: 'monthly',
+              primarySector: 'servicos',
+              sectors: opts.sectors ?? ['servicos', 'comercio'],
+            },
+          }
+        : {}),
+    },
+  });
   expect(res.status(), await res.text()).toBe(201);
   const token = /kianda_session=([^;]+)/.exec(res.headers()['set-cookie'] ?? '')![1]!;
   const body = await res.json();
@@ -38,19 +63,35 @@ export async function registerCompany(opts: { name?: string; modules?: Modules; 
 }
 
 /** Pedido autenticado à API (com o cookie de sessão de quem o faz). */
-export async function apiAs<T = any>(token: string, method: string, path: string, data?: unknown): Promise<{ status: number; body: T }> {
+export async function apiAs<T = any>(
+  token: string,
+  method: string,
+  path: string,
+  data?: unknown,
+): Promise<{ status: number; body: T }> {
   const api = await request.newContext({ baseURL: API, extraHTTPHeaders: { cookie: `kianda_session=${token}` } });
   const res = await api.fetch(path, { method, ...(data === undefined ? {} : { data }) });
   const text = await res.text();
   await api.dispose();
-  let body: unknown = text; try { body = JSON.parse(text); } catch { /* binário ou vazio */ }
+  let body: unknown = text;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    /* binário ou vazio */
+  }
   return { status: res.status(), body: body as T };
 }
 
 /** Cria um utilizador na empresa e devolve a sua sessão. */
 export async function addUser(owner: Company, name: string, role = 'finance', employeeId?: string) {
   const email = `${name.toLowerCase().replace(/\W+/g, '.')}.${unique()}@e2e.kianda.test`;
-  const created = await apiAs(owner.token, 'POST', '/v1/users', { name, email, password: PASSWORD, role, ...(employeeId ? { employeeId } : {}) });
+  const created = await apiAs(owner.token, 'POST', '/v1/users', {
+    name,
+    email,
+    password: PASSWORD,
+    role,
+    ...(employeeId ? { employeeId } : {}),
+  });
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   const api = await request.newContext({ baseURL: API });
   const login = await api.post('/v1/auth/login', { data: { email, password: PASSWORD } });
@@ -62,14 +103,16 @@ export async function addUser(owner: Company, name: string, role = 'finance', em
 /** Entra sem passar pelo formulário (o login pelo formulário tem o seu próprio teste). */
 export async function signIn(context: BrowserContext, token: string) {
   await context.clearCookies();
-  await context.addCookies([{ name: 'kianda_session', value: token, domain: 'localhost', path: '/', httpOnly: true, sameSite: 'Lax' }]);
+  await context.addCookies([
+    { name: 'kianda_session', value: token, domain: 'localhost', path: '/', httpOnly: true, sameSite: 'Lax' },
+  ]);
 }
 
 /** Erros de JavaScript da página (ignora só recursos externos, como as fontes, que podem falhar na rede do CI). */
 export function watchErrors(page: Page) {
   const errors: string[] = [];
-  page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
-  page.on('console', (m) => {
+  page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
+  page.on('console', m => {
     if (m.type() !== 'error') return;
     const t = m.text();
     if (/fonts\.(googleapis|gstatic)|ERR_TUNNEL|ERR_NAME_NOT_RESOLVED|ERR_INTERNET_DISCONNECTED/.test(t)) return;
@@ -78,12 +121,19 @@ export function watchErrors(page: Page) {
   return errors;
 }
 
-export async function closePool() { await pool?.end(); pool = null; }
+export async function closePool() {
+  await pool?.end();
+  pool = null;
+}
 
 /** Valora: abre um ecrã pelo menu lateral, abrindo antes o grupo recolhido que o contém. */
 export async function valoraGo(page: Page, view: string) {
   const link = page.locator(`#nav a[data-v="${view}"]`);
-  if (!(await link.isVisible())) await page.locator('#nav .nav-group', { has: page.locator(`a[data-v="${view}"]`) }).locator('.nav-group-toggle').click();
+  if (!(await link.isVisible()))
+    await page
+      .locator('#nav .nav-group', { has: page.locator(`a[data-v="${view}"]`) })
+      .locator('.nav-group-toggle')
+      .click();
   await link.click();
   await openMaps(page);
 }
@@ -102,7 +152,12 @@ export async function openMaps(page: Page) {
 export async function expectRecoveryPdf(download: { path(): Promise<string> }, section: string) {
   if (!process.env.RECOVERY_OBJECTS) return;
   const output = execFileSync('pdftotext', [await download.path(), '-'], { encoding: 'utf8' });
-  const normalize = (text: string) => text.normalize('NFKD').replace(/\p{M}/gu, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+  const normalize = (text: string) =>
+    text
+      .normalize('NFKD')
+      .replace(/\p{M}/gu, '')
+      .replace(/[^a-z0-9]/gi, '')
+      .toLowerCase();
   // Evita que um erro de teste coloque conteúdo de um PDF nos registos.
   expect(normalize(output).includes(normalize(section)), 'Secção presente no texto do PDF').toBe(true);
 }

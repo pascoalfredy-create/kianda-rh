@@ -4,17 +4,39 @@
 
 // ——— Recrutamento ———
 
-export const STAGES = ['applied', 'screening', 'interview', 'assessment', 'offer', 'hired', 'rejected', 'withdrawn'] as const;
+export const STAGES = [
+  'applied',
+  'screening',
+  'interview',
+  'assessment',
+  'offer',
+  'hired',
+  'rejected',
+  'withdrawn',
+] as const;
 export type Stage = (typeof STAGES)[number];
 export const STAGE_LABEL: Record<Stage, string> = {
-  applied: 'Recebida', screening: 'Triagem', interview: 'Entrevista', assessment: 'Prova técnica', offer: 'Proposta',
-  hired: 'Contratado', rejected: 'Recusado', withdrawn: 'Desistiu',
+  applied: 'Recebida',
+  screening: 'Triagem',
+  interview: 'Entrevista',
+  assessment: 'Prova técnica',
+  offer: 'Proposta',
+  hired: 'Contratado',
+  rejected: 'Recusado',
+  withdrawn: 'Desistiu',
 };
 /** Etapas activas do pipeline (colunas do quadro). */
 export const PIPELINE: Stage[] = ['applied', 'screening', 'interview', 'assessment', 'offer'];
 export const CLOSED_STAGES: Stage[] = ['hired', 'rejected', 'withdrawn'];
 
-export const SOURCES = { site: 'Página de carreiras', referral: 'Indicação interna', linkedin: 'LinkedIn', agency: 'Agência', spontaneous: 'Candidatura espontânea', other: 'Outra' } as const;
+export const SOURCES = {
+  site: 'Página de carreiras',
+  referral: 'Indicação interna',
+  linkedin: 'LinkedIn',
+  agency: 'Agência',
+  spontaneous: 'Candidatura espontânea',
+  other: 'Outra',
+} as const;
 export type CandidateSource = keyof typeof SOURCES;
 
 export interface CandidateProfile {
@@ -29,24 +51,39 @@ export interface CandidateProfile {
 }
 
 /** Ligação estável da vaga, utilizável sem conta Kianda. */
-export const publicOpeningPath = (companyId: string, openingId: string) => `/carreiras/${encodeURIComponent(companyId)}/vagas/${encodeURIComponent(openingId)}`;
+export const publicOpeningPath = (companyId: string, openingId: string) =>
+  `/carreiras/${encodeURIComponent(companyId)}/vagas/${encodeURIComponent(openingId)}`;
 
 /** A mesma regra vale na lista, no detalhe e na submissão; o último dia ainda é válido. */
-export function openingAcceptsApplications(opening: { status: string; isPublic: boolean; closesOn: string | null }, today: string) {
+export function openingAcceptsApplications(
+  opening: { status: string; isPublic: boolean; closesOn: string | null },
+  today: string,
+) {
   return opening.status === 'open' && opening.isPublic && (!opening.closesOn || opening.closesOn >= today);
 }
 
-export interface CandidateLite { stage: Stage; source: string; createdAt: string; hiredAt?: string | null }
+export interface CandidateLite {
+  stage: Stage;
+  source: string;
+  createdAt: string;
+  hiredAt?: string | null;
+}
 
 /** Indicadores de uma vaga: candidatos por etapa, por origem, taxa de conversão e dias até à contratação. */
 export function pipelineStats(cs: CandidateLite[]) {
-  const byStage = Object.fromEntries(STAGES.map((s) => [s, cs.filter((c) => c.stage === s).length])) as Record<Stage, number>;
+  const byStage = Object.fromEntries(STAGES.map(s => [s, cs.filter(c => c.stage === s).length])) as Record<
+    Stage,
+    number
+  >;
   const bySource: Record<string, number> = {};
   for (const c of cs) bySource[c.source] = (bySource[c.source] ?? 0) + 1;
-  const hired = cs.filter((c) => c.stage === 'hired' && c.hiredAt);
-  const days = hired.map((c) => Math.round((Date.parse(c.hiredAt!) - Date.parse(c.createdAt)) / 86_400_000));
+  const hired = cs.filter(c => c.stage === 'hired' && c.hiredAt);
+  const days = hired.map(c => Math.round((Date.parse(c.hiredAt!) - Date.parse(c.createdAt)) / 86_400_000));
   return {
-    total: cs.length, active: cs.filter((c) => PIPELINE.includes(c.stage)).length, byStage, bySource,
+    total: cs.length,
+    active: cs.filter(c => PIPELINE.includes(c.stage)).length,
+    byStage,
+    bySource,
     hireRate: cs.length ? Math.round((hired.length / cs.length) * 1000) / 10 : 0,
     avgDaysToHire: days.length ? Math.round(days.reduce((s, d) => s + d, 0) / days.length) : null,
   };
@@ -62,7 +99,11 @@ export function stageTransitionProblem(from: Stage, to: Stage): string | null {
 
 // ——— Desempenho ———
 
-export interface Competency { key: string; label: string; weight: number }
+export interface Competency {
+  key: string;
+  label: string;
+  weight: number;
+}
 export const DEFAULT_COMPETENCIES: Competency[] = [
   { key: 'qualidade', label: 'Qualidade e rigor do trabalho', weight: 20 },
   { key: 'produtividade', label: 'Produtividade e cumprimento de prazos', weight: 20 },
@@ -73,13 +114,27 @@ export const DEFAULT_COMPETENCIES: Competency[] = [
 ];
 
 export const SCALE: { value: number; label: string }[] = [
-  { value: 1, label: 'Insuficiente' }, { value: 2, label: 'Abaixo do esperado' }, { value: 3, label: 'Cumpre' },
-  { value: 4, label: 'Supera' }, { value: 5, label: 'Excepcional' },
+  { value: 1, label: 'Insuficiente' },
+  { value: 2, label: 'Abaixo do esperado' },
+  { value: 3, label: 'Cumpre' },
+  { value: 4, label: 'Supera' },
+  { value: 5, label: 'Excepcional' },
 ];
 
-export interface Objective { title: string; weight: number; result?: string | null; score?: number | null }
+export interface Objective {
+  title: string;
+  weight: number;
+  result?: string | null;
+  score?: number | null;
+}
 
-export const RECOMMENDATIONS = { none: 'Sem recomendação', raise: 'Aumento salarial', promotion: 'Promoção', training: 'Formação', improvement_plan: 'Plano de melhoria' } as const;
+export const RECOMMENDATIONS = {
+  none: 'Sem recomendação',
+  raise: 'Aumento salarial',
+  promotion: 'Promoção',
+  training: 'Formação',
+  improvement_plan: 'Plano de melhoria',
+} as const;
 export type Recommendation = keyof typeof RECOMMENDATIONS;
 
 /** Problemas na configuração do ciclo (pesos têm de somar 100). */
@@ -98,19 +153,26 @@ const round2 = (v: number) => Math.round(v * 100) / 100;
  * Nota final (1–5): média ponderada das competências e dos objectivos, combinadas segundo o peso do ciclo
  * (ex.: 60% competências, 40% objectivos). Sem objectivos avaliados, conta só a parte das competências.
  */
-export function reviewScore(competencies: Competency[], scores: Record<string, number | null | undefined>, objectives: Objective[], competencyWeight: number) {
-  const scored = competencies.filter((c) => typeof scores[c.key] === 'number');
+export function reviewScore(
+  competencies: Competency[],
+  scores: Record<string, number | null | undefined>,
+  objectives: Objective[],
+  competencyWeight: number,
+) {
+  const scored = competencies.filter(c => typeof scores[c.key] === 'number');
   const cw = scored.reduce((s, c) => s + c.weight, 0);
   const comp = cw ? scored.reduce((s, c) => s + c.weight * scores[c.key]!, 0) / cw : null;
-  const objs = objectives.filter((o) => typeof o.score === 'number' && o.weight > 0);
+  const objs = objectives.filter(o => typeof o.score === 'number' && o.weight > 0);
   const ow = objs.reduce((s, o) => s + o.weight, 0);
   const obj = ow ? objs.reduce((s, o) => s + o.weight * o.score!, 0) / ow : null;
   let final: number | null;
   if (comp !== null && obj !== null) final = (comp * competencyWeight + obj * (100 - competencyWeight)) / 100;
   else final = comp ?? obj;
   return {
-    competencies: comp === null ? null : round2(comp), objectives: obj === null ? null : round2(obj), final: final === null ? null : round2(final),
-    complete: scored.length === competencies.length && objs.length === objectives.filter((o) => o.weight > 0).length,
+    competencies: comp === null ? null : round2(comp),
+    objectives: obj === null ? null : round2(obj),
+    final: final === null ? null : round2(final),
+    complete: scored.length === competencies.length && objs.length === objectives.filter(o => o.weight > 0).length,
   };
 }
 
@@ -125,8 +187,8 @@ export function ratingLabel(score: number | null): string {
 
 /** Distribuição das notas finais por classificação (para a calibração do RH). */
 export function ratingDistribution(scores: (number | null)[]) {
-  const labels = SCALE.map((s) => s.label);
-  const out = Object.fromEntries(labels.map((l) => [l, 0])) as Record<string, number>;
+  const labels = SCALE.map(s => s.label);
+  const out = Object.fromEntries(labels.map(l => [l, 0])) as Record<string, number>;
   for (const s of scores) if (s !== null) out[ratingLabel(s)]! += 1;
   return out;
 }

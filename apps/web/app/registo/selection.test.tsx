@@ -9,7 +9,17 @@ describe('cadastro da experiência antes da escolha comercial', () => {
     expect(html).toContain('Um mês grátis (30 dias)');
     expect(html).toContain('confirmação do email');
     expect(html).toContain('Módulos e licenças');
-    for (const oldControl of ['Plano RH', 'Plano do Valora', 'Plano de Modelagem', 'Pagamento RH', 'Pagamento da Modelagem', 'Pagamento do Valora', '29.900', '29\u00a0900']) expect(html).not.toContain(oldControl);
+    for (const oldControl of [
+      'Plano RH',
+      'Plano do Valora',
+      'Plano de Modelagem',
+      'Pagamento RH',
+      'Pagamento da Modelagem',
+      'Pagamento do Valora',
+      '29.900',
+      '29\u00a0900',
+    ])
+      expect(html).not.toContain(oldControl);
   });
   it('exige NIF de dez dígitos e permite mostrar a palavra-passe', async () => {
     const html = renderToStaticMarkup(await Registo());
@@ -19,13 +29,21 @@ describe('cadastro da experiência antes da escolha comercial', () => {
     expect(html).toContain('Mostrar palavra-passe');
   });
   it('uma ligação pública com plano mostra e guarda a escolha', async () => {
-    const html = renderToStaticMarkup(await Registo({ searchParams: Promise.resolve({ modulo: 'valuation', plano: 'corporate', ciclo: 'annual' }) }));
+    const html = renderToStaticMarkup(
+      await Registo({ searchParams: Promise.resolve({ modulo: 'valuation', plano: 'corporate', ciclo: 'annual' }) }),
+    );
     expect(html).toContain('Escolha guardada: Valora');
     expect(html).toContain('pagamento anual');
     expect(html).toContain('Número aproximado de colaboradores');
   });
   it('as ligações públicas e valores comerciais continuam a ser rotas locais válidas', () => {
-    expect(registrationHref('valuation', 'corporate', 'annual')).toBe('/registo?modulo=valuation&plano=corporate&ciclo=annual');
-    expect(registrationSelection({ modulo: ['modeling', 'hr'], plano: 'inexistente', ciclo: '__proto__' })).toEqual({ module: 'hr', planKey: '', cycle: 'monthly' });
+    expect(registrationHref('valuation', 'corporate', 'annual')).toBe(
+      '/registo?modulo=valuation&plano=corporate&ciclo=annual',
+    );
+    expect(registrationSelection({ modulo: ['modeling', 'hr'], plano: 'inexistente', ciclo: '__proto__' })).toEqual({
+      module: 'hr',
+      planKey: '',
+      cycle: 'monthly',
+    });
   });
 });

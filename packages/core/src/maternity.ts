@@ -10,11 +10,15 @@ export function estimateMaternityBenefit(input: {
   if (!Number.isInteger(contributionMonths) || contributionMonths < 0 || contributionMonths > 36) {
     throw new RangeError('Indique o número de meses com contribuições nos últimos 36 meses.');
   }
-  if (assertMinor(employerTargetMinor) < 0) throw new RangeError('Indique um valor de referência igual ou superior a zero.');
+  if (assertMinor(employerTargetMinor) < 0)
+    throw new RangeError('Indique um valor de referência igual ou superior a zero.');
   if (contributionMonths < 12) {
     return { meetsContributionRequirement: false, statutoryMinor: 0, employerSupplementMinor: employerTargetMinor };
   }
-  if (declaredRegularRemunerations.length !== 12 || declaredRegularRemunerations.some(value => assertMinor(value) <= 0)) {
+  if (
+    declaredRegularRemunerations.length !== 12 ||
+    declaredRegularRemunerations.some(value => assertMinor(value) <= 0)
+  ) {
     throw new RangeError('Indique as últimas 12 remunerações regulares declaradas antes da licença.');
   }
   const statutoryMinor = prorate(sum(...declaredRegularRemunerations), 3, 12);

@@ -21,7 +21,8 @@ async function forward(req: Request, { params }: { params: Promise<{ path: strin
     body: hasBody ? await req.arrayBuffer() : undefined,
   });
   const out = new Headers();
-  for (const [k, v] of res.headers) if (k !== 'set-cookie' && k !== 'content-encoding' && k !== 'content-length') out.set(k, v);
+  for (const [k, v] of res.headers)
+    if (k !== 'set-cookie' && k !== 'content-encoding' && k !== 'content-length') out.set(k, v);
   for (const c of res.headers.getSetCookie()) out.append('set-cookie', c);
   return new Response(res.status === 204 ? null : await res.arrayBuffer(), { status: res.status, headers: out });
 }

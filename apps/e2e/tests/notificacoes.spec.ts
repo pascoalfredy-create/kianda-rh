@@ -8,7 +8,10 @@ import { addUser, apiAs, closePool, registerCompany, signIn, sql, watchErrors } 
  */
 test.afterAll(closePool);
 
-test('Notificações: o colaborador activa no telemóvel, recebe o aviso do evento e deixa de receber ao sair', async ({ page, context }) => {
+test('Notificações: o colaborador activa no telemóvel, recebe o aviso do evento e deixa de receber ao sair', async ({
+  page,
+  context,
+}) => {
   await context.grantPermissions(['notifications'], { origin: 'http://localhost:3000' });
   await context.addInitScript(`(() => {
     const KEY = 'e2e-push-sub';
@@ -28,7 +31,15 @@ test('Notificações: o colaborador activa no telemóvel, recebe o aviso do even
     };
   })();`);
   const owner = await registerCompany();
-  const emp = await apiAs(owner.token, 'POST', '/v1/employees', { number: '61', name: 'Marta Sungo', gender: 'F', jobTitle: 'Técnica', province: 'Luanda', nif: '0000006161', contract: { type: 'indefinite', startDate: '2025-02-03', base: 300000, meal: 30000, transport: 25000 } });
+  const emp = await apiAs(owner.token, 'POST', '/v1/employees', {
+    number: '61',
+    name: 'Marta Sungo',
+    gender: 'F',
+    jobTitle: 'Técnica',
+    province: 'Luanda',
+    nif: '0000006161',
+    contract: { type: 'indefinite', startDate: '2025-02-03', base: 300000, meal: 30000, transport: 25000 },
+  });
   const marta = await addUser(owner, 'Marta Sungo', 'employee', emp.body.id);
 
   await signIn(context, marta.token);
@@ -40,7 +51,10 @@ test('Notificações: o colaborador activa no telemóvel, recebe o aviso do even
   await expect(invite).toContainText('Notificações activas neste dispositivo.');
   await page.screenshot({ path: '/tmp/e2e/notificacoes-01-convite.png', fullPage: false });
 
-  const subs = await sql<{ n: string }>('select count(*) as n from push_subscriptions s join users u on u.id = s.user_id where u.employee_id = $1', [emp.body.id]);
+  const subs = await sql<{ n: string }>(
+    'select count(*) as n from push_subscriptions s join users u on u.id = s.user_id where u.employee_id = $1',
+    [emp.body.id],
+  );
   expect(subs[0]!.n).toBe('1');
   await page.goto('/conta');
   const card = page.locator('.card', { hasText: 'Notificações no telemóvel' });
@@ -50,15 +64,26 @@ test('Notificações: o colaborador activa no telemóvel, recebe o aviso do even
   await page.screenshot({ path: '/tmp/e2e/notificacoes-02-conta.png', fullPage: false });
 
   // Um evento real: o RH aprova uma ausência registada para a Marta → aviso na caixa de saída.
-  const a = await apiAs(owner.token, 'POST', '/v1/absences', { employeeId: emp.body.id, type: 'justified', startDate: '2026-12-21', endDate: '2026-12-21' });
+  const a = await apiAs(owner.token, 'POST', '/v1/absences', {
+    employeeId: emp.body.id,
+    type: 'justified',
+    startDate: '2026-12-21',
+    endDate: '2026-12-21',
+  });
   expect(a.status).toBe(201);
   expect((await apiAs(owner.token, 'POST', `/v1/absences/${a.body.id}/approve`, {})).status).toBe(200);
-  const queued = await sql<{ title: string }>(`select payload->>'title' as title from push_outbox o join users u on u.id = o.user_id where u.employee_id = $1 order by o.created_at desc limit 1`, [emp.body.id]);
+  const queued = await sql<{ title: string }>(
+    `select payload->>'title' as title from push_outbox o join users u on u.id = o.user_id where u.employee_id = $1 order by o.created_at desc limit 1`,
+    [emp.body.id],
+  );
   expect(queued[0]!.title).toMatch(/pedido aprovado/);
 
   await page.getByRole('button', { name: 'Terminar sessão' }).first().click();
   await expect(page).toHaveURL(/\/$|\/login/);
-  const after = await sql<{ n: string }>('select count(*) as n from push_subscriptions s join users u on u.id = s.user_id where u.employee_id = $1', [emp.body.id]);
+  const after = await sql<{ n: string }>(
+    'select count(*) as n from push_subscriptions s join users u on u.id = s.user_id where u.employee_id = $1',
+    [emp.body.id],
+  );
   expect(after[0]!.n).toBe('0');
   expect(errors).toEqual([]);
 });

@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { canExportDocuments, cyclePrice, DEFAULT_TIERS, effectiveStatus, employeeLimit, kz, periodEnd, tierFor, trialEndDate, trialDaysRemaining } from '../src/index.js';
+import {
+  canExportDocuments,
+  cyclePrice,
+  DEFAULT_TIERS,
+  effectiveStatus,
+  employeeLimit,
+  kz,
+  periodEnd,
+  tierFor,
+  trialEndDate,
+  trialDaysRemaining,
+} from '../src/index.js';
 
 describe('licenças', () => {
   it('a avaliação tem trinta datas de calendário, incluindo activação e último dia, mesmo ao mudar de mês/ano', () => {
@@ -14,7 +25,8 @@ describe('licenças', () => {
     expect(effectiveStatus({ status: 'trial', trialEndsAt: until, paidUntil: null }, '2026-11-29')).toBe('suspended');
   });
   it('recusa datas inválidas em vez de transferir silenciosamente a avaliação para outro mês', () => {
-    for (const day of ['2026-02-30', '2026-2-01', '2026-10-30T10:00:00Z', 'invalid']) expect(() => trialEndDate(day)).toThrow(RangeError);
+    for (const day of ['2026-02-30', '2026-2-01', '2026-10-30T10:00:00Z', 'invalid'])
+      expect(() => trialEndDate(day)).toThrow(RangeError);
     expect(() => trialDaysRemaining('2026-11-28', '2026-02-30')).toThrow(RangeError);
   });
   it('escalão pelo número de colaboradores', () => {
@@ -29,13 +41,27 @@ describe('licenças', () => {
     const t1 = DEFAULT_TIERS[0]!;
     expect(cyclePrice(t1, 'monthly')!.totalMinor).toBe(kz(29_900));
     expect(cyclePrice(t1, 'semiannual')!.totalMinor).toBe(kz(161_460));
-    expect(cyclePrice(t1, 'annual')).toEqual({ grossMinor: kz(358_800), discountMinor: kz(53_820), totalMinor: kz(304_980) });
+    expect(cyclePrice(t1, 'annual')).toEqual({
+      grossMinor: kz(358_800),
+      discountMinor: kz(53_820),
+      totalMinor: kz(304_980),
+    });
     expect(cyclePrice(DEFAULT_TIERS[3]!, 'annual')!.totalMinor).toBe(kz(916_980));
     expect(cyclePrice(DEFAULT_TIERS[4]!, 'monthly')!.totalMinor).toBe(kz(99_999));
   });
   it('reproduz todos os montantes comerciais aprovados para o RH', () => {
-    const expected = [[29900, 161460, 304980], [49900, 269460, 508980], [69900, 377460, 712980], [89900, 485460, 916980], [99999, 539995, 1019990]];
-    DEFAULT_TIERS.forEach((tier, i) => expect((['monthly', 'semiannual', 'annual'] as const).map(c => cyclePrice(tier, c)!.totalMinor)).toEqual(expected[i]!.map(kz)));
+    const expected = [
+      [29900, 161460, 304980],
+      [49900, 269460, 508980],
+      [69900, 377460, 712980],
+      [89900, 485460, 916980],
+      [99999, 539995, 1019990],
+    ];
+    DEFAULT_TIERS.forEach((tier, i) =>
+      expect((['monthly', 'semiannual', 'annual'] as const).map(c => cyclePrice(tier, c)!.totalMinor)).toEqual(
+        expected[i]!.map(kz),
+      ),
+    );
   });
   it('a avaliação permite trabalhar mas só uma licença paga ou em tolerância permite exportar documentos', () => {
     for (const status of ['trial', 'suspended', 'cancelled'] as const) expect(canExportDocuments(status)).toBe(false);

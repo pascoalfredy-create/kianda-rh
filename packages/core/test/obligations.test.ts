@@ -2,11 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { AO_2026, csvMoney, kz, payrollObligations, toCsv } from '../src/index.js';
 
 describe('obrigações do processamento', () => {
-  const base = { period: '2026-10', pack: AO_2026, netMinor: kz(3_351_844.5), irtMinor: kz(697_355.5), inssEmployeeMinor: kz(115_800), inssEmployerMinor: kz(308_800) };
+  const base = {
+    period: '2026-10',
+    pack: AO_2026,
+    netMinor: kz(3_351_844.5),
+    irtMinor: kz(697_355.5),
+    inssEmployeeMinor: kz(115_800),
+    inssEmployerMinor: kz(308_800),
+  };
   it('prazos: salários a 31/10, INSS a 10/11, IRT a 30/11', () => {
     const o = payrollObligations({ ...base, paid: {}, today: '2026-11-05' });
-    expect(o.map((x) => [x.kind, x.dueDate, x.status])).toEqual([
-      ['salaries', '2026-10-31', 'overdue'], ['inss', '2026-11-10', 'due_soon'], ['irt', '2026-11-30', 'open'],
+    expect(o.map(x => [x.kind, x.dueDate, x.status])).toEqual([
+      ['salaries', '2026-10-31', 'overdue'],
+      ['inss', '2026-11-10', 'due_soon'],
+      ['irt', '2026-11-30', 'open'],
     ]);
     expect(o[1]!.amountMinor).toBe(kz(424_600));
   });

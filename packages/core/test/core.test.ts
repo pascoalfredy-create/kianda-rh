@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
-  AO_2026, PackNotFoundError, businessDays, calculatePayroll, complianceAlerts, contractAlerts, finalSettlement,
-  getPack, irtGroupA, isValidAngolanBI, isValidAngolanIban, kz, payrollDeadlines, payrollJournal, reconcile, solveBaseForNet,
+  AO_2026,
+  PackNotFoundError,
+  businessDays,
+  calculatePayroll,
+  complianceAlerts,
+  contractAlerts,
+  finalSettlement,
+  getPack,
+  irtGroupA,
+  isValidAngolanBI,
+  isValidAngolanIban,
+  kz,
+  payrollDeadlines,
+  payrollJournal,
+  reconcile,
+  solveBaseForNet,
 } from '../src/index.js';
 import { AO_2026 as PACK } from '../src/packs/ao-2026.js';
 
@@ -23,12 +37,24 @@ describe('IRT Grupo A 2026 (Lei 14/25)', () => {
 describe('processamento salarial', () => {
   it('INSS: 3% são retidos no trabalhador e 8% acrescem apenas ao custo da empresa', () => {
     const r = calculatePayroll({ period: '2026-10', baseMinor: kz(100000) });
-    expect(r).toMatchObject({ grossMinor: kz(100000), inssEmployeeMinor: kz(3000), inssEmployerMinor: kz(8000), irtMinor: 0, netMinor: kz(97000), totalCostMinor: kz(108000) });
-    expect(r.lines.filter((l) => l.kind === 'deduction').map((l) => l.code)).not.toContain('INSS_EMP');
-    expect(r.lines.find((l) => l.code === 'INSS_EMP')).toMatchObject({ kind: 'employer', amountMinor: kz(8000) });
+    expect(r).toMatchObject({
+      grossMinor: kz(100000),
+      inssEmployeeMinor: kz(3000),
+      inssEmployerMinor: kz(8000),
+      irtMinor: 0,
+      netMinor: kz(97000),
+      totalCostMinor: kz(108000),
+    });
+    expect(r.lines.filter(l => l.kind === 'deduction').map(l => l.code)).not.toContain('INSS_EMP');
+    expect(r.lines.find(l => l.code === 'INSS_EMP')).toMatchObject({ kind: 'employer', amountMinor: kz(8000) });
   });
   it('alterar apenas a contribuição patronal não altera o líquido nem o IRT do trabalhador', () => {
-    const input = { period: '2026-10', baseMinor: kz(420000), advancesMinor: kz(10000), otherDeductionsMinor: kz(5000) };
+    const input = {
+      period: '2026-10',
+      baseMinor: kz(420000),
+      advancesMinor: kz(10000),
+      otherDeductionsMinor: kz(5000),
+    };
     const normal = calculatePayroll(input);
     const changed = calculatePayroll({ ...input, pack: { ...PACK, inss: { ...PACK.inss, employerBps: 1600 } } });
     expect(changed.netMinor).toBe(normal.netMinor);
@@ -38,7 +64,12 @@ describe('processamento salarial', () => {
     expect(changed.totalCostMinor - normal.totalCostMinor).toBe(normal.inssEmployerMinor);
   });
   it('trabalhadora com 420 000 Kz de base e subsídios isentos', () => {
-    const r = calculatePayroll({ period: '2026-10', baseMinor: kz(420_000), mealMinor: kz(30_000), transportMinor: kz(25_000) });
+    const r = calculatePayroll({
+      period: '2026-10',
+      baseMinor: kz(420_000),
+      mealMinor: kz(30_000),
+      transportMinor: kz(25_000),
+    });
     expect(r.grossMinor).toBe(kz(475_000));
     expect(r.inssEmployeeMinor).toBe(kz(12_600));
     expect(r.irtTaxableMinor).toBe(kz(407_400));
@@ -48,7 +79,12 @@ describe('processamento salarial', () => {
     expect(r.packVersion).toBe('AO-2026.2');
   });
   it('tributa só o excesso dos subsídios acima de 30 000 Kz', () => {
-    const r = calculatePayroll({ period: '2026-10', baseMinor: kz(1_850_000), mealMinor: kz(45_000), transportMinor: kz(40_000) });
+    const r = calculatePayroll({
+      period: '2026-10',
+      baseMinor: kz(1_850_000),
+      mealMinor: kz(45_000),
+      transportMinor: kz(40_000),
+    });
     expect(r.irtTaxableMinor).toBe(kz(1_850_000 + 15_000 + 10_000 - 55_500));
   });
   it('subsídio de férias fora da base do INSS e de Natal dentro (parâmetros do pacote)', () => {
@@ -58,7 +94,8 @@ describe('processamento salarial', () => {
     expect(n.inssBaseMinor).toBe(kz(300_000));
   });
   it('um ano sem pacote próprio continua com as regras do último publicado (sem esperar pelo OGE)', () => {
-    const jan = calculatePayroll({ period: '2027-01', baseMinor: kz(300_000) }), dez = calculatePayroll({ period: '2026-12', baseMinor: kz(300_000) });
+    const jan = calculatePayroll({ period: '2027-01', baseMinor: kz(300_000) }),
+      dez = calculatePayroll({ period: '2026-12', baseMinor: kz(300_000) });
     expect(jan.netMinor).toBe(dez.netMinor);
     expect(jan.packVersion).toBe('AO-2027 (regras AO-2026.2)');
     expect(getPack('AO', 2027).holidays[0]!.date).toBe('2027-01-01');
@@ -84,8 +121,13 @@ describe('calendário laboral', () => {
     expect(payrollDeadlines('2026-10', AO_2026)).toEqual({ inss: '2026-11-10', irt: '2026-11-30' });
   });
   it('alerta fim de contrato a termo e período experimental', () => {
-    expect(contractAlerts({ startDate: '2025-11-10', endDate: '2026-11-09', type: 'fixed-term' }, '2026-10-26', AO_2026)[0]?.daysLeft).toBe(14);
-    expect(contractAlerts({ startDate: '2026-10-01', type: 'indefinite' }, '2026-10-26', AO_2026)[0]?.kind).toBe('probation');
+    expect(
+      contractAlerts({ startDate: '2025-11-10', endDate: '2026-11-09', type: 'fixed-term' }, '2026-10-26', AO_2026)[0]
+        ?.daysLeft,
+    ).toBe(14);
+    expect(contractAlerts({ startDate: '2026-10-01', type: 'indefinite' }, '2026-10-26', AO_2026)[0]?.kind).toBe(
+      'probation',
+    );
   });
 });
 
@@ -102,35 +144,99 @@ describe('validações', () => {
 
 describe('cessação e PGC', () => {
   it('fecho de contas com proporcionais', () => {
-    const s = finalSettlement({ terminationDate: '2026-11-30', baseMinor: kz(165_000), monthlyAllowancesMinor: kz(55_000), unusedVacationDays: 22, compensationMinor: kz(165_000) }, AO_2026);
-    expect(s.lines.find((l) => l.code === 'SUBNAT')?.amountMinor).toBe(kz(75_625));
+    const s = finalSettlement(
+      {
+        terminationDate: '2026-11-30',
+        baseMinor: kz(165_000),
+        monthlyAllowancesMinor: kz(55_000),
+        unusedVacationDays: 22,
+        compensationMinor: kz(165_000),
+      },
+      AO_2026,
+    );
+    expect(s.lines.find(l => l.code === 'SUBNAT')?.amountMinor).toBe(kz(75_625));
     expect(s.totalMinor).toBe(kz(220_000 + 165_000 + 75_625 + 75_625 + 165_000));
   });
   it('lançamento do processamento equilibrado (classe 7 contra 34 e 36)', () => {
-    const r = calculatePayroll({ period: '2026-10', baseMinor: kz(420_000), mealMinor: kz(30_000), transportMinor: kz(25_000) });
+    const r = calculatePayroll({
+      period: '2026-10',
+      baseMinor: kz(420_000),
+      mealMinor: kz(30_000),
+      transportMinor: kz(25_000),
+    });
     const e = payrollJournal('2026-10', {
-      byCostCenter: [{ costCenter: 'Finanças', baseMinor: kz(420_000), allowancesMinor: kz(55_000), overtimeAndBonusMinor: 0, holidayChristmasMinor: 0, employerInssMinor: r.inssEmployerMinor }],
-      irtMinor: r.irtMinor, inssEmployeeMinor: r.inssEmployeeMinor, inssEmployerMinor: r.inssEmployerMinor, advancesMinor: 0, netMinor: r.netMinor,
+      byCostCenter: [
+        {
+          costCenter: 'Finanças',
+          baseMinor: kz(420_000),
+          allowancesMinor: kz(55_000),
+          overtimeAndBonusMinor: 0,
+          holidayChristmasMinor: 0,
+          employerInssMinor: r.inssEmployerMinor,
+        },
+      ],
+      irtMinor: r.irtMinor,
+      inssEmployeeMinor: r.inssEmployeeMinor,
+      inssEmployerMinor: r.inssEmployerMinor,
+      advancesMinor: 0,
+      netMinor: r.netMinor,
     });
     const d = e.lines.reduce((a, l) => a + l.debitMinor, 0);
     const c = e.lines.reduce((a, l) => a + l.creditMinor, 0);
     expect(d).toBe(c);
-    expect(e.lines.every((l) => l.debitMinor === 0 || l.account.startsWith('72'))).toBe(true);
+    expect(e.lines.every(l => l.debitMinor === 0 || l.account.startsWith('72'))).toBe(true);
   });
 });
 
 describe('conciliação bancária', () => {
   it('distingue o IRT de Setembro do de Agosto pelo período no descritivo', () => {
     const obligations = [
-      { key: 'irt:2026-08', kind: 'irt' as const, label: 'IRT Agosto', amountMinor: kz(2_580_263.91), dueDate: '2026-09-30', period: '2026-08', keywords: ['AGT', 'IRT'] },
-      { key: 'irt:2026-09', kind: 'irt' as const, label: 'IRT Setembro', amountMinor: kz(2_580_263.91), dueDate: '2026-10-31', period: '2026-09', keywords: ['AGT', 'IRT'] },
+      {
+        key: 'irt:2026-08',
+        kind: 'irt' as const,
+        label: 'IRT Agosto',
+        amountMinor: kz(2_580_263.91),
+        dueDate: '2026-09-30',
+        period: '2026-08',
+        keywords: ['AGT', 'IRT'],
+      },
+      {
+        key: 'irt:2026-09',
+        kind: 'irt' as const,
+        label: 'IRT Setembro',
+        amountMinor: kz(2_580_263.91),
+        dueDate: '2026-10-31',
+        period: '2026-09',
+        keywords: ['AGT', 'IRT'],
+      },
     ];
-    const [m] = reconcile([{ id: 'l1', date: '2026-10-23', description: 'PAG IMPOSTOS AGT IRT GRUPO A 09/2026', amountMinor: -kz(2_580_263.91) }], obligations);
+    const [m] = reconcile(
+      [
+        {
+          id: 'l1',
+          date: '2026-10-23',
+          description: 'PAG IMPOSTOS AGT IRT GRUPO A 09/2026',
+          amountMinor: -kz(2_580_263.91),
+        },
+      ],
+      obligations,
+    );
     expect(m).toMatchObject({ obligationKey: 'irt:2026-09', status: 'matched' });
   });
   it('sem palavras-chave fica como sugestão', () => {
-    const [m] = reconcile([{ id: 'l2', date: '2026-10-20', description: 'TRF ORDEM 0055 000778812', amountMinor: -kz(48_500) }],
-      [{ key: 'exp:1', kind: 'expense', label: 'Reembolso', amountMinor: kz(48_500), dueDate: '2026-10-09', keywords: ['REEMB', 'TAVARES'] }]);
+    const [m] = reconcile(
+      [{ id: 'l2', date: '2026-10-20', description: 'TRF ORDEM 0055 000778812', amountMinor: -kz(48_500) }],
+      [
+        {
+          key: 'exp:1',
+          kind: 'expense',
+          label: 'Reembolso',
+          amountMinor: kz(48_500),
+          dueDate: '2026-10-09',
+          keywords: ['REEMB', 'TAVARES'],
+        },
+      ],
+    );
     expect(m?.status).toBe('suggested');
   });
 });
@@ -155,13 +261,35 @@ describe('processamento completo: subsídios proporcionais e lançamento com out
     expect(yearServiceFraction(2026, '2026-07-02')).toBeCloseTo(5 / 12, 6); // meses completos (art. 238.º, n.º 3)
     expect(yearServiceFraction(2026, '2023-01-16')).toBe(1);
     const r = calculatePayroll({ period: '2026-12', baseMinor: kz(400_000), christmasSubsidy: 0.5 });
-    expect(r.lines.find((l) => l.code === 'SUBNAT')).toMatchObject({ amountMinor: kz(100_000), name: 'Subsídio de Natal (proporcional 50%)' });
+    expect(r.lines.find(l => l.code === 'SUBNAT')).toMatchObject({
+      amountMinor: kz(100_000),
+      name: 'Subsídio de Natal (proporcional 50%)',
+    });
   });
   it('descontos acima do ilíquido dão erro próprio', () => {
-    expect(() => calculatePayroll({ period: '2026-10', baseMinor: kz(200_000), advancesMinor: kz(300_000) })).toThrow(NegativeNetError);
+    expect(() => calculatePayroll({ period: '2026-10', baseMinor: kz(200_000), advancesMinor: kz(300_000) })).toThrow(
+      NegativeNetError,
+    );
   });
   it('lançamento equilibrado com adiantamentos e outros descontos', () => {
-    const e = payrollJournal('2026-10', { byCostCenter: [{ costCenter: 'CC1', baseMinor: 1000, allowancesMinor: 0, overtimeAndBonusMinor: 0, holidayChristmasMinor: 0, employerInssMinor: 80 }], irtMinor: 50, inssEmployeeMinor: 30, inssEmployerMinor: 80, advancesMinor: 100, otherDeductionsMinor: 70, netMinor: 750 });
-    expect(e.lines.find((l) => l.account === '36.9')?.creditMinor).toBe(70);
+    const e = payrollJournal('2026-10', {
+      byCostCenter: [
+        {
+          costCenter: 'CC1',
+          baseMinor: 1000,
+          allowancesMinor: 0,
+          overtimeAndBonusMinor: 0,
+          holidayChristmasMinor: 0,
+          employerInssMinor: 80,
+        },
+      ],
+      irtMinor: 50,
+      inssEmployeeMinor: 30,
+      inssEmployerMinor: 80,
+      advancesMinor: 100,
+      otherDeductionsMinor: 70,
+      netMinor: 750,
+    });
+    expect(e.lines.find(l => l.account === '36.9')?.creditMinor).toBe(70);
   });
 });

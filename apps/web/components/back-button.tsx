@@ -6,7 +6,9 @@ import { returnPath } from '../lib/return-path';
 
 /** Regressa na navegação da plataforma; uma entrada directa tem sempre um destino útil. */
 export function BackButton() {
-  const path = usePathname(), search = useSearchParams(), router = useRouter();
+  const path = usePathname(),
+    search = useSearchParams(),
+    router = useRouter();
   const current = `${path}${search.size ? `?${search}` : ''}`;
   const visited = useRef<string[]>([]);
   const [hasHistory, setHasHistory] = useState(false);
@@ -17,15 +19,24 @@ export function BackButton() {
       else stack.push(current);
     }
     let sameSite = false;
-    try { const ref = new URL(document.referrer); sameSite = ref.origin === location.origin && !/^\/(login|registo|acesso|recuperar)(?:\/|$)/.test(ref.pathname); } catch { /* entrada directa */ }
+    try {
+      const ref = new URL(document.referrer);
+      sameSite = ref.origin === location.origin && !/^\/(login|registo|acesso|recuperar)(?:\/|$)/.test(ref.pathname);
+    } catch {
+      /* entrada directa */
+    }
     setHasHistory(stack.length > 1 || sameSite);
   }, [current]);
   // Páginas principais têm o menu ao lado: aí o «Voltar» só aparece quando há uma página anterior na plataforma.
-  if (path === '/' || (path.split('/').filter(Boolean).length === 1 && !search.get('voltar') && !hasHistory)) return null;
+  if (path === '/' || (path.split('/').filter(Boolean).length === 1 && !search.get('voltar') && !hasHistory))
+    return null;
   const back = () => {
     const origin = returnPath(search.get('voltar'), '');
     if (origin && origin !== current) {
-      if (/^\/(?:modelagem|valora)(?:[?#]|$)/.test(origin)) { window.location.assign(origin); return; }
+      if (/^\/(?:modelagem|valora)(?:[?#]|$)/.test(origin)) {
+        window.location.assign(origin);
+        return;
+      }
       if (visited.current.at(-2) === origin) router.back();
       else router.replace(origin);
       return;
@@ -34,12 +45,18 @@ export function BackButton() {
     try {
       const ref = new URL(document.referrer);
       sameSite = ref.origin === location.origin && !/^\/(login|registo|acesso|recuperar)(?:\/|$)/.test(ref.pathname);
-    } catch { /* entrada directa */ }
+    } catch {
+      /* entrada directa */
+    }
     if (window.history.length > 1 && (visited.current.length > 1 || sameSite)) router.back();
     else {
       const parts = path.split('/').filter(Boolean);
       router.push(returnPath(parts.length > 1 ? `/${parts.slice(0, -1).join('/')}` : '/modulos'));
     }
   };
-  return <button type="button" className="btn ghost sm navigation-back" onClick={back} aria-label="Voltar à página anterior">← <span>Voltar</span></button>;
+  return (
+    <button type="button" className="btn ghost sm navigation-back" onClick={back} aria-label="Voltar à página anterior">
+      ← <span>Voltar</span>
+    </button>
+  );
 }

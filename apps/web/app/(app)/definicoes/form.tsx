@@ -6,15 +6,48 @@ import { PROVINCES } from '@/lib/types';
 import { AGT_MUNICIPALITIES, formatAmount, parseAmount } from '@kianda/core';
 
 const kzField = (v: FormDataEntryValue | null) => parseAmount(String(v ?? ''));
-const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+const MONTHS = [
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+];
 
-export function SettingsForm({ s }: { s: { inssNumber: string | null; address: string | null; workdayMinutes: number; christmasSubsidyMonth: number; holidaySubsidyMonth: number | null; perDiemNationalMinor: number | null; perDiemInternationalMinor: number | null; autoIssueDeclarations: boolean; allowancesOnVacation: boolean; allowancesOnAbsence?: boolean; discountLateness?: boolean; latenessToleranceMinutes?: number; province: string | null; municipality: string | null; bankFileProfile: string } }) {
+export function SettingsForm({
+  s,
+}: {
+  s: {
+    inssNumber: string | null;
+    address: string | null;
+    workdayMinutes: number;
+    christmasSubsidyMonth: number;
+    holidaySubsidyMonth: number | null;
+    perDiemNationalMinor: number | null;
+    perDiemInternationalMinor: number | null;
+    autoIssueDeclarations: boolean;
+    allowancesOnVacation: boolean;
+    allowancesOnAbsence?: boolean;
+    discountLateness?: boolean;
+    latenessToleranceMinutes?: number;
+    province: string | null;
+    municipality: string | null;
+    bankFileProfile: string;
+  };
+}) {
   const { busy, error, run } = useMutation();
   const [ok, setOk] = useState('');
   return (
     <form
       className="form card cols4"
-      onSubmit={async (e) => {
+      onSubmit={async e => {
         e.preventDefault();
         setOk('');
         const f = new FormData(e.currentTarget);
@@ -31,7 +64,10 @@ export function SettingsForm({ s }: { s: { inssNumber: string | null; address: s
           allowancesOnVacation: f.get('allowancesOnVacation') === 'on',
           allowancesOnAbsence: f.get('allowancesOnAbsence') === 'on',
           discountLateness: f.get('discountLateness') === 'on',
-          latenessToleranceMinutes: Math.max(0, Math.min(120, Math.round(Number(f.get('latenessToleranceMinutes')) || 0))),
+          latenessToleranceMinutes: Math.max(
+            0,
+            Math.min(120, Math.round(Number(f.get('latenessToleranceMinutes')) || 0)),
+          ),
           province: String(f.get('province') || '') || null,
           municipality: String(f.get('municipality') || '').trim() || null,
           bankFileProfile: String(f.get('bankFileProfile') || 'nib'),
@@ -40,13 +76,36 @@ export function SettingsForm({ s }: { s: { inssNumber: string | null; address: s
       }}
     >
       <h3>Empresa</h3>
-      <label>N.º de contribuinte INSS<input name="inssNumber" defaultValue={s.inssNumber ?? ''} /></label>
-      <label className="span2">Morada (aparece nos recibos)<input name="address" defaultValue={s.address ?? ''} /></label>
-      <label>Província da sede
-        <select name="province" defaultValue={s.province ?? ''}><option value="">—</option>{PROVINCES.map((x) => <option key={x}>{x}</option>)}</select>
+      <label>
+        N.º de contribuinte INSS
+        <input name="inssNumber" defaultValue={s.inssNumber ?? ''} />
       </label>
-      <label>Município da sede<input name="municipality" list="agt-municipios" defaultValue={s.municipality ?? ''} placeholder="Ex.: Belas" /><datalist id="agt-municipios">{Object.values(AGT_MUNICIPALITIES).flat().map((m) => <option key={m} value={m} />)}</datalist></label>
-      <label className="span2">Banco dos salários (ficheiro de transferências)
+      <label className="span2">
+        Morada (aparece nos recibos)
+        <input name="address" defaultValue={s.address ?? ''} />
+      </label>
+      <label>
+        Província da sede
+        <select name="province" defaultValue={s.province ?? ''}>
+          <option value="">—</option>
+          {PROVINCES.map(x => (
+            <option key={x}>{x}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Município da sede
+        <input name="municipality" list="agt-municipios" defaultValue={s.municipality ?? ''} placeholder="Ex.: Belas" />
+        <datalist id="agt-municipios">
+          {Object.values(AGT_MUNICIPALITIES)
+            .flat()
+            .map(m => (
+              <option key={m} value={m} />
+            ))}
+        </datalist>
+      </label>
+      <label className="span2">
+        Banco dos salários (ficheiro de transferências)
         <select name="bankFileProfile" defaultValue={s.bankFileProfile}>
           <option value="nib">Excel NOME, NIB, VALOR (regra comum dos bancos)</option>
           <option value="generic">CSV com IBAN (IBAN; nome; valor; descritivo)</option>
@@ -54,32 +113,97 @@ export function SettingsForm({ s }: { s: { inssNumber: string | null; address: s
           <option value="bai">BAI — Excel para o Pagamento em Massa (PSX)</option>
         </select>
       </label>
-      <p className="muted wide">A província e o município da sede entram no mapa de remunerações da AGT para quem não tem outro local de trabalho na ficha. O município tem de constar da lista do template da AGT.</p>
-      <label>Jornada diária (horas)<input name="workdayHours" inputMode="decimal" defaultValue={String(s.workdayMinutes / 60).replace('.', ',')} /></label>
-      <h3>Subsídios</h3>
-      <label className="span2">Subsídio de Natal pago em
-        <select name="christmasSubsidyMonth" defaultValue={s.christmasSubsidyMonth}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select>
+      <p className="muted wide">
+        A província e o município da sede entram no mapa de remunerações da AGT para quem não tem outro local de
+        trabalho na ficha. O município tem de constar da lista do template da AGT.
+      </p>
+      <label>
+        Jornada diária (horas)
+        <input name="workdayHours" inputMode="decimal" defaultValue={String(s.workdayMinutes / 60).replace('.', ',')} />
       </label>
-      <label className="span2">Subsídio de férias pago
-        <select name="holidaySubsidyMonth" defaultValue={s.holidaySubsidyMonth ?? 'ferias'}>
-          <option value="ferias">No mês das primeiras férias aprovadas do ano (Dezembro se não gozar)</option>
-          {MONTHS.map((m, i) => <option key={m} value={i + 1}>Em {m}, para todos</option>)}
+      <h3>Subsídios</h3>
+      <label className="span2">
+        Subsídio de Natal pago em
+        <select name="christmasSubsidyMonth" defaultValue={s.christmasSubsidyMonth}>
+          {MONTHS.map((m, i) => (
+            <option key={m} value={i + 1}>
+              {m}
+            </option>
+          ))}
         </select>
       </label>
-      <p className="muted wide">Ambos os subsídios correspondem a 50% do salário base; sem um ano completo de serviço são proporcionais aos meses completos trabalhados. Nenhum subsídio é pago duas vezes no mesmo ano. A gratificação de férias deve ser paga até 15 dias antes do início das férias.</p>
-      <label className="wide" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><input type="checkbox" name="allowancesOnVacation" defaultChecked={s.allowancesOnVacation} /> Pagar subsídios de alimentação e de transporte também nos dias de férias (por acordo — a regra da LGT)</label>
-      <label className="wide" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><input type="checkbox" name="allowancesOnAbsence" defaultChecked={!!s.allowancesOnAbsence} /> Pagar subsídios de alimentação e de transporte também nos dias de falta injustificada (por omissão, só se pagam os dias trabalhados)</label>
-      <label className="wide" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><input type="checkbox" name="discountLateness" defaultChecked={s.discountLateness !== false} /> Descontar atrasos e saídas antecipadas como faltas em horas, ao valor-hora (como no Primavera)</label>
-      <label>Tolerância diária de atraso (minutos)<input name="latenessToleranceMinutes" type="number" min={0} max={120} defaultValue={s.latenessToleranceMinutes ?? 0} /></label>
+      <label className="span2">
+        Subsídio de férias pago
+        <select name="holidaySubsidyMonth" defaultValue={s.holidaySubsidyMonth ?? 'ferias'}>
+          <option value="ferias">No mês das primeiras férias aprovadas do ano (Dezembro se não gozar)</option>
+          {MONTHS.map((m, i) => (
+            <option key={m} value={i + 1}>
+              Em {m}, para todos
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="muted wide">
+        Ambos os subsídios correspondem a 50% do salário base; sem um ano completo de serviço são proporcionais aos
+        meses completos trabalhados. Nenhum subsídio é pago duas vezes no mesmo ano. A gratificação de férias deve ser
+        paga até 15 dias antes do início das férias.
+      </p>
+      <label className="wide" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <input type="checkbox" name="allowancesOnVacation" defaultChecked={s.allowancesOnVacation} /> Pagar subsídios de
+        alimentação e de transporte também nos dias de férias (por acordo — a regra da LGT)
+      </label>
+      <label className="wide" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <input type="checkbox" name="allowancesOnAbsence" defaultChecked={!!s.allowancesOnAbsence} /> Pagar subsídios de
+        alimentação e de transporte também nos dias de falta injustificada (por omissão, só se pagam os dias
+        trabalhados)
+      </label>
+      <label className="wide" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <input type="checkbox" name="discountLateness" defaultChecked={s.discountLateness !== false} /> Descontar
+        atrasos e saídas antecipadas como faltas em horas, ao valor-hora (como no Primavera)
+      </label>
+      <label>
+        Tolerância diária de atraso (minutos)
+        <input
+          name="latenessToleranceMinutes"
+          type="number"
+          min={0}
+          max={120}
+          defaultValue={s.latenessToleranceMinutes ?? 0}
+        />
+      </label>
       <h3>Ajudas de custo</h3>
-      <label className="span2">Diária — território nacional (Kz)<input name="perDiemNational" inputMode="decimal" placeholder="Sem limite" defaultValue={s.perDiemNationalMinor ? formatAmount(s.perDiemNationalMinor) : ''} /></label>
-      <label className="span2">Diária — estrangeiro (Kz)<input name="perDiemInternational" inputMode="decimal" placeholder="Sem limite" defaultValue={s.perDiemInternationalMinor ? formatAmount(s.perDiemInternationalMinor) : ''} /></label>
-      <p className="muted wide">Valor máximo por dia nas notas de despesas. As ajudas de custo dentro da diária ficam fora do IRT e do INSS (limite legal assinalado para validação).</p>
+      <label className="span2">
+        Diária — território nacional (Kz)
+        <input
+          name="perDiemNational"
+          inputMode="decimal"
+          placeholder="Sem limite"
+          defaultValue={s.perDiemNationalMinor ? formatAmount(s.perDiemNationalMinor) : ''}
+        />
+      </label>
+      <label className="span2">
+        Diária — estrangeiro (Kz)
+        <input
+          name="perDiemInternational"
+          inputMode="decimal"
+          placeholder="Sem limite"
+          defaultValue={s.perDiemInternationalMinor ? formatAmount(s.perDiemInternationalMinor) : ''}
+        />
+      </label>
+      <p className="muted wide">
+        Valor máximo por dia nas notas de despesas. As ajudas de custo dentro da diária ficam fora do IRT e do INSS
+        (limite legal assinalado para validação).
+      </p>
       <h3>Portal do colaborador</h3>
-      <label className="wide" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><input type="checkbox" name="autoIssueDeclarations" defaultChecked={s.autoIssueDeclarations} /> Emitir automaticamente as declarações de serviço e de rendimentos pedidas no portal (sem passar pelo RH)</label>
+      <label className="wide" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <input type="checkbox" name="autoIssueDeclarations" defaultChecked={s.autoIssueDeclarations} /> Emitir
+        automaticamente as declarações de serviço e de rendimentos pedidas no portal (sem passar pelo RH)
+      </label>
       <div className="form-actions">
         {error ? <span className="err">{error}</span> : ok ? <span className="ok">{ok}</span> : null}
-        <button className="btn" disabled={busy}>Gravar</button>
+        <button className="btn" disabled={busy}>
+          Gravar
+        </button>
       </div>
     </form>
   );

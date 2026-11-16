@@ -3,7 +3,12 @@ import { angolaHolidays } from '../holidays.js';
 import type { CountryPack, IrtBracket } from './types.js';
 
 const b = (upper: number, fixed: number, ratePct: number, excessFrom: number): IrtBracket =>
-  [upper === Infinity ? Number.MAX_SAFE_INTEGER : kz(upper), kz(fixed), Math.round(ratePct * 100), kz(excessFrom)] as const;
+  [
+    upper === Infinity ? Number.MAX_SAFE_INTEGER : kz(upper),
+    kz(fixed),
+    Math.round(ratePct * 100),
+    kz(excessFrom),
+  ] as const;
 
 /** Angola 2026 — OGE 2026 (Lei n.º 14/25), LGT (Lei n.º 12/23), regime INSS. */
 export const AO_2026: CountryPack = {

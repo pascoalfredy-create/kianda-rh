@@ -20,61 +20,146 @@ export default async function Recibo({ params }: { params: Promise<{ id: string 
   const logo = (await api<{ logo: string | null } | null>('/v1/company/branding').catch(() => null))?.logo ?? null;
   // Só o que foi processado no mês: rubricas a zero não aparecem no recibo.
   // Só rubricas: nome sem notas entre parênteses (dias, motivos) — os valores dizem o resto.
-  const processed = p.lines.filter((l) => l.amountMinor !== 0).map((l) => ({ ...l, name: l.name.replace(/\s*\([^)]*\)/g, '').trim() }));
-  const earnings = processed.filter((l) => l.kind === 'earning');
-  const deductions = processed.filter((l) => l.kind === 'deduction');
+  const processed = p.lines
+    .filter(l => l.amountMinor !== 0)
+    .map(l => ({ ...l, name: l.name.replace(/\s*\([^)]*\)/g, '').trim() }));
+  const earnings = processed.filter(l => l.kind === 'earning');
+  const deductions = processed.filter(l => l.kind === 'deduction');
   const iban = p.employee.iban ? p.employee.iban.replace(/(.{4})/g, '$1 ').trim() : '—';
   const slip = (copy: 'Original' | 'Duplicado') => (
-      <article className="card payslip" key={copy}>
-        <header>
-          <div>
-            {logo && <img src={logo} alt="" style={{ maxHeight: 52, maxWidth: 160, objectFit: 'contain', marginBottom: 6, display: 'block' }} />}
-            <h2>{p.company.name}</h2>
-            <div className="muted">NIF {p.company.nif}{p.company.inssNumber ? ` · INSS ${p.company.inssNumber}` : ''}</div>
-            {p.company.address && <div className="muted">{p.company.address}</div>}
+    <article className="card payslip" key={copy}>
+      <header>
+        <div>
+          {logo && (
+            <img
+              src={logo}
+              alt=""
+              style={{ maxHeight: 52, maxWidth: 160, objectFit: 'contain', marginBottom: 6, display: 'block' }}
+            />
+          )}
+          <h2>{p.company.name}</h2>
+          <div className="muted">
+            NIF {p.company.nif}
+            {p.company.inssNumber ? ` · INSS ${p.company.inssNumber}` : ''}
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <h2>Recibo de vencimento</h2>
-            <div><b>{monthLabel(p.period)}</b></div>
-            <div className="muted">{p.status === 'closed' ? copy : 'RASCUNHO'}</div>
-          </div>
-        </header>
-        <div className="meta">
-          <div>Colaborador: <b>{p.employee.name}</b></div>
-          <div>N.º mecanográfico: <b>{p.employee.number}</b></div>
-          <div>Função: <b>{p.employee.jobTitle}</b></div>
-          <div>Departamento: <b>{p.employee.department ?? '—'}</b></div>
-          <div>NIF / BI: <b>{p.employee.nif ?? '—'}</b></div>
-          <div>N.º INSS: <b>{p.employee.inssNumber ?? '—'}</b></div>
-          <div>Banco: <b>{p.employee.bank ?? '—'}</b></div>
-          <div>IBAN: <b>{iban}</b></div>
+          {p.company.address && <div className="muted">{p.company.address}</div>}
         </div>
-        <div className="payslip-tables">
+        <div style={{ textAlign: 'right' }}>
+          <h2>Recibo de vencimento</h2>
+          <div>
+            <b>{monthLabel(p.period)}</b>
+          </div>
+          <div className="muted">{p.status === 'closed' ? copy : 'RASCUNHO'}</div>
+        </div>
+      </header>
+      <div className="meta">
+        <div>
+          Colaborador: <b>{p.employee.name}</b>
+        </div>
+        <div>
+          N.º mecanográfico: <b>{p.employee.number}</b>
+        </div>
+        <div>
+          Função: <b>{p.employee.jobTitle}</b>
+        </div>
+        <div>
+          Departamento: <b>{p.employee.department ?? '—'}</b>
+        </div>
+        <div>
+          NIF / BI: <b>{p.employee.nif ?? '—'}</b>
+        </div>
+        <div>
+          N.º INSS: <b>{p.employee.inssNumber ?? '—'}</b>
+        </div>
+        <div>
+          Banco: <b>{p.employee.bank ?? '—'}</b>
+        </div>
+        <div>
+          IBAN: <b>{iban}</b>
+        </div>
+      </div>
+      <div className="payslip-tables">
         <table>
-          <thead><tr><th>Abonos</th><th className="num">Valor</th></tr></thead>
-          <tbody>{earnings.map((l, i) => <tr key={i}><td>{l.name}</td><td className="num" style={{ color: l.amountMinor < 0 ? 'var(--red)' : undefined }}>{formatKz(l.amountMinor)}</td></tr>)}</tbody>
-          <tfoot><tr><td><b>Total ilíquido</b></td><td className="num"><b>{formatKz(p.grossMinor)}</b></td></tr></tfoot>
+          <thead>
+            <tr>
+              <th>Abonos</th>
+              <th className="num">Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {earnings.map((l, i) => (
+              <tr key={i}>
+                <td>{l.name}</td>
+                <td className="num" style={{ color: l.amountMinor < 0 ? 'var(--red)' : undefined }}>
+                  {formatKz(l.amountMinor)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>
+                <b>Total ilíquido</b>
+              </td>
+              <td className="num">
+                <b>{formatKz(p.grossMinor)}</b>
+              </td>
+            </tr>
+          </tfoot>
         </table>
         <table aria-label="Descontos do trabalhador" style={{ marginTop: 10 }}>
-          <thead><tr><th>Descontos</th><th className="num">Valor</th></tr></thead>
-          <tbody>{deductions.map((l, i) => <tr key={i}><td>{l.name}</td><td className="num">{formatKz(l.amountMinor)}</td></tr>)}</tbody>
-          <tfoot><tr><td><b>Total descontos</b></td><td className="num"><b>{formatKz(deductions.reduce((s, l) => s + l.amountMinor, 0))}</b></td></tr></tfoot>
+          <thead>
+            <tr>
+              <th>Descontos</th>
+              <th className="num">Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {deductions.map((l, i) => (
+              <tr key={i}>
+                <td>{l.name}</td>
+                <td className="num">{formatKz(l.amountMinor)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>
+                <b>Total descontos</b>
+              </td>
+              <td className="num">
+                <b>{formatKz(deductions.reduce((s, l) => s + l.amountMinor, 0))}</b>
+              </td>
+            </tr>
+          </tfoot>
         </table>
-        </div>
-        <div className="net"><span>Líquido a receber</span><span>{formatKz(p.netMinor)}</span></div>
-        <footer>
-          <span>{p.closedAt ? `Emitido em ${new Date(p.closedAt).toLocaleDateString('pt-PT')}` : ''}</span>
-          <span>Código de verificação: <code>{p.hash.slice(0, 16).toUpperCase()}</code></span>
-        </footer>
-      </article>
+      </div>
+      <div className="net">
+        <span>Líquido a receber</span>
+        <span>{formatKz(p.netMinor)}</span>
+      </div>
+      <footer>
+        <span>{p.closedAt ? `Emitido em ${new Date(p.closedAt).toLocaleDateString('pt-PT')}` : ''}</span>
+        <span>
+          Código de verificação: <code>{p.hash.slice(0, 16).toUpperCase()}</code>
+        </span>
+      </footer>
+    </article>
   );
   return (
     <>
       <div className="no-print page-head">
-        <Link href="/recibos" className="crumb">← Recibos</Link>
+        <Link href="/recibos" className="crumb">
+          ← Recibos
+        </Link>
         <PrintButton />
       </div>
-      {p.status === 'draft' && <div className="warn no-print">Pré-visualização: o processamento de {monthLabel(p.period)} ainda está em rascunho. O recibo só é definitivo depois do fecho.</div>}
+      {p.status === 'draft' && (
+        <div className="warn no-print">
+          Pré-visualização: o processamento de {monthLabel(p.period)} ainda está em rascunho. O recibo só é definitivo
+          depois do fecho.
+        </div>
+      )}
       {slip('Original')}
       {/* Duas vias: o duplicado só sai na impressão, em página própria. */}
       <div className="payslip-copy">{slip('Duplicado')}</div>

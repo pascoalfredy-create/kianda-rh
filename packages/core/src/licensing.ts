@@ -5,7 +5,14 @@ import { kz, type Minor } from './money.js';
  * faixas fixas e estado da subscrição.
  */
 
-export interface Tier { key: string; label: string; minEmployees: number; maxEmployees: number | null; monthlyMinor: Minor | null; cycleTotals?: Partial<Record<BillingCycle, Minor>> }
+export interface Tier {
+  key: string;
+  label: string;
+  minEmployees: number;
+  maxEmployees: number | null;
+  monthlyMinor: Minor | null;
+  cycleTotals?: Partial<Record<BillingCycle, Minor>>;
+}
 
 /** Tabela comercial de faixas fixas (Kz/mês). A última faixa não tem limite de colaboradores. */
 export const DEFAULT_TIERS: Tier[] = [
@@ -16,7 +23,13 @@ export const DEFAULT_TIERS: Tier[] = [
   { key: 't5', label: 'Mais de 1 000 colaboradores', minEmployees: 1001, maxEmployees: null, monthlyMinor: kz(99_999) },
 ];
 /** Contratos personalizados anteriores continuam válidos, sem os oferecer na tabela pública. */
-export const LEGACY_CUSTOM_TIER: Tier = { key: 'custom', label: 'Contrato personalizado', minEmployees: 0, maxEmployees: null, monthlyMinor: null };
+export const LEGACY_CUSTOM_TIER: Tier = {
+  key: 'custom',
+  label: 'Contrato personalizado',
+  minEmployees: 0,
+  maxEmployees: null,
+  monthlyMinor: null,
+};
 
 export type BillingCycle = 'monthly' | 'semiannual' | 'annual';
 export const CYCLES: Record<BillingCycle, { label: string; months: number; discountBps: number }> = {
@@ -32,7 +45,12 @@ export const REGISTRATION_TERMS_VERSION = '2026-11-04.2';
 const DAY_MS = 86_400_000;
 function calendarDay(value: string): number {
   const time = Date.parse(value);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(time) || new Date(time).toISOString().slice(0, 10) !== value) throw new RangeError('Data de calendário inválida.');
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+    !Number.isFinite(time) ||
+    new Date(time).toISOString().slice(0, 10) !== value
+  )
+    throw new RangeError('Data de calendário inválida.');
   return time;
 }
 
@@ -47,11 +65,17 @@ export function trialDaysRemaining(until: string, today: string): number {
 }
 
 export function tierFor(employees: number, tiers: Tier[] = DEFAULT_TIERS): Tier {
-  return tiers.find((t) => employees >= t.minEmployees && (t.maxEmployees === null || employees <= t.maxEmployees)) ?? tiers[tiers.length - 1]!;
+  return (
+    tiers.find(t => employees >= t.minEmployees && (t.maxEmployees === null || employees <= t.maxEmployees)) ??
+    tiers[tiers.length - 1]!
+  );
 }
 
 /** Valor de um período: mensal × meses, com o desconto do ciclo, arredondado ao kwanza. */
-export function cyclePrice(tier: Tier, cycle: BillingCycle): { grossMinor: Minor; discountMinor: Minor; totalMinor: Minor } | null {
+export function cyclePrice(
+  tier: Tier,
+  cycle: BillingCycle,
+): { grossMinor: Minor; discountMinor: Minor; totalMinor: Minor } | null {
   if (tier.monthlyMinor === null) return null;
   const c = CYCLES[cycle];
   const gross = tier.monthlyMinor * c.months;
@@ -70,7 +94,11 @@ export function periodEnd(start: string, months: number): string {
 
 export type SubscriptionStatus = 'trial' | 'active' | 'past_due' | 'suspended' | 'cancelled';
 export const SUBSCRIPTION_STATUS: Record<SubscriptionStatus, string> = {
-  trial: 'Período experimental', active: 'Activa', past_due: 'Pagamento em atraso', suspended: 'Suspensa (só leitura)', cancelled: 'Cancelada',
+  trial: 'Período experimental',
+  active: 'Activa',
+  past_due: 'Pagamento em atraso',
+  suspended: 'Suspensa (só leitura)',
+  cancelled: 'Cancelada',
 };
 
 /** Dias de tolerância depois do fim do período antes de passar a só leitura. */
@@ -80,7 +108,10 @@ export const GRACE_DAYS = 7;
  * Estado efectivo numa data: o experimental e o período pago expiram sozinhos; depois do fim há tolerância
  * (pagamento em atraso, ainda com escrita) e a seguir só leitura. "Suspensa" e "cancelada" manuais prevalecem.
  */
-export function effectiveStatus(s: { status: SubscriptionStatus; trialEndsAt: string | null; paidUntil: string | null }, today: string): SubscriptionStatus {
+export function effectiveStatus(
+  s: { status: SubscriptionStatus; trialEndsAt: string | null; paidUntil: string | null },
+  today: string,
+): SubscriptionStatus {
   if (s.status === 'suspended' || s.status === 'cancelled') return s.status;
   const until = s.paidUntil && (!s.trialEndsAt || s.paidUntil > s.trialEndsAt) ? s.paidUntil : null;
   if (until) {
@@ -93,7 +124,8 @@ export function effectiveStatus(s: { status: SubscriptionStatus; trialEndsAt: st
 }
 
 /** Pode escrever (criar/alterar)? A avaliação permite trabalhar; em só leitura mantém a consulta. */
-export const canWrite = (status: SubscriptionStatus) => status === 'trial' || status === 'active' || status === 'past_due';
+export const canWrite = (status: SubscriptionStatus) =>
+  status === 'trial' || status === 'active' || status === 'past_due';
 
 /** Documentos de negócio: avaliação e consulta só permitem pré-visualizar. O pagamento liberta a exportação. */
 export const canExportDocuments = (status: SubscriptionStatus) => status === 'active' || status === 'past_due';
@@ -104,9 +136,22 @@ export function employeeLimit(tier: Tier): number | null {
 }
 
 export const SECTORS = {
-  commerce: 'Comércio e distribuição', services: 'Serviços e consultoria', construction: 'Construção e obras públicas', security: 'Segurança privada',
-  mining: 'Mineração', oil_gas: 'Petróleo e gás', manufacturing: 'Indústria transformadora', agriculture: 'Agricultura e pescas',
-  hospitality: 'Hotelaria e restauração', health: 'Saúde', education: 'Educação', transport: 'Transportes e logística',
-  finance: 'Banca e seguros', telecom: 'Tecnologia e telecomunicações', ngo: 'ONG e associações', public: 'Sector público e empresas públicas', other: 'Outro',
+  commerce: 'Comércio e distribuição',
+  services: 'Serviços e consultoria',
+  construction: 'Construção e obras públicas',
+  security: 'Segurança privada',
+  mining: 'Mineração',
+  oil_gas: 'Petróleo e gás',
+  manufacturing: 'Indústria transformadora',
+  agriculture: 'Agricultura e pescas',
+  hospitality: 'Hotelaria e restauração',
+  health: 'Saúde',
+  education: 'Educação',
+  transport: 'Transportes e logística',
+  finance: 'Banca e seguros',
+  telecom: 'Tecnologia e telecomunicações',
+  ngo: 'ONG e associações',
+  public: 'Sector público e empresas públicas',
+  other: 'Outro',
 } as const;
 export type Sector = keyof typeof SECTORS;

@@ -2,7 +2,20 @@
  * Texto à medida de pessoas: saudações pela hora de Luanda, datas por extenso e relativas, plurais.
  * Funções puras (sem fuso do servidor): as datas chegam em AAAA-MM-DD já em hora de Luanda.
  */
-const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+const MONTHS = [
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+];
 const SHORT = ['Jan.', 'Fev.', 'Mar.', 'Abr.', 'Maio', 'Jun.', 'Jul.', 'Ago.', 'Set.', 'Out.', 'Nov.', 'Dez.'];
 const WEEKDAYS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 const DAY = 86_400_000;
@@ -26,8 +39,12 @@ export function longDate(d: string, today?: string) {
   return `${weekday(d)}, ${x.getUTCDate()} de ${MONTHS[x.getUTCMonth()]}${year}`;
 }
 /** «16 de Nov.» */
-export const shortDate = (d: string) => { const x = parse(d); return `${x.getUTCDate()} de ${SHORT[x.getUTCMonth()]}`; };
-export const daysBetween = (from: string, to: string) => Math.round((parse(to).getTime() - parse(from).getTime()) / DAY);
+export const shortDate = (d: string) => {
+  const x = parse(d);
+  return `${x.getUTCDate()} de ${SHORT[x.getUTCMonth()]}`;
+};
+export const daysBetween = (from: string, to: string) =>
+  Math.round((parse(to).getTime() - parse(from).getTime()) / DAY);
 
 /** «hoje», «amanhã», «sexta», «daqui a 12 dias», «ontem», «há 3 dias». */
 export function relativeDay(d: string, today: string) {
@@ -41,7 +58,8 @@ export function relativeDay(d: string, today: string) {
 
 /** Intervalo por extenso: «de segunda 16 a sexta 20 de Novembro», «a 3 de Dezembro» quando muda o mês. */
 export function dateRange(from: string, to: string) {
-  const a = parse(from), b = parse(to);
+  const a = parse(from),
+    b = parse(to);
   if (from === to) return `${weekday(from)}, ${a.getUTCDate()} de ${MONTHS[a.getUTCMonth()]}`;
   const sameMonth = a.getUTCMonth() === b.getUTCMonth() && a.getUTCFullYear() === b.getUTCFullYear();
   return `de ${weekday(from)} ${a.getUTCDate()}${sameMonth ? '' : ` de ${MONTHS[a.getUTCMonth()]}`} a ${weekday(to)} ${b.getUTCDate()} de ${MONTHS[b.getUTCMonth()]}`;
@@ -51,14 +69,16 @@ export function dateRange(from: string, to: string) {
 export function nextWorkingDay(d: string, holidays: ReadonlySet<string> = new Set()) {
   let x = parse(d).getTime() + DAY;
   for (let i = 0; i < 14; i++, x += DAY) {
-    const iso = new Date(x).toISOString().slice(0, 10), w = new Date(x).getUTCDay();
+    const iso = new Date(x).toISOString().slice(0, 10),
+      w = new Date(x).getUTCDay();
     if (w !== 0 && w !== 6 && !holidays.has(iso)) return iso;
   }
   return new Date(x).toISOString().slice(0, 10);
 }
 
 /** «1 pedido», «3 pedidos», «nenhum pedido». */
-export const plural = (n: number, one: string, many: string, zero?: string) => (n === 0 && zero ? zero : `${n === 1 ? 'um' : n} ${n === 1 ? one : many}`);
+export const plural = (n: number, one: string, many: string, zero?: string) =>
+  n === 0 && zero ? zero : `${n === 1 ? 'um' : n} ${n === 1 ? one : many}`;
 export const capitalise = cap;
 /** Junta frases curtas: «A, B e C». */
 export function joinPt(parts: string[]) {

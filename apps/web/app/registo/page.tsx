@@ -5,5 +5,10 @@ import { VisitBeacon } from '../../components/visit-beacon';
 /** Ligações públicas com plano (?modulo=…&plano=…&ciclo=…) chegam ao cadastro com a escolha preenchida. */
 export default async function Registo({ searchParams }: { searchParams?: Promise<RegistrationQuery> } = {}) {
   const query = (await searchParams) ?? {};
-  return <><RegistoForm selection={typeof query.plano === 'string' ? registrationSelection(query) : null} /><VisitBeacon /></>;
+  return (
+    <>
+      <RegistoForm selection={typeof query.plano === 'string' ? registrationSelection(query) : null} />
+      <VisitBeacon />
+    </>
+  );
 }

@@ -13,7 +13,12 @@ export interface InjectResponse {
 /** Adaptador de testes: mesma forma que o inject do Fastify, sobre app.request do Hono (sem rede). */
 export function testClient(app: App, options: { confirmEmails?: boolean } = {}) {
   return {
-    async inject(o: { method: string; url: string; headers?: Record<string, string>; payload?: unknown }): Promise<InjectResponse> {
+    async inject(o: {
+      method: string;
+      url: string;
+      headers?: Record<string, string>;
+      payload?: unknown;
+    }): Promise<InjectResponse> {
       const headers: Record<string, string> = { ...(o.headers ?? {}) };
       let body: string | Uint8Array | undefined;
       if (o.payload instanceof Uint8Array) {
@@ -34,12 +39,19 @@ export function testClient(app: App, options: { confirmEmails?: boolean } = {}) 
         const registration = JSON.parse(text);
         await getDb().update(users).set({ emailVerifiedAt: new Date() }).where(eq(users.id, registration.user.id));
       }
-      const cookies = res.headers.getSetCookie().map((c) => {
+      const cookies = res.headers.getSetCookie().map(c => {
         const [pair] = c.split(';');
         const i = pair!.indexOf('=');
         return { name: pair!.slice(0, i), value: pair!.slice(i + 1) };
       });
-      return { statusCode: res.status, body: text, bytes, json: () => JSON.parse(text), cookies, headers: Object.fromEntries(res.headers) };
+      return {
+        statusCode: res.status,
+        body: text,
+        bytes,
+        json: () => JSON.parse(text),
+        cookies,
+        headers: Object.fromEntries(res.headers),
+      };
     },
     async close() {},
   };

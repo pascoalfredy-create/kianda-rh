@@ -36,9 +36,28 @@ test('Simulador: do líquido pretendido ao salário base e de USD ao líquido', 
   expect(errors).toEqual([]);
 });
 
-test('Salário indexado: o processamento pede o câmbio do dia e o recibo mostra a conversão', async ({ page, context }) => {
+test('Salário indexado: o processamento pede o câmbio do dia e o recibo mostra a conversão', async ({
+  page,
+  context,
+}) => {
   const owner = await registerCompany();
-  const r = await apiAs(owner.token, 'POST', '/v1/employees', { number: '51', name: 'Paulo Indexado', gender: 'M', jobTitle: 'Engenheiro', province: 'Luanda', nif: '0000005151', contract: { type: 'indefinite', startDate: '2026-01-05', base: 1_350_000, currency: 'USD', baseUsd: 1500, meal: 30000, transport: 25000 } });
+  const r = await apiAs(owner.token, 'POST', '/v1/employees', {
+    number: '51',
+    name: 'Paulo Indexado',
+    gender: 'M',
+    jobTitle: 'Engenheiro',
+    province: 'Luanda',
+    nif: '0000005151',
+    contract: {
+      type: 'indefinite',
+      startDate: '2026-01-05',
+      base: 1_350_000,
+      currency: 'USD',
+      baseUsd: 1500,
+      meal: 30000,
+      transport: 25000,
+    },
+  });
   expect(r.status, JSON.stringify(r.body)).toBe(201);
   await signIn(context, owner.token);
   const errors = watchErrors(page);

@@ -9,12 +9,21 @@ test.describe.configure({ mode: 'serial' });
 const SEDE = { latitude: -8.8125, longitude: 13.2302 };
 const NEAR = { latitude: -8.8131, longitude: 13.2305, accuracy: 20 };
 const FAR = { latitude: -8.83, longitude: 13.25, accuracy: 10 };
-let owner: Company, worker: { id: string; token: string }, employeeId = '';
+let owner: Company,
+  worker: { id: string; token: string },
+  employeeId = '';
 
 test.beforeAll(async () => {
   owner = await registerCompany({ name: 'Estaleiro Marginal E2E' });
-  const e = await apiAs(owner.token, 'POST', '/v1/employees', { number: '31', name: 'Domingos Kiala', gender: 'M', jobTitle: 'Encarregado', province: 'Luanda', nif: '0000000031',
-    contract: { type: 'indefinite', startDate: '2026-01-05', base: 280000, meal: 30000, transport: 25000 } });
+  const e = await apiAs(owner.token, 'POST', '/v1/employees', {
+    number: '31',
+    name: 'Domingos Kiala',
+    gender: 'M',
+    jobTitle: 'Encarregado',
+    province: 'Luanda',
+    nif: '0000000031',
+    contract: { type: 'indefinite', startDate: '2026-01-05', base: 280000, meal: 30000, transport: 25000 },
+  });
   expect(e.status, JSON.stringify(e.body)).toBe(201);
   employeeId = e.body.id;
   worker = await addUser(owner, 'Domingos', 'employee', employeeId);
@@ -36,14 +45,24 @@ test('RH: cria o local com raio, liga o quiosque e escolhe bloquear fora do loca
   await page.getByRole('button', { name: 'Ligar quiosque' }).click();
   await expect(page.getByRole('link', { name: 'Abrir quiosque' })).toBeVisible();
   await page.getByLabel(/Bloquear marcações fora do local/).check();
-  await Promise.all([page.waitForResponse((r) => r.url().includes('/v1/workplaces/settings') && r.ok()), page.getByRole('button', { name: 'Gravar regra' }).click()]);
+  await Promise.all([
+    page.waitForResponse(r => r.url().includes('/v1/workplaces/settings') && r.ok()),
+    page.getByRole('button', { name: 'Gravar regra' }).click(),
+  ]);
   expect((await apiAs(owner.token, 'GET', '/v1/workplaces')).body.mode).toBe('block');
   expect(errors).toEqual([]);
 });
 
-test('colaborador: fora do local a marcação é recusada; dentro é aceite, com aviso de privacidade', async ({ browser }) => {
+test('colaborador: fora do local a marcação é recusada; dentro é aceite, com aviso de privacidade', async ({
+  browser,
+}) => {
   await clearToday();
-  const context = await browser.newContext({ permissions: ['geolocation'], geolocation: FAR, locale: 'pt-PT', timezoneId: 'Africa/Luanda' });
+  const context = await browser.newContext({
+    permissions: ['geolocation'],
+    geolocation: FAR,
+    locale: 'pt-PT',
+    timezoneId: 'Africa/Luanda',
+  });
   await signIn(context, worker.token);
   const page = await context.newPage();
   const errors = watchErrors(page);
@@ -55,11 +74,14 @@ test('colaborador: fora do local a marcação é recusada; dentro é aceite, com
   await context.setGeolocation(NEAR);
   await page.locator('.card.clock').getByRole('button', { name: 'Registar entrada' }).click();
   await expect(page.locator('.card.clock').getByText('Em serviço')).toBeVisible();
-  const [row] = await sql<{ clock_in_location: { status: string; method: string } }>(`select clock_in_location from attendance_entries where employee_id = $1`, [employeeId]);
+  const [row] = await sql<{ clock_in_location: { status: string; method: string } }>(
+    `select clock_in_location from attendance_entries where employee_id = $1`,
+    [employeeId],
+  );
   expect(row!.clock_in_location).toMatchObject({ status: 'ok', method: 'gps' });
   await context.close();
   // O 403 da tentativa fora do local é a resposta esperada (o navegador regista-o na consola).
-  expect(errors.filter((e) => !/status of 403/.test(e))).toEqual([]);
+  expect(errors.filter(e => !/status of 403/.test(e))).toEqual([]);
 });
 
 test('quiosque: o ecrã mostra o código rotativo e o colaborador marca sem GPS', async ({ browser, page }) => {
@@ -80,17 +102,29 @@ test('quiosque: o ecrã mostra o código rotativo e o colaborador marca sem GPS'
   await phone.getByLabel('Código do quiosque').fill(code);
   await phone.locator('.card.clock').getByRole('button', { name: 'Registar entrada' }).click();
   await expect(phone.locator('.card.clock').getByText('Em serviço')).toBeVisible();
-  const [row] = await sql<{ clock_in_location: { method: string; lat?: number } }>(`select clock_in_location from attendance_entries where employee_id = $1`, [employeeId]);
+  const [row] = await sql<{ clock_in_location: { method: string; lat?: number } }>(
+    `select clock_in_location from attendance_entries where employee_id = $1`,
+    [employeeId],
+  );
   expect(row!.clock_in_location).toMatchObject({ method: 'kiosk' });
   expect(row!.clock_in_location.lat).toBeUndefined();
   await context.close();
   expect(kioskErrors).toEqual([]);
 });
 
-test('alertar: a marcação fora do local é aceite e aparece nas excepções da chefia', async ({ browser, page, context }) => {
+test('alertar: a marcação fora do local é aceite e aparece nas excepções da chefia', async ({
+  browser,
+  page,
+  context,
+}) => {
   await clearToday();
   expect((await apiAs(owner.token, 'PUT', '/v1/workplaces/settings', { mode: 'alert' })).status).toBe(200);
-  const phoneContext = await browser.newContext({ permissions: ['geolocation'], geolocation: FAR, locale: 'pt-PT', timezoneId: 'Africa/Luanda' });
+  const phoneContext = await browser.newContext({
+    permissions: ['geolocation'],
+    geolocation: FAR,
+    locale: 'pt-PT',
+    timezoneId: 'Africa/Luanda',
+  });
   await signIn(phoneContext, worker.token);
   const phone = await phoneContext.newPage();
   await phone.goto('/assiduidade');
@@ -106,6 +140,9 @@ test('alertar: a marcação fora do local é aceite e aparece nas excepções da
   const issues = page.locator('.card', { hasText: 'Excepções de localização' });
   await expect(issues).toContainText('Domingos Kiala');
   await expect(issues).toContainText(/Fora do local: a .* de «Sede — Marginal» \(GPS ±10 m\)/);
-  await expect(issues.getByRole('link', { name: 'mapa' })).toHaveAttribute('href', /openstreetmap\.org\/\?mlat=-8\.83&mlon=13\.25/);
+  await expect(issues.getByRole('link', { name: 'mapa' })).toHaveAttribute(
+    'href',
+    /openstreetmap\.org\/\?mlat=-8\.83&mlon=13\.25/,
+  );
   expect(errors).toEqual([]);
 });

@@ -16,7 +16,7 @@ export function isWeekend(date: string): boolean {
 
 export function holidayName(date: string, packs: CountryPack[]): string | undefined {
   for (const p of packs) {
-    const h = p.holidays.find((x) => x.date === date);
+    const h = p.holidays.find(x => x.date === date);
     if (h) return h.name;
   }
   return undefined;
@@ -24,7 +24,8 @@ export function holidayName(date: string, packs: CountryPack[]): string | undefi
 
 /** Dias úteis entre duas datas (inclusive), excluindo fins-de-semana e feriados dos pacotes indicados. */
 export function businessDays(from: string, to: string, packs: CountryPack[]): number {
-  const a = parse(from), b = parse(to);
+  const a = parse(from),
+    b = parse(to);
   if (b < a) throw new RangeError('a data de fim é anterior à de início');
   let n = 0;
   for (const d = new Date(a); d <= b; d.setUTCDate(d.getUTCDate() + 1)) {
@@ -73,20 +74,31 @@ export function contractAlerts(
   const out: ContractAlert[] = [];
   if (c.endDate) {
     const left = daysBetween(today, c.endDate);
-    if (left < 0) out.push({ kind: 'fixed-term-expired', daysLeft: left, message: `Contrato expirou há ${-left} dia(s)` });
+    if (left < 0)
+      out.push({ kind: 'fixed-term-expired', daysLeft: left, message: `Contrato expirou há ${-left} dia(s)` });
     else if (left <= windowDays) {
       // LGT, art. 17.º, n.os 3 e 4: aviso prévio de 30 dias para não renovar; sem aviso, compensação de 30 dias.
       const [y, m, d] = c.endDate.split('-').map(Number);
       const limit = new Date(Date.UTC(y!, m! - 1, d! - 30)).toISOString().slice(0, 10).split('-').reverse().join('/');
-      out.push({ kind: 'fixed-term-ending', daysLeft: left, message: left >= 30
-        ? `Contrato termina em ${left} dia(s): se não for renovar, avise até ${limit} (30 dias)`
-        : `Contrato termina em ${left} dia(s): já passou o prazo do aviso de não renovação (30 dias); sem aviso há compensação de 30 dias` });
+      out.push({
+        kind: 'fixed-term-ending',
+        daysLeft: left,
+        message:
+          left >= 30
+            ? `Contrato termina em ${left} dia(s): se não for renovar, avise até ${limit} (30 dias)`
+            : `Contrato termina em ${left} dia(s): já passou o prazo do aviso de não renovação (30 dias); sem aviso há compensação de 30 dias`,
+      });
     }
   }
   if (c.type === 'indefinite' || c.type === 'fixed-term') {
     const elapsed = daysBetween(c.startDate, today);
     const p = c.type === 'indefinite' ? pack.labour.probationDaysIndefinite : pack.labour.probationDaysFixedTerm;
-    if (elapsed >= 0 && elapsed < p) out.push({ kind: 'probation', daysLeft: p - elapsed, message: `Período experimental: faltam ${p - elapsed} dia(s)` });
+    if (elapsed >= 0 && elapsed < p)
+      out.push({
+        kind: 'probation',
+        daysLeft: p - elapsed,
+        message: `Período experimental: faltam ${p - elapsed} dia(s)`,
+      });
   }
   return out;
 }
