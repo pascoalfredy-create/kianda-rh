@@ -28,14 +28,15 @@ const navy = '#1d4e89',
 const clean = (v: string) => v.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, ' ').replace(/\r\n?/g, '\n');
 const glyphs = (v: string, key: FontKey) =>
   [...clean(v)].map(c => FONTS[key].map[String(c.codePointAt(0))] ?? FONTS[key].map['63']!);
-const textWidth = (v: string, size: number, key: FontKey) =>
+export type PdfFont = FontKey;
+export const textWidth = (v: string, size: number, key: FontKey) =>
   glyphs(v, key).reduce((s, id) => s + ((FONTS[key].widths[id] ?? 500) * size) / 1000, 0);
-const hexText = (v: string, key: FontKey) =>
+export const hexText = (v: string, key: FontKey) =>
   glyphs(v, key)
     .map(id => id.toString(16).padStart(4, '0'))
     .join('');
-const rgb = (hex: string) => [1, 3, 5].map(i => (parseInt(hex.slice(i, i + 2), 16) / 255).toFixed(4)).join(' ');
-const num = (n: number) => Number(n.toFixed(3)).toString();
+export const rgb = (hex: string) => [1, 3, 5].map(i => (parseInt(hex.slice(i, i + 2), 16) / 255).toFixed(4)).join(' ');
+export const num = (n: number) => Number(n.toFixed(3)).toString();
 function wrap(v: string, width: number, size: number, font: FontKey): string[] {
   const lines: string[] = [];
   for (const paragraph of clean(v).split('\n')) {
@@ -72,7 +73,7 @@ export interface PdfBound {
   height: number;
   kind: string;
 }
-interface PdfPage {
+export interface PdfPage {
   width: number;
   height: number;
   commands: string[];
@@ -476,8 +477,12 @@ function fontResources() {
 }
 /** Sérialise PDF 1.7. As únicas cadeias de texto no conteúdo são glifos hexadecimais, nunca código fornecido pelo utilizador. */
 export function renderFinancialPdf(bundle: FinancialReportDocument, key: FinancialDocumentKey): Uint8Array {
-  const pages = financialPdfLayout(bundle, key),
-    objects: Uint8Array[] = [];
+  return renderPdfPages(financialPdfLayout(bundle, key));
+}
+
+/** Sérialise páginas já desenhadas (comandos PDF) num documento com as fontes incorporadas. */
+export function renderPdfPages(pages: PdfPage[]): Uint8Array {
+  const objects: Uint8Array[] = [];
   const add = (body: string | Uint8Array) => {
     objects.push(typeof body === 'string' ? bytes(body) : body);
     return objects.length;

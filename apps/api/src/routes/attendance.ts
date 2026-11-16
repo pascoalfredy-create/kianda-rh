@@ -1,6 +1,9 @@
 import {
   ABSENCE_POLICIES,
   describeSchedule,
+  EFFECTIVENESS_LEGEND,
+  effectivenessDayCode,
+  effectivenessTotals,
   evaluatePunchLocation,
   fromLuanda,
   labourRules,
@@ -46,6 +49,8 @@ import { groupBy } from '../lib/group-by.js';
 import { DomainError } from '../services/payroll.js';
 import { canDecideFor, canSee, visibleEmployeeIds } from '../services/scope.js';
 import { publishedRoster } from './shifts.js';
+import { xlsx, xlsxResponse } from '../lib/xlsx.js';
+import { renderEffectivenessPdf } from '../lib/effectiveness-pdf.js';
 
 const periodSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Período inválido (AAAA-MM)');
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Hora inválida (HH:MM)');
@@ -277,6 +282,138 @@ async function overviewFor(db: Db, actor: Actor, period: string) {
       canApprove: canDecideFor(actor, e) && !approval && period < data.today.slice(0, 7),
     };
   });
+}
+
+// ───────────────────────── Mapa de efectividade ─────────────────────────
+
+const WEEKDAY_PT = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+const MONTH_PT = [
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+];
+const EFFECTIVENESS_TOTALS = ['DT', 'FI', 'FJ', 'Fé', 'D', 'L', 'SR', 'HE'] as const;
+
+/** Grelha do mês (colaboradores × dias) com os códigos e totais; mesmas regras e visibilidade da assiduidade. */
+async function effectivenessMap(db: Db, actor: Actor, period: string, departmentId?: string) {
+  const visible = await visibleEmployeeIds(db, actor);
+  const conds = [eq(employees.companyId, actor.companyId)];
+  if (visible) conds.push(inArray(employees.id, visible.length ? visible : ['-']));
+  if (departmentId) conds.push(eq(employees.departmentId, departmentId));
+  const list = await db
+    .select({ e: employees, department: departments.name })
+    .from(employees)
+    .leftJoin(departments, eq(departments.id, employees.departmentId))
+    .where(and(...conds))
+    .orderBy(asc(employees.name));
+  const [company] = await db.select({ name: companies.name }).from(companies).where(eq(companies.id, actor.companyId));
+  const data = list.length
+    ? await monthData(
+        db,
+        actor.companyId,
+        list.map(r => r.e),
+        period,
+      )
+    : null;
+  const clockInUse = !!data && [...data.entries.values()].some(v => v.length > 0);
+  const rows = [];
+  for (const { e, department } of data ? list : []) {
+    const { summary, approval } = sheetFromData(e, period, data!);
+    if (summary.days.every(d => d.kind === 'inactive')) continue;
+    const typeByDate = new Map<string, string>();
+    for (const a of data!.absences.get(e.id) ?? [])
+      for (let d = a.startDate < data!.from ? data!.from : a.startDate; d <= a.endDate && d <= data!.to; d = nextDay(d))
+        typeByDate.set(d, a.type);
+    const codes = summary.days.map(d =>
+      effectivenessDayCode(d, typeByDate.get(d.date), { today: data!.today, clockInUse }),
+    );
+    rows.push({
+      employee: { id: e.id, name: e.name, number: e.number, department },
+      codes,
+      totals: effectivenessTotals(codes),
+      overtimeMinutes: approval ? approval.approvedOvertimeMinutes : summary.overtimeMinutes,
+      approved: !!approval,
+    });
+  }
+  const year = Number(period.slice(0, 4)),
+    month = Number(period.slice(5, 7));
+  const holidays = new Map(labourRules('AO', year).holidays.map(h => [h.date, h.name]));
+  const days = Array.from({ length: new Date(Date.UTC(year, month, 0)).getUTCDate() }, (_, i) => {
+    const date = `${period}-${String(i + 1).padStart(2, '0')}`,
+      dow = new Date(`${date}T00:00:00Z`).getUTCDay();
+    return { date, weekday: WEEKDAY_PT[dow]!, weekend: dow === 0 || dow === 6, holiday: holidays.get(date) ?? null };
+  });
+  const today = luandaDate(new Date());
+  return {
+    period,
+    periodLabel: `${MONTH_PT[month - 1]} de ${year}`,
+    companyName: company?.name ?? '',
+    provisional: period >= today.slice(0, 7) || rows.some(r => !r.approved),
+    clockInUse,
+    days,
+    legend: EFFECTIVENESS_LEGEND,
+    rows,
+  };
+}
+type EffectivenessMap = Awaited<ReturnType<typeof effectivenessMap>>;
+
+const totalsRow = (r: EffectivenessMap['rows'][number]) => [
+  r.totals.worked,
+  r.totals.unjustified,
+  r.totals.justified,
+  r.totals.vacation,
+  r.totals.sick,
+  r.totals.leave,
+  r.totals.noRecord,
+  Math.round((r.overtimeMinutes / 60) * 100) / 100,
+];
+
+function effectivenessXlsx(map: EffectivenessMap) {
+  const header = [
+    'Nº',
+    'Colaborador',
+    'Departamento',
+    ...map.days.map(d => Number(d.date.slice(8))),
+    ...EFFECTIVENESS_TOTALS,
+  ];
+  return xlsxResponse(
+    xlsx([
+      {
+        name: 'Mapa de efectividade',
+        rows: [
+          [`${map.companyName} — Mapa de efectividade — ${map.periodLabel}${map.provisional ? ' (provisório)' : ''}`],
+          [],
+          header,
+          ['', '', '', ...map.days.map(d => d.weekday), ...EFFECTIVENESS_TOTALS.map(() => '')],
+          ...map.rows.map(r => [
+            r.employee.number,
+            r.employee.name,
+            r.employee.department ?? '',
+            ...r.codes,
+            ...totalsRow(r),
+          ]),
+          [],
+          ['Legenda'],
+          ...map.legend.map(([code, label]) => [code, label]),
+          ['DT', 'Dias trabalhados'],
+          ['HE', 'Horas extra (aprovadas no fecho do ponto; provisórias nos meses abertos)'],
+        ],
+        widths: [8, 30, 20, ...map.days.map(() => 4.5), ...EFFECTIVENESS_TOTALS.map(() => 6)],
+        boldRows: [0, 2, 3],
+        freezeRows: 4,
+      },
+    ]),
+    `mapa-efectividade-${map.period}.xlsx`,
+  );
 }
 
 /** Regra da empresa e locais activos (com o segredo do quiosque, que nunca sai da API). */
@@ -659,6 +796,46 @@ export function attendanceRoutes() {
     const { period } = z.object({ period: periodSchema }).parse(c.req.query());
     const db = getDb();
     return c.json(await overviewFor(db, actor, period));
+  });
+
+  /** Mapa de efectividade do mês (JSON para o ecrã, Excel e PDF para arquivo). */
+  app.get('/v1/attendance/effectiveness', async c => {
+    const actor = c.get('actor');
+    const q = z
+      .object({
+        period: periodSchema,
+        departmentId: z.string().max(64).optional(),
+        format: z.enum(['json', 'xlsx', 'pdf']).default('json'),
+      })
+      .parse(c.req.query());
+    const map = await effectivenessMap(getDb(), actor, q.period, q.departmentId || undefined);
+    if (q.format === 'xlsx') return effectivenessXlsx(map);
+    if (q.format === 'pdf') {
+      const pdf = renderEffectivenessPdf({
+        companyName: map.companyName,
+        periodLabel: map.periodLabel,
+        provisional: map.provisional,
+        generatedAt: new Date(),
+        days: map.days.map(d => ({ date: d.date, weekday: d.weekday, off: d.weekend || !!d.holiday })),
+        rows: map.rows.map(r => ({
+          name: r.employee.name,
+          number: r.employee.number,
+          codes: r.codes,
+          totals: totalsRow(r).map(v =>
+            typeof v === 'number' && !Number.isInteger(v) ? v.toFixed(1).replace('.', ',') : v,
+          ),
+        })),
+        totalHeaders: [...EFFECTIVENESS_TOTALS],
+      });
+      return new Response(pdf, {
+        headers: {
+          'content-type': 'application/pdf',
+          'content-disposition': `attachment; filename="mapa-efectividade-${map.period}.pdf"`,
+          'cache-control': 'no-store',
+        },
+      });
+    }
+    return c.json(map);
   });
 
   /** Correcção manual (chefia da equipa ou RH; nunca o próprio). */
