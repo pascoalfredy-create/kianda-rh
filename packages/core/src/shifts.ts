@@ -212,12 +212,111 @@ const startAbs = (date: string, t: ShiftTypeLike) => dayIndex(date) * 1440 + min
 const endAbs = (date: string, t: ShiftTypeLike) => startAbs(date, t) + shiftSpanMinutes(t);
 const dm = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
 
+type RosterEmployee = RosterCheckInput['employees'][number];
+type RosterPlan = Map<string, ShiftTypeLike | null>;
+type Push = (code: RosterIssueCode, severity: RosterIssue['severity'], date: string, message: string) => void;
+
+/** Descanso entre o fim do turno anterior e o início deste (sobreposição é erro; abaixo do mínimo é aviso). */
+function restIssue(
+  emp: RosterEmployee,
+  last: { date: string; t: ShiftTypeLike },
+  d: string,
+  t: ShiftTypeLike,
+  minRest: number,
+  push: Push,
+) {
+  const gap = startAbs(d, t) - endAbs(last.date, last.t);
+  if (gap < 0)
+    push('rest_short', 'error', d, `${emp.name}: o turno de ${dm(d)} começa antes de terminar o de ${dm(last.date)}`);
+  else if (gap < minRest)
+    push(
+      'rest_short',
+      'warning',
+      d,
+      `${emp.name}: só ${formatShiftHours(gap)} de descanso antes do turno de ${dm(d)} (mínimo ${formatShiftHours(minRest)})`,
+    );
+}
+
+/** Turno muito longo, em dia de ausência aprovada ou em feriado. */
+function shiftDayIssues(i: RosterCheckInput, emp: RosterEmployee, d: string, t: ShiftTypeLike, push: Push) {
+  if (shiftWorkMinutes(t) > 12 * 60)
+    push(
+      'long_shift',
+      'warning',
+      d,
+      `${emp.name}: turno de ${formatShiftHours(shiftWorkMinutes(t))} em ${dm(d)} (acima de 12 h)`,
+    );
+  const absence = i.absences?.get(emp.id)?.get(d);
+  if (absence)
+    push(
+      'absence',
+      'warning',
+      d,
+      `${emp.name}: turno em ${dm(d)}, dia de ${absence.toLocaleLowerCase('pt-PT')} aprovada`,
+    );
+  const holiday = i.holidays?.get(d);
+  if (holiday && !emp.rotation) push('holiday', 'info', d, `${emp.name}: turno no feriado de ${dm(d)} (${holiday})`);
+}
+
+/** Verificações dia a dia de um colaborador: descanso, dias seguidos e problemas do próprio turno. */
+function dailyIssues(i: RosterCheckInput, emp: RosterEmployee, plan: RosterPlan, dates: string[], push: Push) {
+  const minRest = i.minRestMinutes ?? DEFAULT_SHIFT_MIN_REST_MINUTES;
+  const maxRun = i.maxConsecutiveDays ?? 6;
+  let run = 0,
+    runStart = '';
+  let last: { date: string; t: ShiftTypeLike } | null = null;
+  for (const d of [addDays(i.from, -1), ...dates]) {
+    const t = plan.get(d) ?? null;
+    if (!t) {
+      run = 0;
+      continue;
+    }
+    const inRange = d >= i.from;
+    if (last && inRange) restIssue(emp, last, d, t, minRest, push);
+    last = { date: d, t };
+    if (!inRange) continue;
+    if (run === 0) runStart = d;
+    run++;
+    if (run === maxRun + 1 && !emp.rotation)
+      push(
+        'consecutive_days',
+        'warning',
+        d,
+        `${emp.name}: mais de ${maxRun} dias seguidos de trabalho desde ${dm(runStart)} sem folga`,
+      );
+    shiftDayIssues(i, emp, d, t, push);
+  }
+}
+
+/** Semanas completas (segunda a domingo) dentro do intervalo: horas acima do normal ou do máximo alargado. */
+function weeklyIssues(i: RosterCheckInput, emp: RosterEmployee, plan: RosterPlan, dates: string[], push: Push) {
+  for (const d of dates) {
+    if (new Date(`${d}T00:00:00Z`).getUTCDay() !== 1 || addDays(d, 6) > i.to) continue;
+    const total = dateRange(d, addDays(d, 6)).reduce((s, x) => {
+      const t = plan.get(x);
+      return s + (t ? shiftWorkMinutes(t) : 0);
+    }, 0);
+    if (total > i.extendedWeeklyHours * 60)
+      push(
+        'weekly_max',
+        'error',
+        d,
+        `${emp.name}: ${formatShiftHours(total)} na semana de ${dm(d)}, acima do máximo de ${i.extendedWeeklyHours} h`,
+      );
+    else if (total > i.weeklyHours * 60 && !emp.rotation)
+      push(
+        'weekly_hours',
+        'warning',
+        d,
+        `${emp.name}: ${formatShiftHours(total)} na semana de ${dm(d)}, acima de ${i.weeklyHours} h`,
+      );
+  }
+}
+
 /** Avisos da escala planeada. Não bloqueiam a gravação: o planeador decide e o aviso fica visível até ser resolvido. */
 export function rosterChecks(i: RosterCheckInput): RosterIssue[] {
   const issues: RosterIssue[] = [];
-  const minRest = i.minRestMinutes ?? DEFAULT_SHIFT_MIN_REST_MINUTES;
-  const maxRun = i.maxConsecutiveDays ?? 6;
-  const byEmp = new Map<string, Map<string, ShiftTypeLike | null>>();
+  const byEmp = new Map<string, RosterPlan>();
   for (const e of [...(i.before ?? []), ...i.entries]) {
     let m = byEmp.get(e.employeeId);
     if (!m) byEmp.set(e.employeeId, (m = new Map()));
@@ -226,98 +325,10 @@ export function rosterChecks(i: RosterCheckInput): RosterIssue[] {
   const dates = dateRange(i.from, i.to);
   for (const emp of i.employees) {
     const plan = byEmp.get(emp.id) ?? new Map<string, ShiftTypeLike | null>();
-    let run = 0,
-      runStart = '';
-    let last: { date: string; t: ShiftTypeLike } | null = null;
-    for (const d of [...dateRange(addDays(i.from, -1), addDays(i.from, -1)), ...dates]) {
-      const t = plan.get(d) ?? null;
-      const inRange = d >= i.from;
-      if (!t) {
-        run = 0;
-        continue;
-      }
-      if (last && inRange) {
-        const gap = startAbs(d, t) - endAbs(last.date, last.t);
-        if (gap < 0)
-          issues.push({
-            code: 'rest_short',
-            severity: 'error',
-            employeeId: emp.id,
-            date: d,
-            message: `${emp.name}: o turno de ${dm(d)} começa antes de terminar o de ${dm(last.date)}`,
-          });
-        else if (gap < minRest)
-          issues.push({
-            code: 'rest_short',
-            severity: 'warning',
-            employeeId: emp.id,
-            date: d,
-            message: `${emp.name}: só ${formatShiftHours(gap)} de descanso antes do turno de ${dm(d)} (mínimo ${formatShiftHours(minRest)})`,
-          });
-      }
-      last = { date: d, t };
-      if (!inRange) continue;
-      if (run === 0) runStart = d;
-      run++;
-      if (run === maxRun + 1 && !emp.rotation)
-        issues.push({
-          code: 'consecutive_days',
-          severity: 'warning',
-          employeeId: emp.id,
-          date: d,
-          message: `${emp.name}: mais de ${maxRun} dias seguidos de trabalho desde ${dm(runStart)} sem folga`,
-        });
-      if (shiftWorkMinutes(t) > 12 * 60)
-        issues.push({
-          code: 'long_shift',
-          severity: 'warning',
-          employeeId: emp.id,
-          date: d,
-          message: `${emp.name}: turno de ${formatShiftHours(shiftWorkMinutes(t))} em ${dm(d)} (acima de 12 h)`,
-        });
-      const absence = i.absences?.get(emp.id)?.get(d);
-      if (absence)
-        issues.push({
-          code: 'absence',
-          severity: 'warning',
-          employeeId: emp.id,
-          date: d,
-          message: `${emp.name}: turno em ${dm(d)}, dia de ${absence.toLocaleLowerCase('pt-PT')} aprovada`,
-        });
-      const holiday = i.holidays?.get(d);
-      if (holiday && !emp.rotation)
-        issues.push({
-          code: 'holiday',
-          severity: 'info',
-          employeeId: emp.id,
-          date: d,
-          message: `${emp.name}: turno no feriado de ${dm(d)} (${holiday})`,
-        });
-    }
-    // Semanas completas (segunda a domingo) dentro do intervalo.
-    for (const d of dates) {
-      if (new Date(`${d}T00:00:00Z`).getUTCDay() !== 1 || addDays(d, 6) > i.to) continue;
-      const total = dateRange(d, addDays(d, 6)).reduce((s, x) => {
-        const t = plan.get(x);
-        return s + (t ? shiftWorkMinutes(t) : 0);
-      }, 0);
-      if (total > i.extendedWeeklyHours * 60)
-        issues.push({
-          code: 'weekly_max',
-          severity: 'error',
-          employeeId: emp.id,
-          date: d,
-          message: `${emp.name}: ${formatShiftHours(total)} na semana de ${dm(d)}, acima do máximo de ${i.extendedWeeklyHours} h`,
-        });
-      else if (total > i.weeklyHours * 60 && !emp.rotation)
-        issues.push({
-          code: 'weekly_hours',
-          severity: 'warning',
-          employeeId: emp.id,
-          date: d,
-          message: `${emp.name}: ${formatShiftHours(total)} na semana de ${dm(d)}, acima de ${i.weeklyHours} h`,
-        });
-    }
+    const push: Push = (code, severity, date, message) =>
+      issues.push({ code, severity, employeeId: emp.id, date, message });
+    dailyIssues(i, emp, plan, dates, push);
+    weeklyIssues(i, emp, plan, dates, push);
   }
   // Cobertura mínima por tipo de turno e dia.
   for (const t of i.types ?? []) {
