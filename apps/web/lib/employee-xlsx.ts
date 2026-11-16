@@ -114,7 +114,7 @@ async function sheetEntry(entries: Map<string, DocumentZipEntry>, sheetIndex: nu
 }
 
 /** Valor de uma célula pelo tipo do Excel (texto partilhado, texto, booleano, erro ou número). */
-function cellValue(type: string, body: string, shared: string[]): XlsxValue {
+function cellValue(type: string, body: string, shared: string[], textDates: boolean): XlsxValue {
   const raw = /<v>([\s\S]*?)<\/v>/.exec(body)?.[1];
   let value: XlsxValue;
   switch (type) {
@@ -125,8 +125,11 @@ function cellValue(type: string, body: string, shared: string[]): XlsxValue {
       value = runText(/<is>([\s\S]*?)<\/is>/.exec(body)?.[1] ?? '');
       break;
     case 'str':
-    case 'd':
       value = raw === undefined ? null : text(raw);
+      break;
+    case 'd':
+      // Datas ISO: texto para a migração de pessoal; o Valora (só valores) trata-as como célula não numérica.
+      value = raw === undefined ? null : textDates ? text(raw) : null;
       break;
     case 'b':
       value = raw === '1';
@@ -141,14 +144,14 @@ function cellValue(type: string, body: string, shared: string[]): XlsxValue {
 }
 
 /** Células de uma linha, nas colunas certas; recusa dados além do limite de colunas. */
-function rowCells(body: string, shared: string[], maxColumns: number) {
+function rowCells(body: string, shared: string[], maxColumns: number, textDates: boolean) {
   const cells: XlsxValue[] = [];
   for (const cell of body.matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
     const tag = cell[1]!,
       ref = attr(tag, 'r');
     const col = ref ? columnIndex(ref) : cells.length;
     if (col < 0 || col > 16_383) fail();
-    const value = cellValue(attr(tag, 't') ?? 'n', cell[2] ?? '', shared);
+    const value = cellValue(attr(tag, 't') ?? 'n', cell[2] ?? '', shared, textDates);
     if (col >= maxColumns) {
       if (value !== null && value !== '')
         fail('A folha excede o limite de colunas. Seleccione apenas a tabela de colaboradores.');
@@ -163,7 +166,7 @@ function rowCells(body: string, shared: string[], maxColumns: number) {
 /** Linhas da primeira folha, como o sheet_to_json({header:1, raw:true, defval:null}) do SheetJS. */
 export async function readXlsxRows(
   buffer: ArrayBuffer,
-  options: { sheetIndex?: number; maxRows?: number; maxColumns?: number } = {},
+  options: { sheetIndex?: number; maxRows?: number; maxColumns?: number; textDates?: boolean } = {},
 ): Promise<XlsxValue[][]> {
   const entries = workbookEntries(buffer);
   const sheet = await sheetEntry(entries, options.sheetIndex ?? 0);
@@ -176,7 +179,7 @@ export async function readXlsxRows(
   for (const row of xml.matchAll(/<row\b([^>]*)>([\s\S]*?)<\/row>|<row\b([^>]*)\/>/g)) {
     const index = Number(attr(row[1] ?? row[3] ?? '', 'r') ?? rows.length + 1) - 1;
     if (!Number.isInteger(index) || index < 0 || index > (options.maxRows ? 1_048_575 : 100_000)) fail();
-    const cells = rowCells(row[2] ?? '', shared, options.maxColumns ?? 16_384);
+    const cells = rowCells(row[2] ?? '', shared, options.maxColumns ?? 16_384, options.textDates ?? true);
     if (index >= (options.maxRows ?? 100_001)) {
       if (!cells.some(v => v !== null && v !== '')) continue;
       return fail('A folha excede o limite de linhas. Separe os dados em ficheiros menores.');
