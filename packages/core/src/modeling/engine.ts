@@ -62,32 +62,65 @@ export function runFinancialModel(input: unknown, overrides: FinancialOverrides 
 }
 
 function calculate(m: FinancialAssumptions, ov: FinancialOverrides): FinancialResult {
+  const L = createLedger(m, ov);
+  const { ke, wacc } = discountRate(m, ov);
+  const { lines, qty } = projectRevenues(L);
+  operatingCosts(L);
+  investmentAndDepreciation(L);
+  debtSchedule(L);
+  const tax = taxSchedule(L);
+  workingCapital(L);
+  const funding = cashAndBalance(L, tax.taxUPaid);
+  const value = valuation(L, wacc, tax.nextYearTax);
+  const debt = debtMetrics(L, funding.dscr);
+  modelWarnings(L, value);
+  const result = assembleResult(L, { ke, wacc, lines, qty, ...funding, ...value, ...debt });
+  addCovenantsAndMultiples(result, m);
+  assertFinite(result);
+  return result;
+}
+
+/** Séries anuais (em cêntimos) e parâmetros do cenário partilhados pelos passos do cálculo. */
+function createLedger(m: FinancialAssumptions, ov: FinancialOverrides) {
   const H = m.horizonte,
     T = H + 1,
     zeros = () => Array<number>(T).fill(0);
   const k = Object.fromEntries(FINANCIAL_SERIES.map(key => [key, zeros()])) as Record<FinancialSeries, number[]>;
-  const a = (key: FinancialSeries, t: number) => k[key][t]!;
-  const set = (key: FinancialSeries, t: number, v: number) => {
-    k[key][t] = minor(v);
-  };
-  const lines: Record<string, number[]> = {},
-    qty = zeros(),
-    dscr = Array<number | null>(T).fill(null);
   const scenario = ov.cen ?? m.cen,
     sc = m.cenarios[scenario];
-  const pM = sc.preco * (ov.preco ?? 1),
-    vM = sc.volume * (ov.volume ?? 1),
-    cvM = sc.opex * (ov.cvar ?? 1),
-    fM = sc.opex * (ov.fixos ?? 1),
-    kM = sc.capex * (ov.capex ?? 1);
-  const ex = m.inicio === 'existente',
-    st = ex ? 1 : m.inicioOp,
-    ab = m.abertura,
-    d = m.divida;
+  const ex = m.inicio === 'existente';
   const warnings: FinancialResult['warnings'] = [];
-  const warn = (code: string, message: string) => {
-    warnings.push({ code, message });
+  return {
+    m,
+    H,
+    T,
+    zeros,
+    k,
+    a: (key: FinancialSeries, t: number) => k[key][t]!,
+    set: (key: FinancialSeries, t: number, v: number) => {
+      k[key][t] = minor(v);
+    },
+    scenario,
+    sc,
+    pM: sc.preco * (ov.preco ?? 1),
+    vM: sc.volume * (ov.volume ?? 1),
+    cvM: sc.opex * (ov.cvar ?? 1),
+    fM: sc.opex * (ov.fixos ?? 1),
+    kM: sc.capex * (ov.capex ?? 1),
+    ex,
+    st: ex ? 1 : m.inicioOp,
+    ab: m.abertura,
+    d: m.divida,
+    warnings,
+    warn: (code: string, message: string) => {
+      warnings.push({ code, message });
+    },
   };
+}
+type Ledger = ReturnType<typeof createLedger>;
+
+/** Custo do capital próprio (CAPM com prémio de risco país) e WACC, manual ou calculado. */
+function discountRate(m: FinancialAssumptions, ov: FinancialOverrides) {
   const ke = (m.wacc.rf + m.wacc.beta * m.wacc.erp + m.wacc.crp) / 100;
   const wacc =
     (m.wacc.modo === 'manual'
@@ -97,24 +130,37 @@ function calculate(m: FinancialAssumptions, ov: FinancialOverrides): FinancialRe
     throw new FinancialModelError([
       { path: 'tv.g', message: 'O crescimento perpétuo deve ser inferior ao WACC, incluindo no cenário seleccionado' },
     ]);
+  return { ke, wacc };
+}
 
+/** Receitas por linha: quantidade (rampa de arranque e crescimento) × preço (escalada) × cenário. */
+function projectRevenues(L: Ledger) {
+  const { m, H, st, ex, vM, pM } = L;
+  const lines: Record<string, number[]> = {},
+    qty = L.zeros();
   for (const [i, r] of m.receitas.entries()) {
     const ramp = r.ramp
         .trim()
         .split(/[,;\s]+/)
         .map(v => Number(v) / 100),
-      line = zeros();
+      line = L.zeros();
     for (let t = st; t <= H; t++) {
       const j = t - st;
       const q = r.qtd * (ex ? 1 : (ramp[j] ?? 1)) * (1 + r.cresc / 100) ** j * vM;
       if (!Number.isFinite(q))
         throw new FinancialModelError([{ path: `receitas.${i}`, message: 'Volume fora do intervalo suportado' }]);
       line[t] = amount(q * r.preco * (1 + r.esc / 100) ** (t - 1) * pM);
-      set('rev', t, a('rev', t) + line[t]!);
+      L.set('rev', t, L.a('rev', t) + line[t]!);
       if (i === 0) qty[t] = q;
     }
     lines[String(i)] = line;
   }
+  return { lines, qty };
+}
+
+/** Custos variáveis, royalties e custos fixos (com inflação e fase pré-operacional) até ao EBITDA. */
+function operatingCosts(L: Ledger) {
+  const { m, H, st, a, set, cvM, fM } = L;
   for (let t = 1; t <= H; t++) {
     const inflation = (1 + m.inflacao / 100) ** (t - 1),
       preOp = t >= st ? 1 : m.preOp / 100;
@@ -125,6 +171,11 @@ function calculate(m: FinancialAssumptions, ov: FinancialOverrides): FinancialRe
     set('out', t, amount(m.outros * inflation * fM * preOp));
     set('ebitda', t, a('rev', t) - a('cv', t) - a('roy', t) - a('pes', t) - a('fst', t) - a('out', t));
   }
+}
+
+/** Investimento de expansão e de manutenção, amortizações em linha recta e EBIT. */
+function investmentAndDepreciation(L: Ledger) {
+  const { m, H, st, ex, ab, a, set, kM } = L;
   const depreciate = (value: number, first: number, life: number) => {
     const annual = minor(value / life);
     let remaining = value;
@@ -148,7 +199,11 @@ function calculate(m: FinancialAssumptions, ov: FinancialOverrides): FinancialRe
     set('capex', t, a('capexExp', t) + a('capexMan', t));
     set('ebit', t, a('ebitda', t) - a('da', t));
   }
+}
 
+/** Empréstimo novo (carência, prestações constantes de capital) e dívida existente; juros e resultado antes de impostos. */
+function debtSchedule(L: Ledger) {
+  const { H, ex, ab, d, a, set } = L;
   let balance = 0,
     openingDebt = ex ? amount(ab.divida) : 0;
   const principal = amount(d.montante),
@@ -175,23 +230,59 @@ function calculate(m: FinancialAssumptions, ov: FinancialOverrides): FinancialRe
     set('ds', t, a('jur', t) + a('princ', t));
     set('ebt', t, a('ebit', t) - a('jur', t));
   }
+}
+
+/** Imposto Industrial (com reporte de prejuízos) e imposto desalavancado; pago no próprio ano ou no seguinte. */
+function taxSchedule(L: Ledger) {
+  const { m, k } = L;
   k.imp = financialTaxes(k.ebt, m.ii / 100, m.prejuizosAnos);
   k.taxU = financialTaxes(k.ebit, m.ii / 100, m.prejuizosAnos);
-  // Imposto pago no próprio ano ou no seguinte (a dívida ao Estado fica no balanço até ao pagamento).
+  // A dívida ao Estado fica no balanço até ao pagamento.
   const nextYearTax = m.impostoPagamento === 'ano_seguinte';
   const lag = (s: number[]) => s.map((v, t) => (nextYearTax ? (t ? s[t - 1]! : 0) : v));
   k.taxPaid = lag(k.imp);
   k.taxPay = k.imp.map(v => (nextYearTax ? v : 0));
   const taxUPaid = lag(k.taxU);
   k.taxUPaid = taxUPaid;
+  return { nextYearTax, taxUPaid };
+}
+
+/** Resultado líquido e fundo de maneio (clientes, existências e fornecedores pelos prazos médios). */
+function workingCapital(L: Ledger) {
+  const { m, H, ex, ab, a, set } = L;
   for (let t = 0; t <= H; t++) {
+    const opening = t === 0 && ex;
     set('rl', t, a('ebt', t) - a('imp', t));
-    set('ar', t, t === 0 && ex ? amount(ab.clientes) : (a('rev', t) * m.dso) / 365);
-    set('inv', t, t === 0 && ex ? amount(ab.exist) : (a('cv', t) * m.dio) / 365);
-    set('ap', t, t === 0 && ex ? amount(ab.fornec) : ((a('cv', t) + a('fst', t)) * m.dpo) / 365);
+    set('ar', t, opening ? amount(ab.clientes) : (a('rev', t) * m.dso) / 365);
+    set('inv', t, opening ? amount(ab.exist) : (a('cv', t) * m.dio) / 365);
+    set('ap', t, opening ? amount(ab.fornec) : ((a('cv', t) + a('fst', t)) * m.dpo) / 365);
     set('nwc', t, a('ar', t) + a('inv', t) - a('ap', t));
     set('dnwc', t, t ? a('nwc', t) - a('nwc', t - 1) : ex ? 0 : a('nwc', t));
   }
+}
+
+/** Reserva legal do ano: parte do lucro retida até ao limite sobre o capital; não é distribuível. */
+function legalReserveTransfer(
+  m: FinancialAssumptions,
+  profit: number,
+  capital: number,
+  reserves: number,
+  legal: number,
+) {
+  if (profit <= 0) return 0;
+  return Math.max(
+    0,
+    Math.min(
+      minor((profit * m.reservaLegal) / 100),
+      minor((capital * m.reservaLegalLimite) / 100) - legal,
+      reserves - legal + profit,
+    ),
+  );
+}
+
+/** Caixa, capital, reservas e dividendos ano a ano; balanço, fluxos de caixa livres e CFADS. */
+function cashAndBalance(L: Ledger, taxUPaid: number[]) {
+  const { m, H, T, ex, ab, a, set } = L;
   const bookEq = ex
     ? amount(ab.imob) +
       amount(ab.exist) +
@@ -205,26 +296,16 @@ function calculate(m: FinancialAssumptions, ov: FinancialOverrides): FinancialRe
     reserves = 0,
     legalReserve = 0;
   const minimumCash = amount(m.caixaMin);
+  const dscr = Array<number | null>(T).fill(null);
   let maxCashFlowDifference = 0;
   for (let t = 0; t <= H; t++) {
     const previousCash = cash;
-    set('cfo', t, a('rl', t) + a('da', t) - a('dnwc', t) + (a('taxPay', t) - (t ? a('taxPay', t - 1) : 0)));
+    const taxPayChange = a('taxPay', t) - (t ? a('taxPay', t - 1) : 0);
+    set('cfo', t, a('rl', t) + a('da', t) - a('dnwc', t) + taxPayChange);
     set('cfi', t, -a('capex', t));
     const injected = t === 0 && !ex ? amount(m.capitalInicial) : 0;
     let nextCash = cash + a('cfo', t) + a('cfi', t) + a('draw', t) - a('princ', t) + injected;
-    // Reserva legal: parte do lucro retida até ao limite sobre o capital; não é distribuível.
-    const legalTransfer =
-      a('rl', t) > 0
-        ? Math.max(
-            0,
-            Math.min(
-              minor((a('rl', t) * m.reservaLegal) / 100),
-              minor((capital * m.reservaLegalLimite) / 100) - legalReserve,
-              reserves - legalReserve + a('rl', t),
-            ),
-          )
-        : 0;
-    legalReserve += legalTransfer;
+    legalReserve += legalReserveTransfer(m, a('rl', t), capital, reserves, legalReserve);
     const distributable = Math.max(0, reserves + a('rl', t) - legalReserve);
     const dividend =
       t > 0 && a('rl', t) > 0
@@ -246,7 +327,7 @@ function calculate(m: FinancialAssumptions, ov: FinancialOverrides): FinancialRe
     set('res', t, reserves);
     set('resLeg', t, legalReserve);
     set('resFree', t, reserves - legalReserve);
-    set('dtax', t, a('taxPay', t) - (t ? a('taxPay', t - 1) : 0));
+    set('dtax', t, taxPayChange);
     set('imobB', t, (t ? a('imobB', t - 1) : ex ? amount(ab.imob) : 0) + a('capex', t));
     set('depAc', t, (t ? a('depAc', t - 1) : 0) + a('da', t));
     set('imob', t, a('imobB', t) - a('depAc', t));
@@ -263,6 +344,12 @@ function calculate(m: FinancialAssumptions, ov: FinancialOverrides): FinancialRe
       Math.abs(cash - previousCash - a('cfo', t) - a('cfi', t) - a('cff', t)),
     );
   }
+  return { bookEq, dscr, maxCashFlowDifference };
+}
+
+/** Valor terminal, VAL, TIR (projecto e accionista), payback e índice de rendibilidade. */
+function valuation(L: Ledger, wacc: number, nextYearTax: boolean) {
+  const { m, H, k, a, ex } = L;
   const tv =
     m.tv.metodo === 'gordon'
       ? ((a('fcff', H) / 100) * (1 + m.tv.g / 100)) / (wacc - m.tv.g / 100)
@@ -284,14 +371,6 @@ function calculate(m: FinancialAssumptions, ov: FinancialOverrides): FinancialRe
   );
   equityFlows[H] = equityFlows[H]! + terminalEquityValue;
   // Empresa existente: avaliação DCF, sem inventar um preço de aquisição para calcular TIR/payback.
-  const projectIrr = financialIrr(projectFlows),
-    investorIrr = financialIrr(equityFlows);
-  const unfundedGap = Math.max(...k.unfunded) / 100,
-    fullyFunded = unfundedGap === 0;
-  const npv = financialNpv(wacc, projectFlows),
-    npvSemTv = financialNpv(wacc, fcff),
-    pb = ex ? null : financialPayback(fcff),
-    pbD = ex ? null : financialPayback(fcff.map((v, t) => v / (1 + wacc) ** t));
   const posPv = financialNpv(
       wacc,
       projectFlows.map(v => Math.max(0, v)),
@@ -300,6 +379,30 @@ function calculate(m: FinancialAssumptions, ov: FinancialOverrides): FinancialRe
       wacc,
       projectFlows.map(v => Math.min(0, v)),
     );
+  const unfundedGap = Math.max(...k.unfunded) / 100;
+  return {
+    tv,
+    residual,
+    terminalWorkingCapital,
+    projectFlows,
+    equityFlows,
+    terminalEquityValue,
+    projectIrr: financialIrr(projectFlows),
+    investorIrr: financialIrr(equityFlows),
+    unfundedGap,
+    fullyFunded: unfundedGap === 0,
+    npv: financialNpv(wacc, projectFlows),
+    npvSemTv: financialNpv(wacc, fcff),
+    pb: ex ? null : financialPayback(fcff),
+    pbD: ex ? null : financialPayback(fcff.map((v, t) => v / (1 + wacc) ** t)),
+    pi: negPv > 0 ? posPv / negPv : null,
+  };
+}
+type Valuation = ReturnType<typeof valuation>;
+
+/** DSCR, anos de serviço da dívida, LLCR e capacidade indicativa de endividamento. */
+function debtMetrics(L: Ledger, dscr: (number | null)[]) {
+  const { m, H, k, a, ex, ab, d, warn } = L;
   const serviceYears = dscr.map((v, t) => (v === null ? -1 : t)).filter(t => t >= 0),
     repY = k.princ.map((v, t) => (v > 0 && t > 0 ? t : -1)).filter(t => t >= 0);
   const ratios = serviceYears.map(t => dscr[t]!);
@@ -324,47 +427,75 @@ function calculate(m: FinancialAssumptions, ov: FinancialOverrides): FinancialRe
         'O horizonte não cobre o vencimento da dívida; LLCR e capacidade indicativa não são calculados.',
       );
   }
-  if (!fullyFunded)
+  return {
+    dscr,
+    serviceYears,
+    repY,
+    minDscr: ratios.length ? Math.min(...ratios) : null,
+    avgDscr: ratios.length ? ratios.reduce((s, v) => s + v, 0) / ratios.length : null,
+    llcr,
+    debtCap,
+    hasDebt: newDebt || oldDebt,
+  };
+}
+
+/** Avisos de financiamento, TIR não convencional, valor terminal negativo e juros do desembolso. */
+function modelWarnings(L: Ledger, v: Valuation) {
+  const { m, k, ex, d, warn } = L;
+  if (!v.fullyFunded)
     warn(
       'unfunded',
       'Existem necessidades por financiar. A caixa negativa representa défice de financiamento e a TIR do accionista não é apresentada.',
     );
-  if (m.capitalAutomatico && k.eqAuto.some(v => v > 0))
+  if (m.capitalAutomatico && k.eqAuto.some(x => x > 0))
     warn('additional_equity', 'O equilíbrio de caixa exige capital adicional, identificado nos fluxos do accionista.');
-  if (projectIrr.status === 'non_conventional' && !ex)
+  if (v.projectIrr.status === 'non_conventional' && !ex)
     warn(
       'project_irr_non_conventional',
       'A TIR do projecto é omitida: os fluxos mudam de sinal mais de uma vez. Use o VAL para avaliar.',
     );
-  if (investorIrr.status === 'non_conventional' && !ex && fullyFunded)
+  if (v.investorIrr.status === 'non_conventional' && !ex && v.fullyFunded)
     warn('equity_irr_non_conventional', 'A TIR do accionista é omitida: os fluxos mudam de sinal mais de uma vez.');
-  if (tv < 0)
+  if (v.tv < 0)
     warn(
       'negative_terminal_value',
       'Gordon produz valor terminal negativo; reveja a viabilidade e o pressuposto de continuidade.',
     );
-  if (newDebt && d.ano === 0 && d.jurosDesembolso > 0)
+  if (d.montante > 0 && d.ano === 0 && d.jurosDesembolso > 0)
     warn(
       'initial_interest',
       'Juros do desembolso no ano 0 são pagos no financiamento inicial; DSCR considera os períodos anuais 1 em diante.',
     );
+}
+
+/** Múltiplos: EBITDA do primeiro ano em velocidade de cruzeiro (fim da rampa de arranque), ou o ano escolhido. */
+function multipleYearOf(L: Ledger) {
+  const { m, H, st, ex } = L;
+  if (m.mult.ano) return m.mult.ano;
+  if (ex) return 1;
+  const ends = m.receitas.map(r => {
+    const ramp = r.ramp
+      .trim()
+      .split(/[,;\s]+/)
+      .map(v => Number(v));
+    let j = ramp.length;
+    while (j > 0 && ramp[j - 1]! >= 100) j--;
+    return j;
+  });
+  return Math.min(H, st + Math.max(0, ...ends));
+}
+
+type Parts = { ke: number; wacc: number; lines: Record<string, number[]>; qty: number[] } & Valuation &
+  ReturnType<typeof debtMetrics> & { bookEq: number; maxCashFlowDifference: number };
+
+/** Junta séries (em kwanzas) e indicadores no resultado do modelo. */
+function assembleResult(L: Ledger, p: Parts): FinancialResult {
+  const { m, H, T, k, a, ex, ab, scenario, sc } = L;
   const maxBalanceDifference = Math.max(...k.check.map(Math.abs));
-  // Múltiplos: EBITDA do primeiro ano em velocidade de cruzeiro (fim da rampa de arranque), ou o ano escolhido.
-  const cruise = (() => {
-    if (ex) return 1;
-    const ends = m.receitas.map(r => {
-      const ramp = r.ramp
-        .trim()
-        .split(/[,;\s]+/)
-        .map(v => Number(v));
-      let j = ramp.length;
-      while (j > 0 && ramp[j - 1]! >= 100) j--;
-      return j;
-    });
-    return Math.min(H, st + Math.max(0, ...ends));
-  })();
-  const multipleYear = m.mult.ano || cruise;
-  const result: FinancialResult = {
+  const multipleYear = multipleYearOf(L);
+  const netDebt0 = ex ? ab.divida - ab.caixa : 0;
+  const notFunded = ex || !p.fullyFunded;
+  return {
     engineVersion: FINANCIAL_ENGINE_VERSION,
     H,
     years: Array.from({ length: T }, (_, t) => m.anoBase + t),
@@ -375,48 +506,48 @@ function calculate(m: FinancialAssumptions, ov: FinancialOverrides): FinancialRe
         FinancialSeries,
         number[]
       >),
-      qty,
-      dscr,
+      qty: p.qty,
+      dscr: p.dscr,
     },
-    lines: Object.fromEntries(Object.entries(lines).map(([key, arr]) => [key, arr.map(v => v / 100)])),
-    wacc,
-    ke,
-    tv,
-    pvTv: tv / (1 + wacc) ** H,
-    residual,
-    terminalWorkingCapital,
-    npv,
-    npvSemTv,
-    valuationFlows: { project: projectFlows, equity: ex || !fullyFunded ? null : equityFlows },
-    terminalEquityValue,
-    irr: ex ? null : projectIrr.value,
-    irrEq: ex || !fullyFunded ? null : investorIrr.value,
-    irrStatus: ex ? 'not_applicable' : projectIrr.status,
-    irrEqStatus: ex ? 'not_applicable' : !fullyFunded ? 'not_funded' : investorIrr.status,
-    pb,
-    pbD,
-    pbDuration: financialDuration(pb),
-    pbDDuration: financialDuration(pbD),
-    pi: negPv > 0 ? posPv / negPv : null,
+    lines: Object.fromEntries(Object.entries(p.lines).map(([key, arr]) => [key, arr.map(v => v / 100)])),
+    wacc: p.wacc,
+    ke: p.ke,
+    tv: p.tv,
+    pvTv: p.tv / (1 + p.wacc) ** H,
+    residual: p.residual,
+    terminalWorkingCapital: p.terminalWorkingCapital,
+    npv: p.npv,
+    npvSemTv: p.npvSemTv,
+    valuationFlows: { project: p.projectFlows, equity: notFunded ? null : p.equityFlows },
+    terminalEquityValue: p.terminalEquityValue,
+    irr: ex ? null : p.projectIrr.value,
+    irrEq: notFunded ? null : p.investorIrr.value,
+    irrStatus: ex ? 'not_applicable' : p.projectIrr.status,
+    irrEqStatus: ex ? 'not_applicable' : !p.fullyFunded ? 'not_funded' : p.investorIrr.status,
+    pb: p.pb,
+    pbD: p.pbD,
+    pbDuration: financialDuration(p.pb),
+    pbDDuration: financialDuration(p.pbD),
+    pi: p.pi,
     pvCapex: financialNpv(
-      wacc,
+      p.wacc,
       k.capex.map(v => v / 100),
     ),
-    ev: npv,
-    netDebt0: ex ? ab.divida - ab.caixa : 0,
-    eqVal: npv - (ex ? ab.divida - ab.caixa : 0),
-    bookEq: bookEq / 100,
-    fundingGap: m.capitalAutomatico ? k.eqAuto.reduce((s, v) => s + v / 100, 0) : unfundedGap,
-    unfundedGap,
-    fullyFunded,
+    ev: p.npv,
+    netDebt0,
+    eqVal: p.npv - netDebt0,
+    bookEq: p.bookEq / 100,
+    fundingGap: m.capitalAutomatico ? k.eqAuto.reduce((s, v) => s + v / 100, 0) : p.unfundedGap,
+    unfundedGap: p.unfundedGap,
+    fullyFunded: p.fullyFunded,
     totalCapex: k.capexExp.reduce((s, v) => s + v / 100, 0),
-    hasDebt: newDebt || oldDebt,
-    repY,
-    serviceYears,
-    minDscr: ratios.length ? Math.min(...ratios) : null,
-    avgDscr: ratios.length ? ratios.reduce((s, v) => s + v, 0) / ratios.length : null,
-    llcr,
-    debtCap,
+    hasDebt: p.hasDebt,
+    repY: p.repY,
+    serviceYears: p.serviceYears,
+    minDscr: p.minDscr,
+    avgDscr: p.avgDscr,
+    llcr: p.llcr,
+    debtCap: p.debtCap,
     ndE: k.ebitda.map((v, t) => (v > 0 ? (a('debt', t) - a('cash', t)) / v : null)),
     icr: k.ebitda.map((v, t) => (a('jur', t) > 0 ? v / a('jur', t) : null)),
     covenants: [],
@@ -432,15 +563,19 @@ function calculate(m: FinancialAssumptions, ov: FinancialOverrides): FinancialRe
     },
     checks: {
       balance: maxBalanceDifference === 0,
-      cashFlow: maxCashFlowDifference === 0,
+      cashFlow: p.maxCashFlowDifference === 0,
       maxBalanceDifference: maxBalanceDifference / 100,
-      maxCashFlowDifference: maxCashFlowDifference / 100,
+      maxCashFlowDifference: p.maxCashFlowDifference / 100,
     },
-    warnings,
+    warnings: L.warnings,
   };
+}
+
+/** Cumprimento dos covenants por ano e intervalo de valor por múltiplos. */
+function addCovenantsAndMultiples(result: FinancialResult, m: FinancialAssumptions) {
   result.covenants = result.years.slice(1).map((year, i) => {
     const t = i + 1,
-      dscrValue = dscr[t],
+      dscrValue = result.k.dscr[t],
       leverage = result.ndE[t],
       interestCover = result.icr[t];
     return {
@@ -456,13 +591,12 @@ function calculate(m: FinancialAssumptions, ov: FinancialOverrides): FinancialRe
     result.multiples.equityLow = result.multiples.enterpriseLow - result.netDebt0;
     result.multiples.equityHigh = result.multiples.enterpriseHigh - result.netDebt0;
   }
-  // JSON não deve converter silenciosamente Infinity/NaN em null.
-  const checkFinite = (v: unknown): void => {
-    if (typeof v === 'number' && !Number.isFinite(v))
-      throw new FinancialModelError([{ path: 'calculo', message: 'Resultado não finito; reveja os pressupostos' }]);
-    if (Array.isArray(v)) for (const item of v) checkFinite(item);
-    else if (v && typeof v === 'object') for (const item of Object.values(v)) checkFinite(item);
-  };
-  checkFinite(result);
-  return result;
+}
+
+/** JSON não deve converter silenciosamente Infinity/NaN em null. */
+function assertFinite(v: unknown): void {
+  if (typeof v === 'number' && !Number.isFinite(v))
+    throw new FinancialModelError([{ path: 'calculo', message: 'Resultado não finito; reveja os pressupostos' }]);
+  if (Array.isArray(v)) for (const item of v) assertFinite(item);
+  else if (v && typeof v === 'object') for (const item of Object.values(v)) assertFinite(item);
 }
