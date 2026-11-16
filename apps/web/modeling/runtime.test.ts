@@ -5,7 +5,7 @@ import { convertFinancialCurrency, FINANCIAL_ENGINE_VERSION, FINANCIAL_REPORT_KE
 const runtime = readFileSync(new URL('../public/modeling-runtime.js', import.meta.url), 'utf8');
 const views = ['painel', 'pressupostos', 'demonstracoes', 'avaliacao', 'credito', 'sensibilidade', 'relatorios'];
 /** Teste do código distribuído e das vistas, sem simular um motor de layout de navegador. */
-async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, incomplete = false, withHistory = false, deferRead = false, _unused:unknown=null, allowedSectors: readonly typeof FINANCIAL_SECTORS[number][] = FINANCIAL_SECTORS, projects: { canExport?: boolean; bootstrap?: boolean; initialArchived?: boolean; restoreFails?: boolean; deferUsage?: boolean; historyFailsAfterRestore?: boolean; historyFailsOnRefresh?: boolean; logoutFails?: boolean; deferLogout?: boolean; bootFails?: boolean; role?: string; respond?: (path: string, method: string | undefined, payload: any) => unknown } = {}) {
+async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, incomplete = false, _withHistory = false, deferRead = false, _unused:unknown=null, allowedSectors: readonly typeof FINANCIAL_SECTORS[number][] = FINANCIAL_SECTORS, projects: { canExport?: boolean; bootstrap?: boolean; initialArchived?: boolean; restoreFails?: boolean; deferUsage?: boolean; historyFailsAfterRestore?: boolean; historyFailsOnRefresh?: boolean; logoutFails?: boolean; deferLogout?: boolean; bootFails?: boolean; role?: string; respond?: (path: string, method: string | undefined, payload: any) => unknown } = {}) {
   const template = financialTemplate(sector), handlers = new Map<string, Function>();
   const nodes = new Map<string, any>();
   const node = (selector: string) => {
@@ -16,7 +16,6 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
   const records = [model], pendingUsage: (() => void)[] = [], pendingLogout: (() => void)[] = [];
   const redirects: string[] = [], windowHandlers = new Map<string, Function>();
   node('#integra-session').textContent = JSON.stringify({ user: { id: 'u1', name: 'Dona Integra', role: projects.role ?? 'finance' }, canWrite, permission: canWrite ? 'editor' : 'viewer', formats: { pdf: projects.canExport !== false, xlsx: false, csv: false }, usage: {}, ...(projects.bootstrap ? { bootstrap: { models: records, templates: allowedSectors.map(financialTemplate) } } : {}) });
-  let restored=false,modelReads=0;
   const requests: { path: string; method?: string; payload?: any }[] = [];
   const pendingReads: (()=>void)[]=[];
   const currencyField=node('[data-p="moeda"]');currencyField.dataset={p:'moeda',t:'t'};currencyField.value=model.currency;
@@ -35,10 +34,10 @@ async function mount(sector: typeof FINANCIAL_SECTORS[number], canWrite = true, 
       const custom=projects.respond?.(path,init?.method,payload);if(custom!==undefined)return new Response(JSON.stringify(custom),{headers:{'content-type':'application/json'}});
       if(path.endsWith('/auth/logout')){if(projects.deferLogout)await new Promise<void>(resolve=>pendingLogout.push(resolve));if(projects.logoutFails)return new Response(JSON.stringify({message:'Fim de sessão indisponível'}),{status:503,headers:{'content-type':'application/json'}});data={ok:true};}
       else if(path.endsWith('/usage')){const activeProjects=records.filter(r=>!r.archivedAt).length;data={activeProjects,projectLimit:2,userLimit:5,enabledUsers:1,canCreateProject:activeProjects<2};if(projects.deferUsage)await new Promise<void>(resolve=>pendingUsage.push(resolve));}
-      else if(path.endsWith('/archive')){const target=records.find(r=>path.includes('/'+r.id+'/'))!;if(!payload.archived&&projects.restoreFails)return new Response(JSON.stringify({message:'Atingiu o limite de projectos activos.'}),{status:409,headers:{'content-type':'application/json'}});target.archivedAt=payload.archived?'2026-10-29T08:00:00Z':null;target.revision++;restored=!payload.archived;data=target;}
+      else if(path.endsWith('/archive')){const target=records.find(r=>path.includes('/'+r.id+'/'))!;if(!payload.archived&&projects.restoreFails)return new Response(JSON.stringify({message:'Atingiu o limite de projectos activos.'}),{status:409,headers:{'content-type':'application/json'}});target.archivedAt=payload.archived?'2026-10-29T08:00:00Z':null;target.revision++;data=target;}
       else if(path.includes('/exchange-rate?')){const q=new URLSearchParams(path.split('?')[1]);data={from:q.get('from'),to:q.get('to'),rate:q.get('from')==='Kz'?0.001:1000,rateDate:'2026-10-27',source:'Referência do teste',stale:false};}
       else if(path.endsWith('/convert-currency')){model.currency=payload.to;model.assumptions={...convertFinancialCurrency(model.assumptions as unknown as Record<string,unknown>,payload.from,payload.to,payload.rate),currencyConversion:payload} as any;model.revision++;data=model;}
-      else if(path.endsWith('/models')){if(projects.bootFails)return new Response(JSON.stringify({message:'Projectos indisponíveis'}),{status:503,headers:{'content-type':'application/json'}});modelReads++;data=records;}
+      else if(path.endsWith('/models')){if(projects.bootFails)return new Response(JSON.stringify({message:'Projectos indisponíveis'}),{status:503,headers:{'content-type':'application/json'}});data=records;}
       else data=path.endsWith('/templates')?allowedSectors.map(financialTemplate):records;
       return new Response(JSON.stringify(data),{headers:{'content-type':'application/json'}});
     },

@@ -39,7 +39,7 @@ const SECURITY_HEADERS = [
 const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  async headers() {
+  headers() {
     return [{ source: '/:path*', headers: SECURITY_HEADERS }];
   },
 };

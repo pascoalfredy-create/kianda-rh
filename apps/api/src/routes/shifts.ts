@@ -26,7 +26,6 @@ const VIEWERS = ['owner', 'hr_admin', 'payroll', 'finance', 'manager'] as const;
 
 type TypeRow = typeof shiftTypes.$inferSelect;
 type Row = typeof shiftAssignments.$inferSelect;
-type Emp = { id: string; name: string; number: string; jobTitle: string; managerId: string | null; departmentId: string | null; workplaceId: string | null; scheduleId: string | null };
 
 const typeView = (t: TypeRow) => ({
   id: t.id, code: t.code, name: t.name, startTime: t.startTime, endTime: t.endTime, breakMinutes: t.breakMinutes, color: t.color,

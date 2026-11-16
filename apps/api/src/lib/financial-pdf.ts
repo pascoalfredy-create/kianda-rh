@@ -1,5 +1,5 @@
 /** PDF vectorial com fontes incorporadas, sem browser ou dependências de runtime. */
-import type { FinancialReportDocument, FinancialDocumentKey, ReportBlock, ReportCell, ReportChart, ReportTable, ReportTornado } from '@kianda/core';
+import type { FinancialReportDocument, FinancialDocumentKey, ReportCell, ReportChart, ReportTable, ReportTornado } from '@kianda/core';
 import { FINANCIAL_FONTS } from './financial-fonts.js';
 
 type FontKey = keyof typeof FINANCIAL_FONTS;

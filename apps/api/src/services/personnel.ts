@@ -1,5 +1,5 @@
 import { personnelCashFlow, personnelMonths, type CashObligation } from '@kianda/core/personnel-cash';
-import { allowanceAmount, calculatePayroll, labourRules, scheduledDays, type Schedule, compensationAt, getPack, lastDayOfMonth, listPacks, luandaDate, payrollObligations, yearServiceFraction, workingDaysInMonth } from '@kianda/core';
+import { allowanceAmount, calculatePayroll, labourRules, scheduledDays, type Schedule, compensationAt, getPack, lastDayOfMonth, listPacks, luandaDate, payrollObligations, yearServiceFraction } from '@kianda/core';
 import { and, asc, companies, compensationChanges, contracts, departments, desc, employeeAllowances, allowanceTypes, employees, eq, expenseClaims, getDb, inArray, payrollLines, payrollRuns, personnelCashPlans, workSchedules } from '@kianda/db';
 import { DomainError } from './payroll.js';
 

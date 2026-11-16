@@ -5,7 +5,7 @@ import {
   payrollJournal, yearServiceFraction, type EarningInput, type PayrollResult, type PayrollTotals, type PgcAccountMap,
 } from '@kianda/core';
 import {
-  absences, accountMappings, allowanceTypes, and, asc, employeeAllowances, isNull, or, shiftAssignments, workSchedules, attendanceEntries, attendanceMonths, auditLogs, companies, compensationChanges, contracts, departments, desc, employees, eq,
+  absences, accountMappings, allowanceTypes, and, asc, employeeAllowances, isNull, or, shiftAssignments, workSchedules, attendanceEntries, attendanceMonths, auditLogs, companies, compensationChanges, contracts, departments, employees, eq,
   gte, inArray, sql, journalEntries, journalLines, lte, ne, payrollLines, payrollRuns, payrollVariables, type Db,
 } from '@kianda/db';
 import { notifyEmployees } from './push.js';

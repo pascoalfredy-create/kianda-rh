@@ -40,6 +40,8 @@ const connection = (env: Env) => env.HYPERDRIVE?.connectionString ?? env.DATABAS
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     loadEnv(env);
+    // Sem segredo de sessão forte, a API não arranca: nunca assina sessões com o segredo de desenvolvimento.
+    if (!process.env.API_JWT_SECRET || process.env.API_JWT_SECRET.length < 32) return Response.json({ error: 'configuracao', message: 'Segredo de sessão em falta' }, { status: 500 });
     app ??= buildApp();
     const connectionString = connection(env);
     if (!connectionString) return Response.json({ error: 'configuracao', message: 'Base de dados não configurada (HYPERDRIVE ou DATABASE_URL)' }, { status: 500 });

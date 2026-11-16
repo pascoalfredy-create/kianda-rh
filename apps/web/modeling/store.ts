@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- modelo do protótipo aprovado: campos dinâmicos lidos pela interface. */
 /** Persistência do protótipo: sem localStorage, revisões serializadas e sem perder edições em curso. */
 import type { FinancialCurrency, SubscriptionStatus, financialTemplate } from '@kianda/core';
 export interface CurrencyConversionInput { from: FinancialCurrency; to: FinancialCurrency; rate: number; rateDate: string; source: string; reference: boolean }

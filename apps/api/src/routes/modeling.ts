@@ -76,7 +76,6 @@ export function modelingRoutes() {
     if (!bootstrap) return c.json(session);
     const sectors = row?.grant?.modelingSectors ?? [];
     const models = await visibleModels(db, c.get('modelingMember'), a.role, await db.select().from(financialModels).where(and(eq(financialModels.companyId, a.companyId), inArray(financialModels.sector, sectors))).orderBy(desc(financialModels.updatedAt)));
-    const first = models.find(m => !m.archivedAt);
     return c.json({ ...session, bootstrap: { models, templates: FINANCIAL_SECTORS.filter(s => sectors.includes(s)).map(financialTemplate) } });
   };
   app.get('/v1/modeling/session', opening(false));
