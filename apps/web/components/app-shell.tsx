@@ -93,7 +93,7 @@ function EmployeeSearch({ pathname }: { pathname: string }) {
   useEffect(() => {
     if (query.trim().length < 2) { setRows([]); return; }
     const controller = new AbortController();
-    const timer = setTimeout(async () => {
+    const timer = setTimeout(() => void (async () => {
       setBusy(true); setError('');
       try {
         const response = await fetch('/api/v1/employees', { signal: controller.signal, cache: 'no-store' });
@@ -101,7 +101,7 @@ function EmployeeSearch({ pathname }: { pathname: string }) {
         setRows(await response.json() as EmployeeRow[]);
       } catch (e) { if (!controller.signal.aborted) { setRows([]); setError((e as Error).message); } }
       finally { if (!controller.signal.aborted) setBusy(false); }
-    }, 250);
+    })(), 250);
     return () => { controller.abort(); clearTimeout(timer); };
   }, [query]);
   const term = query.trim().toLocaleLowerCase('pt-PT');

@@ -1,6 +1,6 @@
 import { financialBreakEvenPrice, financialScenarios, financialSensitivity } from './analysis.js';
 import { creditDiagnosis, creditDiagnosisText } from './credit.js';
-import type { FinancialAssumptions, FinancialResult, FinancialScenario } from './types.js';
+import type { FinancialResult, FinancialScenario } from './types.js';
 import { validateFinancialAssumptions } from './validation.js';
 
 export const FINANCIAL_SCENARIO_LABELS = { base: 'Base', otim: 'Optimista', pess: 'Pessimista' };

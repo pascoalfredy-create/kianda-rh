@@ -192,7 +192,7 @@ export async function extractPdfContent<T>(buffer: ArrayBuffer, convert: (pages:
   let timeout: ReturnType<typeof setTimeout> | undefined, abort: (() => void) | undefined;
   const interrupted = new Promise<never>((_, reject) => {
     rejectInterrupted = reject;
-    abort = () => reject(options.signal?.reason || new Error('Importação cancelada.'));
+    abort = () => { const r: unknown = options.signal?.reason; reject(r instanceof Error ? r : new Error('Importação cancelada.')); };
     options.signal?.addEventListener('abort', abort, { once: true });
     timeout = setTimeout(() => reject(new Error('A leitura do PDF excedeu 45 segundos. Exporte um documento mais curto.')), 45_000);
   });

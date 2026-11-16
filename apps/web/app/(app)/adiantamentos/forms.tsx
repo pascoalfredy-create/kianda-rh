@@ -27,11 +27,11 @@ export function RequestForm({ employees }: { employees?: { id: string; name: str
   const value = Number(amount.replace(/\s/g, '').replace(/\./g, '').replace(',', '.'));
   useEffect(() => {
     if (!(value > 0)) { setSim(null); return; }
-    const t = setTimeout(async () => {
+    const t = setTimeout(() => void (async () => {
       const q = new URLSearchParams({ amount: String(value), installments: String(installments), firstPeriod, ...(employees ? { employeeId } : {}) });
       const r = await send<Sim>(`/v1/advances/simulate?${q}`, 'GET');
       if (r.ok) setSim(r.data!);
-    }, 350);
+    })(), 350);
     return () => clearTimeout(t);
   }, [value, installments, firstPeriod, employeeId, employees]);
   return (

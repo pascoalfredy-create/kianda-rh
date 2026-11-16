@@ -12,7 +12,7 @@ export function PayrollSelection({ people, selected, onChange, processedIds, dis
   const query = search.toLocaleLowerCase('pt');
   const filtered = people.filter(p => (!department || (p.department ?? 'Sem departamento') === department) && (!pendingOnly || !processed.has(p.id)) && `${p.name} ${p.number} ${p.jobTitle}`.toLocaleLowerCase('pt').includes(query));
   const pages = Math.max(1, Math.ceil(filtered.length / 50)), current = Math.min(page, pages - 1), visible = filtered.slice(current * 50, current * 50 + 50);
-  function select(ids: string[], checked: boolean) { const next = new Set(selected); for (const id of ids) checked ? next.add(id) : next.delete(id); onChange([...next]); }
+  function select(ids: string[], checked: boolean) { const next = new Set(selected); for (const id of ids) { if (checked) next.add(id); else next.delete(id); } onChange([...next]); }
   return <section aria-label={selectable ? 'Colaboradores do processamento em lote' : 'Remunerações habituais do mês'} style={{ margin: '12px 0', minWidth: 0 }}>
     <h3>{selectable ? 'Seleccionar colaboradores do mês' : 'Remunerações habituais do mês'}</h3><p className="muted">Valores da ficha salarial em vigor. Para uma alteração permanente, use a ficha salarial do colaborador.</p>
     {selectable && <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap', margin: '10px 0' }}>

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- corpo JSON livre da API; cada ecrã lê os campos que espera. */
 /** Pedidos de formulários: uma falha de rede deve devolver o controlo ao utilizador. */
 export async function jsonRequest(path: string, init: RequestInit = {}) {
   const controller = new AbortController();

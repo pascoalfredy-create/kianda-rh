@@ -25,6 +25,7 @@ export function setupModelingMobile(showIosInstructions: () => void) {
   window.addEventListener('online', network);
   window.addEventListener('offline', network);
   media.addEventListener('change', update);
+  // eslint-disable-next-line @typescript-eslint/no-misused-promises -- o próprio handler trata os erros (try/catch); os testes aguardam a promessa.
   button.addEventListener('click', async () => {
     if (deferred) {
       const event = deferred; deferred = null; button.disabled = true;

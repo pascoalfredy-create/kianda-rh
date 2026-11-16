@@ -122,7 +122,6 @@ export function authRoutes() {
     const verification = await issueEmailVerification(db, result.user.id);
     // Boas-vindas ao proprietário e aviso à administração da plataforma (sem bloquear o registo).
     const base = appBaseUrl();
-    const trialEnd = result.trialEnd.split('-').reverse().join('/');
     await sendMail(db, {
       to: result.user.email, companyId: result.company.id, kind: 'boas_vindas', subject: 'Bem-vindo ao Kianda', title: `Bem-vindo ao Kianda, ${result.user.name.split(' ')[0]}`,
       paragraphs: [`A conta de ${result.company.name} está criada. Confirme o email na ligação enviada separadamente para iniciar os ${TRIAL_DAYS} dias de experiência nos módulos escolhidos: ${new Intl.ListFormat('pt', { type: 'conjunction' }).format([hasHr ? 'Recursos Humanos' : '', hasModeling ? 'Modelagem Financeira' : '', hasValuation ? 'Análise e Avaliação (Valora)' : ''].filter(Boolean))}.`, 'Sem cobrança automática. Durante a avaliação, pode introduzir dados e pré-visualizar os documentos; exportar e imprimir exige uma subscrição paga. Escolha o plano e o pagamento depois de entrar na conta, em Módulos e licenças.'],

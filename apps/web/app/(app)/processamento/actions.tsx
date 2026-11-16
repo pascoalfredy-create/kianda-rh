@@ -10,7 +10,7 @@ import { BatchVariables, type BatchResult } from './batch-variables';
 import { PayrollSelection } from './payroll-selection';
 import type { PayrollBatchPerson } from '@/lib/types';
 
-export function PrepareButton({ period, prepared, runId, people, payrollPeople, processedIds, variableCount, indexed = 0, fx }: { period: string; prepared: boolean; runId?: string; people: { id: string; name: string }[]; payrollPeople: PayrollBatchPerson[]; processedIds: string[]; variableCount: number; indexed?: number; fx?: { rate: string | null; date: string | null; source: string | null } }) {
+export function PrepareButton({ period, prepared, runId, payrollPeople, processedIds, variableCount, indexed = 0, fx }: { period: string; prepared: boolean; runId?: string; people: { id: string; name: string }[]; payrollPeople: PayrollBatchPerson[]; processedIds: string[]; variableCount: number; indexed?: number; fx?: { rate: string | null; date: string | null; source: string | null } }) {
   const { busy, error, run } = useMutation();
   const draftKey = `payroll:${period}:preparation:`;
   const clearPreparation = useClearWorkspace(draftKey);

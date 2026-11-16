@@ -1,4 +1,4 @@
-import { buildFinancialReportBundle, FINANCIAL_REPORT_VERSION, type FinancialReportBundle, type FinancialReportSource, type FinancialReportDocument } from '@kianda/core';
+import { buildFinancialReportBundle, FINANCIAL_REPORT_VERSION, type FinancialReportBundle, type FinancialReportSource } from '@kianda/core';
 import { and, companies, desc, eq, financialModelVersions, financialPersonnelImports, type Db, type financialModels } from '@kianda/db';
 import { DomainError } from './payroll.js';
 import { financialCalculationSource, financialFingerprint } from './modeling-calculation.js';

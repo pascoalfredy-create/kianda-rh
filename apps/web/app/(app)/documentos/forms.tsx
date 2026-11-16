@@ -30,11 +30,11 @@ export function IssueForm({ templates, employees, initialEmployee, initialTempla
   useEffect(() => {
     if (!employeeId || !key) { setPv(null); return; }
     let cancelled = false;
-    const t = setTimeout(async () => {
+    const t = setTimeout(() => void (async () => {
       const r = await send<{ text: string; missingLabels: string[]; version: string }>('/v1/documents/preview', 'POST', { employeeId, templateKey: key, inputs });
       if (cancelled) return;
       if (r.ok) { setPv(r.data!); setError(''); } else setError(r.message ?? 'Erro');
-    }, 250);
+    })(), 250);
     return () => { cancelled = true; clearTimeout(t); };
   }, [employeeId, key, inputs]);
   async function issue() {

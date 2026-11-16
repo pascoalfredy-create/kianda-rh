@@ -1,7 +1,7 @@
 'use client';
 
 import { SalaryBaseFields } from '@/components/salary-base-fields';
-import { AGT_MUNICIPALITIES, compensationChangeBps, formatPercent, formatAmount, formatUsd, luandaDate, parseAmount } from '@kianda/core';
+import { AGT_MUNICIPALITIES, compensationChangeBps, formatPercent, formatAmount, luandaDate, parseAmount } from '@kianda/core';
 import { useState } from 'react';
 import Link from 'next/link';
 import { IbanField } from '@/components/iban-field';

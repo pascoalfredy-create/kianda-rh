@@ -7,7 +7,7 @@ import {
   CHECKLIST_KINDS, CHECKLIST_LINKS, CHECKLIST_MAX_ITEMS, CHECKLIST_MAX_OFFSET_DAYS, canCompleteTask, checklistProgress, checklistTemplateIssue, luandaDate,
   TASK_RESPONSIBLES, taskState, type ChecklistKind, type TaskResponsible,
 } from '@kianda/core';
-import { and, asc, auditLogs, checklistTasks, checklistTemplates, desc, employeeChecklists, employees, eq, getDb, inArray, isNull, users, type Db } from '@kianda/db';
+import { and, asc, auditLogs, checklistTasks, checklistTemplates, desc, employeeChecklists, employees, eq, getDb, inArray, users, type Db } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { body, requireCompany, requireRole, type Actor, type AppEnv } from '../plugins/tenant.js';

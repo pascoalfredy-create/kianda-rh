@@ -42,6 +42,7 @@ export function sessionToken(c: Ctx) {
 export function jwtSecret(): string {
   const s = process.env.API_JWT_SECRET;
   if (s && s.length >= 32) return s;
+  // Só testes e desenvolvimento local (Node) usam o segredo de desenvolvimento; o Worker recusa arrancar sem segredo (worker.ts).
   if (process.env.NODE_ENV === 'production') throw new Error('API_JWT_SECRET em falta ou com menos de 32 caracteres');
   return 'segredo-de-desenvolvimento-nao-usar-em-producao-0123456789';
 }

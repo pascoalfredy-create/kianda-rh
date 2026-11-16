@@ -38,7 +38,7 @@ export function BatchVariables({ period, people, disabled, onPendingChange, onSa
   const dirty = selected.size > 0 && (!!label.trim() || !!common.trim() || [...selected].some(id => !!amounts[id]?.trim()));
   useEffect(() => { onPendingChange(dirty); }, [dirty, onPendingChange]);
   function choose(id: string, checked: boolean) {
-    const next = new Set(selected); checked ? next.add(id) : next.delete(id); setSelected(next);
+    const next = new Set(selected); if (checked) next.add(id); else next.delete(id); setSelected(next);
   }
   return <form className="form card cols4" aria-label="Variáveis em lote" onSubmit={async (e) => {
     e.preventDefault();

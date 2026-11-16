@@ -19,7 +19,7 @@ export default function Acesso({ params }: { params: Promise<{ token: string }> 
   const [otp, setOtp] = useState('');
   useEffect(() => {
     let current = true;
-    jsonRequest(`/api/v1/public/access/${encodeURIComponent(token)}`).then(({ res, body: j }) => {
+    void jsonRequest(`/api/v1/public/access/${encodeURIComponent(token)}`).then(({ res, body: j }) => {
       if (!current) return;
       if (!res.ok) return setFailure(j.message ?? 'Ligação inválida');
       setInfo(j as Info);

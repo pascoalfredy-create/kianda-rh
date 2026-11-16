@@ -3,7 +3,7 @@ import { requireValuationPlanUsage, valuationUsage } from '../services/valuation
 import { storageMode } from '../services/storage.js';
 import { CYCLES, cyclePrice, DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, MODELING_EXTRA_USER_MONTHLY_MINOR, VALUATION_EXTRA_USER_MONTHLY_MINOR, VALUATION_INCLUDED_USERS, VALUATION_PLANS, VALUATION_PLAN_KEYS, VALUATION_TRIAL_ANALYSES, valuationPlanPrice, defaultModelingSector, modelingPlanPrice, luandaDate, periodEnd, SECTORS, type BillingCycle, type FinancialSector } from '@kianda/core';
 import {
-  and, auditLogs, companyModules, companies, desc, employees, eq, ne, files, gatewayEvents, getDb, like, outboundEmails, paymentRequests, PLATFORM_NIF, platformAdmins, platformSettings, sql, subscriptions, users, type Db,
+  and, auditLogs, companyModules, companies, desc, employees, eq, ne, files, gatewayEvents, getDb, outboundEmails, paymentRequests, PLATFORM_NIF, platformAdmins, platformSettings, sql, subscriptions, users, type Db,
 } from '@kianda/db';
 import { Hono } from 'hono';
 import { z } from 'zod';

@@ -66,13 +66,14 @@ export function ClockCard({ compact, inline }: { compact?: boolean; inline?: boo
   useEffect(() => {
     void sync().then(load);
     const online = () => { setInfo(''); void sync(); };
+    const refresh = () => { void load(); };
     window.addEventListener('online', online);
-    window.addEventListener('kianda:punch', load);
-    const t = setInterval(load, 60_000);
+    window.addEventListener('kianda:punch', refresh);
+    const t = setInterval(refresh, 60_000);
     const tick = () => setClock(new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Africa/Luanda' }));
     tick();
     const c = setInterval(tick, 1000);
-    return () => { clearInterval(t); clearInterval(c); window.removeEventListener('online', online); window.removeEventListener('kianda:punch', load); };
+    return () => { clearInterval(t); clearInterval(c); window.removeEventListener('online', online); window.removeEventListener('kianda:punch', refresh); };
   }, [load, sync]);
 
   async function punch(action: 'in' | 'out') {
@@ -173,7 +174,7 @@ function QrScanner({ onResult, onClose }: { onResult: (text: string) => void; on
   const [problem, setProblem] = useState('');
   useEffect(() => {
     let stream: MediaStream | null = null, stopped = false, timer: ReturnType<typeof setTimeout> | undefined;
-    (async () => {
+    void (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
         if (stopped || !video.current) return;
@@ -185,7 +186,7 @@ function QrScanner({ onResult, onClose }: { onResult: (text: string) => void; on
           if (stopped || !video.current) return;
           const found = await detector.detect(video.current).catch(() => []);
           const hit = found.find((f) => f.rawValue.startsWith('kianda-ponto:'));
-          if (hit) done.current(hit.rawValue); else timer = setTimeout(tick, 300);
+          if (hit) done.current(hit.rawValue); else timer = setTimeout(() => void tick(), 300);
         };
         void tick();
       } catch { setProblem('Não foi possível abrir a câmara. Escreva o código de 6 dígitos.'); }

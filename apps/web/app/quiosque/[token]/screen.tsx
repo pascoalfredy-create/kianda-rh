@@ -20,12 +20,12 @@ export function KioskScreen({ token }: { token: string }) {
         const res = await fetch(`/api/v1/public/kiosk/${encodeURIComponent(token)}`, { cache: 'no-store' });
         const data = await res.json().catch(() => ({}));
         if (stopped) return;
-        if (!res.ok) { setError(data.message ?? 'Quiosque indisponível.'); setScreen(null); timer = setTimeout(load, 30_000); return; }
+        if (!res.ok) { setError(data.message ?? 'Quiosque indisponível.'); setScreen(null); timer = setTimeout(() => void load(), 30_000); return; }
         setError(''); setScreen(data as Screen); setLeft((data as Screen).expiresInSeconds);
         setQr(await QRCode.toDataURL((data as Screen).qr, { margin: 1, width: 360, errorCorrectionLevel: 'M' }));
-        timer = setTimeout(load, Math.max(1, (data as Screen).expiresInSeconds) * 1000 + 300);
+        timer = setTimeout(() => void load(), Math.max(1, (data as Screen).expiresInSeconds) * 1000 + 300);
       } catch {
-        if (!stopped) { setError('Sem rede. A tentar de novo…'); timer = setTimeout(load, 5_000); }
+        if (!stopped) { setError('Sem rede. A tentar de novo…'); timer = setTimeout(() => void load(), 5_000); }
       }
     };
     void load();
