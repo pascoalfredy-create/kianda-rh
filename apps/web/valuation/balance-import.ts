@@ -293,80 +293,104 @@ export function isErpBalance(rows: BalanceCell[][]) {
   return header !== undefined && closingColumn(header) > 0;
 }
 
-export function parseBalance(rows: BalanceCell[][], opts: BalanceOptions): BalanceResult {
-  if (!opts.unit || !(opts.unit in BALANCE_UNITS))
-    return empty(
-      'Indique a unidade dos valores do ficheiro (Kz, milhares de Kz ou milhões de Kz) antes de pré-visualizar.',
-    );
-  const factor = BALANCE_UNITS[opts.unit] / 1e6;
+/** Problema de importação: interrompe a leitura e é devolvido ao ecrã como erro. */
+class BalanceProblem extends Error {}
+const fail = (message: string): never => {
+  throw new BalanceProblem(message);
+};
+
+type MonthRef = { month: number; year: number | null };
+type BalanceLayout = ReturnType<typeof balanceLayout>;
+type RawAccount = { code: string; digits: string; desc: string; values: Record<number, number>; key?: string };
+
+/** Estrutura do ficheiro: linha de cabeçalho, colunas de meses ou de saldo final (ERP) e coluna de descrição. */
+function balanceLayout(rows: BalanceCell[][], opts: BalanceOptions) {
   const hi = rows.findIndex(balanceHeader);
-  if (hi < 0) return empty('Indique colunas de meses (Jan, Fev, 2026-01) ou uma coluna «Saldo final» no balancete.');
+  if (hi < 0) fail('Indique colunas de meses (Jan, Fev, 2026-01) ou uma coluna «Saldo final» no balancete.');
   const hdr = rows[hi]!;
   const finalCol = closingColumn(hdr);
   const erp = finalCol > 0;
   const month = (opts.erpMonth ?? 0) - 1;
   if (erp && (!Number.isInteger(month) || month < 0 || month > 11))
-    return empty('Seleccione o mês do saldo final no balancete do ERP.');
-  const cols = erp
-    ? ([[finalCol, { month, year: opts.year }]] as const)
+    fail('Seleccione o mês do saldo final no balancete do ERP.');
+  const cols: (readonly [number, MonthRef])[] = erp
+    ? [[finalCol, { month, year: opts.year }]]
     : hdr.flatMap((value, i) => {
         const m = i > 0 ? monthHeader(value) : null;
         return m ? [[i, m] as const] : [];
       });
   const other = cols.find(([, m]) => m.year !== null && m.year !== opts.year);
   if (other)
-    return empty(
+    fail(
       `O ficheiro tem colunas de ${other[1].year}; esta análise é do exercício ${opts.year}. Escolha o balancete do exercício certo.`,
     );
   const months = [...new Set(cols.map(([, m]) => m.month))].sort((a, b) => a - b);
-  if (months.length !== cols.length) return empty('O cabeçalho repete o mesmo mês. Deixe uma coluna por mês.');
-  const descCol = hdr.length > 1 && !monthHeader(hdr[1]) && finalCol !== 1 ? 1 : -1;
+  if (months.length !== cols.length) fail('O cabeçalho repete o mesmo mês. Deixe uma coluna por mês.');
   const cumulative = erp ? !opts.erpMonthly : opts.cumulative;
   const priorCol =
     erp && cumulative && month > 0
       ? hdr.findIndex((value, i) => i > 0 && normalise(value) === 'saldo do mes anterior')
       : -1;
-  const sourceCols = priorCol > 0 ? [...cols, [priorCol, { month: month - 1, year: opts.year }] as const] : cols;
+  return {
+    hi,
+    hdr,
+    months,
+    cumulative,
+    descCol: hdr.length > 1 && !monthHeader(hdr[1]) && finalCol !== 1 ? 1 : -1,
+    sourceCols: priorCol > 0 ? [...cols, [priorCol, { month: month - 1, year: opts.year }] as const] : cols,
+  };
+}
 
-  type Raw = { code: string; digits: string; desc: string; values: Record<number, number>; key?: string };
-  const raw = new Map<string, Raw>(),
-    ignored: string[] = [],
-    warnings: string[] = [];
-  for (const r of rows.slice(hi + 1)) {
+/** Valores de uma linha por mês, em milhões de Kz; recusa números inválidos e meses repetidos. */
+function readRowValues(
+  r: BalanceCell[],
+  code: string,
+  layout: BalanceLayout,
+  factor: number,
+  values: Record<number, number>,
+) {
+  for (const [i, m] of layout.sourceCols) {
+    const cell = r[i] ?? null;
+    if (!String(cell ?? '').trim() || ['-', '—', '–'].includes(String(cell).trim())) continue;
+    const value = balanceNumber(cell),
+      mkz = value === null ? NaN : round8(value * factor);
+    if (!Number.isSafeInteger(Math.round(mkz * 1e8)))
+      fail(`Valor inválido na conta ${code}, ${MONTHS_PT[m.month]}. Verifique o número e a unidade.`);
+    if (values[m.month] !== undefined)
+      fail(`A conta ${code} aparece mais de uma vez em ${MONTHS_PT[m.month]}. Confirme o detalhe antes de importar.`);
+    values[m.month] = mkz;
+  }
+  return values;
+}
+
+/** Contas do ficheiro com os valores por mês (contas PGC ou rubricas do modelo); o resto fica em «ignoradas». */
+function readRawAccounts(rows: BalanceCell[][], layout: BalanceLayout, factor: number, ignored: string[]) {
+  const raw = new Map<string, RawAccount>();
+  const headerKey = JSON.stringify(layout.hdr.map(normalise));
+  for (const r of rows.slice(layout.hi + 1)) {
     const code = String(r[0] ?? '').trim();
     if (!code) continue;
     if (balanceHeader(r)) {
-      if (JSON.stringify(r.map(normalise)) !== JSON.stringify(hdr.map(normalise)))
-        return empty('O ficheiro tem cabeçalhos diferentes. Use uma só estrutura de colunas por importação.');
+      if (JSON.stringify(r.map(normalise)) !== headerKey)
+        fail('O ficheiro tem cabeçalhos diferentes. Use uma só estrutura de colunas por importação.');
       continue;
     }
     const key = keyOf(code),
       digits = key ? '' : digitsOf(code);
-    const desc = descCol > 0 ? String(r[descCol] ?? '') : '';
     if (!digits && !key) {
       ignored.push(code);
       continue;
     }
-    const id = key ?? digits,
-      existing = raw.get(id);
-    const values: Record<number, number> = existing?.values ?? {};
-    for (const [i, m] of sourceCols) {
-      const cell = r[i] ?? null;
-      if (!String(cell ?? '').trim() || ['-', '—', '–'].includes(String(cell).trim())) continue;
-      const value = balanceNumber(cell),
-        mkz = value === null ? NaN : round8(value * factor);
-      if (!Number.isSafeInteger(Math.round(mkz * 1e8)))
-        return empty(`Valor inválido na conta ${code}, ${MONTHS_PT[m.month]}. Verifique o número e a unidade.`);
-      if (values[m.month] !== undefined)
-        return empty(
-          `A conta ${code} aparece mais de uma vez em ${MONTHS_PT[m.month]}. Confirme o detalhe antes de importar.`,
-        );
-      values[m.month] = mkz;
-    }
+    const id = key ?? digits;
+    const values = readRowValues(r, code, layout, factor, raw.get(id)?.values ?? {});
+    const desc = layout.descCol > 0 ? String(r[layout.descCol] ?? '') : '';
     if (Object.keys(values).length) raw.set(id, { code, digits, desc, values, key });
   }
+  return raw;
+}
 
-  // Verifica cada subtotal contra os seus filhos imediatos antes de usar apenas o detalhe.
+/** Verifica cada subtotal contra os seus filhos imediatos antes de usar apenas o detalhe. */
+function reconcileSubtotals(raw: Map<string, RawAccount>, layout: BalanceLayout) {
   const children = new Map<string, string[]>(),
     ancestors: string[] = [];
   for (const code of [...raw.values()]
@@ -375,92 +399,81 @@ export function parseBalance(rows: BalanceCell[][], opts: BalanceOptions): Balan
     .sort()) {
     while (ancestors.length && !code.startsWith(ancestors.at(-1)!)) ancestors.pop();
     const parent = ancestors.at(-1);
-    if (parent) {
-      const list = children.get(parent) ?? [];
-      list.push(code);
-      children.set(parent, list);
-    }
+    if (parent) children.set(parent, [...(children.get(parent) ?? []), code]);
     ancestors.push(code);
   }
   for (const [code, childCodes] of children) {
     const parent = raw.get(code)!;
-    for (const [, { month: m }] of sourceCols) {
+    for (const [, { month: m }] of layout.sourceCols) {
       const value = parent.values[m];
       if (value === undefined) continue;
       const childrenTotal = childCodes.reduce((sum, child) => sum + (raw.get(child)!.values[m] ?? 0), 0);
       const diff = Math.round((value - childrenTotal) * 1e8) / 100;
       if (diff !== 0)
-        return empty(
+        fail(
           `Subtotal da conta ${parent.code} em ${MONTHS_PT[m]} difere das subcontas em ${diff.toLocaleString('pt-PT')} Kz. Inclua todo o detalhe ou importe apenas o subtotal.`,
         );
     }
   }
-  const parents = [...children.keys()].map(code => raw.get(code)!.code);
-  const acc: Record<string, Record<number, number>> = {},
-    lines: BalanceLine[] = [];
-  for (const x of raw.values()) {
-    if (children.has(x.digits)) continue;
-    const mapped = x.key ?? keyOf(opts.mapping?.[x.digits] ?? '');
-    const credit = mapped ? CREDIT_KEYS.has(mapped) : CREDIT_NORMAL.some(p => x.digits.startsWith(p));
-    const flow = mapped ? FLOW_KEYS.has(mapped) : FLOW_PREFIX.test(x.digits);
-    const mixed = !mapped && MIXED.some(p => x.digits.startsWith(p));
-    const movements: NonNullable<BalanceLine['movements']> = [];
-    let key: string | null = null,
-      total = 0,
-      contrary = false;
-    for (const m of months) {
-      let value = x.values[m];
-      if (value === undefined) continue;
-      if (cumulative && flow && m > 0) {
-        const previous = x.values[m - 1];
-        if (previous === undefined)
-          return empty(
-            `Falta o saldo acumulado de ${MONTHS_PT[m - 1]} na conta ${x.code} para calcular o movimento de ${MONTHS_PT[m]}. Inclua o mês anterior ou um saldo explícito de 0 quando aplicável.`,
-          );
-        movements.push({ month: m, previous, current: value, movement: round8(value - previous) });
-        value -= previous;
-      }
-      // No modo de natureza normal, um negativo é um estorno. Contas mistas positivas representam credores.
-      const natural = (opts.signed ? credit : mixed) ? -value : value;
-      const got = mapped ? { key: mapped, value: natural, contrary: natural < 0 } : rubric(x.digits, natural);
-      if (!got.key) break;
-      key = got.key;
-      contrary ||= !!got.contrary;
-      const target = (acc[key] ??= {});
-      target[m] = round8((target[m] ?? 0) + got.value);
-      total += got.value;
-    }
-    if (key)
-      lines.push({
-        code: x.code,
-        desc: x.desc,
-        key,
-        total: round8(total),
-        contrary,
-        ...(movements.length ? { movements } : {}),
-      });
-    else ignored.push(x.code + (x.desc ? ' ' + x.desc : ''));
-  }
-  const contraryLines = lines.filter(l => l.contrary);
-  if (contraryLines.length)
-    warnings.push(
-      `${contraryLines.length} conta(s) com saldo de natureza contrária ou estorno. Confirme a classificação: ${contraryLines
-        .slice(0, 5)
-        .map(l => l.code)
-        .join(', ')}.`,
-    );
-  if (parents.length)
-    warnings.push(`${parents.length} conta(s)-mãe reconciliadas com o detalhe e excluídas para evitar duplicação.`);
-  if (!lines.length)
-    return {
-      ...empty('Nenhuma conta do ficheiro corresponde às rubricas do modelo. Confirme a coluna de contas PGC.'),
-      ignored,
-      parents,
-    };
+  return children;
+}
 
+/** Classifica uma conta numa rubrica, mês a mês (movimento do mês em ficheiros acumulados), e soma-a às rubricas. */
+function classifyAccount(
+  x: RawAccount,
+  layout: BalanceLayout,
+  opts: BalanceOptions,
+  acc: Record<string, Record<number, number>>,
+): BalanceLine | null {
+  const mapped = x.key ?? keyOf(opts.mapping?.[x.digits] ?? '');
+  const credit = mapped ? CREDIT_KEYS.has(mapped) : CREDIT_NORMAL.some(p => x.digits.startsWith(p));
+  const flow = mapped ? FLOW_KEYS.has(mapped) : FLOW_PREFIX.test(x.digits);
+  const mixed = !mapped && MIXED.some(p => x.digits.startsWith(p));
+  const movements: NonNullable<BalanceLine['movements']> = [];
+  let key: string | null = null,
+    total = 0,
+    contrary = false;
+  for (const m of layout.months) {
+    let value = x.values[m];
+    if (value === undefined) continue;
+    if (layout.cumulative && flow && m > 0) {
+      const previous = x.values[m - 1];
+      if (previous === undefined)
+        fail(
+          `Falta o saldo acumulado de ${MONTHS_PT[m - 1]} na conta ${x.code} para calcular o movimento de ${MONTHS_PT[m]}. Inclua o mês anterior ou um saldo explícito de 0 quando aplicável.`,
+        );
+      movements.push({ month: m, previous: previous!, current: value, movement: round8(value - previous!) });
+      value -= previous!;
+    }
+    // No modo de natureza normal, um negativo é um estorno. Contas mistas positivas representam credores.
+    const natural = (opts.signed ? credit : mixed) ? -value : value;
+    const got = mapped ? { key: mapped, value: natural, contrary: natural < 0 } : rubric(x.digits, natural);
+    if (!got.key) break;
+    key = got.key;
+    contrary ||= !!got.contrary;
+    const target = (acc[key] ??= {});
+    target[m] = round8((target[m] ?? 0) + got.value);
+    total += got.value;
+  }
+  if (!key) return null;
+  return {
+    code: x.code,
+    desc: x.desc,
+    key,
+    total: round8(total),
+    contrary,
+    ...(movements.length ? { movements } : {}),
+  };
+}
+
+/** Controlo por mês: resultado (proveitos − custos) e diferença de balanço face ao resultado acumulado. */
+function monthlyControl(acc: Record<string, Record<number, number>>, months: number[]) {
   const get = (k: string, m: number) => acc[k]?.[m] ?? 0;
+  const has = (keys: string[], m: number) => keys.some(k => acc[k]?.[m] !== undefined);
+  const assetKeys = ['imob', 'amort', 'invfin', 'exist', 'clientes', 'outdev', 'caixa'];
+  const claimKeys = ['empMLP', 'empCP', 'fornec', 'estado', 'outcred', 'capital', 'reservas'];
   let cumulativeResult = 0;
-  const control = months.map((m, index) => {
+  return months.map((m, index) => {
     const proveitos = get('v61', m) + get('v62', m) + get('v63', m) + get('p66', m) + get('p68', m);
     const custos =
       get('c71', m) + get('c72', m) + get('c73', m) + get('c75', m) + get('c76', m) + get('c78', m) + get('imp', m);
@@ -476,19 +489,63 @@ export function parseBalance(rows: BalanceCell[][], opts: BalanceOptions): Balan
       get('caixa', m);
     const passivo = get('empMLP', m) + get('empCP', m) + get('fornec', m) + get('estado', m) + get('outcred', m);
     const capital = get('capital', m) + get('reservas', m);
-    const hasAssets = ['imob', 'amort', 'invfin', 'exist', 'clientes', 'outdev', 'caixa'].some(
-      k => acc[k]?.[m] !== undefined,
-    );
-    const hasClaims = ['empMLP', 'empCP', 'fornec', 'estado', 'outcred', 'capital', 'reservas'].some(
-      k => acc[k]?.[m] !== undefined,
-    );
-    const canReconcile = hasAssets && hasClaims && index === m;
+    const canReconcile = has(assetKeys, m) && has(claimKeys, m) && index === m;
     const differenceKz = canReconcile
       ? Math.round((activo - passivo - capital - cumulativeResult) * 1e8) / 100 || 0
       : null;
     return { month: m, resultKz: Math.round(result * 1e8) / 100, differenceKz };
   });
-  return { acc, lines, ignored, parents, months, warnings, control };
+}
+
+export function parseBalance(rows: BalanceCell[][], opts: BalanceOptions): BalanceResult {
+  if (!opts.unit || !(opts.unit in BALANCE_UNITS))
+    return empty(
+      'Indique a unidade dos valores do ficheiro (Kz, milhares de Kz ou milhões de Kz) antes de pré-visualizar.',
+    );
+  try {
+    const layout = balanceLayout(rows, opts);
+    const ignored: string[] = [],
+      warnings: string[] = [];
+    const raw = readRawAccounts(rows, layout, BALANCE_UNITS[opts.unit] / 1e6, ignored);
+    const children = reconcileSubtotals(raw, layout);
+    const parents = [...children.keys()].map(code => raw.get(code)!.code);
+    const acc: Record<string, Record<number, number>> = {},
+      lines: BalanceLine[] = [];
+    for (const x of raw.values()) {
+      if (children.has(x.digits)) continue;
+      const line = classifyAccount(x, layout, opts, acc);
+      if (line) lines.push(line);
+      else ignored.push(x.code + (x.desc ? ' ' + x.desc : ''));
+    }
+    const contraryLines = lines.filter(l => l.contrary);
+    if (contraryLines.length)
+      warnings.push(
+        `${contraryLines.length} conta(s) com saldo de natureza contrária ou estorno. Confirme a classificação: ${contraryLines
+          .slice(0, 5)
+          .map(l => l.code)
+          .join(', ')}.`,
+      );
+    if (parents.length)
+      warnings.push(`${parents.length} conta(s)-mãe reconciliadas com o detalhe e excluídas para evitar duplicação.`);
+    if (!lines.length)
+      return {
+        ...empty('Nenhuma conta do ficheiro corresponde às rubricas do modelo. Confirme a coluna de contas PGC.'),
+        ignored,
+        parents,
+      };
+    return {
+      acc,
+      lines,
+      ignored,
+      parents,
+      months: layout.months,
+      warnings,
+      control: monthlyControl(acc, layout.months),
+    };
+  } catch (e) {
+    if (e instanceof BalanceProblem) return empty(e.message);
+    throw e;
+  }
 }
 
 /** Linhas de uma tabela em PDF com texto: colunas pelo cabeçalho que tem meses. */
