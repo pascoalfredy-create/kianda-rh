@@ -13,16 +13,41 @@ describe('módulos independentes', () => {
     expect(moduleAccess(grant, '2026-11-08')).toMatchObject({ canRead: true, canWrite: false });
   });
   it('cancelamento e suspensão prevalecem sobre a data paga', () => {
-    for (const status of ['suspended', 'cancelled'] as const) expect(moduleAccess({ ...grant, status }, '2026-10-28').canWrite).toBe(false);
+    for (const status of ['suspended', 'cancelled'] as const)
+      expect(moduleAccess({ ...grant, status }, '2026-10-28').canWrite).toBe(false);
   });
   it('experimental exige prazo e expira sem tolerância adicional', () => {
     expect(moduleAccess({ ...grant, status: 'trial', paidUntil: null }, '2026-10-28').canWrite).toBe(false);
-    expect(moduleAccess({ ...grant, status: 'trial', paidUntil: null, trialEndsAt: '2026-10-28' }, '2026-10-28').canWrite).toBe(true);
+    expect(
+      moduleAccess({ ...grant, status: 'trial', paidUntil: null, trialEndsAt: '2026-10-28' }, '2026-10-28').canWrite,
+    ).toBe(true);
   });
   it('separa Modelagem, domínios RH e serviços comuns com limites exactos', () => {
     for (const path of ['/v1/modeling', '/v1/modeling/models/123']) expect(moduleForPath(path)).toBe('modeling');
-    for (const module of ['hr', 'modeling', 'valuation'] as const) expect(moduleForPath(`/v1/copilots/${module}/setup`)).toBe(module);
-    for (const path of ['/v1/payroll-runs', '/v1/payslips', '/v1/reviews', '/v1/sector', '/v1/files', '/v1/billing-extra', '/v1/modeling-extra', '/v1/access-extra']) expect(moduleForPath(path)).toBe('hr');
-    for (const path of ['/v1/auth/me', '/v1/users', '/v1/access', '/v1/access/invites', '/v1/modules', '/v1/company/settings', '/v1/company/logo', '/v1/platform/companies', '/v1/billing']) expect(moduleForPath(path)).toBeNull();
+    for (const module of ['hr', 'modeling', 'valuation'] as const)
+      expect(moduleForPath(`/v1/copilots/${module}/setup`)).toBe(module);
+    for (const path of [
+      '/v1/payroll-runs',
+      '/v1/payslips',
+      '/v1/reviews',
+      '/v1/sector',
+      '/v1/files',
+      '/v1/billing-extra',
+      '/v1/modeling-extra',
+      '/v1/access-extra',
+    ])
+      expect(moduleForPath(path)).toBe('hr');
+    for (const path of [
+      '/v1/auth/me',
+      '/v1/users',
+      '/v1/access',
+      '/v1/access/invites',
+      '/v1/modules',
+      '/v1/company/settings',
+      '/v1/company/logo',
+      '/v1/platform/companies',
+      '/v1/billing',
+    ])
+      expect(moduleForPath(path)).toBeNull();
   });
 });

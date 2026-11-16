@@ -11,11 +11,17 @@ export type Db = NodePgDatabase<typeof schema>;
 let instance: { db: Db; pool: pg.Pool } | undefined;
 const requestScope = new AsyncLocalStorage<Db>();
 const queryMeasurement = new AsyncLocalStorage<{ queries: number }>();
-const queryLogger = { logQuery() { const measurement = queryMeasurement.getStore(); if (measurement) measurement.queries += 1; } };
+const queryLogger = {
+  logQuery() {
+    const measurement = queryMeasurement.getStore();
+    if (measurement) measurement.queries += 1;
+  },
+};
 
 /** Medição isolada por operação, sem guardar SQL, parâmetros ou dados pessoais. */
 export async function measureQueries<T>(fn: () => Promise<T>) {
-  const measurement = { queries: 0 }, start = performance.now();
+  const measurement = { queries: 0 },
+    start = performance.now();
   const value = await queryMeasurement.run(measurement, fn);
   return { value, queries: measurement.queries, elapsedMs: Math.round(performance.now() - start) };
 }
@@ -65,7 +71,7 @@ export { and, asc, desc, eq, gt, gte, inArray, isNull, like, lt, lte, ne, or, sq
  * por empresa, o Postgres só devolve e só aceita linhas desta empresa.
  */
 export async function withTenant<T>(companyId: string, fn: () => Promise<T>): Promise<T> {
-  return getDb().transaction(async (tx) => {
+  return getDb().transaction(async tx => {
     await tx.execute(sql`select set_config('app.company_id', ${companyId}, true)`);
     await tx.execute(sql`set local role kianda_app`);
     return requestScope.run(tx as unknown as Db, fn);

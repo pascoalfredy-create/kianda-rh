@@ -5,7 +5,17 @@
 import { addDays, businessDays } from './calendar.js';
 import type { CountryPack } from './packs/types.js';
 
-export type AbsenceType = 'vacation' | 'sick' | 'justified' | 'unjustified' | 'maternity' | 'paternity' | 'marriage' | 'bereavement' | 'training' | 'unpaid_leave';
+export type AbsenceType =
+  | 'vacation'
+  | 'sick'
+  | 'justified'
+  | 'unjustified'
+  | 'maternity'
+  | 'paternity'
+  | 'marriage'
+  | 'bereavement'
+  | 'training'
+  | 'unpaid_leave';
 
 export interface AbsencePolicy {
   type: AbsenceType;
@@ -24,35 +34,110 @@ export interface AbsencePolicy {
 }
 
 export const ABSENCE_POLICIES: Record<AbsenceType, AbsencePolicy> = {
-  vacation: { type: 'vacation', label: 'Férias', deductsVacation: true, paid: true, selfService: true, needsProof: false, color: '#127a66' },
-  sick: { type: 'sick', label: 'Doença', deductsVacation: false, paid: true, selfService: true, needsProof: true, color: '#c2412d' },
-  justified: { type: 'justified', label: 'Falta justificada', deductsVacation: false, paid: true, selfService: true, needsProof: true, color: '#b7791f' },
-  unjustified: { type: 'unjustified', label: 'Falta injustificada', deductsVacation: false, paid: false, selfService: false, needsProof: false, color: '#5b6170' },
+  vacation: {
+    type: 'vacation',
+    label: 'Férias',
+    deductsVacation: true,
+    paid: true,
+    selfService: true,
+    needsProof: false,
+    color: '#127a66',
+  },
+  sick: {
+    type: 'sick',
+    label: 'Doença',
+    deductsVacation: false,
+    paid: true,
+    selfService: true,
+    needsProof: true,
+    color: '#c2412d',
+  },
+  justified: {
+    type: 'justified',
+    label: 'Falta justificada',
+    deductsVacation: false,
+    paid: true,
+    selfService: true,
+    needsProof: true,
+    color: '#b7791f',
+  },
+  unjustified: {
+    type: 'unjustified',
+    label: 'Falta injustificada',
+    deductsVacation: false,
+    paid: false,
+    selfService: false,
+    needsProof: false,
+    color: '#5b6170',
+  },
   maternity: {
-    type: 'maternity', label: 'Licença de maternidade', deductsVacation: false, paid: 'social_security', selfService: true, needsProof: true, color: '#8a4fc7',
-    limit: (p) => ({ calendarDays: p.leave.maternityCalendarDays }),
+    type: 'maternity',
+    label: 'Licença de maternidade',
+    deductsVacation: false,
+    paid: 'social_security',
+    selfService: true,
+    needsProof: true,
+    color: '#8a4fc7',
+    limit: p => ({ calendarDays: p.leave.maternityCalendarDays }),
   },
   paternity: {
     // Art. 218.º: 1 dia pago + 7 dias úteis complementares não remunerados (descontados no processamento).
-    type: 'paternity', label: 'Licença de paternidade', deductsVacation: false, paid: false, selfService: true, needsProof: true, color: '#3f6fd8',
-    limit: (p) => ({ workingDays: p.leave.paternityPaidDays + p.leave.paternityUnpaidWorkingDays }),
+    type: 'paternity',
+    label: 'Licença de paternidade',
+    deductsVacation: false,
+    paid: false,
+    selfService: true,
+    needsProof: true,
+    color: '#3f6fd8',
+    limit: p => ({ workingDays: p.leave.paternityPaidDays + p.leave.paternityUnpaidWorkingDays }),
   },
   marriage: {
     // Art. 222.º, n.º 1, a): até 8 dias seguidos de calendário.
-    type: 'marriage', label: 'Casamento', deductsVacation: false, paid: true, selfService: true, needsProof: true, color: '#d6589a',
-    limit: (p) => ({ calendarDays: p.leave.marriageCalendarDays }),
+    type: 'marriage',
+    label: 'Casamento',
+    deductsVacation: false,
+    paid: true,
+    selfService: true,
+    needsProof: true,
+    color: '#d6589a',
+    limit: p => ({ calendarDays: p.leave.marriageCalendarDays }),
   },
   bereavement: {
     // Art. 223.º: 8 dias úteis (cônjuge, pais, filhos, irmãos, agregado); 3 (avós, netos, tios, primos, sobrinhos, sogros, genros, noras).
-    type: 'bereavement', label: 'Luto', deductsVacation: false, paid: true, selfService: true, needsProof: true, color: '#3d4452',
-    limit: (p) => ({ workingDays: p.leave.bereavementWorkingDays }),
+    type: 'bereavement',
+    label: 'Luto',
+    deductsVacation: false,
+    paid: true,
+    selfService: true,
+    needsProof: true,
+    color: '#3d4452',
+    limit: p => ({ workingDays: p.leave.bereavementWorkingDays }),
   },
-  training: { type: 'training', label: 'Formação', deductsVacation: false, paid: true, selfService: true, needsProof: false, color: '#2a8fb0' },
+  training: {
+    type: 'training',
+    label: 'Formação',
+    deductsVacation: false,
+    paid: true,
+    selfService: true,
+    needsProof: false,
+    color: '#2a8fb0',
+  },
   // Art. 216.º: autorizada pelo empregador; conta para antiguidade; acima de 30 dias as férias passam a proporcionais.
-  unpaid_leave: { type: 'unpaid_leave', label: 'Licença sem remuneração', deductsVacation: false, paid: false, selfService: true, needsProof: false, color: '#7a6f5b' },
+  unpaid_leave: {
+    type: 'unpaid_leave',
+    label: 'Licença sem remuneração',
+    deductsVacation: false,
+    paid: false,
+    selfService: true,
+    needsProof: false,
+    color: '#7a6f5b',
+  },
 };
 
-const parse = (d: string) => { const [y, m, day] = d.split('-').map(Number) as [number, number, number]; return { y, m, day }; };
+const parse = (d: string) => {
+  const [y, m, day] = d.split('-').map(Number) as [number, number, number];
+  return { y, m, day };
+};
 
 /** Meses completos de serviço entre a admissão e uma data (inclusive). */
 export function fullMonthsBetween(from: string, to: string): number {
@@ -68,24 +153,40 @@ export function fullMonthsBetween(from: string, to: string): number {
  * Dias de férias a que o colaborador tem direito no ano civil.
  * Ano de admissão: `firstYearDaysPerMonth` por mês completo até 31/12 (limitado ao máximo anual). Anos seguintes: máximo anual.
  */
-export function vacationEntitlement(hireDate: string, year: number, pack: CountryPack, contract?: { type: string; startDate: string; endDate: string | null } | null, suspensions: { startDate: string; endDate: string }[] = []): number {
+export function vacationEntitlement(
+  hireDate: string,
+  year: number,
+  pack: CountryPack,
+  contract?: { type: string; startDate: string; endDate: string | null } | null,
+  suspensions: { startDate: string; endDate: string }[] = [],
+): number {
   const hireYear = Number(hireDate.slice(0, 4));
   if (year < hireYear) return 0;
   const max = pack.labour.vacationWorkingDays;
   // Art. 204.º, n.º 3, e art. 216.º, n.º 4: contrato suspenso no ano (licença sem remuneração > 30 dias) —
   // 2 dias úteis por mês completo de trabalho, com o mínimo de 6.
-  const long = suspensions.filter((x) => (Date.parse(x.endDate) - Date.parse(x.startDate)) / 86_400_000 + 1 > 30 && x.startDate <= `${year}-12-31` && x.endDate >= `${year}-01-01`);
+  const long = suspensions.filter(
+    x =>
+      (Date.parse(x.endDate) - Date.parse(x.startDate)) / 86_400_000 + 1 > 30 &&
+      x.startDate <= `${year}-12-31` &&
+      x.endDate >= `${year}-01-01`,
+  );
   if (long.length && !(contract?.type === 'fixed_term')) {
     const first = year === hireYear ? Number(hireDate.slice(5, 7)) + (hireDate.slice(8) === '01' ? 0 : 1) : 1;
     let months = 0;
     for (let m = first; m <= 12; m++) {
-      const a = `${year}-${String(m).padStart(2, '0')}-01`, z = `${year}-${String(m).padStart(2, '0')}-${String(new Date(Date.UTC(year, m, 0)).getUTCDate()).padStart(2, '0')}`;
-      if (!long.some((x) => x.startDate <= z && x.endDate >= a)) months++;
+      const a = `${year}-${String(m).padStart(2, '0')}-01`,
+        z = `${year}-${String(m).padStart(2, '0')}-${String(new Date(Date.UTC(year, m, 0)).getUTCDate()).padStart(2, '0')}`;
+      if (!long.some(x => x.startDate <= z && x.endDate >= a)) months++;
     }
     return Math.min(max, Math.max(pack.leave.firstYearMinDays, months * pack.leave.firstYearDaysPerMonth));
   }
   // Art. 205.º: contrato a termo (ou renovação) até um ano — 2 dias úteis por mês completo no ano, máximo 22, sem mínimo.
-  if (contract?.type === 'fixed_term' && contract.endDate && (Date.parse(contract.endDate) - Date.parse(contract.startDate)) / 86_400_000 < 366) {
+  if (
+    contract?.type === 'fixed_term' &&
+    contract.endDate &&
+    (Date.parse(contract.endDate) - Date.parse(contract.startDate)) / 86_400_000 < 366
+  ) {
     const from = contract.startDate > `${year}-01-01` ? contract.startDate : `${year}-01-01`;
     const to = contract.endDate < `${year}-12-31` ? contract.endDate : `${year}-12-31`;
     return Math.min(max, fullMonthsBetween(from, to) * pack.leave.firstYearDaysPerMonth);
@@ -108,7 +209,11 @@ export function vacationEligibleFrom(hireDate: string, pack: CountryPack): strin
 }
 
 /** Dias úteis de um período repartidos por ano civil (férias de Dezembro a Janeiro contam em dois saldos). */
-export function workingDaysByYear(from: string, to: string, packFor: (year: number) => CountryPack): Record<number, number> {
+export function workingDaysByYear(
+  from: string,
+  to: string,
+  packFor: (year: number) => CountryPack,
+): Record<number, number> {
   const out: Record<number, number> = {};
   const y1 = Number(from.slice(0, 4));
   const y2 = Number(to.slice(0, 4));
@@ -134,7 +239,13 @@ export interface VacationBalance {
   available: number;
 }
 
-export function vacationBalance(input: { year: number; entitlement: number; carriedOver?: number; approvedDays: number; pendingDays: number }): VacationBalance {
+export function vacationBalance(input: {
+  year: number;
+  entitlement: number;
+  carriedOver?: number;
+  approvedDays: number;
+  pendingDays: number;
+}): VacationBalance {
   const carriedOver = input.carriedOver ?? 0;
   return {
     year: input.year,
@@ -147,12 +258,20 @@ export function vacationBalance(input: { year: number; entitlement: number; carr
 }
 
 /** Verifica o limite legal por ocorrência. Devolve a mensagem de erro, ou null. */
-export function checkAbsenceLimit(type: AbsenceType, from: string, to: string, workingDays: number, pack: CountryPack): string | null {
+export function checkAbsenceLimit(
+  type: AbsenceType,
+  from: string,
+  to: string,
+  workingDays: number,
+  pack: CountryPack,
+): string | null {
   const limit = ABSENCE_POLICIES[type].limit?.(pack);
   if (!limit) return null;
   const label = ABSENCE_POLICIES[type].label;
-  if (limit.workingDays !== undefined && workingDays > limit.workingDays) return `${label}: máximo de ${limit.workingDays} dias úteis por ocorrência (pedido: ${workingDays})`;
+  if (limit.workingDays !== undefined && workingDays > limit.workingDays)
+    return `${label}: máximo de ${limit.workingDays} dias úteis por ocorrência (pedido: ${workingDays})`;
   const cal = calendarDays(from, to);
-  if (limit.calendarDays !== undefined && cal > limit.calendarDays) return `${label}: máximo de ${limit.calendarDays} dias seguidos (pedido: ${cal})`;
+  if (limit.calendarDays !== undefined && cal > limit.calendarDays)
+    return `${label}: máximo de ${limit.calendarDays} dias seguidos (pedido: ${cal})`;
   return null;
 }

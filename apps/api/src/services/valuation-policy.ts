@@ -1,5 +1,17 @@
 import { luandaDate, VALUATION_INCLUDED_USERS, VALUATION_TRIAL_ANALYSES, valuationCapacity } from '@kianda/core';
-import { and, companies, companyModules, eq, gte, isNull, or, sql, valuationAnalyses, valuationMembers, type Db } from '@kianda/db';
+import {
+  and,
+  companies,
+  companyModules,
+  eq,
+  gte,
+  isNull,
+  or,
+  sql,
+  valuationAnalyses,
+  valuationMembers,
+  type Db,
+} from '@kianda/db';
 import { DomainError } from './payroll.js';
 
 /** Serializa admissões de utilizadores e criação/restauro de análises dentro da transacção da empresa. */
@@ -8,23 +20,68 @@ export async function lockValuationCompany(db: Db, companyId: string) {
 }
 
 export async function valuationUsage(db: Db, companyId: string) {
-  const [grant] = await db.select().from(companyModules).where(and(eq(companyModules.companyId, companyId), eq(companyModules.module, 'valuation')));
+  const [grant] = await db
+    .select()
+    .from(companyModules)
+    .where(and(eq(companyModules.companyId, companyId), eq(companyModules.module, 'valuation')));
   // Vagas ocupadas: análises activas + as restauradas e de novo arquivadas neste mês (hora de Luanda), contra a rotação de clientes.
   const monthStart = new Date(`${luandaDate(new Date()).slice(0, 7)}-01T00:00:00+01:00`);
-  const [analyses] = await db.select({ n: sql<number>`count(*)::int`, held: sql<number>`count(*) filter (where ${valuationAnalyses.archivedAt} is not null)::int` }).from(valuationAnalyses)
-    .where(and(eq(valuationAnalyses.companyId, companyId), or(isNull(valuationAnalyses.archivedAt), and(gte(valuationAnalyses.restoredAt, monthStart), gte(valuationAnalyses.archivedAt, monthStart)))));
-  const [members] = await db.select({ n: sql<number>`count(*)::int` }).from(valuationMembers).where(and(eq(valuationMembers.companyId, companyId), eq(valuationMembers.enabled, true)));
-  return { ...valuationCapacity({ analysisLimit: grant ? grant.projectLimit : VALUATION_TRIAL_ANALYSES, extraUsers: grant?.extraUsers ?? 0 }, analyses?.n ?? 0, members?.n ?? 0), heldArchived: analyses?.held ?? 0 };
+  const [analyses] = await db
+    .select({
+      n: sql<number>`count(*)::int`,
+      held: sql<number>`count(*) filter (where ${valuationAnalyses.archivedAt} is not null)::int`,
+    })
+    .from(valuationAnalyses)
+    .where(
+      and(
+        eq(valuationAnalyses.companyId, companyId),
+        or(
+          isNull(valuationAnalyses.archivedAt),
+          and(gte(valuationAnalyses.restoredAt, monthStart), gte(valuationAnalyses.archivedAt, monthStart)),
+        ),
+      ),
+    );
+  const [members] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(valuationMembers)
+    .where(and(eq(valuationMembers.companyId, companyId), eq(valuationMembers.enabled, true)));
+  return {
+    ...valuationCapacity(
+      { analysisLimit: grant ? grant.projectLimit : VALUATION_TRIAL_ANALYSES, extraUsers: grant?.extraUsers ?? 0 },
+      analyses?.n ?? 0,
+      members?.n ?? 0,
+    ),
+    heldArchived: analyses?.held ?? 0,
+  };
 }
 
 /** Um plano (pago ou definido pela plataforma) nunca fica abaixo do uso actual: arquivar análises ou retirar acessos primeiro. */
-export async function requireValuationPlanUsage(db: Db, companyId: string, limits: { analysisLimit: number | null; extraUsers: number }) {
+export async function requireValuationPlanUsage(
+  db: Db,
+  companyId: string,
+  limits: { analysisLimit: number | null; extraUsers: number },
+) {
   const usage = await valuationUsage(db, companyId);
-  if (limits.analysisLimit !== null && usage.activeAnalyses > limits.analysisLimit) throw new DomainError('limite_inferior_ao_uso', `A empresa tem ${usage.activeAnalyses} análises activas. Arquive análises antes de escolher um plano com ${limits.analysisLimit}.`, 409);
-  if (usage.enabledUsers > VALUATION_INCLUDED_USERS + limits.extraUsers) throw new DomainError('limite_inferior_ao_uso', `A empresa tem ${usage.enabledUsers} utilizadores com acesso ao Valora: acrescente utilizadores extra ou retire acessos.`, 409);
+  if (limits.analysisLimit !== null && usage.activeAnalyses > limits.analysisLimit)
+    throw new DomainError(
+      'limite_inferior_ao_uso',
+      `A empresa tem ${usage.activeAnalyses} análises activas. Arquive análises antes de escolher um plano com ${limits.analysisLimit}.`,
+      409,
+    );
+  if (usage.enabledUsers > VALUATION_INCLUDED_USERS + limits.extraUsers)
+    throw new DomainError(
+      'limite_inferior_ao_uso',
+      `A empresa tem ${usage.enabledUsers} utilizadores com acesso ao Valora: acrescente utilizadores extra ou retire acessos.`,
+      409,
+    );
 }
 
 export async function requireAnalysisCapacity(db: Db, companyId: string) {
   await lockValuationCompany(db, companyId);
-  if (!(await valuationUsage(db, companyId)).canCreateAnalysis) throw new DomainError('limite_analises', 'Atingiu o número de análises activas contratado. Arquive uma análise ou mude de plano em Módulos e licenças.', 409);
+  if (!(await valuationUsage(db, companyId)).canCreateAnalysis)
+    throw new DomainError(
+      'limite_analises',
+      'Atingiu o número de análises activas contratado. Arquive uma análise ou mude de plano em Módulos e licenças.',
+      409,
+    );
 }

@@ -16,14 +16,25 @@ export default async function Conta() {
   const content = (
     <>
       <h1>A minha conta</h1>
-      <p className="sub">{me.user.name} · {me.platformAdmin ? 'Administração da plataforma' : me.company?.name}</p>
+      <p className="sub">
+        {me.user.name} · {me.platformAdmin ? 'Administração da plataforma' : me.company?.name}
+      </p>
       <PasswordForm />
       <div style={{ height: 16 }} />
       <EndSessions />
       <div style={{ height: 16 }} />
       <TwoFactor enabled={tf.enabled} recommended={tf.recommended} />
-      {!me.platformAdmin && <><div style={{ height: 16 }} /><PushSettings /></>}
+      {!me.platformAdmin && (
+        <>
+          <div style={{ height: 16 }} />
+          <PushSettings />
+        </>
+      )}
     </>
   );
-  return me.platformAdmin ? <PlatformShell current="account">{content}</PlatformShell> : <AppLayout>{content}</AppLayout>;
+  return me.platformAdmin ? (
+    <PlatformShell current="account">{content}</PlatformShell>
+  ) : (
+    <AppLayout>{content}</AppLayout>
+  );
 }

@@ -15,11 +15,35 @@ function LicenceBanner({ me }: { me: NonNullable<Awaited<ReturnType<typeof curre
   const l = me.licence;
   if (!l || !me.modules.hr.subscribed) return null;
   const manage = ['owner', 'finance'].includes(me.user.role);
-  const link = manage ? <> <Link href="/licenca"><b>Ver planos</b></Link></> : null;
-  if (!l.canWrite) return <div className="alert no-print">O RH está só para consulta ({l.label.toLowerCase()}). Pode ver tudo, mas não gravar, exportar nem imprimir. {manage ? 'Regularize a licença para voltar ao normal.' : 'Fale com quem gere a conta da empresa.'}{link}</div>;
-  if (l.status === 'past_due') return <div className="warn no-print">O pagamento da licença está em atraso. Daqui a poucos dias a conta fica só para consulta.{link}</div>;
+  const link = manage ? (
+    <>
+      {' '}
+      <Link href="/licenca">
+        <b>Ver planos</b>
+      </Link>
+    </>
+  ) : null;
+  if (!l.canWrite)
+    return (
+      <div className="alert no-print">
+        O RH está só para consulta ({l.label.toLowerCase()}). Pode ver tudo, mas não gravar, exportar nem imprimir.{' '}
+        {manage ? 'Regularize a licença para voltar ao normal.' : 'Fale com quem gere a conta da empresa.'}
+        {link}
+      </div>
+    );
+  if (l.status === 'past_due')
+    return (
+      <div className="warn no-print">
+        O pagamento da licença está em atraso. Daqui a poucos dias a conta fica só para consulta.{link}
+      </div>
+    );
   if (l.status === 'trial' && l.trialEndsAt) {
-    return <div className="trial-note no-print">{trialBannerText('Kianda', l.trialEndsAt, luandaDate(new Date()))}{link}</div>;
+    return (
+      <div className="trial-note no-print">
+        {trialBannerText('Kianda', l.trialEndsAt, luandaDate(new Date()))}
+        {link}
+      </div>
+    );
   }
   return null;
 }
@@ -30,10 +54,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (me.user.requiresEmailVerification) redirect('/confirmar-email');
   if (me.platformAdmin) redirect('/plataforma');
   const counts = me.notifications ?? { absences: 0, expenses: 0, tasks: 0, acks: 0 };
-  return <Suspense fallback={<div className="empty">A abrir o Kianda…</div>}>
-    <WorkspaceState key={workspaceScope(me.company?.id, me.user.sub)} scope={workspaceScope(me.company?.id, me.user.sub)}><DocumentExportAccess allowed={canExportDocuments(me.modules.hr.status)}><AppShell me={me} counts={counts}>
-      <LicenceBanner me={me} />
-      {children}
-    </AppShell></DocumentExportAccess></WorkspaceState>
-  </Suspense>;
+  return (
+    <Suspense fallback={<div className="empty">A abrir o Kianda…</div>}>
+      <WorkspaceState
+        key={workspaceScope(me.company?.id, me.user.sub)}
+        scope={workspaceScope(me.company?.id, me.user.sub)}
+      >
+        <DocumentExportAccess allowed={canExportDocuments(me.modules.hr.status)}>
+          <AppShell me={me} counts={counts}>
+            <LicenceBanner me={me} />
+            {children}
+          </AppShell>
+        </DocumentExportAccess>
+      </WorkspaceState>
+    </Suspense>
+  );
 }

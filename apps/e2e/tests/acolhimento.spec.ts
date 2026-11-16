@@ -6,9 +6,20 @@ test.afterAll(closePool);
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
 
-test('Acolhimento: o RH acompanha a lista, ajusta o modelo e o colaborador vê só as suas tarefas', async ({ page, context }) => {
+test('Acolhimento: o RH acompanha a lista, ajusta o modelo e o colaborador vê só as suas tarefas', async ({
+  page,
+  context,
+}) => {
   const owner = await registerCompany();
-  const created = await apiAs(owner.token, 'POST', '/v1/employees', { number: '21', name: 'Joana Lutete', gender: 'F', jobTitle: 'Analista', province: 'Luanda', nif: '0000002121', contract: { type: 'indefinite', startDate: daysAgo(5), base: 350000, meal: 30000, transport: 25000 } });
+  const created = await apiAs(owner.token, 'POST', '/v1/employees', {
+    number: '21',
+    name: 'Joana Lutete',
+    gender: 'F',
+    jobTitle: 'Analista',
+    province: 'Luanda',
+    nif: '0000002121',
+    contract: { type: 'indefinite', startDate: daysAgo(5), base: 350000, meal: 30000, transport: 25000 },
+  });
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   const joana = await addUser(owner, 'Joana Lutete', 'employee', created.body.id);
 
@@ -16,7 +27,9 @@ test('Acolhimento: o RH acompanha a lista, ajusta o modelo e o colaborador vê s
   const errors = watchErrors(page);
   await page.goto('/acolhimento');
   await expect(page.getByRole('heading', { name: 'Acolhimento e saída', level: 1 })).toBeVisible();
-  const row = page.locator('table', { has: page.getByRole('columnheader', { name: 'Progresso' }) }).getByRole('row', { name: /Joana Lutete/ });
+  const row = page
+    .locator('table', { has: page.getByRole('columnheader', { name: 'Progresso' }) })
+    .getByRole('row', { name: /Joana Lutete/ });
   await expect(row).toContainText('Acolhimento');
   await expect(row).toContainText('em atraso');
   await page.screenshot({ path: '/tmp/e2e/acolhimento-01-listas.png', fullPage: false });
@@ -39,7 +52,11 @@ test('Acolhimento: o RH acompanha a lista, ajusta o modelo e o colaborador vê s
   await model.getByRole('button', { name: 'Gravar modelo' }).click();
   await expect(model).toContainText('Modelo gravado.');
   const templates = await apiAs(owner.token, 'GET', '/v1/checklist-templates');
-  expect(templates.body[0].items.at(-1)).toMatchObject({ title: 'Visita às instalações e apresentação aos clientes', responsible: 'manager', offsetDays: 2 });
+  expect(templates.body[0].items.at(-1)).toMatchObject({
+    title: 'Visita às instalações e apresentação aos clientes',
+    responsible: 'manager',
+    offsetDays: 2,
+  });
   await page.screenshot({ path: '/tmp/e2e/acolhimento-03-modelo.png', fullPage: false });
 
   await signIn(context, joana.token);

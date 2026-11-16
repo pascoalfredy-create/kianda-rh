@@ -2,9 +2,14 @@ import { luandaDate, sha256Hex } from '@kianda/core';
 import { and, companies, gte, ne, PLATFORM_NIF, siteVisits, sql, users, type Db } from '@kianda/db';
 
 /** Robôs e pré-visualizações de links não contam como visitas. */
-const BOT = /bot|crawl|spider|slurp|preview|facebookexternalhit|whatsapp|telegram|headless|lighthouse|pingdom|curl|wget|python|axios|node-fetch/i;
+const BOT =
+  /bot|crawl|spider|slurp|preview|facebookexternalhit|whatsapp|telegram|headless|lighthouse|pingdom|curl|wget|python|axios|node-fetch/i;
 
-export interface VisitInput { path: string; referrer?: string | null; source?: string | null }
+export interface VisitInput {
+  path: string;
+  referrer?: string | null;
+  source?: string | null;
+}
 
 /** Caminho normalizado e curto: sem query, sem barra final, só caracteres de URL simples. */
 export function normalisePath(p: string): string {
@@ -16,10 +21,15 @@ export function normalisePath(p: string): string {
 export function referrerHost(r: string | null | undefined, ownHost: string | null): string | null {
   if (!r) return null;
   try {
-    const h = new URL(r).hostname.toLowerCase().replace(/^www\./, '').replace(/^(m|l|lm)\.facebook\.com$/, 'facebook.com');
+    const h = new URL(r).hostname
+      .toLowerCase()
+      .replace(/^www\./, '')
+      .replace(/^(m|l|lm)\.facebook\.com$/, 'facebook.com');
     if (!h || (ownHost && h === ownHost.toLowerCase())) return null;
     return h.slice(0, 120);
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 export function deviceOf(ua: string): 'mobile' | 'desktop' {
@@ -30,38 +40,101 @@ export function deviceOf(ua: string): 'mobile' | 'desktop' {
  * Regista uma visita. Sem cookies e sem guardar IP: o visitante é um hash de (dia, IP, navegador, segredo),
  * por isso a mesma pessoa conta uma vez por página e por dia, e não é possível segui-la de um dia para o outro.
  */
-export async function recordVisit(db: Db, v: VisitInput, ctx: { ip: string; ua: string; country: string | null; ownHost: string | null; secret: string; now?: Date }) {
+export async function recordVisit(
+  db: Db,
+  v: VisitInput,
+  ctx: { ip: string; ua: string; country: string | null; ownHost: string | null; secret: string; now?: Date },
+) {
   if (!ctx.ua || BOT.test(ctx.ua)) return { counted: false as const };
   const day = luandaDate(ctx.now ?? new Date());
   const visitor = await sha256Hex(`${day}|${ctx.ip}|${ctx.ua}|${ctx.secret}`);
   const country = ctx.country && /^[A-Z]{2}$/.test(ctx.country) && ctx.country !== 'XX' ? ctx.country : null;
-  const source = v.source ? v.source.toLowerCase().replace(/[^a-z0-9_\-.]/g, '').slice(0, 40) || null : null;
-  await db.insert(siteVisits).values({
-    day, path: normalisePath(v.path), visitor, referrer: referrerHost(v.referrer, ctx.ownHost), source, country, device: deviceOf(ctx.ua),
-  }).onConflictDoNothing();
+  const source = v.source
+    ? v.source
+        .toLowerCase()
+        .replace(/[^a-z0-9_\-.]/g, '')
+        .slice(0, 40) || null
+    : null;
+  await db
+    .insert(siteVisits)
+    .values({
+      day,
+      path: normalisePath(v.path),
+      visitor,
+      referrer: referrerHost(v.referrer, ctx.ownHost),
+      source,
+      country,
+      device: deviceOf(ctx.ua),
+    })
+    .onConflictDoNothing();
   return { counted: true as const };
 }
 
-const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+const addDays = (d: string, n: number) =>
+  new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
 /** Visitas e registos agregados, sem associar a actividade no site à identidade de quem cria a conta. */
 export async function visitsSummary(db: Db, days: number, now = new Date()) {
-  const today = luandaDate(now), from = addDays(today, -(days - 1)), prevFrom = addDays(from, -days);
+  const today = luandaDate(now),
+    from = addDays(today, -(days - 1)),
+    prevFrom = addDays(from, -days);
   const inRange = gte(siteVisits.day, from);
   const people = sql<number>`count(distinct (${siteVisits.day}, ${siteVisits.visitor}))::int`;
   const [daily, pages, refs, countries, devices, sources, [prev], signupRows] = await Promise.all([
-    db.select({ day: siteVisits.day, visitors: sql<number>`count(distinct ${siteVisits.visitor})::int`, views: sql<number>`count(*)::int` }).from(siteVisits).where(inRange).groupBy(siteVisits.day),
-    db.select({ key: siteVisits.path, n: people }).from(siteVisits).where(inRange).groupBy(siteVisits.path).orderBy(sql`2 desc`).limit(8),
-    db.select({ key: siteVisits.referrer, n: people }).from(siteVisits).where(inRange).groupBy(siteVisits.referrer).orderBy(sql`2 desc`).limit(8),
-    db.select({ key: siteVisits.country, n: people }).from(siteVisits).where(inRange).groupBy(siteVisits.country).orderBy(sql`2 desc`).limit(8),
+    db
+      .select({
+        day: siteVisits.day,
+        visitors: sql<number>`count(distinct ${siteVisits.visitor})::int`,
+        views: sql<number>`count(*)::int`,
+      })
+      .from(siteVisits)
+      .where(inRange)
+      .groupBy(siteVisits.day),
+    db
+      .select({ key: siteVisits.path, n: people })
+      .from(siteVisits)
+      .where(inRange)
+      .groupBy(siteVisits.path)
+      .orderBy(sql`2 desc`)
+      .limit(8),
+    db
+      .select({ key: siteVisits.referrer, n: people })
+      .from(siteVisits)
+      .where(inRange)
+      .groupBy(siteVisits.referrer)
+      .orderBy(sql`2 desc`)
+      .limit(8),
+    db
+      .select({ key: siteVisits.country, n: people })
+      .from(siteVisits)
+      .where(inRange)
+      .groupBy(siteVisits.country)
+      .orderBy(sql`2 desc`)
+      .limit(8),
     db.select({ key: siteVisits.device, n: people }).from(siteVisits).where(inRange).groupBy(siteVisits.device),
-    db.select({ key: siteVisits.source, n: people }).from(siteVisits).where(and(inRange, sql`${siteVisits.source} is not null`)).groupBy(siteVisits.source).orderBy(sql`2 desc`).limit(8),
-    db.select({ n: people }).from(siteVisits).where(and(gte(siteVisits.day, prevFrom), sql`${siteVisits.day} < ${from}`)),
-    db.select({
-      day: sql<string>`(${companies.createdAt} at time zone 'Africa/Luanda')::date::text`,
-      confirmed: sql<boolean>`exists (select 1 from ${users} where ${users.companyId} = ${companies.id} and ${users.role} = 'owner' and ${users.emailVerifiedAt} is not null)`,
-    }).from(companies)
-      .where(and(ne(companies.nif, PLATFORM_NIF), sql`(${companies.createdAt} at time zone 'Africa/Luanda')::date >= ${from}`)),
+    db
+      .select({ key: siteVisits.source, n: people })
+      .from(siteVisits)
+      .where(and(inRange, sql`${siteVisits.source} is not null`))
+      .groupBy(siteVisits.source)
+      .orderBy(sql`2 desc`)
+      .limit(8),
+    db
+      .select({ n: people })
+      .from(siteVisits)
+      .where(and(gte(siteVisits.day, prevFrom), sql`${siteVisits.day} < ${from}`)),
+    db
+      .select({
+        day: sql<string>`(${companies.createdAt} at time zone 'Africa/Luanda')::date::text`,
+        confirmed: sql<boolean>`exists (select 1 from ${users} where ${users.companyId} = ${companies.id} and ${users.role} = 'owner' and ${users.emailVerifiedAt} is not null)`,
+      })
+      .from(companies)
+      .where(
+        and(
+          ne(companies.nif, PLATFORM_NIF),
+          sql`(${companies.createdAt} at time zone 'Africa/Luanda')::date >= ${from}`,
+        ),
+      ),
   ]);
   const byDay = new Map(daily.map(d => [String(d.day), d]));
   const signupsByDay = new Map<string, number>();
@@ -71,16 +144,33 @@ export async function visitsSummary(db: Db, days: number, now = new Date()) {
     if (s.confirmed) confirmedByDay.set(s.day, (confirmedByDay.get(s.day) ?? 0) + 1);
   }
   const series = Array.from({ length: days }, (_, i) => {
-    const day = addDays(from, i), d = byDay.get(day);
-    return { day, visitors: d?.visitors ?? 0, views: d?.views ?? 0, signups: signupsByDay.get(day) ?? 0, confirmed: confirmedByDay.get(day) ?? 0 };
+    const day = addDays(from, i),
+      d = byDay.get(day);
+    return {
+      day,
+      visitors: d?.visitors ?? 0,
+      views: d?.views ?? 0,
+      signups: signupsByDay.get(day) ?? 0,
+      confirmed: confirmedByDay.get(day) ?? 0,
+    };
   });
-  const sum = (k: 'visitors' | 'views' | 'signups' | 'confirmed', n: number) => series.slice(-n).reduce((s, x) => s + x[k], 0);
-  const visitors = sum('visitors', days), signups = sum('signups', days);
+  const sum = (k: 'visitors' | 'views' | 'signups' | 'confirmed', n: number) =>
+    series.slice(-n).reduce((s, x) => s + x[k], 0);
+  const visitors = sum('visitors', days),
+    signups = sum('signups', days);
   return {
-    days, from, to: today,
+    days,
+    from,
+    to: today,
     totals: {
-      today: series.at(-1)!.visitors, last7: sum('visitors', Math.min(7, days)), visitors, views: sum('views', days), previous: prev?.n ?? 0,
-      signups, confirmed: sum('confirmed', days), conversion: visitors ? Math.round((signups / visitors) * 1000) / 10 : null,
+      today: series.at(-1)!.visitors,
+      last7: sum('visitors', Math.min(7, days)),
+      visitors,
+      views: sum('views', days),
+      previous: prev?.n ?? 0,
+      signups,
+      confirmed: sum('confirmed', days),
+      conversion: visitors ? Math.round((signups / visitors) * 1000) / 10 : null,
     },
     series,
     pages: pages.map(x => ({ key: x.key, n: x.n })),

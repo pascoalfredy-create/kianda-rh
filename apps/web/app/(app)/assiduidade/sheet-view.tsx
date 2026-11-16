@@ -11,25 +11,56 @@ export function SheetView({ sheet, period }: { sheet: Sheet; period: string }) {
   const byDate = new Map<string, Sheet['entries']>();
   for (const e of sheet.entries) byDate.set(e.workDate, [...(byDate.get(e.workDate) ?? []), e]);
   const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
-  const days = s.days.filter((d) => d.date <= today || byDate.has(d.date));
+  const days = s.days.filter(d => d.date <= today || byDate.has(d.date));
   return (
     <>
-      {sheet.schedule && <p className="muted" style={{ margin: '-6px 0 12px' }}>Regime: <b>{sheet.schedule.name}</b> · {sheet.schedule.description}</p>}
+      {sheet.schedule && (
+        <p className="muted" style={{ margin: '-6px 0 12px' }}>
+          Regime: <b>{sheet.schedule.name}</b> · {sheet.schedule.description}
+        </p>
+      )}
       <div className="grid">
-        <div className="card kpi"><div className="l">Horas trabalhadas</div><div className="v">{formatMinutes(s.workedMinutes)}</div></div>
-        <div className="card kpi"><div className="l">Horas previstas</div><div className="v">{formatMinutes(s.expectedMinutes)}</div></div>
-        <div className="card kpi"><div className="l">Horas extra</div><div className="v" style={{ color: s.overtimeMinutes ? 'var(--brand)' : undefined }}>{formatMinutes(s.overtimeMinutes)}</div>
-          {s.restOrHolidayOvertimeMinutes > 0 && <div className="muted" style={{ fontSize: 12 }}>{formatMinutes(s.restOrHolidayOvertimeMinutes)} em descanso/feriado</div>}</div>
-        <div className="card kpi"><div className="l">Pendências</div><div className="v" style={{ color: s.openDays + s.noRecordDays ? 'var(--red)' : undefined }}>{s.openDays + s.noRecordDays}</div>
-          <div className="muted" style={{ fontSize: 12 }}>{s.openDays} sem saída · {s.noRecordDays} sem registo</div></div>
+        <div className="card kpi">
+          <div className="l">Horas trabalhadas</div>
+          <div className="v">{formatMinutes(s.workedMinutes)}</div>
+        </div>
+        <div className="card kpi">
+          <div className="l">Horas previstas</div>
+          <div className="v">{formatMinutes(s.expectedMinutes)}</div>
+        </div>
+        <div className="card kpi">
+          <div className="l">Horas extra</div>
+          <div className="v" style={{ color: s.overtimeMinutes ? 'var(--brand)' : undefined }}>
+            {formatMinutes(s.overtimeMinutes)}
+          </div>
+          {s.restOrHolidayOvertimeMinutes > 0 && (
+            <div className="muted" style={{ fontSize: 12 }}>
+              {formatMinutes(s.restOrHolidayOvertimeMinutes)} em descanso/feriado
+            </div>
+          )}
+        </div>
+        <div className="card kpi">
+          <div className="l">Pendências</div>
+          <div className="v" style={{ color: s.openDays + s.noRecordDays ? 'var(--red)' : undefined }}>
+            {s.openDays + s.noRecordDays}
+          </div>
+          <div className="muted" style={{ fontSize: 12 }}>
+            {s.openDays} sem saída · {s.noRecordDays} sem registo
+          </div>
+        </div>
       </div>
 
       {sheet.approval && (
-        <div className="preview good" style={{ marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+        <div
+          className="preview good"
+          style={{ marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}
+        >
           <span>
-            Mês aprovado por {sheet.approval.approvedByName ?? '—'} em {new Date(sheet.approval.approvedAt).toLocaleDateString('pt-PT')} ·
-            horas extra a pagar: <b>{formatMinutes(sheet.approval.approvedOvertimeMinutes)}</b>
-            {sheet.approval.approvedOvertimeMinutes < sheet.approval.overtimeMinutes && ` (de ${formatMinutes(sheet.approval.overtimeMinutes)} registadas)`}
+            Mês aprovado por {sheet.approval.approvedByName ?? '—'} em{' '}
+            {new Date(sheet.approval.approvedAt).toLocaleDateString('pt-PT')} · horas extra a pagar:{' '}
+            <b>{formatMinutes(sheet.approval.approvedOvertimeMinutes)}</b>
+            {sheet.approval.approvedOvertimeMinutes < sheet.approval.overtimeMinutes &&
+              ` (de ${formatMinutes(sheet.approval.overtimeMinutes)} registadas)`}
             {sheet.approval.note && ` — ${sheet.approval.note}`}
           </span>
           {sheet.canReopen && <ReopenMonth employeeId={sheet.employee.id} period={period} />}
@@ -38,24 +69,57 @@ export function SheetView({ sheet, period }: { sheet: Sheet; period: string }) {
 
       <div className="card">
         <table>
-          <thead><tr><th>Dia</th><th>Registos</th><th className="num">Trabalhado</th><th className="num">Extra</th><th>Observações</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Dia</th>
+              <th>Registos</th>
+              <th className="num">Trabalhado</th>
+              <th className="num">Extra</th>
+              <th>Observações</th>
+            </tr>
+          </thead>
           <tbody>
-            {days.map((d) => {
+            {days.map(d => {
               const entries = byDate.get(d.date) ?? [];
               return (
-                <tr key={d.date} className={d.kind === 'rest' || d.kind === 'inactive' ? 'rest' : d.kind === 'holiday' ? 'holiday' : ''}>
-                  <td style={{ whiteSpace: 'nowrap' }}><b>{d.date.slice(8)}</b> <span className="muted">{WD[new Date(`${d.date}T00:00:00Z`).getUTCDay()]}</span>{sheet.shifts?.[d.date] && <div className="muted" style={{ fontSize: 12 }} title="Escala de turnos publicada">{sheet.shifts[d.date]}</div>}</td>
+                <tr
+                  key={d.date}
+                  className={
+                    d.kind === 'rest' || d.kind === 'inactive' ? 'rest' : d.kind === 'holiday' ? 'holiday' : ''
+                  }
+                >
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <b>{d.date.slice(8)}</b>{' '}
+                    <span className="muted">{WD[new Date(`${d.date}T00:00:00Z`).getUTCDay()]}</span>
+                    {sheet.shifts?.[d.date] && (
+                      <div className="muted" style={{ fontSize: 12 }} title="Escala de turnos publicada">
+                        {sheet.shifts[d.date]}
+                      </div>
+                    )}
+                  </td>
                   <td>
-                    {entries.map((e) => <EntryChip key={e.id} e={e} editable={sheet.canEdit} />)}
+                    {entries.map(e => (
+                      <EntryChip key={e.id} e={e} editable={sheet.canEdit} />
+                    ))}
                     {sheet.canEdit && d.date <= today && <AddEntry employeeId={sheet.employee.id} date={d.date} />}
                   </td>
                   <td className="num">{d.workedMinutes ? formatMinutes(d.workedMinutes) : '—'}</td>
-                  <td className="num">{d.overtimeMinutes ? <b style={{ color: 'var(--brand)' }}>{formatMinutes(d.overtimeMinutes)}</b> : '—'}</td>
+                  <td className="num">
+                    {d.overtimeMinutes ? (
+                      <b style={{ color: 'var(--brand)' }}>{formatMinutes(d.overtimeMinutes)}</b>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td>
                     {d.kind === 'inactive' && <span className="muted">Fora do período de contrato </span>}
                     {d.holiday && <span className="muted">{d.holiday} </span>}
                     {d.absence && <span className="tag">{d.absence}</span>}
-                    {d.flags.map((f) => <span key={f} className={`flag ${RED.includes(f as DayFlag) ? 'red' : ''}`}>{DAY_FLAG_LABEL[f as DayFlag]}</span>)}
+                    {d.flags.map(f => (
+                      <span key={f} className={`flag ${RED.includes(f as DayFlag) ? 'red' : ''}`}>
+                        {DAY_FLAG_LABEL[f as DayFlag]}
+                      </span>
+                    ))}
                   </td>
                 </tr>
               );
@@ -65,11 +129,26 @@ export function SheetView({ sheet, period }: { sheet: Sheet; period: string }) {
         {!days.length && <div className="empty">Ainda não há dias para mostrar neste mês.</div>}
       </div>
 
-      {sheet.entries.some((e) => e.source === 'offline' || e.offlineOut) && (
-        <div className="warn" style={{ marginTop: 10 }}>{sheet.entries.filter((e) => e.source === 'offline' || e.offlineOut).length} registo(s) feitos sem rede, com a hora do telemóvel — confirme-os antes de aprovar o mês (corrija com ✎ se a hora não estiver certa).</div>
+      {sheet.entries.some(e => e.source === 'offline' || e.offlineOut) && (
+        <div className="warn" style={{ marginTop: 10 }}>
+          {sheet.entries.filter(e => e.source === 'offline' || e.offlineOut).length} registo(s) feitos sem rede, com a
+          hora do telemóvel — confirme-os antes de aprovar o mês (corrija com ✎ se a hora não estiver certa).
+        </div>
       )}
-      {sheet.canApprove && <ApproveMonth employeeId={sheet.employee.id} period={period} overtimeMinutes={s.overtimeMinutes} openDays={s.openDays} noRecordDays={s.noRecordDays} />}
-      {!sheet.approval && !sheet.canApprove && sheet.canEdit && <p className="muted" style={{ marginTop: 10 }}>A aprovação do mês fica disponível depois de o mês terminar.</p>}
+      {sheet.canApprove && (
+        <ApproveMonth
+          employeeId={sheet.employee.id}
+          period={period}
+          overtimeMinutes={s.overtimeMinutes}
+          openDays={s.openDays}
+          noRecordDays={s.noRecordDays}
+        />
+      )}
+      {!sheet.approval && !sheet.canApprove && sheet.canEdit && (
+        <p className="muted" style={{ marginTop: 10 }}>
+          A aprovação do mês fica disponível depois de o mês terminar.
+        </p>
+      )}
     </>
   );
 }

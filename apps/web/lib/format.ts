@@ -1,7 +1,11 @@
 /** Formatação partilhada (servidor e cliente). */
 export const monthLabel = (period: string) => {
   const [y, m] = period.split('-').map(Number) as [number, number];
-  const s = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('pt-PT', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const s = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('pt-PT', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
   return s.charAt(0).toUpperCase() + s.slice(1);
 };
 

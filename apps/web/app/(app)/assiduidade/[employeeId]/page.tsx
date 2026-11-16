@@ -7,7 +7,13 @@ import { SheetView } from '../sheet-view';
 
 export const dynamic = 'force-dynamic';
 
-export default async function FolhaColaborador({ params, searchParams }: { params: Promise<{ employeeId: string }>; searchParams: Promise<{ mes?: string }> }) {
+export default async function FolhaColaborador({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ employeeId: string }>;
+  searchParams: Promise<{ mes?: string }>;
+}) {
   const { employeeId } = await params;
   const period = (await searchParams).mes ?? currentPeriod();
   let sheet: Sheet;
@@ -19,16 +25,27 @@ export default async function FolhaColaborador({ params, searchParams }: { param
   }
   return (
     <>
-      <Link href={`/assiduidade?s=equipa&mes=${period}`} className="crumb">← Assiduidade da equipa</Link>
+      <Link href={`/assiduidade?s=equipa&mes=${period}`} className="crumb">
+        ← Assiduidade da equipa
+      </Link>
       <div className="page-head">
         <div>
           <h1>{sheet.employee.name}</h1>
-          <p className="sub">{sheet.employee.jobTitle} · N.º {sheet.employee.number} · <Link href={`/colaboradores/${employeeId}`} style={{ color: 'var(--brand)' }}>ficha</Link></p>
+          <p className="sub">
+            {sheet.employee.jobTitle} · N.º {sheet.employee.number} ·{' '}
+            <Link href={`/colaboradores/${employeeId}`} style={{ color: 'var(--brand)' }}>
+              ficha
+            </Link>
+          </p>
         </div>
         <div className="month-nav">
-          <Link className="btn ghost sm" href={`?mes=${shift(period, -1)}`}>←</Link>
+          <Link className="btn ghost sm" href={`?mes=${shift(period, -1)}`}>
+            ←
+          </Link>
           <b>{monthLabel(period)}</b>
-          <Link className="btn ghost sm" href={`?mes=${shift(period, 1)}`}>→</Link>
+          <Link className="btn ghost sm" href={`?mes=${shift(period, 1)}`}>
+            →
+          </Link>
         </div>
       </div>
       <SheetView sheet={sheet} period={period} />

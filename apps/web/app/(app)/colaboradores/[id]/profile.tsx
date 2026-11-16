@@ -5,8 +5,19 @@ import { ContextLink as Link, ReturnLink } from '@/components/context-link';
 import { notFound } from 'next/navigation';
 import { api, ApiError, currentUser } from '@/lib/api';
 import {
-  CAN_EDIT, CONTRACT_LABEL, DOC_LABEL, ROLE_LABEL, STATUS_LABEL,
-  ABSENCE_STATUS_LABEL, type AbsenceRow, type BalanceRow, type Department, type EmployeeRow, type HistoryEntry, type PersonRef, type Profile,
+  CAN_EDIT,
+  CONTRACT_LABEL,
+  DOC_LABEL,
+  ROLE_LABEL,
+  STATUS_LABEL,
+  ABSENCE_STATUS_LABEL,
+  type AbsenceRow,
+  type BalanceRow,
+  type Department,
+  type EmployeeRow,
+  type HistoryEntry,
+  type PersonRef,
+  type Profile,
 } from '@/lib/types';
 import { ABSENCE_POLICIES, CHECKLIST_KIND_LABELS, type AbsenceType } from '@kianda/core';
 import { LIST_STATUS, type ChecklistRow } from '../../acolhimento/types';
@@ -16,7 +27,8 @@ import { AllowanceActions, AssignAllowance, RegimeForm } from './regime';
 import { MinimizeEmployee } from '@/components/privacy-actions';
 
 /** Salário base em Kz, ou em USD (indexado) com a referência em Kz. */
-const baseText = (c: Pick<Compensation, 'baseMinor' | 'salaryCurrency' | 'baseForeignMinor'>) => c.salaryCurrency === 'USD' && c.baseForeignMinor ? formatUsd(c.baseForeignMinor) : formatKz(c.baseMinor);
+const baseText = (c: Pick<Compensation, 'baseMinor' | 'salaryCurrency' | 'baseForeignMinor'>) =>
+  c.salaryCurrency === 'USD' && c.baseForeignMinor ? formatUsd(c.baseForeignMinor) : formatKz(c.baseMinor);
 
 export const dynamic = 'force-dynamic';
 
@@ -31,17 +43,35 @@ const TABS = [
   ['historico', 'Histórico'],
 ] as const;
 
-const initials = (name: string) => name.split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(w => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 const fmtDate = (d: string | null | undefined) => (d ? d.split('-').reverse().join('/') : '—');
 const val = (x: string | null | undefined) => x || '—';
 const tenure = (start: string) => {
   const months = Math.max(0, Math.floor((Date.now() - Date.parse(start)) / (30.4375 * 86_400_000)));
   const y = Math.floor(months / 12);
   const m = months % 12;
-  return [y && `${y} ano${y > 1 ? 's' : ''}`, m && `${m} ${m > 1 ? 'meses' : 'mês'}`].filter(Boolean).join(' e ') || 'menos de 1 mês';
+  return (
+    [y && `${y} ano${y > 1 ? 's' : ''}`, m && `${m} ${m > 1 ? 'meses' : 'mês'}`].filter(Boolean).join(' e ') ||
+    'menos de 1 mês'
+  );
 };
 
-export default async function Ficha({ params, searchParams, panelBase }: { panelBase?: string; params: Promise<{ id: string }>; searchParams: Promise<{ s?: string }> }) {
+export default async function Ficha({
+  params,
+  searchParams,
+  panelBase,
+}: {
+  panelBase?: string;
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ s?: string }>;
+}) {
   const { id } = await params;
   const tab = (await searchParams).s ?? 'dados';
   const me = await currentUser();
@@ -56,44 +86,93 @@ export default async function Ficha({ params, searchParams, panelBase }: { panel
     throw e;
   }
   const regimeRoles = ['owner', 'hr_admin', 'payroll', 'finance'];
-  const tabs = TABS.filter(([k]) => (k !== 'historico' || canEdit) && (k !== 'regime' || regimeRoles.includes(me?.user.role ?? '')) && (k !== 'acolhimento' || isStaff));
+  const tabs = TABS.filter(
+    ([k]) =>
+      (k !== 'historico' || canEdit) &&
+      (k !== 'regime' || regimeRoles.includes(me?.user.role ?? '')) &&
+      (k !== 'acolhimento' || isStaff),
+  );
   const firstStart = p.contracts.at(-1)?.startDate;
 
   return (
     <>
-      {isStaff && !panelBase && <ReturnLink fallback="/colaboradores" className="crumb">← Colaboradores</ReturnLink>}
+      {isStaff && !panelBase && (
+        <ReturnLink fallback="/colaboradores" className="crumb">
+          ← Colaboradores
+        </ReturnLink>
+      )}
       <div className="card hero">
         <div className="avatar">{initials(p.name)}</div>
         <div>
-          <h1>{p.name}<span className={`status ${p.status}`}>{STATUS_LABEL[p.status]}</span></h1>
-          <div className="meta">{p.jobTitle} · {p.department?.name ?? 'Sem departamento'} · N.º {p.number}</div>
+          <h1>
+            {p.name}
+            <span className={`status ${p.status}`}>{STATUS_LABEL[p.status]}</span>
+          </h1>
+          <div className="meta">
+            {p.jobTitle} · {p.department?.name ?? 'Sem departamento'} · N.º {p.number}
+          </div>
         </div>
         <div className="facts">
-          <div><small>Antiguidade</small><b>{firstStart ? tenure(firstStart) : '—'}</b></div>
-          <div><small>Salário base</small><b>{p.compensation.current ? baseText(p.compensation.current) : '—'}</b></div>
-          <div><small>Contrato</small><b>{p.contract ? CONTRACT_LABEL[p.contract.type] : '—'}</b></div>
+          <div>
+            <small>Antiguidade</small>
+            <b>{firstStart ? tenure(firstStart) : '—'}</b>
+          </div>
+          <div>
+            <small>Salário base</small>
+            <b>{p.compensation.current ? baseText(p.compensation.current) : '—'}</b>
+          </div>
+          <div>
+            <small>Contrato</small>
+            <b>{p.contract ? CONTRACT_LABEL[p.contract.type] : '—'}</b>
+          </div>
         </div>
       </div>
 
       {p.alerts.length > 0 && (
         <div className="warn">
           <b>{p.alerts.length} ponto(s) a tratar</b>
-          <ul>{p.alerts.map((a) => <li key={a}>{a}</li>)}</ul>
+          <ul>
+            {p.alerts.map(a => (
+              <li key={a}>{a}</li>
+            ))}
+          </ul>
         </div>
       )}
 
-      {p.status === 'terminated' && (p.dataMinimizedAt
-        ? <div className="warn">Dados pessoais eliminados a {fmtDate(p.dataMinimizedAt.slice(0, 10))}. Conservam-se só os dados exigidos para as obrigações fiscais, de segurança social e contabilísticas.</div>
-        : canEdit && ['owner', 'hr_admin'].includes(me?.user.role ?? '') && <div style={{ marginBottom: 14 }}><MinimizeEmployee id={p.id} number={p.number} /></div>)}
+      {p.status === 'terminated' &&
+        (p.dataMinimizedAt ? (
+          <div className="warn">
+            Dados pessoais eliminados a {fmtDate(p.dataMinimizedAt.slice(0, 10))}. Conservam-se só os dados exigidos
+            para as obrigações fiscais, de segurança social e contabilísticas.
+          </div>
+        ) : (
+          canEdit &&
+          ['owner', 'hr_admin'].includes(me?.user.role ?? '') && (
+            <div style={{ marginBottom: 14 }}>
+              <MinimizeEmployee id={p.id} number={p.number} />
+            </div>
+          )
+        ))}
 
       <nav className="tabs">
-        {tabs.map(([k, label]) => <Link key={k} href={panelBase ? `${panelBase}&s=${k}` : `?s=${k}`} className={tab === k ? 'on' : ''} scroll={false}>{label}</Link>)}
+        {tabs.map(([k, label]) => (
+          <Link
+            key={k}
+            href={panelBase ? `${panelBase}&s=${k}` : `?s=${k}`}
+            className={tab === k ? 'on' : ''}
+            scroll={false}
+          >
+            {label}
+          </Link>
+        ))}
       </nav>
 
       {tab === 'dados' && <DataTab p={p} canEdit={canEdit} />}
       {tab === 'contrato' && <ContractTab p={p} canEdit={canEdit} />}
       {tab === 'documentos' && <DocumentsTab p={p} canEdit={canEdit} />}
-      {tab === 'regime' && regimeRoles.includes(me?.user.role ?? '') && <RegimeTab id={p.id} canEdit={['owner', 'hr_admin', 'payroll'].includes(me?.user.role ?? '')} />}
+      {tab === 'regime' && regimeRoles.includes(me?.user.role ?? '') && (
+        <RegimeTab id={p.id} canEdit={['owner', 'hr_admin', 'payroll'].includes(me?.user.role ?? '')} />
+      )}
       {tab === 'ausencias' && <AbsencesTab p={p} />}
       {tab === 'equipa' && <TeamTab p={p} />}
       {tab === 'historico' && canEdit && <HistoryTab id={p.id} />}
@@ -106,21 +185,51 @@ export default async function Ficha({ params, searchParams, panelBase }: { panel
 
 async function DataTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
   if (canEdit) {
-    const [departments, people] = await Promise.all([api<Department[]>('/v1/departments'), api<EmployeeRow[]>('/v1/employees')]);
-    const refs: PersonRef[] = people.filter((x) => x.status !== 'terminated').map((x) => ({ id: x.id, name: x.name, jobTitle: x.jobTitle }));
-    return <div className="card"><PersonalForm p={p} departments={departments} people={refs} /></div>;
+    const [departments, people] = await Promise.all([
+      api<Department[]>('/v1/departments'),
+      api<EmployeeRow[]>('/v1/employees'),
+    ]);
+    const refs: PersonRef[] = people
+      .filter(x => x.status !== 'terminated')
+      .map(x => ({ id: x.id, name: x.name, jobTitle: x.jobTitle }));
+    return (
+      <div className="card">
+        <PersonalForm p={p} departments={departments} people={refs} />
+      </div>
+    );
   }
   const rows: [string, string][] = [
-    ['Função', p.jobTitle], ['Departamento', val(p.department?.name)], ['Chefia directa', val(p.manager?.name)], ['Província', val(p.province)], ['Município', val(p.municipality)],
-    ['Data de nascimento', fmtDate(p.birthDate)], ['Nacionalidade', val(p.nationality)], ['Estado civil', val(p.maritalStatus)],
-    ['BI', val(p.biNumber)], ['NIF', val(p.nif)], ['INSS', val(p.inssNumber)], ['Banco', val(p.bank)], ['IBAN', val(p.iban)],
-    ['Email', val(p.email)], ['Telefone', val(p.phone)], ['Morada', val(p.address)],
+    ['Função', p.jobTitle],
+    ['Departamento', val(p.department?.name)],
+    ['Chefia directa', val(p.manager?.name)],
+    ['Província', val(p.province)],
+    ['Município', val(p.municipality)],
+    ['Data de nascimento', fmtDate(p.birthDate)],
+    ['Nacionalidade', val(p.nationality)],
+    ['Estado civil', val(p.maritalStatus)],
+    ['BI', val(p.biNumber)],
+    ['NIF', val(p.nif)],
+    ['INSS', val(p.inssNumber)],
+    ['Banco', val(p.bank)],
+    ['IBAN', val(p.iban)],
+    ['Email', val(p.email)],
+    ['Telefone', val(p.phone)],
+    ['Morada', val(p.address)],
     ['Contacto de emergência', [p.emergencyContactName, p.emergencyContactPhone].filter(Boolean).join(' · ') || '—'],
   ];
   return (
     <div className="card section">
-      <dl className="dl">{rows.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
-      <p className="muted" style={{ padding: '0 16px 14px' }}>Para corrigir dados, contacte os Recursos Humanos.</p>
+      <dl className="dl">
+        {rows.map(([k, v]) => (
+          <div key={k}>
+            <dt>{k}</dt>
+            <dd>{v}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="muted" style={{ padding: '0 16px 14px' }}>
+        Para corrigir dados, contacte os Recursos Humanos.
+      </p>
     </div>
   );
 }
@@ -135,53 +244,130 @@ function ContractTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
           <h2>Contrato em vigor</h2>
           {c ? (
             <dl className="dl">
-              <div><dt>Tipo</dt><dd>{CONTRACT_LABEL[c.type]}</dd></div>
-              <div><dt>Início</dt><dd>{fmtDate(c.startDate)}</dd></div>
-              <div><dt>Fim</dt><dd>{c.endDate ? fmtDate(c.endDate) : 'Sem termo'}</dd></div>
-              {c.termJustification && <div style={{ gridColumn: '1 / -1' }}><dt>Fundamento do termo</dt><dd>{c.termJustification}</dd></div>}
+              <div>
+                <dt>Tipo</dt>
+                <dd>{CONTRACT_LABEL[c.type]}</dd>
+              </div>
+              <div>
+                <dt>Início</dt>
+                <dd>{fmtDate(c.startDate)}</dd>
+              </div>
+              <div>
+                <dt>Fim</dt>
+                <dd>{c.endDate ? fmtDate(c.endDate) : 'Sem termo'}</dd>
+              </div>
+              {c.termJustification && (
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <dt>Fundamento do termo</dt>
+                  <dd>{c.termJustification}</dd>
+                </div>
+              )}
             </dl>
-          ) : <div className="empty">Sem contrato registado</div>}
+          ) : (
+            <div className="empty">Sem contrato registado</div>
+          )}
         </div>
         <div className="card section">
           <h2>Remuneração em vigor</h2>
           {cur ? (
             <dl className="dl">
-              <div><dt>Salário base</dt><dd>{baseText(cur)}{cur.salaryCurrency === 'USD' && <div className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>Indexado ao dólar · pago em Kz ao câmbio do dia do processamento · referência {formatKz(cur.baseMinor)}</div>}</dd></div>
-              <div><dt>Subsídio de alimentação</dt><dd>{formatKz(cur.mealMinor)}</dd></div>
-              <div><dt>Subsídio de transporte</dt><dd>{formatKz(cur.transportMinor)}</dd></div>
-              <div><dt>Desde</dt><dd>{fmtDate(cur.effectiveDate)}</dd></div>
+              <div>
+                <dt>Salário base</dt>
+                <dd>
+                  {baseText(cur)}
+                  {cur.salaryCurrency === 'USD' && (
+                    <div className="muted" style={{ fontSize: 12.5, fontWeight: 400 }}>
+                      Indexado ao dólar · pago em Kz ao câmbio do dia do processamento · referência{' '}
+                      {formatKz(cur.baseMinor)}
+                    </div>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Subsídio de alimentação</dt>
+                <dd>{formatKz(cur.mealMinor)}</dd>
+              </div>
+              <div>
+                <dt>Subsídio de transporte</dt>
+                <dd>{formatKz(cur.transportMinor)}</dd>
+              </div>
+              <div>
+                <dt>Desde</dt>
+                <dd>{fmtDate(cur.effectiveDate)}</dd>
+              </div>
             </dl>
-          ) : <div className="empty">Sem remuneração registada</div>}
+          ) : (
+            <div className="empty">Sem remuneração registada</div>
+          )}
         </div>
       </div>
 
       {canEdit && p.status !== 'terminated' && (
         <div className="actions" style={{ justifyContent: 'flex-start', marginBottom: 12 }}>
-          <Link className="btn danger" href={`/cessacoes/nova?colaborador=${p.id}`}>Cessar contrato…</Link>
+          <Link className="btn danger" href={`/cessacoes/nova?colaborador=${p.id}`}>
+            Cessar contrato…
+          </Link>
         </div>
       )}
-      {canEdit && <div className="actions" style={{ justifyContent: 'flex-start', marginBottom: 12 }}><Link className="btn ghost" href={`/documentos?v=emitir&colaborador=${p.id}`}>Emitir contrato ou declaração</Link><Link className="btn ghost" href="/acessos">Acesso à plataforma</Link></div>}
-      {p.status === 'terminated' && <div className="warn">Contrato cessado. <Link href="/cessacoes">Ver o fecho de contas e os documentos de cessação</Link>.</div>}
+      {canEdit && (
+        <div className="actions" style={{ justifyContent: 'flex-start', marginBottom: 12 }}>
+          <Link className="btn ghost" href={`/documentos?v=emitir&colaborador=${p.id}`}>
+            Emitir contrato ou declaração
+          </Link>
+          <Link className="btn ghost" href="/acessos">
+            Acesso à plataforma
+          </Link>
+        </div>
+      )}
+      {p.status === 'terminated' && (
+        <div className="warn">
+          Contrato cessado. <Link href="/cessacoes">Ver o fecho de contas e os documentos de cessação</Link>.
+        </div>
+      )}
       {canEdit && p.status !== 'terminated' && (
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16, alignItems: 'flex-start' }}>
-          <div style={{ flex: '1 1 100%' }}><CompensationForm p={p} /></div>
-          <div style={{ flex: '1 1 100%' }}><ContractForm p={p} /></div>
+          <div style={{ flex: '1 1 100%' }}>
+            <CompensationForm p={p} />
+          </div>
+          <div style={{ flex: '1 1 100%' }}>
+            <ContractForm p={p} />
+          </div>
         </div>
       )}
 
       <div className="card section">
         <h2>Histórico salarial</h2>
         <table>
-          <thead><tr><th>Efeito</th><th>Motivo</th><th className="num">Base</th><th className="num">Variação</th><th className="num">Alimentação</th><th className="num">Transporte</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Efeito</th>
+              <th>Motivo</th>
+              <th className="num">Base</th>
+              <th className="num">Variação</th>
+              <th className="num">Alimentação</th>
+              <th className="num">Transporte</th>
+            </tr>
+          </thead>
           <tbody>
-            {p.compensation.history.map((h) => {
+            {p.compensation.history.map(h => {
               const future = h.effectiveDate > luandaDate(new Date());
               return (
                 <tr key={h.id}>
-                  <td>{fmtDate(h.effectiveDate)} {future && <span className="tag future">agendada</span>}{cur?.id === h.id && <span className="tag">em vigor</span>}</td>
+                  <td>
+                    {fmtDate(h.effectiveDate)} {future && <span className="tag future">agendada</span>}
+                    {cur?.id === h.id && <span className="tag">em vigor</span>}
+                  </td>
                   <td>{h.reason}</td>
                   <td className="num">{baseText(h)}</td>
-                  <td className="num">{h.changeBps == null ? '—' : <span className="delta" style={{ color: h.changeBps < 0 ? 'var(--red)' : undefined }}>{formatPercent(h.changeBps / 100, 2, true)}</span>}</td>
+                  <td className="num">
+                    {h.changeBps == null ? (
+                      '—'
+                    ) : (
+                      <span className="delta" style={{ color: h.changeBps < 0 ? 'var(--red)' : undefined }}>
+                        {formatPercent(h.changeBps / 100, 2, true)}
+                      </span>
+                    )}
+                  </td>
                   <td className="num">{formatKz(h.mealMinor)}</td>
                   <td className="num">{formatKz(h.transportMinor)}</td>
                 </tr>
@@ -195,7 +381,15 @@ function ContractTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
       <div className="card section">
         <h2>Contratos</h2>
         <table>
-          <thead><tr><th>Tipo</th><th>Início</th><th>Fim</th><th className="num">Base inicial</th><th>Situação</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Tipo</th>
+              <th>Início</th>
+              <th>Fim</th>
+              <th className="num">Base inicial</th>
+              <th>Situação</th>
+            </tr>
+          </thead>
           <tbody>
             {p.contracts.map((k, i) => (
               <tr key={k.id}>
@@ -203,7 +397,15 @@ function ContractTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
                 <td>{fmtDate(k.startDate)}</td>
                 <td>{k.terminatedAt ? fmtDate(k.terminatedAt) : k.endDate ? fmtDate(k.endDate) : 'Sem termo'}</td>
                 <td className="num">{formatKz(k.baseMinor)}</td>
-                <td>{k.terminatedAt ? <span className="muted">{k.terminationReason ?? 'Terminado'}</span> : i === 0 ? <span className="tag">em vigor</span> : '—'}</td>
+                <td>
+                  {k.terminatedAt ? (
+                    <span className="muted">{k.terminationReason ?? 'Terminado'}</span>
+                  ) : i === 0 ? (
+                    <span className="tag">em vigor</span>
+                  ) : (
+                    '—'
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -218,24 +420,51 @@ function DocumentsTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
   const soon = luandaDate(new Date(Date.now() + 60 * 86_400_000));
   return (
     <>
-      {canEdit && <div style={{ marginBottom: 14 }}><DocumentForm employeeId={p.id} /></div>}
+      {canEdit && (
+        <div style={{ marginBottom: 14 }}>
+          <DocumentForm employeeId={p.id} />
+        </div>
+      )}
       <div className="card">
         <table>
-          <thead><tr><th>Documento</th><th>Número</th><th>Emissão</th><th>Validade</th><th>Entidade emissora</th><th>Cópia digitalizada</th>{canEdit && <th />}</tr></thead>
+          <thead>
+            <tr>
+              <th>Documento</th>
+              <th>Número</th>
+              <th>Emissão</th>
+              <th>Validade</th>
+              <th>Entidade emissora</th>
+              <th>Cópia digitalizada</th>
+              {canEdit && <th />}
+            </tr>
+          </thead>
           <tbody>
-            {p.documents.map((d) => (
+            {p.documents.map(d => (
               <tr key={d.id}>
-                <td><b>{DOC_LABEL[d.type]}</b>{d.notes && <div className="muted">{d.notes}</div>}</td>
+                <td>
+                  <b>{DOC_LABEL[d.type]}</b>
+                  {d.notes && <div className="muted">{d.notes}</div>}
+                </td>
                 <td>{d.number}</td>
                 <td>{fmtDate(d.issueDate)}</td>
                 <td>
                   {fmtDate(d.expiryDate)}{' '}
-                  {d.expiryDate && d.expiryDate < t && <span className="pill" style={{ background: 'var(--red-soft)', color: 'var(--red)' }}>Caducado</span>}
+                  {d.expiryDate && d.expiryDate < t && (
+                    <span className="pill" style={{ background: 'var(--red-soft)', color: 'var(--red)' }}>
+                      Caducado
+                    </span>
+                  )}
                   {d.expiryDate && d.expiryDate >= t && d.expiryDate <= soon && <span className="pill">A caducar</span>}
                 </td>
                 <td>{val(d.issuer)}</td>
-                <td><Attachments entity="employee_document" entityId={d.id} compact /></td>
-                {canEdit && <td className="num"><DeleteDocument employeeId={p.id} doc={d} /></td>}
+                <td>
+                  <Attachments entity="employee_document" entityId={d.id} compact />
+                </td>
+                {canEdit && (
+                  <td className="num">
+                    <DeleteDocument employeeId={p.id} doc={d} />
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -244,7 +473,10 @@ function DocumentsTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
       </div>
       <div className="card" style={{ marginTop: 14, padding: 16 }}>
         <h2 style={{ fontSize: 14, marginTop: 0 }}>Outros ficheiros do processo individual</h2>
-        <p className="muted" style={{ marginTop: 0 }}>Contrato assinado, certificados de habilitações, declarações entregues… Visíveis só para o RH e para o próprio colaborador.</p>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Contrato assinado, certificados de habilitações, declarações entregues… Visíveis só para o RH e para o próprio
+          colaborador.
+        </p>
         <Attachments entity="employee" entityId={p.id} />
       </div>
     </>
@@ -252,13 +484,31 @@ function DocumentsTab({ p, canEdit }: { p: Profile; canEdit: boolean }) {
 }
 
 interface Regime {
-  scheduleId: string | null; scheduleAnchor: string | null; schedule: { name: string; kind: string; description: string; anchorDate: string | null } | null;
+  scheduleId: string | null;
+  scheduleAnchor: string | null;
+  schedule: { name: string; kind: string; description: string; anchorDate: string | null } | null;
   schedules: { id: string; name: string; kind: 'weekly' | 'cycle'; anchorDate: string | null; description: string }[];
-  types: { id: string; code: string; label: string; calc: 'fixed' | 'base_pct' | 'per_day'; valueMinor: number | null; bps: number | null }[];
-  allowances: { id: string; startDate: string; endDate: string | null; valueMinor: number | null; bps: number | null; type: { code: string; label: string; calc: string; valueMinor: number | null; bps: number | null } | null }[];
+  types: {
+    id: string;
+    code: string;
+    label: string;
+    calc: 'fixed' | 'base_pct' | 'per_day';
+    valueMinor: number | null;
+    bps: number | null;
+  }[];
+  allowances: {
+    id: string;
+    startDate: string;
+    endDate: string | null;
+    valueMinor: number | null;
+    bps: number | null;
+    type: { code: string; label: string; calc: string; valueMinor: number | null; bps: number | null } | null;
+  }[];
 }
 const allowanceValue = (calc: string | undefined, v: number | null, b: number | null) =>
-  calc === 'base_pct' ? `${formatPercent((b ?? 0) / 100, 2)} do base` : `${formatKz(v ?? 0)}${calc === 'per_day' ? ' por dia de escala' : ' por mês'}`;
+  calc === 'base_pct'
+    ? `${formatPercent((b ?? 0) / 100, 2)} do base`
+    : `${formatKz(v ?? 0)}${calc === 'per_day' ? ' por dia de escala' : ' por mês'}`;
 
 async function RegimeTab({ id, canEdit }: { id: string; canEdit: boolean }) {
   const r = await api<Regime>(`/v1/work-regime/${id}`);
@@ -268,31 +518,80 @@ async function RegimeTab({ id, canEdit }: { id: string; canEdit: boolean }) {
       <div className="card section">
         <h2>Regime de horário</h2>
         <dl className="dl">
-          <div><dt>Regime</dt><dd>{r.schedule?.name ?? 'Horário normal da empresa (segunda a sexta)'}</dd></div>
-          <div><dt>Dias e horas</dt><dd>{r.schedule?.description ?? '—'}</dd></div>
-          {r.schedule?.kind === 'cycle' && <div><dt>Início do ciclo</dt><dd>{fmtDate(r.scheduleAnchor ?? r.schedule.anchorDate)}{!r.scheduleAnchor && r.schedule.anchorDate ? ' (do regime)' : ''}</dd></div>}
+          <div>
+            <dt>Regime</dt>
+            <dd>{r.schedule?.name ?? 'Horário normal da empresa (segunda a sexta)'}</dd>
+          </div>
+          <div>
+            <dt>Dias e horas</dt>
+            <dd>{r.schedule?.description ?? '—'}</dd>
+          </div>
+          {r.schedule?.kind === 'cycle' && (
+            <div>
+              <dt>Início do ciclo</dt>
+              <dd>
+                {fmtDate(r.scheduleAnchor ?? r.schedule.anchorDate)}
+                {!r.scheduleAnchor && r.schedule.anchorDate ? ' (do regime)' : ''}
+              </dd>
+            </div>
+          )}
         </dl>
-        {canEdit && <RegimeForm employeeId={id} scheduleId={r.scheduleId} anchor={r.scheduleAnchor} schedules={r.schedules} />}
+        {canEdit && (
+          <RegimeForm employeeId={id} scheduleId={r.scheduleId} anchor={r.scheduleAnchor} schedules={r.schedules} />
+        )}
       </div>
       <div className="card section">
         <h2>Subsídios recorrentes</h2>
         {r.allowances.length ? (
           <table>
-            <thead><tr><th>Subsídio</th><th>Valor</th><th>Desde</th><th>Até</th><th /></tr></thead>
-            <tbody>{r.allowances.map((a) => {
-              const ended = !!a.endDate && a.endDate < today;
-              return (
-                <tr key={a.id} style={ended ? { color: 'var(--ink3)' } : undefined}>
-                  <td><span className="tag">{a.type?.code}</span> {a.type?.label}</td>
-                  <td>{allowanceValue(a.type?.calc, a.valueMinor ?? a.type?.valueMinor ?? null, a.bps ?? a.type?.bps ?? null)}{(a.valueMinor !== null || a.bps !== null) && <span className="muted"> (valor próprio)</span>}</td>
-                  <td>{fmtDate(a.startDate)}</td><td>{a.endDate ? fmtDate(a.endDate) : 'em vigor'}</td>
-                  <td className="num">{canEdit && !ended && <AllowanceActions id={a.id} />}</td>
-                </tr>
-              );
-            })}</tbody>
+            <thead>
+              <tr>
+                <th>Subsídio</th>
+                <th>Valor</th>
+                <th>Desde</th>
+                <th>Até</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {r.allowances.map(a => {
+                const ended = !!a.endDate && a.endDate < today;
+                return (
+                  <tr key={a.id} style={ended ? { color: 'var(--ink3)' } : undefined}>
+                    <td>
+                      <span className="tag">{a.type?.code}</span> {a.type?.label}
+                    </td>
+                    <td>
+                      {allowanceValue(
+                        a.type?.calc,
+                        a.valueMinor ?? a.type?.valueMinor ?? null,
+                        a.bps ?? a.type?.bps ?? null,
+                      )}
+                      {(a.valueMinor !== null || a.bps !== null) && <span className="muted"> (valor próprio)</span>}
+                    </td>
+                    <td>{fmtDate(a.startDate)}</td>
+                    <td>{a.endDate ? fmtDate(a.endDate) : 'em vigor'}</td>
+                    <td className="num">{canEdit && !ended && <AllowanceActions id={a.id} />}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
           </table>
-        ) : <div className="empty">Sem subsídios recorrentes atribuídos.</div>}
-        {canEdit && (r.types.length ? <AssignAllowance employeeId={id} types={r.types} /> : <p className="muted" style={{ padding: '0 16px 14px' }}>Crie os subsídios em <Link href="/sector" style={{ color: 'var(--brand)' }}>Sector e regimes</Link>.</p>)}
+        ) : (
+          <div className="empty">Sem subsídios recorrentes atribuídos.</div>
+        )}
+        {canEdit &&
+          (r.types.length ? (
+            <AssignAllowance employeeId={id} types={r.types} />
+          ) : (
+            <p className="muted" style={{ padding: '0 16px 14px' }}>
+              Crie os subsídios em{' '}
+              <Link href="/sector" style={{ color: 'var(--brand)' }}>
+                Sector e regimes
+              </Link>
+              .
+            </p>
+          ))}
       </div>
     </>
   );
@@ -309,31 +608,75 @@ async function AbsencesTab({ p }: { p: Profile }) {
     <>
       {b && (
         <div className="grid">
-          <div className="card kpi"><div className="l">Direito {year}</div><div className="v">{b.entitlement}{b.carriedOver ? ` + ${b.carriedOver}` : ''} dias</div></div>
-          <div className="card kpi"><div className="l">Gozados / aprovados</div><div className="v">{b.taken}</div></div>
-          <div className="card kpi"><div className="l">Pendentes</div><div className="v">{b.pending}</div></div>
-          <div className="card kpi"><div className="l">Disponíveis</div><div className="v" style={{ color: 'var(--brand)' }}>{b.available}</div></div>
+          <div className="card kpi">
+            <div className="l">Direito {year}</div>
+            <div className="v">
+              {b.entitlement}
+              {b.carriedOver ? ` + ${b.carriedOver}` : ''} dias
+            </div>
+          </div>
+          <div className="card kpi">
+            <div className="l">Gozados / aprovados</div>
+            <div className="v">{b.taken}</div>
+          </div>
+          <div className="card kpi">
+            <div className="l">Pendentes</div>
+            <div className="v">{b.pending}</div>
+          </div>
+          <div className="card kpi">
+            <div className="l">Disponíveis</div>
+            <div className="v" style={{ color: 'var(--brand)' }}>
+              {b.available}
+            </div>
+          </div>
         </div>
       )}
-      {b?.eligibleFrom && b.eligibleFrom > luandaDate(new Date()) && <div className="warn">Pode gozar férias a partir de {fmtDate(b.eligibleFrom)} (6 meses de serviço).</div>}
+      {b?.eligibleFrom && b.eligibleFrom > luandaDate(new Date()) && (
+        <div className="warn">Pode gozar férias a partir de {fmtDate(b.eligibleFrom)} (6 meses de serviço).</div>
+      )}
       <div className="card">
         <table>
-          <thead><tr><th>Tipo</th><th>Período</th><th className="num">Dias úteis</th><th>Estado</th><th /></tr></thead>
+          <thead>
+            <tr>
+              <th>Tipo</th>
+              <th>Período</th>
+              <th className="num">Dias úteis</th>
+              <th>Estado</th>
+              <th />
+            </tr>
+          </thead>
           <tbody>
-            {list.map((a) => (
+            {list.map(a => (
               <tr key={a.id}>
-                <td><span className="dot" style={{ background: ABSENCE_POLICIES[a.type as AbsenceType]?.color }} />{ABSENCE_POLICIES[a.type as AbsenceType]?.label ?? a.type}{a.reason && <div className="muted">{a.reason}</div>}<AbsenceFiles id={a.id} count={a.fileCount ?? 0} canAttach={!!a.canAttach} /></td>
-                <td>{fmtDate(a.startDate)}{a.endDate !== a.startDate ? ` – ${fmtDate(a.endDate)}` : ''}</td>
+                <td>
+                  <span className="dot" style={{ background: ABSENCE_POLICIES[a.type as AbsenceType]?.color }} />
+                  {ABSENCE_POLICIES[a.type as AbsenceType]?.label ?? a.type}
+                  {a.reason && <div className="muted">{a.reason}</div>}
+                  <AbsenceFiles id={a.id} count={a.fileCount ?? 0} canAttach={!!a.canAttach} />
+                </td>
+                <td>
+                  {fmtDate(a.startDate)}
+                  {a.endDate !== a.startDate ? ` – ${fmtDate(a.endDate)}` : ''}
+                </td>
                 <td className="num">{a.workingDays}</td>
-                <td><span className={`st ${a.status}`}>{ABSENCE_STATUS_LABEL[a.status]}</span>{a.decisionNote && <div className="muted">{a.decisionNote}</div>}</td>
-                <td className="num"><AbsenceActions id={a.id} canDecide={a.canDecide} canCancel={a.canCancel} /></td>
+                <td>
+                  <span className={`st ${a.status}`}>{ABSENCE_STATUS_LABEL[a.status]}</span>
+                  {a.decisionNote && <div className="muted">{a.decisionNote}</div>}
+                </td>
+                <td className="num">
+                  <AbsenceActions id={a.id} canDecide={a.canDecide} canCancel={a.canCancel} />
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
         {!list.length && <div className="empty">Ninguém faltou nem tirou férias.</div>}
       </div>
-      <p className="muted" style={{ marginTop: 10 }}><Link href="/ausencias" style={{ color: 'var(--brand)' }}>Registar ou pedir ausência →</Link></p>
+      <p className="muted" style={{ marginTop: 10 }}>
+        <Link href="/ausencias" style={{ color: 'var(--brand)' }}>
+          Registar ou pedir ausência →
+        </Link>
+      </p>
     </>
   );
 }
@@ -342,23 +685,43 @@ function TeamTab({ p }: { p: Profile }) {
   const Person = ({ x }: { x: PersonRef }) => (
     <Link href={`/colaboradores/${x.id}`} className="person">
       <div className="avatar sm">{initials(x.name)}</div>
-      <div><b>{x.name}</b><div className="muted">{x.jobTitle}</div></div>
+      <div>
+        <b>{x.name}</b>
+        <div className="muted">{x.jobTitle}</div>
+      </div>
     </Link>
   );
   return (
     <div className="two">
       <div className="card section">
         <h2>Chefia directa</h2>
-        <div style={{ paddingTop: 8 }}>{p.manager ? <Person x={p.manager} /> : <div className="empty">Ainda sem chefia directa.</div>}</div>
+        <div style={{ paddingTop: 8 }}>
+          {p.manager ? <Person x={p.manager} /> : <div className="empty">Ainda sem chefia directa.</div>}
+        </div>
       </div>
       <div className="card section">
         <h2>Equipa directa ({p.reports.length})</h2>
-        <div style={{ paddingTop: 8 }}>{p.reports.length ? p.reports.map((r) => <Person key={r.id} x={r} />) : <div className="empty">Ninguém responde a esta pessoa.</div>}</div>
+        <div style={{ paddingTop: 8 }}>
+          {p.reports.length ? (
+            p.reports.map(r => <Person key={r.id} x={r} />)
+          ) : (
+            <div className="empty">Ninguém responde a esta pessoa.</div>
+          )}
+        </div>
       </div>
       {p.account && (
         <div className="card section">
           <h2>Acesso à plataforma</h2>
-          <dl className="dl"><div><dt>Email de acesso</dt><dd>{p.account.email}</dd></div><div><dt>Perfil</dt><dd>{ROLE_LABEL[p.account.role] ?? p.account.role}</dd></div></dl>
+          <dl className="dl">
+            <div>
+              <dt>Email de acesso</dt>
+              <dd>{p.account.email}</dd>
+            </div>
+            <div>
+              <dt>Perfil</dt>
+              <dd>{ROLE_LABEL[p.account.role] ?? p.account.role}</dd>
+            </div>
+          </dl>
         </div>
       )}
     </div>
@@ -366,14 +729,35 @@ function TeamTab({ p }: { p: Profile }) {
 }
 
 const TITLE: Record<string, string> = {
-  'create:employee': 'Ficha criada', 'update:employee': 'Ficha alterada', 'create:contract': 'Novo contrato',
-  'create:compensation': 'Alteração salarial', 'create:employee_document': 'Documento adicionado', 'delete:employee_document': 'Documento removido',
+  'create:employee': 'Ficha criada',
+  'update:employee': 'Ficha alterada',
+  'create:contract': 'Novo contrato',
+  'create:compensation': 'Alteração salarial',
+  'create:employee_document': 'Documento adicionado',
+  'delete:employee_document': 'Documento removido',
   'correct:compensation': 'Correcção de remuneração',
 };
 const FIELD: Record<string, string> = {
-  name: 'nome', jobTitle: 'função', departmentId: 'departamento', managerId: 'chefia', status: 'situação', province: 'província', gender: 'sexo',
-  birthDate: 'nascimento', nationality: 'nacionalidade', maritalStatus: 'estado civil', biNumber: 'BI', nif: 'NIF', inssNumber: 'INSS', iban: 'IBAN',
-  bank: 'banco', email: 'email', phone: 'telefone', address: 'morada', emergencyContactName: 'contacto de emergência', emergencyContactPhone: 'telefone de emergência',
+  name: 'nome',
+  jobTitle: 'função',
+  departmentId: 'departamento',
+  managerId: 'chefia',
+  status: 'situação',
+  province: 'província',
+  gender: 'sexo',
+  birthDate: 'nascimento',
+  nationality: 'nacionalidade',
+  maritalStatus: 'estado civil',
+  biNumber: 'BI',
+  nif: 'NIF',
+  inssNumber: 'INSS',
+  iban: 'IBAN',
+  bank: 'banco',
+  email: 'email',
+  phone: 'telefone',
+  address: 'morada',
+  emergencyContactName: 'contacto de emergência',
+  emergencyContactPhone: 'telefone de emergência',
 };
 
 /** Listas de acolhimento e saída do colaborador (todas as situações). */
@@ -382,15 +766,42 @@ async function ChecklistsTab({ id }: { id: string }) {
   return (
     <div className="card">
       <table>
-        <thead><tr><th>Lista</th><th>Data de referência</th><th>Progresso</th><th>Situação</th></tr></thead>
-        <tbody>{lists.map(l => <tr key={l.id}>
-          <td><Link href={`/acolhimento/${l.id}`}><b>{CHECKLIST_KIND_LABELS[l.kind]}</b></Link><div className="muted">{l.title}</div></td>
-          <td>{fmtDate(l.referenceDate)}</td>
-          <td>{l.progress.done}/{l.progress.total}{l.progress.overdue > 0 && <span style={{ color: 'var(--red)' }}> · {l.progress.overdue} em atraso</span>}</td>
-          <td><span className={LIST_STATUS[l.status][1]}>{LIST_STATUS[l.status][0]}</span></td>
-        </tr>)}</tbody>
+        <thead>
+          <tr>
+            <th>Lista</th>
+            <th>Data de referência</th>
+            <th>Progresso</th>
+            <th>Situação</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lists.map(l => (
+            <tr key={l.id}>
+              <td>
+                <Link href={`/acolhimento/${l.id}`}>
+                  <b>{CHECKLIST_KIND_LABELS[l.kind]}</b>
+                </Link>
+                <div className="muted">{l.title}</div>
+              </td>
+              <td>{fmtDate(l.referenceDate)}</td>
+              <td>
+                {l.progress.done}/{l.progress.total}
+                {l.progress.overdue > 0 && (
+                  <span style={{ color: 'var(--red)' }}> · {l.progress.overdue} em atraso</span>
+                )}
+              </td>
+              <td>
+                <span className={LIST_STATUS[l.status][1]}>{LIST_STATUS[l.status][0]}</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
       </table>
-      {!lists.length && <div className="empty">Sem listas de acolhimento ou saída. Pode iniciar uma em <Link href="/acolhimento">Acolhimento e saída</Link>.</div>}
+      {!lists.length && (
+        <div className="empty">
+          Sem listas de acolhimento ou saída. Pode iniciar uma em <Link href="/acolhimento">Acolhimento e saída</Link>.
+        </div>
+      )}
     </div>
   );
 }
@@ -400,12 +811,18 @@ async function HistoryTab({ id }: { id: string }) {
   const describe = (h: HistoryEntry): string => {
     const a = h.after ?? {};
     const b = h.before ?? {};
-    if (h.entity === 'employee' && h.action === 'update') return `Campos alterados: ${Object.keys(a).map((k) => FIELD[k] ?? k).join(', ')}`;
+    if (h.entity === 'employee' && h.action === 'update')
+      return `Campos alterados: ${Object.keys(a)
+        .map(k => FIELD[k] ?? k)
+        .join(', ')}`;
     if (h.entity === 'employee' && h.action === 'create') return 'Registo inicial com contrato e remuneração';
     if (h.entity === 'compensation') {
       const before = b as Partial<Compensation>;
       const after = a as Partial<Compensation> & { correctionReason?: string };
-      const payText = (c: Partial<Compensation>) => c.salaryCurrency === 'USD' && c.baseForeignMinor != null ? formatUsd(c.baseForeignMinor) : formatKz(c.baseMinor ?? 0);
+      const payText = (c: Partial<Compensation>) =>
+        c.salaryCurrency === 'USD' && c.baseForeignMinor != null
+          ? formatUsd(c.baseForeignMinor)
+          : formatKz(c.baseMinor ?? 0);
       return `${after.correctionReason ?? after.reason ?? ''}: ${before.baseMinor != null ? `${payText(before)} → ` : ''}${payText(after)} com efeito em ${fmtDate(after.effectiveDate)}`;
     }
     if (h.entity === 'contract') {
@@ -422,15 +839,24 @@ async function HistoryTab({ id }: { id: string }) {
     <div className="card">
       {hist.length ? (
         <ul className="timeline">
-          {hist.map((h) => (
+          {hist.map(h => (
             <li key={h.id}>
               <b>{TITLE[`${h.action}:${h.entity}`] ?? `${h.entity} (${h.action})`}</b>
               <div className="chg">{describe(h)}</div>
-              <div className="when">{new Date(h.at).toLocaleString('pt-AO', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Africa/Luanda' })} · {h.actorName}</div>
+              <div className="when">
+                {new Date(h.at).toLocaleString('pt-AO', {
+                  dateStyle: 'short',
+                  timeStyle: 'short',
+                  timeZone: 'Africa/Luanda',
+                })}{' '}
+                · {h.actorName}
+              </div>
             </li>
           ))}
         </ul>
-      ) : <div className="empty">Sem alterações registadas</div>}
+      ) : (
+        <div className="empty">Sem alterações registadas</div>
+      )}
     </div>
   );
 }

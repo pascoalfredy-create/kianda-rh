@@ -5,17 +5,42 @@ import { addUser, apiAs, closePool, registerCompany, signIn, watchErrors } from 
 test.afterAll(closePool);
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
-const nextMonday = () => { const d = new Date(Date.now() + 3_600_000); d.setUTCDate(d.getUTCDate() + ((8 - d.getUTCDay()) % 7 || 7)); return iso(d); };
+const nextMonday = () => {
+  const d = new Date(Date.now() + 3_600_000);
+  d.setUTCDate(d.getUTCDate() + ((8 - d.getUTCDay()) % 7 || 7));
+  return iso(d);
+};
 
-test('Turnos: o RH cria os turnos, planeia com o pincel e um padrão, publica, e o colaborador vê a sua escala', async ({ page, context, browser }) => {
+test('Turnos: o RH cria os turnos, planeia com o pincel e um padrão, publica, e o colaborador vê a sua escala', async ({
+  page,
+  context,
+  browser,
+}) => {
   const owner = await registerCompany();
   const ids: string[] = [];
-  for (const [n, name] of [['31', 'Ana Muxima'], ['32', 'Bento Kanda'], ['33', 'Carla Tchissola'], ['34', 'Dário Lemos']] as const) {
-    const r = await apiAs(owner.token, 'POST', '/v1/employees', { number: n, name, gender: 'F', jobTitle: 'Vigilante', province: 'Luanda', nif: `00000031${n}`, contract: { type: 'indefinite', startDate: '2025-03-03', base: 250000, meal: 25000, transport: 20000 } });
-    expect(r.status, JSON.stringify(r.body)).toBe(201); ids.push(r.body.id);
+  for (const [n, name] of [
+    ['31', 'Ana Muxima'],
+    ['32', 'Bento Kanda'],
+    ['33', 'Carla Tchissola'],
+    ['34', 'Dário Lemos'],
+  ] as const) {
+    const r = await apiAs(owner.token, 'POST', '/v1/employees', {
+      number: n,
+      name,
+      gender: 'F',
+      jobTitle: 'Vigilante',
+      province: 'Luanda',
+      nif: `00000031${n}`,
+      contract: { type: 'indefinite', startDate: '2025-03-03', base: 250000, meal: 25000, transport: 20000 },
+    });
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    ids.push(r.body.id);
   }
   const ana = await addUser(owner, 'Ana Muxima', 'employee', ids[0]);
-  for (const t of [{ code: 'T', name: 'Tarde', startTime: '14:00', endTime: '22:00', breakMinutes: 30, color: 'amber' }, { code: 'N', name: 'Noite', startTime: '22:00', endTime: '06:00', breakMinutes: 30, color: 'violet', minStaff: 1 }]) {
+  for (const t of [
+    { code: 'T', name: 'Tarde', startTime: '14:00', endTime: '22:00', breakMinutes: 30, color: 'amber' },
+    { code: 'N', name: 'Noite', startTime: '22:00', endTime: '06:00', breakMinutes: 30, color: 'violet', minStaff: 1 },
+  ]) {
     expect((await apiAs(owner.token, 'POST', '/v1/shifts/types', t)).status).toBe(201);
   }
 
@@ -71,23 +96,39 @@ test('Turnos: o RH cria os turnos, planeia com o pincel e um padrão, publica, e
   expect(errors).toEqual([]);
 
   // A colaboradora vê a sua escala publicada.
-  const mine = await browser.newContext({ locale: 'pt-PT', timezoneId: 'Africa/Luanda', viewport: { width: 412, height: 860 }, isMobile: true, hasTouch: true });
+  const mine = await browser.newContext({
+    locale: 'pt-PT',
+    timezoneId: 'Africa/Luanda',
+    viewport: { width: 412, height: 860 },
+    isMobile: true,
+    hasTouch: true,
+  });
   await signIn(mine, ana.token);
   const phone = await mine.newPage();
   await phone.goto(`/turnos?v=meus&de=${monday}`);
   await expect(phone.getByRole('heading', { name: 'Os meus turnos', level: 1 })).toBeVisible();
   await expect(phone.locator('.kpi', { hasText: 'Próximo turno' })).toContainText('06:00–14:00');
   await expect(phone.getByRole('row', { name: /seg/ }).first()).toContainText('Manhã');
-  expect(await phone.evaluate<number>('document.documentElement.scrollWidth - window.innerWidth')).toBeLessThanOrEqual(1);
+  expect(await phone.evaluate<number>('document.documentElement.scrollWidth - window.innerWidth')).toBeLessThanOrEqual(
+    1,
+  );
   await phone.screenshot({ path: '/tmp/e2e/turnos-04-os-meus.png', fullPage: false });
   await mine.close();
   // A dona vê a escala no telemóvel: a grelha desliza dentro do cartão, sem alargar a página.
-  const own = await browser.newContext({ locale: 'pt-PT', timezoneId: 'Africa/Luanda', viewport: { width: 412, height: 860 }, isMobile: true, hasTouch: true });
+  const own = await browser.newContext({
+    locale: 'pt-PT',
+    timezoneId: 'Africa/Luanda',
+    viewport: { width: 412, height: 860 },
+    isMobile: true,
+    hasTouch: true,
+  });
   await signIn(own, owner.token);
   const ownPhone = await own.newPage();
   await ownPhone.goto(`/turnos?de=${monday}`);
   await expect(ownPhone.locator('table.roster')).toBeVisible();
-  expect(await ownPhone.evaluate<number>('document.documentElement.scrollWidth - window.innerWidth')).toBeLessThanOrEqual(1);
+  expect(
+    await ownPhone.evaluate<number>('document.documentElement.scrollWidth - window.innerWidth'),
+  ).toBeLessThanOrEqual(1);
   await ownPhone.screenshot({ path: '/tmp/e2e/turnos-05-escala-telemovel.png', fullPage: false });
   await own.close();
 });

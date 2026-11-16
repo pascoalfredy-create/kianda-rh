@@ -1,4 +1,15 @@
-import { candidates, closeDb, employees as employeesTable, getDb, eq, files, jobOpenings, platformSettings, sql, withTenant } from '@kianda/db';
+import {
+  candidates,
+  closeDb,
+  employees as employeesTable,
+  getDb,
+  eq,
+  files,
+  jobOpenings,
+  platformSettings,
+  sql,
+  withTenant,
+} from '@kianda/db';
 import { COMPANY_TABLES_PURGE_ORDER } from '../src/services/privacy.js';
 import { drainR2Deletions, removeFiles, setObjectStore, type ObjectStore } from '../src/services/storage.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -9,10 +20,13 @@ import { platformCookie } from './platform-admin.js';
 import { fixtureWord, fixtureZip } from '../../../packages/core/test/fixtures/document-import.js';
 
 const app = testClient(buildApp({ rateLimit: false }));
-afterAll(async () => { await app.close(); if (process.env.DATABASE_URL) await closeDb(); });
+afterAll(async () => {
+  await app.close();
+  if (process.env.DATABASE_URL) await closeDb();
+});
 
 const cookieOf = (r: InjectResponse) => {
-  const c = r.cookies.find((x) => x.name === 'kianda_session');
+  const c = r.cookies.find(x => x.name === 'kianda_session');
   if (!c) throw new Error('sem cookie de sessão');
   return `kianda_session=${c.value}`;
 };
@@ -23,24 +37,39 @@ describe('rotas públicas', () => {
     expect(r.json()).toMatchObject({ status: 'ok', packs: ['AO-2026'] });
   });
   it('simulador salarial: 420 000 Kz → 392 744 Kz líquidos', async () => {
-    const r = await app.inject({ method: 'POST', url: '/v1/payroll/simulate', payload: { period: '2026-10', base: 420000, meal: 30000, transport: 25000 } });
+    const r = await app.inject({
+      method: 'POST',
+      url: '/v1/payroll/simulate',
+      payload: { period: '2026-10', base: 420000, meal: 30000, transport: 25000 },
+    });
     expect(r.json().netMinor).toBe(39_274_400);
   });
   it('ano anterior ao primeiro pacote devolve 422; anos seguintes continuam com as regras em vigor', async () => {
-    const r = await app.inject({ method: 'POST', url: '/v1/payroll/simulate', payload: { period: '2025-01', base: 200000 } });
+    const r = await app.inject({
+      method: 'POST',
+      url: '/v1/payroll/simulate',
+      payload: { period: '2025-01', base: 200000 },
+    });
     expect(r.statusCode).toBe(422);
-    expect((await app.inject({ method: 'POST', url: '/v1/payroll/simulate', payload: { period: '2027-01', base: 200000 } })).statusCode).toBe(200);
+    expect(
+      (await app.inject({ method: 'POST', url: '/v1/payroll/simulate', payload: { period: '2027-01', base: 200000 } }))
+        .statusCode,
+    ).toBe(200);
   });
   it('rotas da empresa exigem sessão', async () => {
     expect((await app.inject({ method: 'GET', url: '/v1/employees' })).statusCode).toBe(401);
-    expect((await app.inject({ method: 'GET', url: '/v1/employees', headers: { 'x-company-id': 'qualquer' } })).statusCode).toBe(401);
+    expect(
+      (await app.inject({ method: 'GET', url: '/v1/employees', headers: { 'x-company-id': 'qualquer' } })).statusCode,
+    ).toBe(401);
   });
 });
 
 describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de negócio', () => {
   const stamp = String(Date.now());
   const nifA = stamp.slice(-10);
-  const nifB = String(Number(nifA) + 1).padStart(10, '0').slice(-10);
+  const nifB = String(Number(nifA) + 1)
+    .padStart(10, '0')
+    .slice(-10);
   const pw = 'Segura2026abc';
   let owner = '';
   let admin = '';
@@ -51,39 +80,101 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
   let empId = '';
 
   const as = (cookie: string) => ({ cookie });
-  const login = async (email: string) => cookieOf(await app.inject({ method: 'POST', url: '/v1/auth/login', payload: { email, password: pw, companyNif: nifA } }));
+  const login = async (email: string) =>
+    cookieOf(
+      await app.inject({ method: 'POST', url: '/v1/auth/login', payload: { email, password: pw, companyNif: nifA } }),
+    );
 
   beforeAll(async () => {
-    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Empresa A', nif: nifA }, name: 'Dona A', email: `dona+${stamp}@a.ao`, password: pw } });
+    const r = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/register',
+      payload: {
+        acceptTerms: true,
+        company: { name: 'Empresa A', nif: nifA },
+        name: 'Dona A',
+        email: `dona+${stamp}@a.ao`,
+        password: pw,
+      },
+    });
     expect(r.statusCode).toBe(201);
     owner = cookieOf(r);
-    const rb = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Empresa B', nif: nifB }, name: 'Dono B', email: `dono+${stamp}@b.ao`, password: pw } });
+    const rb = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/register',
+      payload: {
+        acceptTerms: true,
+        company: { name: 'Empresa B', nif: nifB },
+        name: 'Dono B',
+        email: `dono+${stamp}@b.ao`,
+        password: pw,
+      },
+    });
     ownerB = cookieOf(rb);
     // Os fluxos de negócio e de ficheiros abaixo exercitam uma licença paga.
-    for (const company of [r.json().company.id, rb.json().company.id]) await getDb().execute(sql`update subscriptions set status='active', paid_until='2099-12-31' where company_id=${company}`);
+    for (const company of [r.json().company.id, rb.json().company.id])
+      await getDb().execute(
+        sql`update subscriptions set status='active', paid_until='2099-12-31' where company_id=${company}`,
+      );
   });
 
   it('recusa palavra-passe fraca no registo', async () => {
-    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'X', nif: '9999999999' }, name: 'X', email: 'x@x.ao', password: 'curta' } });
+    const r = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/register',
+      payload: {
+        acceptTerms: true,
+        company: { name: 'X', nif: '9999999999' },
+        name: 'X',
+        email: 'x@x.ao',
+        password: 'curta',
+      },
+    });
     expect(r.statusCode).toBe(400);
   });
 
   it('login errado devolve 401 sem revelar se a conta existe', async () => {
-    const a = await app.inject({ method: 'POST', url: '/v1/auth/login', payload: { email: `dona+${stamp}@a.ao`, password: 'Errada12345' } });
-    const b = await app.inject({ method: 'POST', url: '/v1/auth/login', payload: { email: 'naoexiste@a.ao', password: 'Errada12345' } });
+    const a = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: { email: `dona+${stamp}@a.ao`, password: 'Errada12345' },
+    });
+    const b = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: { email: 'naoexiste@a.ao', password: 'Errada12345' },
+    });
     expect([a.statusCode, b.statusCode]).toEqual([401, 401]);
     expect(a.json().message).toBe(b.json().message);
   });
 
   it('proprietário cria colaborador e utilizadores com perfis', async () => {
-    const e = await app.inject({ method: 'POST', url: '/v1/employees', headers: as(owner), payload: {
-      number: '10', name: 'Joana Teste', jobTitle: 'Técnica', biNumber: '004512398LA041', iban: 'AO06 0040 0000 5521 8890 1015 5',
-      contract: { type: 'indefinite', startDate: '2026-01-05', base: 420000, meal: 30000, transport: 25000 },
-    } });
+    const e = await app.inject({
+      method: 'POST',
+      url: '/v1/employees',
+      headers: as(owner),
+      payload: {
+        number: '10',
+        name: 'Joana Teste',
+        jobTitle: 'Técnica',
+        biNumber: '004512398LA041',
+        iban: 'AO06 0040 0000 5521 8890 1015 5',
+        contract: { type: 'indefinite', startDate: '2026-01-05', base: 420000, meal: 30000, transport: 25000 },
+      },
+    });
     expect(e.statusCode).toBe(201);
     empId = e.json().id;
-    for (const [role, extra] of [['payroll', {}], ['finance', {}], ['employee', { employeeId: empId }]] as const) {
-      const r = await app.inject({ method: 'POST', url: '/v1/users', headers: as(owner), payload: { name: role, email: `${role}+${stamp}@a.ao`, password: pw, role, ...extra } });
+    for (const [role, extra] of [
+      ['payroll', {}],
+      ['finance', {}],
+      ['employee', { employeeId: empId }],
+    ] as const) {
+      const r = await app.inject({
+        method: 'POST',
+        url: '/v1/users',
+        headers: as(owner),
+        payload: { name: role, email: `${role}+${stamp}@a.ao`, password: pw, role, ...extra },
+      });
       expect(r.statusCode).toBe(201);
     }
     payrollUser = await login(`payroll+${stamp}@a.ao`);
@@ -94,61 +185,138 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
   });
 
   it('colaborador não cria fichas nem vê a lista, mas consulta a sua ficha', async () => {
-    expect((await app.inject({ method: 'POST', url: '/v1/employees', headers: as(employeeUser), payload: {} })).statusCode).toBe(403);
+    expect(
+      (await app.inject({ method: 'POST', url: '/v1/employees', headers: as(employeeUser), payload: {} })).statusCode,
+    ).toBe(403);
     expect((await app.inject({ method: 'GET', url: '/v1/employees', headers: as(employeeUser) })).statusCode).toBe(403);
-    expect((await app.inject({ method: 'GET', url: `/v1/employees/${empId}`, headers: as(employeeUser) })).statusCode).toBe(200);
+    expect(
+      (await app.inject({ method: 'GET', url: `/v1/employees/${empId}`, headers: as(employeeUser) })).statusCode,
+    ).toBe(200);
   });
 
   it('isolamento entre empresas: a empresa B não vê dados da empresa A', async () => {
-    expect((await app.inject({ method: 'GET', url: `/v1/employees/${empId}`, headers: as(ownerB) })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'GET', url: `/v1/employees/${empId}`, headers: as(ownerB) })).statusCode).toBe(
+      404,
+    );
     expect((await app.inject({ method: 'GET', url: '/v1/employees', headers: as(ownerB) })).json()).toEqual([]);
   });
 
   it('valida BI e IBAN ao criar colaborador', async () => {
-    const r = await app.inject({ method: 'POST', url: '/v1/employees', headers: as(owner), payload: { number: '1', name: 'Ana', jobTitle: 'Técnica', biNumber: '123', iban: 'AO06 0000', contract: { type: 'indefinite', startDate: '2026-01-05', base: 300000 } } });
+    const r = await app.inject({
+      method: 'POST',
+      url: '/v1/employees',
+      headers: as(owner),
+      payload: {
+        number: '1',
+        name: 'Ana',
+        jobTitle: 'Técnica',
+        biNumber: '123',
+        iban: 'AO06 0000',
+        contract: { type: 'indefinite', startDate: '2026-01-05', base: 300000 },
+      },
+    });
     expect(r.statusCode).toBe(400);
     expect(r.json().issues.map((i: { path: string }) => i.path)).toEqual(expect.arrayContaining(['biNumber', 'iban']));
     expect(r.json().issues.find((i: { path: string }) => i.path === 'iban').message).toMatch(/devem ser 21/);
   });
 
   it('colaborador regista as próprias férias com dias úteis e feriados', async () => {
-    const a = await app.inject({ method: 'POST', url: '/v1/absences', headers: as(employeeUser), payload: { employeeId: empId, type: 'vacation', startDate: '2026-10-26', endDate: '2026-11-06' } });
+    const a = await app.inject({
+      method: 'POST',
+      url: '/v1/absences',
+      headers: as(employeeUser),
+      payload: { employeeId: empId, type: 'vacation', startDate: '2026-10-26', endDate: '2026-11-06' },
+    });
     expect(a.json().workingDays).toBe(9);
-    const dup = await app.inject({ method: 'POST', url: '/v1/absences', headers: as(owner), payload: { employeeId: empId, type: 'justified', startDate: '2026-11-02', endDate: '2026-11-03' } });
+    const dup = await app.inject({
+      method: 'POST',
+      url: '/v1/absences',
+      headers: as(owner),
+      payload: { employeeId: empId, type: 'justified', startDate: '2026-11-02', endDate: '2026-11-03' },
+    });
     expect(dup.statusCode).toBe(409);
   });
 
   it('processamento com segregação de funções: quem prepara não fecha', async () => {
-    expect((await app.inject({ method: 'POST', url: '/v1/payroll-runs', headers: as(employeeUser), payload: { period: '2026-10' } })).statusCode).toBe(403);
-    const draft = await app.inject({ method: 'POST', url: '/v1/payroll-runs', headers: as(payrollUser), payload: { period: '2026-10' } });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/v1/payroll-runs',
+          headers: as(employeeUser),
+          payload: { period: '2026-10' },
+        })
+      ).statusCode,
+    ).toBe(403);
+    const draft = await app.inject({
+      method: 'POST',
+      url: '/v1/payroll-runs',
+      headers: as(payrollUser),
+      payload: { period: '2026-10' },
+    });
     expect(draft.statusCode).toBe(201);
     const runId = draft.json().run.id;
-    expect((await app.inject({ method: 'POST', url: `/v1/payroll-runs/${runId}/close`, headers: as(payrollUser) })).statusCode).toBe(403);
-    const close = await app.inject({ method: 'POST', url: `/v1/payroll-runs/${runId}/close`, headers: as(financeUser) });
+    expect(
+      (await app.inject({ method: 'POST', url: `/v1/payroll-runs/${runId}/close`, headers: as(payrollUser) }))
+        .statusCode,
+    ).toBe(403);
+    const close = await app.inject({
+      method: 'POST',
+      url: `/v1/payroll-runs/${runId}/close`,
+      headers: as(financeUser),
+    });
     expect(close.statusCode).toBe(200);
     expect(close.json().journalReference).toBe('PS-202610');
     const journal = (await app.inject({ method: 'GET', url: '/v1/journal', headers: as(financeUser) })).json();
     const lines = journal[0].lines as { debitMinor: number; creditMinor: number }[];
     expect(lines.reduce((s, l) => s + l.debitMinor, 0)).toBe(lines.reduce((s, l) => s + l.creditMinor, 0));
-    expect((await app.inject({ method: 'POST', url: '/v1/payroll-runs', headers: as(payrollUser), payload: { period: '2026-10' } })).statusCode).toBe(409);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/v1/payroll-runs',
+          headers: as(payrollUser),
+          payload: { period: '2026-10' },
+        })
+      ).statusCode,
+    ).toBe(409);
   });
 
   describe('ficha do colaborador (entrega 2)', () => {
     let chiefId = '';
     let deptId = '';
-    const patch = (cookie: string, id: string, payload: object) => app.inject({ method: 'PATCH', url: `/v1/employees/${id}`, headers: as(cookie), payload });
+    const patch = (cookie: string, id: string, payload: object) =>
+      app.inject({ method: 'PATCH', url: `/v1/employees/${id}`, headers: as(cookie), payload });
 
     it('departamentos, chefia e protecção contra ciclos', async () => {
-      const d = await app.inject({ method: 'POST', url: '/v1/departments', headers: as(owner), payload: { name: 'Operações', costCenter: 'cc-ops' } });
+      const d = await app.inject({
+        method: 'POST',
+        url: '/v1/departments',
+        headers: as(owner),
+        payload: { name: 'Operações', costCenter: 'cc-ops' },
+      });
       expect(d.json().costCenter).toBe('CC-OPS');
       deptId = d.json().id;
-      const c = await app.inject({ method: 'POST', url: '/v1/employees', headers: as(owner), payload: {
-        number: '11', name: 'Chefe Teste', jobTitle: 'Directora', departmentId: deptId,
-        contract: { type: 'indefinite', startDate: '2025-01-06', base: 1200000 },
-      } });
+      const c = await app.inject({
+        method: 'POST',
+        url: '/v1/employees',
+        headers: as(owner),
+        payload: {
+          number: '11',
+          name: 'Chefe Teste',
+          jobTitle: 'Directora',
+          departmentId: deptId,
+          contract: { type: 'indefinite', startDate: '2025-01-06', base: 1200000 },
+        },
+      });
       expect(c.statusCode).toBe(201);
       chiefId = c.json().id;
-      const r = await patch(owner, empId, { managerId: chiefId, departmentId: deptId, phone: '923 000 111', nationality: 'Angolana' });
+      const r = await patch(owner, empId, {
+        managerId: chiefId,
+        departmentId: deptId,
+        phone: '923 000 111',
+        nationality: 'Angolana',
+      });
       expect(r.statusCode).toBe(200);
       expect(r.json()).toMatchObject({ managerId: chiefId, departmentId: deptId, phone: '923 000 111' });
       const cycle = await patch(owner, chiefId, { managerId: empId });
@@ -163,59 +331,140 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect((await patch(ownerB, empId, { phone: '1' })).statusCode).toBe(404);
       const fakeDept = await patch(ownerB, empId, { departmentId: deptId });
       expect(fakeDept.statusCode).toBe(404);
-      const otherCo = await app.inject({ method: 'POST', url: '/v1/employees', headers: as(ownerB), payload: { number: '1', name: 'Fulano B', jobTitle: 'Técnico', managerId: chiefId, contract: { type: 'indefinite', startDate: '2026-01-05', base: 200000 } } });
+      const otherCo = await app.inject({
+        method: 'POST',
+        url: '/v1/employees',
+        headers: as(ownerB),
+        payload: {
+          number: '1',
+          name: 'Fulano B',
+          jobTitle: 'Técnico',
+          managerId: chiefId,
+          contract: { type: 'indefinite', startDate: '2026-01-05', base: 200000 },
+        },
+      });
       expect(otherCo.json().error).toBe('chefia_invalida');
       expect((await patch(owner, empId, { iban: 'AO06 1234' })).statusCode).toBe(400);
     });
 
     it('alteração salarial: salário mínimo, meses fechados e duplicados', async () => {
-      const post = (payload: object) => app.inject({ method: 'POST', url: `/v1/employees/${empId}/compensation`, headers: as(owner), payload });
-      expect((await post({ effectiveDate: '2026-11-01', base: 90000, reason: 'teste' })).json().error).toBe('abaixo_salario_minimo');
-      const closed = await post({ effectiveDate: '2026-10-15', base: 460000, meal: 30000, transport: 25000, reason: 'Actualização' });
+      const post = (payload: object) =>
+        app.inject({ method: 'POST', url: `/v1/employees/${empId}/compensation`, headers: as(owner), payload });
+      expect((await post({ effectiveDate: '2026-11-01', base: 90000, reason: 'teste' })).json().error).toBe(
+        'abaixo_salario_minimo',
+      );
+      const closed = await post({
+        effectiveDate: '2026-10-15',
+        base: 460000,
+        meal: 30000,
+        transport: 25000,
+        reason: 'Actualização',
+      });
       expect(closed.statusCode).toBe(409);
       expect(closed.json().error).toBe('periodo_fechado');
-      const ok = await post({ effectiveDate: '2026-11-01', base: 460000, meal: 30000, transport: 25000, reason: 'Actualização anual' });
+      const ok = await post({
+        effectiveDate: '2026-11-01',
+        base: 460000,
+        meal: 30000,
+        transport: 25000,
+        reason: 'Actualização anual',
+      });
       expect(ok.statusCode).toBe(201);
       expect((await post({ effectiveDate: '2026-11-01', base: 470000, reason: 'Repetida' })).statusCode).toBe(409);
     });
 
     it('o processamento usa a remuneração em vigor no fim do mês', async () => {
-      const draft = await app.inject({ method: 'POST', url: '/v1/payroll-runs', headers: as(payrollUser), payload: { period: '2026-11' } });
-      const run = (await app.inject({ method: 'GET', url: `/v1/payroll-runs/${draft.json().run.id}`, headers: as(payrollUser) })).json();
+      const draft = await app.inject({
+        method: 'POST',
+        url: '/v1/payroll-runs',
+        headers: as(payrollUser),
+        payload: { period: '2026-11' },
+      });
+      const run = (
+        await app.inject({ method: 'GET', url: `/v1/payroll-runs/${draft.json().run.id}`, headers: as(payrollUser) })
+      ).json();
       const line = run.lines.find((l: { employeeId: string }) => l.employeeId === empId);
       const base = line.breakdown.find((b: { code: string }) => b.code === 'BASE');
       expect(base.amountMinor).toBe(46_000_000);
     });
 
     it('novo contrato encerra o anterior na véspera', async () => {
-      const post = (payload: object) => app.inject({ method: 'POST', url: `/v1/employees/${empId}/contracts`, headers: as(owner), payload });
+      const post = (payload: object) =>
+        app.inject({ method: 'POST', url: `/v1/employees/${empId}/contracts`, headers: as(owner), payload });
       expect((await post({ type: 'indefinite', startDate: '2025-12-01', base: 500000 })).statusCode).toBe(400);
-      expect((await post({ type: 'fixed_term', startDate: '2026-12-01', endDate: '2027-11-30', base: 500000 })).statusCode).toBe(400);
-      const ok = await post({ type: 'indefinite', startDate: '2026-12-01', base: 500000, meal: 30000, transport: 25000 });
+      expect(
+        (await post({ type: 'fixed_term', startDate: '2026-12-01', endDate: '2027-11-30', base: 500000 })).statusCode,
+      ).toBe(400);
+      const ok = await post({
+        type: 'indefinite',
+        startDate: '2026-12-01',
+        base: 500000,
+        meal: 30000,
+        transport: 25000,
+      });
       expect(ok.statusCode).toBe(201);
       const ficha = (await app.inject({ method: 'GET', url: `/v1/employees/${empId}`, headers: as(owner) })).json();
       expect(ficha.contracts).toHaveLength(2);
-      expect(ficha.contracts[1]).toMatchObject({ terminatedAt: '2026-11-30', terminationReason: 'Substituído por novo contrato' });
-      expect(ficha.compensation.upcoming.map((c: { effectiveDate: string }) => c.effectiveDate)).toEqual(['2026-11-01', '2026-12-01'].filter((d) => d > luandaDate(new Date()))); // "Futuras" depende do dia em que o teste corre.
+      expect(ficha.contracts[1]).toMatchObject({
+        terminatedAt: '2026-11-30',
+        terminationReason: 'Substituído por novo contrato',
+      });
+      expect(ficha.compensation.upcoming.map((c: { effectiveDate: string }) => c.effectiveDate)).toEqual(
+        ['2026-11-01', '2026-12-01'].filter(d => d > luandaDate(new Date())),
+      ); // "Futuras" depende do dia em que o teste corre.
       expect(ficha.manager).toMatchObject({ id: chiefId, name: 'Chefe Teste' });
     });
 
     it('documentos com validade geram alertas e ficam no histórico', async () => {
-      const post = (payload: object) => app.inject({ method: 'POST', url: `/v1/employees/${empId}/documents`, headers: as(owner), payload });
+      const post = (payload: object) =>
+        app.inject({ method: 'POST', url: `/v1/employees/${empId}/documents`, headers: as(owner), payload });
       expect((await post({ type: 'bi', number: '12345' })).statusCode).toBe(400);
       const soon = new Date(Date.now() + 20 * 86_400_000).toISOString().slice(0, 10);
-      const d = await post({ type: 'driving_licence', number: 'lu-0099812', issueDate: '2021-03-01', expiryDate: soon, issuer: 'DNVT' });
+      const d = await post({
+        type: 'driving_licence',
+        number: 'lu-0099812',
+        issueDate: '2021-03-01',
+        expiryDate: soon,
+        issuer: 'DNVT',
+      });
       expect(d.statusCode).toBe(201);
       expect(d.json().number).toBe('LU-0099812');
       let ficha = (await app.inject({ method: 'GET', url: `/v1/employees/${empId}`, headers: as(owner) })).json();
       expect(ficha.alerts.some((a: string) => a.startsWith('Carta de Condução: caduca em'))).toBe(true);
-      expect((await app.inject({ method: 'DELETE', url: `/v1/employees/${empId}/documents/${d.json().id}`, headers: as(employeeUser) })).statusCode).toBe(403);
-      expect((await app.inject({ method: 'DELETE', url: `/v1/employees/${empId}/documents/${d.json().id}`, headers: as(owner) })).statusCode).toBe(204);
+      expect(
+        (
+          await app.inject({
+            method: 'DELETE',
+            url: `/v1/employees/${empId}/documents/${d.json().id}`,
+            headers: as(employeeUser),
+          })
+        ).statusCode,
+      ).toBe(403);
+      expect(
+        (
+          await app.inject({
+            method: 'DELETE',
+            url: `/v1/employees/${empId}/documents/${d.json().id}`,
+            headers: as(owner),
+          })
+        ).statusCode,
+      ).toBe(204);
       ficha = (await app.inject({ method: 'GET', url: `/v1/employees/${empId}`, headers: as(owner) })).json();
       expect(ficha.documents).toHaveLength(0);
-      const hist = (await app.inject({ method: 'GET', url: `/v1/employees/${empId}/history`, headers: as(owner) })).json();
+      const hist = (
+        await app.inject({ method: 'GET', url: `/v1/employees/${empId}/history`, headers: as(owner) })
+      ).json();
       const kinds = hist.map((h: { action: string; entity: string }) => `${h.action}:${h.entity}`);
-      expect(kinds).toEqual(expect.arrayContaining(['delete:employee_document', 'create:employee_document', 'create:contract', 'create:compensation', 'update:employee', 'create:employee']));
+      expect(kinds).toEqual(
+        expect.arrayContaining([
+          'delete:employee_document',
+          'create:employee_document',
+          'create:contract',
+          'create:compensation',
+          'update:employee',
+          'create:employee',
+        ]),
+      );
       expect(hist[0].actorName).toBe('Dona A');
     });
 
@@ -223,7 +472,9 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       const tree = (await app.inject({ method: 'GET', url: '/v1/org-chart', headers: as(financeUser) })).json();
       const chief = tree.find((n: { id: string }) => n.id === chiefId);
       expect(chief.reports.map((r: { id: string }) => r.id)).toEqual([empId]);
-      expect((await app.inject({ method: 'GET', url: '/v1/org-chart', headers: as(employeeUser) })).statusCode).toBe(403);
+      expect((await app.inject({ method: 'GET', url: '/v1/org-chart', headers: as(employeeUser) })).statusCode).toBe(
+        403,
+      );
     });
   });
 
@@ -231,12 +482,19 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     let managerUser = '';
     let chiefId = '';
     let vacationId = '';
-    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const post = (cookie: string, url: string, payload: object = {}) =>
+      app.inject({ method: 'POST', url, headers: as(cookie), payload });
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
 
     beforeAll(async () => {
       chiefId = (await get(owner, `/v1/employees/${empId}`)).json().managerId;
-      const r = await post(owner, '/v1/users', { name: 'Chefe', email: `chefe+${stamp}@a.ao`, password: pw, role: 'manager', employeeId: chiefId });
+      const r = await post(owner, '/v1/users', {
+        name: 'Chefe',
+        email: `chefe+${stamp}@a.ao`,
+        password: pw,
+        role: 'manager',
+        employeeId: chiefId,
+      });
       expect(r.statusCode).toBe(201);
       managerUser = await login(`chefe+${stamp}@a.ao`);
     });
@@ -261,13 +519,23 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     it('saldo de férias: 22 dias, 9 gozados, 13 disponíveis; pedido acima do saldo é recusado', async () => {
       const [b] = (await get(employeeUser, `/v1/leave/balances?year=2026&employeeId=${empId}`)).json();
       expect(b).toMatchObject({ entitlement: 22, taken: 9, pending: 0, available: 13, eligibleFrom: '2026-07-05' });
-      const r = await post(employeeUser, '/v1/absences', { employeeId: empId, type: 'vacation', startDate: '2026-11-16', endDate: '2026-12-11' });
+      const r = await post(employeeUser, '/v1/absences', {
+        employeeId: empId,
+        type: 'vacation',
+        startDate: '2026-11-16',
+        endDate: '2026-12-11',
+      });
       expect(r.statusCode).toBe(409);
       expect(r.json().error).toBe('saldo_insuficiente');
     });
 
     it('férias de Dezembro a Janeiro contam em dois saldos (2027 sem pacote fiscal)', async () => {
-      const r = await post(employeeUser, '/v1/absences', { employeeId: empId, type: 'vacation', startDate: '2026-12-21', endDate: '2027-01-08' });
+      const r = await post(employeeUser, '/v1/absences', {
+        employeeId: empId,
+        type: 'vacation',
+        startDate: '2026-12-21',
+        endDate: '2027-01-08',
+      });
       expect(r.statusCode).toBe(201);
       expect(r.json()).toMatchObject({ workingDays: 13, status: 'pending' });
       const [b] = (await get(owner, `/v1/leave/balances?year=2026&employeeId=${empId}`)).json();
@@ -277,20 +545,56 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
 
     it('recusa exige motivo', async () => {
-      const r = await post(employeeUser, '/v1/absences', { employeeId: empId, type: 'training', startDate: '2026-11-17', endDate: '2026-11-18', reason: 'Curso de Excel' });
+      const r = await post(employeeUser, '/v1/absences', {
+        employeeId: empId,
+        type: 'training',
+        startDate: '2026-11-17',
+        endDate: '2026-11-18',
+        reason: 'Curso de Excel',
+      });
       expect((await post(managerUser, `/v1/absences/${r.json().id}/reject`)).statusCode).toBe(400);
       const ok = await post(managerUser, `/v1/absences/${r.json().id}/reject`, { note: 'Fecho do mês' });
       expect(ok.json()).toMatchObject({ status: 'rejected', decisionNote: 'Fecho do mês' });
     });
 
     it('limites legais, faltas injustificadas e elegibilidade de 6 meses', async () => {
-      const pat = await post(employeeUser, '/v1/absences', { employeeId: empId, type: 'paternity', startDate: '2026-11-23', endDate: '2026-12-04' });
+      const pat = await post(employeeUser, '/v1/absences', {
+        employeeId: empId,
+        type: 'paternity',
+        startDate: '2026-11-23',
+        endDate: '2026-12-04',
+      });
       expect(pat.json().error).toBe('limite_legal');
-      expect((await post(employeeUser, '/v1/absences', { employeeId: empId, type: 'unjustified', startDate: '2026-11-19', endDate: '2026-11-19' })).statusCode).toBe(403);
-      const hr = await post(owner, '/v1/absences', { employeeId: empId, type: 'unjustified', startDate: '2026-11-19', endDate: '2026-11-19', approve: true });
+      expect(
+        (
+          await post(employeeUser, '/v1/absences', {
+            employeeId: empId,
+            type: 'unjustified',
+            startDate: '2026-11-19',
+            endDate: '2026-11-19',
+          })
+        ).statusCode,
+      ).toBe(403);
+      const hr = await post(owner, '/v1/absences', {
+        employeeId: empId,
+        type: 'unjustified',
+        startDate: '2026-11-19',
+        endDate: '2026-11-19',
+        approve: true,
+      });
       expect(hr.json()).toMatchObject({ status: 'approved', workingDays: 1 });
-      const novo = await post(owner, '/v1/employees', { number: '12', name: 'Recém Admitido', jobTitle: 'Técnico', contract: { type: 'indefinite', startDate: '2026-09-01', base: 200000 } });
-      const early = await post(owner, '/v1/absences', { employeeId: novo.json().id, type: 'vacation', startDate: '2026-11-02', endDate: '2026-11-06' });
+      const novo = await post(owner, '/v1/employees', {
+        number: '12',
+        name: 'Recém Admitido',
+        jobTitle: 'Técnico',
+        contract: { type: 'indefinite', startDate: '2026-09-01', base: 200000 },
+      });
+      const early = await post(owner, '/v1/absences', {
+        employeeId: novo.json().id,
+        type: 'vacation',
+        startDate: '2026-11-02',
+        endDate: '2026-11-06',
+      });
       expect(early.statusCode).toBe(422);
       expect(early.json().message).toContain('01/03/2027');
     });
@@ -307,11 +611,14 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
 
   describe('assiduidade (entrega 4)', () => {
     let manager = '';
-    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const post = (cookie: string, url: string, payload: object = {}) =>
+      app.inject({ method: 'POST', url, headers: as(cookie), payload });
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
     let openId = '';
 
-    beforeAll(async () => { manager = await login(`chefe+${stamp}@a.ao`); });
+    beforeAll(async () => {
+      manager = await login(`chefe+${stamp}@a.ao`);
+    });
 
     it('ponto com a hora do servidor: entrada, entrada repetida, saída imediata', async () => {
       const a = await post(employeeUser, '/v1/attendance/clock', { action: 'in' });
@@ -322,13 +629,22 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(me.open).toBe(true);
       expect((await post(owner, '/v1/attendance/clock', { action: 'in' })).json().error).toBe('sem_ficha');
       const current = new Date(Date.now() + 3_600_000).toISOString().slice(0, 7);
-      expect((await post(manager, '/v1/attendance/approve', { employeeId: empId, period: current })).json().error).toBe('mes_em_curso');
+      expect((await post(manager, '/v1/attendance/approve', { employeeId: empId, period: current })).json().error).toBe(
+        'mes_em_curso',
+      );
     });
 
     it('o colaborador não corrige os próprios registos; a chefia sim', async () => {
-      const own = await post(employeeUser, '/v1/attendance/entries', { employeeId: empId, date: '2026-09-01', start: '08:00', end: '17:00', note: 'esqueci' });
+      const own = await post(employeeUser, '/v1/attendance/entries', {
+        employeeId: empId,
+        date: '2026-09-01',
+        start: '08:00',
+        end: '17:00',
+        note: 'esqueci',
+      });
       expect(own.statusCode).toBe(403);
-      const mk = (date: string, start: string, end: string | null) => post(manager, '/v1/attendance/entries', { employeeId: empId, date, start, end, note: 'Registo em papel' });
+      const mk = (date: string, start: string, end: string | null) =>
+        post(manager, '/v1/attendance/entries', { employeeId: empId, date, start, end, note: 'Registo em papel' });
       expect((await mk('2026-09-01', '08:00', '12:00')).statusCode).toBe(201);
       expect((await mk('2026-09-01', '13:00', '18:00')).statusCode).toBe(201);
       expect((await mk('2026-09-05', '09:00', '12:00')).statusCode).toBe(201);
@@ -339,25 +655,74 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
 
     it('folha do mês: extra em dia útil e em dia de descanso, saídas em falta', async () => {
       const s = (await get(manager, `/v1/attendance/sheet?period=2026-09&employeeId=${empId}`)).json();
-      expect(s.summary).toMatchObject({ workedMinutes: 720, overtimeMinutes: 240, restOrHolidayOvertimeMinutes: 180, openDays: 1 });
+      expect(s.summary).toMatchObject({
+        workedMinutes: 720,
+        overtimeMinutes: 240,
+        restOrHolidayOvertimeMinutes: 180,
+        openDays: 1,
+      });
       expect(s.summary.days.find((d: { date: string }) => d.date === '2026-09-05').flags).toContain('rest_day_work');
       expect(s.canApprove).toBe(true);
       expect((await get(ownerB, `/v1/attendance/sheet?period=2026-09&employeeId=${empId}`)).statusCode).toBe(404);
     });
 
     it('aprovação: exige saídas completas e motivo para cortar horas; depois bloqueia correcções', async () => {
-      expect((await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09' })).json().error).toBe('saidas_em_falta');
-      const fix = await app.inject({ method: 'PATCH', url: `/v1/attendance/entries/${openId}`, headers: as(manager), payload: { end: '17:00', note: 'Saída confirmada pela chefia' } });
+      expect(
+        (await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09' })).json().error,
+      ).toBe('saidas_em_falta');
+      const fix = await app.inject({
+        method: 'PATCH',
+        url: `/v1/attendance/entries/${openId}`,
+        headers: as(manager),
+        payload: { end: '17:00', note: 'Saída confirmada pela chefia' },
+      });
       expect(fix.json().out).toBe('17:00');
       // Dias úteis sem registo têm de ser classificados antes de fechar o mês (falta ou presença com motivo).
-      expect((await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09', note: 'x' })).json().error).toBe('dias_sem_registo');
-      expect((await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09', noRecord: 'present' })).json().error).toBe('motivo_obrigatorio');
-      expect((await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09', approvedOvertimeMinutes: 60, noRecord: 'present' })).json().error).toBe('motivo_obrigatorio');
-      expect((await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09', approvedOvertimeMinutes: 9999, note: 'x', noRecord: 'present' })).json().error).toBe('extra_acima');
-      const ok = await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09', approvedOvertimeMinutes: 60, note: 'Sábado não autorizado previamente', noRecord: 'present' });
+      expect(
+        (await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09', note: 'x' })).json()
+          .error,
+      ).toBe('dias_sem_registo');
+      expect(
+        (
+          await post(manager, '/v1/attendance/approve', { employeeId: empId, period: '2026-09', noRecord: 'present' })
+        ).json().error,
+      ).toBe('motivo_obrigatorio');
+      expect(
+        (
+          await post(manager, '/v1/attendance/approve', {
+            employeeId: empId,
+            period: '2026-09',
+            approvedOvertimeMinutes: 60,
+            noRecord: 'present',
+          })
+        ).json().error,
+      ).toBe('motivo_obrigatorio');
+      expect(
+        (
+          await post(manager, '/v1/attendance/approve', {
+            employeeId: empId,
+            period: '2026-09',
+            approvedOvertimeMinutes: 9999,
+            note: 'x',
+            noRecord: 'present',
+          })
+        ).json().error,
+      ).toBe('extra_acima');
+      const ok = await post(manager, '/v1/attendance/approve', {
+        employeeId: empId,
+        period: '2026-09',
+        approvedOvertimeMinutes: 60,
+        note: 'Sábado não autorizado previamente',
+        noRecord: 'present',
+      });
       expect(ok.statusCode).toBe(201);
       expect(ok.json()).toMatchObject({ overtimeMinutes: 300, approvedOvertimeMinutes: 60 });
-      const again = await app.inject({ method: 'PATCH', url: `/v1/attendance/entries/${openId}`, headers: as(manager), payload: { end: '18:00', note: 'tentativa' } });
+      const again = await app.inject({
+        method: 'PATCH',
+        url: `/v1/attendance/entries/${openId}`,
+        headers: as(manager),
+        payload: { end: '18:00', note: 'tentativa' },
+      });
       expect(again.json().error).toBe('mes_aprovado');
     });
 
@@ -375,33 +740,83 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
 
     it('reabrir: só RH, e nunca com o processamento fechado', async () => {
-      expect((await post(manager, '/v1/attendance/reopen', { employeeId: empId, period: '2026-09', note: 'corrigir' })).statusCode).toBe(403);
-      expect((await post(owner, '/v1/attendance/reopen', { employeeId: empId, period: '2026-10', note: 'corrigir' })).json().error).toBe('periodo_fechado');
-      expect((await post(owner, '/v1/attendance/reopen', { employeeId: empId, period: '2026-09', note: 'Rever sábado' })).json()).toEqual({ ok: true });
+      expect(
+        (await post(manager, '/v1/attendance/reopen', { employeeId: empId, period: '2026-09', note: 'corrigir' }))
+          .statusCode,
+      ).toBe(403);
+      expect(
+        (await post(owner, '/v1/attendance/reopen', { employeeId: empId, period: '2026-10', note: 'corrigir' })).json()
+          .error,
+      ).toBe('periodo_fechado');
+      expect(
+        (
+          await post(owner, '/v1/attendance/reopen', { employeeId: empId, period: '2026-09', note: 'Rever sábado' })
+        ).json(),
+      ).toEqual({ ok: true });
     });
   });
 
   describe('processamento completo (entrega 5)', () => {
-    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const post = (cookie: string, url: string, payload: object = {}) =>
+      app.inject({ method: 'POST', url, headers: as(cookie), payload });
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
-    const lineOf = async (runId: string) => (await get(payrollUser, `/v1/payroll-runs/${runId}`)).json().lines.find((l: { employeeId: string }) => l.employeeId === empId);
-    const codes = (l: { breakdown: { code: string }[] }) => l.breakdown.map((b) => b.code);
+    const lineOf = async (runId: string) =>
+      (await get(payrollUser, `/v1/payroll-runs/${runId}`))
+        .json()
+        .lines.find((l: { employeeId: string }) => l.employeeId === empId);
+    const codes = (l: { breakdown: { code: string }[] }) => l.breakdown.map(b => b.code);
     let decRun = '';
     let bigAdvance = '';
 
     it('variáveis do mês: só o processamento as lança', async () => {
-      expect((await post(employeeUser, '/v1/payroll-variables', { employeeId: empId, period: '2026-12', kind: 'bonus', label: 'Prémio', amount: 1 })).statusCode).toBe(403);
-      for (const [kind, label, amount] of [['bonus', 'Prémio de desempenho', 50000], ['advance', 'Adiantamento de 10/12', 30000], ['other_deduction', 'Quota sindical', 10000], ['salary_cut', 'Licença de maternidade (cálculo manual)', 20000]] as const) {
-        expect((await post(payrollUser, '/v1/payroll-variables', { employeeId: empId, period: '2026-12', kind, label, amount })).statusCode).toBe(201);
+      expect(
+        (
+          await post(employeeUser, '/v1/payroll-variables', {
+            employeeId: empId,
+            period: '2026-12',
+            kind: 'bonus',
+            label: 'Prémio',
+            amount: 1,
+          })
+        ).statusCode,
+      ).toBe(403);
+      for (const [kind, label, amount] of [
+        ['bonus', 'Prémio de desempenho', 50000],
+        ['advance', 'Adiantamento de 10/12', 30000],
+        ['other_deduction', 'Quota sindical', 10000],
+        ['salary_cut', 'Licença de maternidade (cálculo manual)', 20000],
+      ] as const) {
+        expect(
+          (
+            await post(payrollUser, '/v1/payroll-variables', {
+              employeeId: empId,
+              period: '2026-12',
+              kind,
+              label,
+              amount,
+            })
+          ).statusCode,
+        ).toBe(201);
       }
-      bigAdvance = (await post(payrollUser, '/v1/payroll-variables', { employeeId: empId, period: '2026-12', kind: 'advance', label: 'Erro', amount: 5_000_000 })).json().id;
+      bigAdvance = (
+        await post(payrollUser, '/v1/payroll-variables', {
+          employeeId: empId,
+          period: '2026-12',
+          kind: 'advance',
+          label: 'Erro',
+          amount: 5_000_000,
+        })
+      ).json().id;
     });
 
     it('descontos acima do ilíquido são recusados com o nome do colaborador', async () => {
       const r = await post(payrollUser, '/v1/payroll-runs', { period: '2026-12' });
       expect(r.statusCode).toBe(422);
       expect(r.json().message).toContain('Joana Teste');
-      expect((await app.inject({ method: 'DELETE', url: `/v1/payroll-variables/${bigAdvance}`, headers: as(payrollUser) })).statusCode).toBe(204);
+      expect(
+        (await app.inject({ method: 'DELETE', url: `/v1/payroll-variables/${bigAdvance}`, headers: as(payrollUser) }))
+          .statusCode,
+      ).toBe(204);
     });
 
     it('Dezembro: Natal proporcional ao ano de admissão, subsídio de férias por pagar, variáveis no recibo', async () => {
@@ -409,14 +824,19 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(r.statusCode).toBe(201);
       decRun = r.json().run.id;
       const l = await lineOf(decRun);
-      expect(codes(l)).toEqual(expect.arrayContaining(['BASE', 'BONUS', 'SUBFER', 'SUBNAT', 'ADIANT', 'OUTDESC', 'CORTE']));
+      expect(codes(l)).toEqual(
+        expect.arrayContaining(['BASE', 'BONUS', 'SUBFER', 'SUBNAT', 'ADIANT', 'OUTDESC', 'CORTE']),
+      );
       expect(l.breakdown.find((b: { code: string }) => b.code === 'CORTE').amountMinor).toBe(-2_000_000);
       const natal = l.breakdown.find((b: { code: string }) => b.code === 'SUBNAT');
       expect(natal.name).toMatch(/proporcional 91[.,]7/);
     });
 
     it('decisão manual: excluir o subsídio de férias e voltar à regra automática', async () => {
-      const off = await post(payrollUser, `/v1/payroll-runs/${decRun}/subsidies`, { employeeId: empId, holiday: false });
+      const off = await post(payrollUser, `/v1/payroll-runs/${decRun}/subsidies`, {
+        employeeId: empId,
+        holiday: false,
+      });
       expect(off.statusCode).toBe(200);
       expect(codes(await lineOf(decRun))).not.toContain('SUBFER');
       await post(payrollUser, `/v1/payroll-runs/${decRun}/subsidies`, { employeeId: empId, holiday: null });
@@ -426,19 +846,33 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     it('fecho: lançamento equilibrado com adiantamentos (36.3) e outros descontos (36.9)', async () => {
       const close = await post(financeUser, `/v1/payroll-runs/${decRun}/close`);
       expect(close.statusCode).toBe(200);
-      const je = (await get(financeUser, '/v1/journal')).json().find((j: { reference: string }) => j.reference === 'PS-202612');
+      const je = (await get(financeUser, '/v1/journal'))
+        .json()
+        .find((j: { reference: string }) => j.reference === 'PS-202612');
       const d = je.lines.reduce((s: number, x: { debitMinor: number }) => s + x.debitMinor, 0);
       const cr = je.lines.reduce((s: number, x: { creditMinor: number }) => s + x.creditMinor, 0);
       expect(d).toBe(cr);
       expect(je.lines.find((x: { account: string }) => x.account === '36.9').creditMinor).toBe(1_000_000);
       expect(je.lines.find((x: { account: string }) => x.account === '36.3').creditMinor).toBe(3_000_000);
-      expect((await post(payrollUser, '/v1/payroll-variables', { employeeId: empId, period: '2026-12', kind: 'bonus', label: 'Tarde', amount: 1 })).json().error).toBe('processamento_fechado');
+      expect(
+        (
+          await post(payrollUser, '/v1/payroll-variables', {
+            employeeId: empId,
+            period: '2026-12',
+            kind: 'bonus',
+            label: 'Tarde',
+            amount: 1,
+          })
+        ).json().error,
+      ).toBe('processamento_fechado');
     });
 
     it('nunca paga o mesmo subsídio duas vezes no ano', async () => {
       const nov = (await get(payrollUser, '/v1/payroll-runs?period=2026-11')).json()[0];
       const r = await post(payrollUser, `/v1/payroll-runs/${nov.id}/subsidies`, { employeeId: empId, christmas: true });
-      expect(r.json().warnings.map((w: { message: string }) => w.message)).toEqual(expect.arrayContaining([expect.stringContaining('subsídio de Natal de 2026 já foi pago')]));
+      expect(r.json().warnings.map((w: { message: string }) => w.message)).toEqual(
+        expect.arrayContaining([expect.stringContaining('subsídio de Natal de 2026 já foi pago')]),
+      );
       expect(codes(await lineOf(nov.id))).not.toContain('SUBNAT');
     });
 
@@ -447,7 +881,11 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(list.map((p: { period: string }) => p.period)).toEqual(expect.arrayContaining(['2026-12', '2026-10']));
       expect(list.map((p: { period: string }) => p.period)).not.toContain('2026-11');
       const slip = (await get(employeeUser, `/v1/payslips/${list[0].id}`)).json();
-      expect(slip).toMatchObject({ period: '2026-12', employee: { name: 'Joana Teste' }, company: { name: 'Empresa A' } });
+      expect(slip).toMatchObject({
+        period: '2026-12',
+        employee: { name: 'Joana Teste' },
+        company: { name: 'Empresa A' },
+      });
       expect(slip.hash).toMatch(/^[0-9a-f]{64}$/);
       const run = (await get(payrollUser, `/v1/payroll-runs/${decRun}`)).json();
       const other = run.lines.find((l: { employeeId: string }) => l.employeeId !== empId).id;
@@ -456,14 +894,29 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
 
     it('definições: mês do subsídio de Natal configurável pelo RH', async () => {
-      expect((await app.inject({ method: 'PATCH', url: '/v1/company/settings', headers: as(payrollUser), payload: { christmasSubsidyMonth: 11 } })).statusCode).toBe(403);
-      const r = await app.inject({ method: 'PATCH', url: '/v1/company/settings', headers: as(owner), payload: { christmasSubsidyMonth: 11, holidaySubsidyMonth: 6 } });
+      expect(
+        (
+          await app.inject({
+            method: 'PATCH',
+            url: '/v1/company/settings',
+            headers: as(payrollUser),
+            payload: { christmasSubsidyMonth: 11 },
+          })
+        ).statusCode,
+      ).toBe(403);
+      const r = await app.inject({
+        method: 'PATCH',
+        url: '/v1/company/settings',
+        headers: as(owner),
+        payload: { christmasSubsidyMonth: 11, holidaySubsidyMonth: 6 },
+      });
       expect(r.json()).toMatchObject({ christmasSubsidyMonth: 11, holidaySubsidyMonth: 6 });
     });
   });
 
   describe('obrigações e pagamentos (entrega 6)', () => {
-    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const post = (cookie: string, url: string, payload: object = {}) =>
+      app.inject({ method: 'POST', url, headers: as(cookie), payload });
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
     let oct = '';
     let dec = '';
@@ -481,32 +934,61 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       const list = (await get(financeUser, '/v1/obligations')).json();
       expect(list.map((r: { period: string }) => r.period)).toEqual(['2026-12', '2026-10']);
       const o = list[1].obligations;
-      expect(o.map((x: { kind: string; dueDate: string }) => [x.kind, x.dueDate])).toEqual([['salaries', '2026-10-31'], ['inss', '2026-11-10'], ['irt', '2026-11-30']]);
+      expect(o.map((x: { kind: string; dueDate: string }) => [x.kind, x.dueDate])).toEqual([
+        ['salaries', '2026-10-31'],
+        ['inss', '2026-11-10'],
+        ['irt', '2026-11-30'],
+      ]);
       const run = (await get(financeUser, `/v1/payroll-runs/${oct}`)).json();
-      const inss = run.lines.reduce((s: number, l: { inssEmployeeMinor: number; inssEmployerMinor: number }) => s + l.inssEmployeeMinor + l.inssEmployerMinor, 0);
+      const inss = run.lines.reduce(
+        (s: number, l: { inssEmployeeMinor: number; inssEmployerMinor: number }) =>
+          s + l.inssEmployeeMinor + l.inssEmployerMinor,
+        0,
+      );
       expect(o[1].amountMinor).toBe(inss);
     });
 
     it('pagamento pelas Finanças gera o lançamento PGC e não se repete', async () => {
-      expect((await post(payrollUser, `/v1/payroll-runs/${oct}/payments`, { kind: 'salaries', paidOn: '2026-10-30' })).statusCode).toBe(403);
-      expect((await post(financeUser, `/v1/payroll-runs/${oct}/payments`, { kind: 'salaries', paidOn: '2099-01-01' })).json().error).toBe('data_futura');
-      const r = await post(financeUser, `/v1/payroll-runs/${oct}/payments`, { kind: 'salaries', paidOn: today, reference: 'TRF BFA 0099' });
+      expect(
+        (await post(payrollUser, `/v1/payroll-runs/${oct}/payments`, { kind: 'salaries', paidOn: '2026-10-30' }))
+          .statusCode,
+      ).toBe(403);
+      expect(
+        (await post(financeUser, `/v1/payroll-runs/${oct}/payments`, { kind: 'salaries', paidOn: '2099-01-01' })).json()
+          .error,
+      ).toBe('data_futura');
+      const r = await post(financeUser, `/v1/payroll-runs/${oct}/payments`, {
+        kind: 'salaries',
+        paidOn: today,
+        reference: 'TRF BFA 0099',
+      });
       expect(r.statusCode).toBe(201);
       expect(r.json().journalReference).toBe('PG-SAL-202610');
-      const je = (await get(financeUser, '/v1/journal')).json().find((j: { reference: string }) => j.reference === 'PG-SAL-202610');
+      const je = (await get(financeUser, '/v1/journal'))
+        .json()
+        .find((j: { reference: string }) => j.reference === 'PG-SAL-202610');
       expect(je.lines.map((l: { account: string }) => l.account)).toEqual(['36.1.2', '43.1']);
       expect(je.lines[0].debitMinor).toBe(je.lines[1].creditMinor);
-      expect((await post(financeUser, `/v1/payroll-runs/${oct}/payments`, { kind: 'salaries', paidOn: today })).json().error).toBe('ja_pago');
+      expect(
+        (await post(financeUser, `/v1/payroll-runs/${oct}/payments`, { kind: 'salaries', paidOn: today })).json().error,
+      ).toBe('ja_pago');
       const o = (await get(financeUser, '/v1/obligations')).json()[1].obligations[0];
       expect(o).toMatchObject({ status: 'paid', paidAt: today, reference: 'TRF BFA 0099' });
     });
 
     it('estorno com motivo: lançamento inverso, obrigação volta a estar por pagar', async () => {
       expect((await post(financeUser, `/v1/payroll-runs/${oct}/payments/salaries/reverse`, {})).statusCode).toBe(400);
-      const r = await post(financeUser, `/v1/payroll-runs/${oct}/payments/salaries/reverse`, { note: 'Transferência devolvida pelo banco' });
+      const r = await post(financeUser, `/v1/payroll-runs/${oct}/payments/salaries/reverse`, {
+        note: 'Transferência devolvida pelo banco',
+      });
       expect(r.json().journalReference).toMatch(/^ES-SAL-202610-/);
-      const es = (await get(financeUser, '/v1/journal')).json().find((j: { reference: string }) => j.reference === r.json().journalReference);
-      expect(es.lines.map((l: { account: string; debitMinor: number }) => [l.account, l.debitMinor > 0])).toEqual([['36.1.2', false], ['43.1', true]]);
+      const es = (await get(financeUser, '/v1/journal'))
+        .json()
+        .find((j: { reference: string }) => j.reference === r.json().journalReference);
+      expect(es.lines.map((l: { account: string; debitMinor: number }) => [l.account, l.debitMinor > 0])).toEqual([
+        ['36.1.2', false],
+        ['43.1', true],
+      ]);
       expect((await get(financeUser, '/v1/obligations')).json()[1].obligations[0].paidAt).toBeNull();
     });
 
@@ -531,7 +1013,9 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
 
     it('ficheiro de transferência: só IBAN válido; os restantes são listados', async () => {
       const info = (await get(financeUser, `/v1/payroll-runs/${dec}/bank-file?format=json`)).json();
-      expect(info.excluded.map((x: { name: string; reason: string }) => [x.name, x.reason])).toEqual(expect.arrayContaining([['Chefe Teste', 'sem IBAN']]));
+      expect(info.excluded.map((x: { name: string; reason: string }) => [x.name, x.reason])).toEqual(
+        expect.arrayContaining([['Chefe Teste', 'sem IBAN']]),
+      );
       const csv = (await get(financeUser, `/v1/payroll-runs/${dec}/bank-file?profile=generic`)).body;
       expect(csv).toContain('AO06004000005521889010155;Joana Teste;');
       expect(csv).toContain('SALARIO 12/2026');
@@ -542,13 +1026,46 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       let j = (await get(financeUser, `/v1/payroll-runs/${dec}/maps/agt`)).json();
       expect(j.template).toBe('A2.1');
       expect(j.columns).toHaveLength(32);
-      expect(j.columns.slice(0, 5)).toEqual(['NIF Trabalhador', 'Nome', 'Nº Segurança Social', 'Província', 'Município']);
+      expect(j.columns.slice(0, 5)).toEqual([
+        'NIF Trabalhador',
+        'Nome',
+        'Nº Segurança Social',
+        'Província',
+        'Município',
+      ]);
       expect(j.issues.some((x: { problem: string }) => /sem província/.test(x.problem))).toBe(true);
-      expect((await app.inject({ method: 'PATCH', url: '/v1/company/settings', headers: as(owner), payload: { province: 'Luanda', municipality: 'Talatona' } })).statusCode).toBe(200);
-      expect((await get(financeUser, `/v1/payroll-runs/${dec}/maps/agt`)).json().issues.some((x: { problem: string }) => /não consta da lista/.test(x.problem))).toBe(false);
-      await app.inject({ method: 'PATCH', url: '/v1/company/settings', headers: as(owner), payload: { municipality: 'Lubango' } });
-      expect((await get(financeUser, `/v1/payroll-runs/${dec}/maps/agt`)).json().issues.some((x: { problem: string }) => /"Lubango" não consta da lista da AGT para LA/.test(x.problem))).toBe(true);
-      await app.inject({ method: 'PATCH', url: '/v1/company/settings', headers: as(owner), payload: { municipality: 'belas' } });
+      expect(
+        (
+          await app.inject({
+            method: 'PATCH',
+            url: '/v1/company/settings',
+            headers: as(owner),
+            payload: { province: 'Luanda', municipality: 'Talatona' },
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(
+        (await get(financeUser, `/v1/payroll-runs/${dec}/maps/agt`))
+          .json()
+          .issues.some((x: { problem: string }) => /não consta da lista/.test(x.problem)),
+      ).toBe(false);
+      await app.inject({
+        method: 'PATCH',
+        url: '/v1/company/settings',
+        headers: as(owner),
+        payload: { municipality: 'Lubango' },
+      });
+      expect(
+        (await get(financeUser, `/v1/payroll-runs/${dec}/maps/agt`))
+          .json()
+          .issues.some((x: { problem: string }) => /"Lubango" não consta da lista da AGT para LA/.test(x.problem)),
+      ).toBe(true);
+      await app.inject({
+        method: 'PATCH',
+        url: '/v1/company/settings',
+        headers: as(owner),
+        payload: { municipality: 'belas' },
+      });
       j = (await get(financeUser, `/v1/payroll-runs/${dec}/maps/agt`)).json();
       const col = (name: string) => j.columns.indexOf(name);
       const joana = j.rows.find((r: (string | number)[]) => r[1] === 'Joana Teste');
@@ -560,13 +1077,44 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       const irt = (await get(financeUser, `/v1/payroll-runs/${dec}/maps/irt`)).json();
       expect(j.totalIrtMinor).toBe(irt.totalIrt);
       // Base Tributável IRT = matéria colectável (instrução 34 do template).
-      for (const r of irt.rows) expect(j.rows.find((x: (string | number)[]) => x[1] === r.name)[col('Base Tributável IRT')]).toBe(r.taxable);
-      const earningsCols = ['Salário Base', 'Subsídio Alimentação', 'Subsídio Transporte', 'Abono Família', 'Reembolso de Despesas', 'Outros', 'Abono de Falhas', 'Subsídio Renda de Casa', 'Compensação Por Rescisão', 'Subsídio de Férias', 'Horas Extras', 'Subsídio de Atavio', 'Subsídio de Representação', 'Prémios', 'Subsídio de Natal', 'Outros Subsídios Sujeitos'];
-      for (const r of j.rows) expect(earningsCols.reduce((s, c) => s + Number(r[col(c)]), 0) - Number(r[col('Descontos por Falta')])).toBe(r[col('Salário Ilíquido')]);
+      for (const r of irt.rows)
+        expect(j.rows.find((x: (string | number)[]) => x[1] === r.name)[col('Base Tributável IRT')]).toBe(r.taxable);
+      const earningsCols = [
+        'Salário Base',
+        'Subsídio Alimentação',
+        'Subsídio Transporte',
+        'Abono Família',
+        'Reembolso de Despesas',
+        'Outros',
+        'Abono de Falhas',
+        'Subsídio Renda de Casa',
+        'Compensação Por Rescisão',
+        'Subsídio de Férias',
+        'Horas Extras',
+        'Subsídio de Atavio',
+        'Subsídio de Representação',
+        'Prémios',
+        'Subsídio de Natal',
+        'Outros Subsídios Sujeitos',
+      ];
+      for (const r of j.rows)
+        expect(earningsCols.reduce((s, c) => s + Number(r[col(c)]), 0) - Number(r[col('Descontos por Falta')])).toBe(
+          r[col('Salário Ilíquido')],
+        );
       const x = await get(financeUser, `/v1/payroll-runs/${dec}/maps/agt?format=xlsx`);
       expect(x.headers['content-type']).toContain('spreadsheetml');
       expect(x.body.startsWith('PK')).toBe(true);
-      for (const t of ['NIF do Contribuinte', 'Período (AAAA-MM)', '2026-12', 'Subsídios Não Sujeitos a IRT (Art. 2º do CIRT)', '<mergeCell ref="O3:X3"/>', '<c r="A5" t="inlineStr">', '<c r="A2" t="inlineStr"><is><t xml:space="preserve">2026-12</t>', '<v>500000</v>']) expect(x.body).toContain(t);
+      for (const t of [
+        'NIF do Contribuinte',
+        'Período (AAAA-MM)',
+        '2026-12',
+        'Subsídios Não Sujeitos a IRT (Art. 2º do CIRT)',
+        '<mergeCell ref="O3:X3"/>',
+        '<c r="A5" t="inlineStr">',
+        '<c r="A2" t="inlineStr"><is><t xml:space="preserve">2026-12</t>',
+        '<v>500000</v>',
+      ])
+        expect(x.body).toContain(t);
       const simple = (await get(financeUser, `/v1/payroll-runs/${dec}/maps/agt?template=simple`)).json();
       expect(simple.columns).toHaveLength(15);
       for (const r of simple.rows) expect(Number(r[5]) + Number(r[6]) + Number(r[7])).toBe(r[8]);
@@ -578,7 +1126,20 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       const j = (await get(payrollUser, `/v1/payroll-runs/${dec}/maps/inss`)).json();
       for (const r of j.rows) expect(r.salaryMinor + r.additionalMinor).toBe(r.base);
       const x = (await get(payrollUser, `/v1/payroll-runs/${dec}/maps/inss?format=xlsx`)).body;
-      for (const t of ['Folha de Remuneração Normal', 'Mês de referência: dezembro/2026', 'Informações do Contribuinte', 'NIS:', 'Inscrição Inss', 'Categoria Profissional', 'Remunerações Adicionais', 'Total Parcela Segurado 3%', 'Total Parcela Contribuinte 8%', 'Total de Contribuições', 'JOANA TESTE']) expect(x).toContain(t);
+      for (const t of [
+        'Folha de Remuneração Normal',
+        'Mês de referência: dezembro/2026',
+        'Informações do Contribuinte',
+        'NIS:',
+        'Inscrição Inss',
+        'Categoria Profissional',
+        'Remunerações Adicionais',
+        'Total Parcela Segurado 3%',
+        'Total Parcela Contribuinte 8%',
+        'Total de Contribuições',
+        'JOANA TESTE',
+      ])
+        expect(x).toContain(t);
     });
 
     it('ficheiro do banco: NOME, NIB, VALOR por omissão; perfis BFA, BAI e CSV', async () => {
@@ -587,14 +1148,17 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(info.banks).toMatchObject({ BAI: expect.any(Number) });
       const nib = await get(financeUser, `/v1/payroll-runs/${dec}/bank-file`);
       expect(nib.headers['content-disposition']).toContain('salarios-202612.xlsx');
-      for (const t of ['>NOME<', '>NIB<', '>VALOR<', 'JOANA TESTE', '004000005521889010155']) expect(nib.body).toContain(t);
+      for (const t of ['>NOME<', '>NIB<', '>VALOR<', 'JOANA TESTE', '004000005521889010155'])
+        expect(nib.body).toContain(t);
       expect(nib.body).not.toContain('AO06');
       const bfa = (await get(financeUser, `/v1/payroll-runs/${dec}/bank-file?profile=bfa`)).body;
       expect(bfa).not.toContain('Nome do Beneficiário');
       expect(bfa).toMatch(/\d+,\d{2}<\/t>/);
       const bai = (await get(financeUser, `/v1/payroll-runs/${dec}/bank-file?profile=bai`)).body;
       expect(bai).toContain('BAIPAOLU');
-      expect((await get(financeUser, `/v1/payroll-runs/${dec}/bank-file?profile=generic`)).body).toContain('AO06004000005521889010155;Joana Teste;');
+      expect((await get(financeUser, `/v1/payroll-runs/${dec}/bank-file?profile=generic`)).body).toContain(
+        'AO06004000005521889010155;Joana Teste;',
+      );
     });
   });
 
@@ -606,38 +1170,69 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(r.months.length).toBeGreaterThan(0);
       expect(r.to).toBe(r.available[r.available.length - 1]);
       const companyId = (await get(owner, '/v1/auth/me')).json().company.id;
-      const [db] = (await getDb().execute(sql`select coalesce(sum(l.gross_minor + l.inss_employer_minor), 0)::bigint as cost, count(*)::int as n from payroll_lines l join payroll_runs r on r.id = l.run_id where r.company_id = ${companyId} and r.status = 'closed' and r.period between ${r.from} and ${r.to}`)).rows;
+      const [db] = (
+        await getDb().execute(
+          sql`select coalesce(sum(l.gross_minor + l.inss_employer_minor), 0)::bigint as cost, count(*)::int as n from payroll_lines l join payroll_runs r on r.id = l.run_id where r.company_id = ${companyId} and r.status = 'closed' and r.period between ${r.from} and ${r.to}`,
+        )
+      ).rows;
       expect(r.totals.costMinor).toBe(Number(db!.cost));
       expect(r.months.reduce((s: number, m: { headcount: number }) => s + m.headcount, 0)).toBe(db!.n);
       // Os grupos de rubricas somam o ilíquido; os departamentos somam o custo.
-      expect(Object.values(r.totals.groups as Record<string, number>).reduce((a, b) => a + b, 0)).toBe(r.totals.grossMinor);
-      expect(r.departments.reduce((s: number, d: { costMinor: number }) => s + d.costMinor, 0)).toBe(r.totals.costMinor);
+      expect(Object.values(r.totals.groups as Record<string, number>).reduce((a, b) => a + b, 0)).toBe(
+        r.totals.grossMinor,
+      );
+      expect(r.departments.reduce((s: number, d: { costMinor: number }) => s + d.costMinor, 0)).toBe(
+        r.totals.costMinor,
+      );
       const one = (await get(financeUser, `/v1/reports/people?from=${r.to}&to=${r.to}`)).json();
       expect(one.months).toHaveLength(1);
       const x = await get(financeUser, '/v1/reports/people?format=xlsx');
       expect(x.headers['content-disposition']).toContain('relatorio-pessoas-');
-      for (const t of ['Resumo', 'Mensal', 'Departamentos', 'Rubricas', 'Custo com pessoal (Kz)', 'Rotatividade (%)']) expect(x.body).toContain(t);
+      for (const t of ['Resumo', 'Mensal', 'Departamentos', 'Rubricas', 'Custo com pessoal (Kz)', 'Rotatividade (%)'])
+        expect(x.body).toContain(t);
       expect((await get(ownerB, '/v1/reports/people')).json()).toMatchObject({ empty: true });
     });
   });
 
   describe('orçamento de pessoal (entrega 23)', () => {
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
-    const send = (cookie: string, method: string, url: string, payload: object = {}) => app.inject({ method, url, headers: as(cookie), payload });
-    const hyp = { year: 2026, increaseBps: 500, increaseFrom: '2026-07', holidayMonth: 12, christmasMonth: 12, hires: [{ departmentId: null, from: '2026-09', count: 2, baseMinor: 15_000_000, mealMinor: 0, transportMinor: 0 }] };
+    const send = (cookie: string, method: string, url: string, payload: object = {}) =>
+      app.inject({ method, url, headers: as(cookie), payload });
+    const hyp = {
+      year: 2026,
+      increaseBps: 500,
+      increaseFrom: '2026-07',
+      holidayMonth: 12,
+      christmasMonth: 12,
+      hires: [
+        { departmentId: null, from: '2026-09', count: 2, baseMinor: 15_000_000, mealMinor: 0, transportMinor: 0 },
+      ],
+    };
     let id = '';
 
     it('simula sem gravar; validações das hipóteses; o colaborador não vê', async () => {
       expect((await get(employeeUser, '/v1/budgets?year=2026')).statusCode).toBe(403);
-      expect((await get(financeUser, '/v1/budgets?year=2026')).json()).toMatchObject({ budget: null, defaults: { year: 2026 } });
+      expect((await get(financeUser, '/v1/budgets?year=2026')).json()).toMatchObject({
+        budget: null,
+        defaults: { year: 2026 },
+      });
       const sim = (await send(financeUser, 'POST', '/v1/budgets/simulate', hyp)).json();
       expect(sim.months).toHaveLength(12);
       expect(sim.totalMinor).toBeGreaterThan(0);
       const noHires = (await send(financeUser, 'POST', '/v1/budgets/simulate', { ...hyp, hires: [] })).json();
       // Duas admissões a 150 000 Kz de Setembro a Dezembro, férias e Natal proporcionais (4/12) em Dezembro;
       // INSS de 8% sobre a base e o Natal (o subsídio de férias está fora da base no pacote AO-2026).
-      expect(sim.totalMinor - noHires.totalMinor).toBe(Math.round(2 * (4 * 15_000_000 * 1.08 + 2_500_000 + 2_500_000 * 1.08)));
-      expect((await send(financeUser, 'POST', '/v1/budgets/simulate', { ...hyp, hires: [{ ...hyp.hires[0], from: '2027-01' }] })).statusCode).toBe(400);
+      expect(sim.totalMinor - noHires.totalMinor).toBe(
+        Math.round(2 * (4 * 15_000_000 * 1.08 + 2_500_000 + 2_500_000 * 1.08)),
+      );
+      expect(
+        (
+          await send(financeUser, 'POST', '/v1/budgets/simulate', {
+            ...hyp,
+            hires: [{ ...hyp.hires[0], from: '2027-01' }],
+          })
+        ).statusCode,
+      ).toBe(400);
       expect((await get(financeUser, '/v1/budgets?year=2026')).json().budget).toBeNull();
     });
 
@@ -652,13 +1247,29 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(g.comparison.totals.actualToDateMinor).toBe(report.totals.costMinor);
       expect(g.comparison.months.find((m: { period: string }) => m.period === '2026-11').actualMinor).toBeNull();
       const before = g.comparison.totals.budgetYearMinor;
-      expect((await send(financeUser, 'PUT', `/v1/budgets/${id}/lines`, { lines: [{ departmentId: null, period: '2026-01', costMinor: 99_900_000, headcount: 9 }] })).statusCode).toBe(200);
+      expect(
+        (
+          await send(financeUser, 'PUT', `/v1/budgets/${id}/lines`, {
+            lines: [{ departmentId: null, period: '2026-01', costMinor: 99_900_000, headcount: 9 }],
+          })
+        ).statusCode,
+      ).toBe(200);
       const after = (await get(financeUser, '/v1/budgets?year=2026')).json();
-      expect(after.lines.find((l: { period: string; departmentId: string | null }) => l.period === '2026-01' && l.departmentId === null)).toMatchObject({ costMinor: 99_900_000, headcount: 9 });
+      expect(
+        after.lines.find(
+          (l: { period: string; departmentId: string | null }) => l.period === '2026-01' && l.departmentId === null,
+        ),
+      ).toMatchObject({ costMinor: 99_900_000, headcount: 9 });
       expect(after.comparison.totals.budgetYearMinor).not.toBe(before);
       expect((await send(financeUser, 'POST', `/v1/budgets/${id}/approve`)).statusCode).toBe(403);
       expect((await send(owner, 'POST', `/v1/budgets/${id}/approve`)).statusCode).toBe(200);
-      expect((await send(financeUser, 'PUT', `/v1/budgets/${id}/lines`, { lines: [{ departmentId: null, period: '2026-02', costMinor: 1 }] })).json().error).toBe('aprovado');
+      expect(
+        (
+          await send(financeUser, 'PUT', `/v1/budgets/${id}/lines`, {
+            lines: [{ departmentId: null, period: '2026-02', costMinor: 1 }],
+          })
+        ).json().error,
+      ).toBe('aprovado');
       expect((await send(financeUser, 'DELETE', `/v1/budgets/${id}`)).statusCode).toBe(409);
       const x = await get(payrollUser, `/v1/budgets/${id}/export`);
       for (const t of ['Orçado vs real', 'Departamentos', 'Previsão de fecho']) expect(x.body).toContain(t);
@@ -670,10 +1281,13 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
   });
 
   describe('app móvel: ponto sem rede (entrega 24)', () => {
-    const post = (cookie: string, url: string, payload: object) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const post = (cookie: string, url: string, payload: object) =>
+      app.inject({ method: 'POST', url, headers: as(cookie), payload });
     it('registos offline: hora do telemóvel, sem duplicar no reenvio, marcados para a chefia; limites de hora', async () => {
       // Dia limpo para este teste (outros testes deixam entradas abertas hoje).
-      await getDb().execute(sql`delete from attendance_entries where employee_id = ${empId} and work_date >= current_date - 1`);
+      await getDb().execute(
+        sql`delete from attendance_entries where employee_id = ${empId} and work_date >= current_date - 1`,
+      );
       const t = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
       const ref = `ref-${stamp}-in`;
       const a = await post(employeeUser, '/v1/attendance/clock', { action: 'in', at: t(3), clientRef: ref });
@@ -682,11 +1296,34 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       const again = await post(employeeUser, '/v1/attendance/clock', { action: 'in', at: t(3), clientRef: ref });
       expect([again.statusCode, again.json().id]).toEqual([200, a.json().id]);
       const outAt = t(1);
-      const out = await post(employeeUser, '/v1/attendance/clock', { action: 'out', at: outAt, clientRef: `ref-${stamp}-out` });
+      const out = await post(employeeUser, '/v1/attendance/clock', {
+        action: 'out',
+        at: outAt,
+        clientRef: `ref-${stamp}-out`,
+      });
       expect(out.json()).toMatchObject({ offlineOut: true });
-      expect((await post(employeeUser, '/v1/attendance/clock', { action: 'out', at: outAt, clientRef: `ref-${stamp}-out` })).statusCode).toBe(200);
-      expect((await post(employeeUser, '/v1/attendance/clock', { action: 'in', at: new Date(Date.now() + 60 * 60_000).toISOString(), clientRef: `ref-${stamp}-fut` })).json().error).toBe('hora_futura');
-      expect((await post(employeeUser, '/v1/attendance/clock', { action: 'in', at: t(73 * 60), clientRef: `ref-${stamp}-old` })).json().error).toBe('offline_antigo');
+      expect(
+        (await post(employeeUser, '/v1/attendance/clock', { action: 'out', at: outAt, clientRef: `ref-${stamp}-out` }))
+          .statusCode,
+      ).toBe(200);
+      expect(
+        (
+          await post(employeeUser, '/v1/attendance/clock', {
+            action: 'in',
+            at: new Date(Date.now() + 60 * 60_000).toISOString(),
+            clientRef: `ref-${stamp}-fut`,
+          })
+        ).json().error,
+      ).toBe('hora_futura');
+      expect(
+        (
+          await post(employeeUser, '/v1/attendance/clock', {
+            action: 'in',
+            at: t(73 * 60),
+            clientRef: `ref-${stamp}-old`,
+          })
+        ).json().error,
+      ).toBe('offline_antigo');
       expect((await post(employeeUser, '/v1/attendance/clock', { action: 'in', at: t(2) })).statusCode).toBe(400);
     });
 
@@ -721,17 +1358,32 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
 
     it('plano de contas: classes validadas; alterações valem para lançamentos futuros', async () => {
       const plan = (await get(financeUser, '/v1/ledger/accounts')).json();
-      expect(plan.find((p: { role: string }) => p.role === 'bank')).toMatchObject({ account: '43.1', expectedClass: '4' });
-      const put = (cookie: string, mappings: object[]) => app.inject({ method: 'PUT', url: '/v1/ledger/accounts', headers: as(cookie), payload: { mappings } });
-      expect((await put(payrollUser, [{ role: 'bank', account: '43.1.2', label: 'BAI — salários' }])).statusCode).toBe(403);
+      expect(plan.find((p: { role: string }) => p.role === 'bank')).toMatchObject({
+        account: '43.1',
+        expectedClass: '4',
+      });
+      const put = (cookie: string, mappings: object[]) =>
+        app.inject({ method: 'PUT', url: '/v1/ledger/accounts', headers: as(cookie), payload: { mappings } });
+      expect((await put(payrollUser, [{ role: 'bank', account: '43.1.2', label: 'BAI — salários' }])).statusCode).toBe(
+        403,
+      );
       const bad = await put(financeUser, [{ role: 'baseSalary', account: '62.1', label: 'Errado' }]);
       expect(bad.json().error).toBe('plano_invalido');
       expect(bad.json().message).toContain('Classe 7');
-      expect((await put(financeUser, [{ role: 'bank', account: '43.1.2', label: 'BAI — conta de salários' }])).statusCode).toBe(200);
+      expect(
+        (await put(financeUser, [{ role: 'bank', account: '43.1.2', label: 'BAI — conta de salários' }])).statusCode,
+      ).toBe(200);
       const oct = (await get(financeUser, '/v1/payroll-runs?period=2026-10')).json()[0].id;
-      const pay = await app.inject({ method: 'POST', url: `/v1/payroll-runs/${oct}/payments`, headers: as(financeUser), payload: { kind: 'irt', paidOn: today } });
+      const pay = await app.inject({
+        method: 'POST',
+        url: `/v1/payroll-runs/${oct}/payments`,
+        headers: as(financeUser),
+        payload: { kind: 'irt', paidOn: today },
+      });
       expect(pay.statusCode).toBe(201);
-      const je = (await get(financeUser, `/v1/ledger/journal?from=${today}&to=${today}&source=payroll_payment`)).json().find((j: { reference: string }) => j.reference === 'PG-IRT-202610');
+      const je = (await get(financeUser, `/v1/ledger/journal?from=${today}&to=${today}&source=payroll_payment`))
+        .json()
+        .find((j: { reference: string }) => j.reference === 'PG-IRT-202610');
       expect(je.lines.map((l: { account: string }) => l.account)).toEqual(['34.3', '43.1.2']);
       const ps = (await get(financeUser, '/v1/ledger/journal?from=2026-10-01&to=2026-10-31&source=payroll')).json()[0];
       expect(ps).toMatchObject({ reference: 'PS-202610', date: '2026-10-31' });
@@ -742,20 +1394,43 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       const csv = (await get(financeUser, '/v1/ledger/export?from=2026-10-01&to=2026-12-31&onlyNew=1')).body;
       expect(csv).toContain('PS-202610');
       expect(csv).toContain('31/10/2026;Pessoal;PS-202610');
-      expect((await app.inject({ method: 'POST', url: '/v1/ledger/export/mark', headers: as(payrollUser), payload: { from: '2026-10-01', to: '2026-12-31' } })).statusCode).toBe(403);
-      const mark = await app.inject({ method: 'POST', url: '/v1/ledger/export/mark', headers: as(financeUser), payload: { from: '2026-10-01', to: '2026-12-31' } });
+      expect(
+        (
+          await app.inject({
+            method: 'POST',
+            url: '/v1/ledger/export/mark',
+            headers: as(payrollUser),
+            payload: { from: '2026-10-01', to: '2026-12-31' },
+          })
+        ).statusCode,
+      ).toBe(403);
+      const mark = await app.inject({
+        method: 'POST',
+        url: '/v1/ledger/export/mark',
+        headers: as(financeUser),
+        payload: { from: '2026-10-01', to: '2026-12-31' },
+      });
       expect(mark.json().marked).toBeGreaterThan(0);
       const again = (await get(financeUser, '/v1/ledger/export?from=2026-10-01&to=2026-12-31&onlyNew=1')).body;
-      expect(again.replace(/^\uFEFF/, '').trim().split('\r\n')).toHaveLength(1);
+      expect(
+        again
+          .replace(/^\uFEFF/, '')
+          .trim()
+          .split('\r\n'),
+      ).toHaveLength(1);
     });
   });
 
   describe('conciliação bancária (entrega 8)', () => {
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
-    const post = (cookie: string, url: string, payload: object) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const post = (cookie: string, url: string, payload: object) =>
+      app.inject({ method: 'POST', url, headers: as(cookie), payload });
     const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
     const pt = (d: string) => d.split('-').reverse().join('/');
-    const kzs = (m: number) => { const v = (Math.abs(m) / 100).toFixed(2).split('.'); return `${v[0]!.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${v[1]}`; };
+    const kzs = (m: number) => {
+      const v = (Math.abs(m) / 100).toFixed(2).split('.');
+      return `${v[0]!.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${v[1]}`;
+    };
     let accountId = '';
     let oct = '';
     let salaries = 0;
@@ -763,17 +1438,30 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     let csv = '';
 
     it('conta bancária: só Finanças cria; conta PGC da classe 4; IBAN validado', async () => {
-      expect((await post(payrollUser, '/v1/bank/accounts', { name: 'BAI', ledgerAccount: '43.1' })).statusCode).toBe(403);
-      expect((await post(financeUser, '/v1/bank/accounts', { name: 'BAI', ledgerAccount: '62.1' })).statusCode).toBe(400);
-      expect((await post(financeUser, '/v1/bank/accounts', { name: 'BAI', ledgerAccount: '43.1', iban: 'AO06 1234' })).json().error).toBe('iban_invalido');
-      const r = await post(financeUser, '/v1/bank/accounts', { name: 'BAI — salários', bankName: 'BAI', ledgerAccount: '43.1' });
+      expect((await post(payrollUser, '/v1/bank/accounts', { name: 'BAI', ledgerAccount: '43.1' })).statusCode).toBe(
+        403,
+      );
+      expect((await post(financeUser, '/v1/bank/accounts', { name: 'BAI', ledgerAccount: '62.1' })).statusCode).toBe(
+        400,
+      );
+      expect(
+        (await post(financeUser, '/v1/bank/accounts', { name: 'BAI', ledgerAccount: '43.1', iban: 'AO06 1234' })).json()
+          .error,
+      ).toBe('iban_invalido');
+      const r = await post(financeUser, '/v1/bank/accounts', {
+        name: 'BAI — salários',
+        bankName: 'BAI',
+        ledgerAccount: '43.1',
+      });
       expect(r.statusCode).toBe(201);
       accountId = r.json().id;
       expect((await get(ownerB, `/v1/bank/reconciliation?accountId=${accountId}`)).statusCode).toBe(404);
     });
 
     it('pré-visualiza e importa o extracto; concilia automaticamente o IRT já registado', async () => {
-      const obl = (await get(financeUser, '/v1/obligations')).json().find((r: { period: string }) => r.period === '2026-10');
+      const obl = (await get(financeUser, '/v1/obligations'))
+        .json()
+        .find((r: { period: string }) => r.period === '2026-10');
       oct = obl.runId;
       salaries = obl.obligations.find((o: { kind: string }) => o.kind === 'salaries').amountMinor;
       irt = obl.obligations.find((o: { kind: string }) => o.kind === 'irt').amountMinor;
@@ -784,12 +1472,25 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
         [today, 'COMISSAO MANUTENCAO', 150_000, 0],
       ] as const;
       let bal = 100_000_000;
-      const lines = rows.map(([d, desc, deb, cred]) => { bal += cred - deb; return `${pt(d)};${pt(d)};${desc};${deb ? kzs(deb) : ''};${cred ? kzs(cred) : ''};${kzs(bal)}`; });
+      const lines = rows.map(([d, desc, deb, cred]) => {
+        bal += cred - deb;
+        return `${pt(d)};${pt(d)};${desc};${deb ? kzs(deb) : ''};${cred ? kzs(cred) : ''};${kzs(bal)}`;
+      });
       csv = `Extracto BAI\nConta;0040 0000\n\nData Mov.;Data Valor;Descritivo;Débito;Crédito;Saldo\n${lines.reverse().join('\n')}\n`;
       const pv = (await post(financeUser, '/v1/bank/statements/preview', { accountId, text: csv })).json();
-      expect(pv).toMatchObject({ headerRow: 3, count: 4, newCount: 4, duplicates: 0, balance: { ok: true, openingMinor: 100_000_000 } });
+      expect(pv).toMatchObject({
+        headerRow: 3,
+        count: 4,
+        newCount: 4,
+        duplicates: 0,
+        balance: { ok: true, openingMinor: 100_000_000 },
+      });
       expect((await post(payrollUser, '/v1/bank/statements', { accountId, text: csv })).statusCode).toBe(403);
-      const imp = await post(financeUser, '/v1/bank/statements', { accountId, fileName: 'extracto-out.csv', text: csv });
+      const imp = await post(financeUser, '/v1/bank/statements', {
+        accountId,
+        fileName: 'extracto-out.csv',
+        text: csv,
+      });
       expect(imp.statusCode).toBe(201);
       expect(imp.json()).toMatchObject({ count: 4, newCount: 4, matched: 1 });
       const again = (await post(financeUser, '/v1/bank/statements', { accountId, text: csv })).json();
@@ -799,15 +1500,36 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     it('obrigação por pagar com movimento correspondente: regista o pagamento a partir do extracto', async () => {
       const rec = (await get(financeUser, `/v1/bank/reconciliation?accountId=${accountId}`)).json();
       expect(rec.summary).toMatchObject({ matched: 1, pendingDebits: 2 });
-      expect(rec.payments.find((p: { kind: string; period: string }) => p.kind === 'irt' && p.period === '2026-10')).toBeUndefined();
-      const sal = rec.unpaid.find((u: { kind: string; period: string }) => u.kind === 'salaries' && u.period === '2026-10');
+      expect(
+        rec.payments.find((p: { kind: string; period: string }) => p.kind === 'irt' && p.period === '2026-10'),
+      ).toBeUndefined();
+      const sal = rec.unpaid.find(
+        (u: { kind: string; period: string }) => u.kind === 'salaries' && u.period === '2026-10',
+      );
       expect(sal.candidate.lineIds).toHaveLength(1);
       const commission = rec.lines.find((l: { description: string }) => l.description === 'COMISSAO MANUTENCAO').id;
-      expect((await post(financeUser, '/v1/bank/register-payment', { accountId, runId: oct, kind: 'salaries', lineIds: [commission] })).json().error).toBe('valor_diferente');
-      const r = await post(financeUser, '/v1/bank/register-payment', { accountId, runId: oct, kind: 'salaries', lineIds: sal.candidate.lineIds });
+      expect(
+        (
+          await post(financeUser, '/v1/bank/register-payment', {
+            accountId,
+            runId: oct,
+            kind: 'salaries',
+            lineIds: [commission],
+          })
+        ).json().error,
+      ).toBe('valor_diferente');
+      const r = await post(financeUser, '/v1/bank/register-payment', {
+        accountId,
+        runId: oct,
+        kind: 'salaries',
+        lineIds: sal.candidate.lineIds,
+      });
       expect(r.statusCode).toBe(201);
       expect(r.json()).toMatchObject({ paidOn: today, reference: 'TRF SALARIOS 10/2026', bankAccountId: accountId });
-      const o = (await get(financeUser, '/v1/obligations')).json().find((x: { period: string }) => x.period === '2026-10').obligations.find((x: { kind: string }) => x.kind === 'salaries');
+      const o = (await get(financeUser, '/v1/obligations'))
+        .json()
+        .find((x: { period: string }) => x.period === '2026-10')
+        .obligations.find((x: { kind: string }) => x.kind === 'salaries');
       expect(o).toMatchObject({ status: 'paid', reconciled: true });
     });
 
@@ -816,96 +1538,206 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       const ids = rec.lines.filter((l: { status: string }) => l.status === 'pending').map((l: { id: string }) => l.id);
       expect(ids).toHaveLength(2);
       expect((await post(financeUser, '/v1/bank/lines/ignore', { lineIds: ids, note: '' })).statusCode).toBe(400);
-      expect((await post(financeUser, '/v1/bank/lines/ignore', { lineIds: ids, note: 'Não é de pessoal' })).json().ignored).toBe(2);
+      expect(
+        (await post(financeUser, '/v1/bank/lines/ignore', { lineIds: ids, note: 'Não é de pessoal' })).json().ignored,
+      ).toBe(2);
       expect((await post(financeUser, `/v1/bank/lines/${ids[0]}/restore`, {})).statusCode).toBe(200);
-      expect((await get(financeUser, `/v1/bank/reconciliation?accountId=${accountId}`)).json().summary).toMatchObject({ pending: 1, outOfScope: 1, matched: 2 });
+      expect((await get(financeUser, `/v1/bank/reconciliation?accountId=${accountId}`)).json().summary).toMatchObject({
+        pending: 1,
+        outOfScope: 1,
+        matched: 2,
+      });
     });
 
     it('desfazer e conciliar manualmente; valores têm de bater; extracto conciliado não se apaga', async () => {
       const rec = (await get(financeUser, `/v1/bank/reconciliation?accountId=${accountId}&status=matched`)).json();
       const irtLine = rec.lines.find((l: { description: string }) => l.description.includes('IRT'));
       expect(irtLine.match).toMatchObject({ kind: 'auto', payment: 'IRT retido (Grupo A) 2026-10' });
-      expect((await app.inject({ method: 'DELETE', url: `/v1/bank/matches/${irtLine.matchId}`, headers: as(financeUser) })).statusCode).toBe(200);
+      expect(
+        (await app.inject({ method: 'DELETE', url: `/v1/bank/matches/${irtLine.matchId}`, headers: as(financeUser) }))
+          .statusCode,
+      ).toBe(200);
       const after = (await get(financeUser, `/v1/bank/reconciliation?accountId=${accountId}`)).json();
-      const pay = after.payments.find((p: { kind: string; period: string }) => p.kind === 'irt' && p.period === '2026-10');
+      const pay = after.payments.find(
+        (p: { kind: string; period: string }) => p.kind === 'irt' && p.period === '2026-10',
+      );
       expect(pay.suggestion.lineIds).toEqual([irtLine.id]);
-      const other = after.lines.find((l: { status: string; amountMinor: number }) => l.status === 'pending' && l.id !== irtLine.id);
-      if (other) expect((await post(financeUser, '/v1/bank/matches', { accountId, paymentId: pay.id, lineIds: [other.id] })).statusCode).toBe(400);
-      expect((await post(financeUser, '/v1/bank/matches', { accountId, paymentId: pay.id, lineIds: [irtLine.id] })).statusCode).toBe(201);
+      const other = after.lines.find(
+        (l: { status: string; amountMinor: number }) => l.status === 'pending' && l.id !== irtLine.id,
+      );
+      if (other)
+        expect(
+          (await post(financeUser, '/v1/bank/matches', { accountId, paymentId: pay.id, lineIds: [other.id] }))
+            .statusCode,
+        ).toBe(400);
+      expect(
+        (await post(financeUser, '/v1/bank/matches', { accountId, paymentId: pay.id, lineIds: [irtLine.id] }))
+          .statusCode,
+      ).toBe(201);
       const st = (await get(financeUser, `/v1/bank/statements?accountId=${accountId}`)).json();
       expect(st).toHaveLength(2);
       expect(st.find((s: { newCount: number }) => s.newCount === 4).balanceOk).toBe(true);
-      expect((await app.inject({ method: 'DELETE', url: `/v1/bank/statements/${st.find((s: { newCount: number }) => s.newCount === 4).id}`, headers: as(financeUser) })).json().error).toBe('extracto_conciliado');
-      expect((await app.inject({ method: 'DELETE', url: `/v1/bank/statements/${st.find((s: { newCount: number }) => s.newCount === 0).id}`, headers: as(financeUser) })).statusCode).toBe(200);
+      expect(
+        (
+          await app.inject({
+            method: 'DELETE',
+            url: `/v1/bank/statements/${st.find((s: { newCount: number }) => s.newCount === 4).id}`,
+            headers: as(financeUser),
+          })
+        ).json().error,
+      ).toBe('extracto_conciliado');
+      expect(
+        (
+          await app.inject({
+            method: 'DELETE',
+            url: `/v1/bank/statements/${st.find((s: { newCount: number }) => s.newCount === 0).id}`,
+            headers: as(financeUser),
+          })
+        ).statusCode,
+      ).toBe(200);
     });
 
     it('estorno de um pagamento conciliado devolve o movimento a "por conciliar"', async () => {
-      const r = await post(financeUser, `/v1/payroll-runs/${oct}/payments/salaries/reverse`, { note: 'Teste de estorno' });
+      const r = await post(financeUser, `/v1/payroll-runs/${oct}/payments/salaries/reverse`, {
+        note: 'Teste de estorno',
+      });
       expect(r.statusCode).toBe(200);
       const rec = (await get(financeUser, `/v1/bank/reconciliation?accountId=${accountId}`)).json();
       expect(rec.lines.some((l: { description: string }) => l.description === 'TRF SALARIOS 10/2026')).toBe(true);
-      expect(rec.unpaid.find((u: { kind: string; period: string }) => u.kind === 'salaries' && u.period === '2026-10').candidate).not.toBeNull();
+      expect(
+        rec.unpaid.find((u: { kind: string; period: string }) => u.kind === 'salaries' && u.period === '2026-10')
+          .candidate,
+      ).not.toBeNull();
     });
   });
 
   describe('despesas e ajudas de custo (entrega 9)', () => {
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
-    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const post = (cookie: string, url: string, payload: object = {}) =>
+      app.inject({ method: 'POST', url, headers: as(cookie), payload });
     const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
     let manager = '';
     let claimId = '';
     const lines = [
-      { kind: 'expense', date: today, description: 'Hotel Lobito', category: 'lodging', amount: 45000, documentRef: 'FT 2026/118' },
+      {
+        kind: 'expense',
+        date: today,
+        description: 'Hotel Lobito',
+        category: 'lodging',
+        amount: 45000,
+        documentRef: 'FT 2026/118',
+      },
       { kind: 'per_diem', date: today, description: 'Deslocação ao Lobito', zone: 'national', days: 2.5, rate: 20000 },
     ];
 
-    beforeAll(async () => { manager = await login(`chefe+${stamp}@a.ao`); });
+    beforeAll(async () => {
+      manager = await login(`chefe+${stamp}@a.ao`);
+    });
 
     it('diária da empresa nas definições', async () => {
-      const r = await app.inject({ method: 'PATCH', url: '/v1/company/settings', headers: as(owner), payload: { perDiemNationalMinor: 2_000_000 } });
+      const r = await app.inject({
+        method: 'PATCH',
+        url: '/v1/company/settings',
+        headers: as(owner),
+        payload: { perDiemNationalMinor: 2_000_000 },
+      });
       expect(r.json().perDiemNationalMinor).toBe(2_000_000);
     });
 
     it('o colaborador cria, completa e submete a nota; numeração por ano', async () => {
-      expect((await post(employeeUser, '/v1/expenses', { title: 'Deslocação ao Lobito', employeeId: 'outro', lines })).statusCode).toBe(403);
-      const r = await post(employeeUser, '/v1/expenses', { title: 'Deslocação ao Lobito', lines: [{ ...lines[0], documentRef: '' }] });
+      expect(
+        (await post(employeeUser, '/v1/expenses', { title: 'Deslocação ao Lobito', employeeId: 'outro', lines }))
+          .statusCode,
+      ).toBe(403);
+      const r = await post(employeeUser, '/v1/expenses', {
+        title: 'Deslocação ao Lobito',
+        lines: [{ ...lines[0], documentRef: '' }],
+      });
       expect(r.statusCode).toBe(201);
       claimId = r.json().id;
       expect(r.json().number).toMatch(/^ND-\d{4}-0001$/);
-      expect((await post(employeeUser, `/v1/expenses/${claimId}/submit`)).json().message).toContain('recibo ou factura');
-      const over = await app.inject({ method: 'PUT', url: `/v1/expenses/${claimId}`, headers: as(employeeUser), payload: { title: 'Deslocação ao Lobito', lines: [lines[0], { ...lines[1], rate: 25000 }] } });
+      expect((await post(employeeUser, `/v1/expenses/${claimId}/submit`)).json().message).toContain(
+        'recibo ou factura',
+      );
+      const over = await app.inject({
+        method: 'PUT',
+        url: `/v1/expenses/${claimId}`,
+        headers: as(employeeUser),
+        payload: { title: 'Deslocação ao Lobito', lines: [lines[0], { ...lines[1], rate: 25000 }] },
+      });
       expect(over.statusCode).toBe(200);
       expect((await post(employeeUser, `/v1/expenses/${claimId}/submit`)).json().message).toContain('acima da fixada');
-      await app.inject({ method: 'PUT', url: `/v1/expenses/${claimId}`, headers: as(employeeUser), payload: { title: 'Deslocação ao Lobito', tripFrom: today, tripTo: today, lines } });
+      await app.inject({
+        method: 'PUT',
+        url: `/v1/expenses/${claimId}`,
+        headers: as(employeeUser),
+        payload: { title: 'Deslocação ao Lobito', tripFrom: today, tripTo: today, lines },
+      });
       const d = (await get(employeeUser, `/v1/expenses/${claimId}`)).json();
       expect(d.totals).toEqual({ expensesMinor: 4_500_000, perDiemMinor: 5_000_000, totalMinor: 9_500_000 });
       expect(d.lines[1].days).toBe(2.5);
       expect((await post(employeeUser, `/v1/expenses/${claimId}/submit`)).json().status).toBe('submitted');
-      expect((await app.inject({ method: 'PUT', url: `/v1/expenses/${claimId}`, headers: as(employeeUser), payload: { title: 'Alterada', lines } })).json().error).toBe('nao_editavel');
+      expect(
+        (
+          await app.inject({
+            method: 'PUT',
+            url: `/v1/expenses/${claimId}`,
+            headers: as(employeeUser),
+            payload: { title: 'Alterada', lines },
+          })
+        ).json().error,
+      ).toBe('nao_editavel');
     });
 
     it('a chefia directa decide; o próprio não; recusa exige motivo; aprovação gera lançamento', async () => {
-      expect((await get(manager, '/v1/expenses?scope=approve')).json().map((x: { id: string }) => x.id)).toContain(claimId);
+      expect((await get(manager, '/v1/expenses?scope=approve')).json().map((x: { id: string }) => x.id)).toContain(
+        claimId,
+      );
       expect((await post(employeeUser, `/v1/expenses/${claimId}/decision`, { approve: true })).statusCode).toBe(403);
-      expect((await post(manager, `/v1/expenses/${claimId}/decision`, { approve: false })).json().error).toBe('motivo_obrigatorio');
+      expect((await post(manager, `/v1/expenses/${claimId}/decision`, { approve: false })).json().error).toBe(
+        'motivo_obrigatorio',
+      );
       const ok = await post(manager, `/v1/expenses/${claimId}/decision`, { approve: true, note: 'Ok' });
       expect(ok.json().status).toBe('approved');
-      const je = (await get(financeUser, `/v1/ledger/journal?from=${today}&to=${today}`)).json().find((j: { reference: string }) => j.reference === ok.json().number);
-      expect(je.lines.map((l: { account: string; debitMinor: number; creditMinor: number }) => [l.account, l.debitMinor, l.creditMinor])).toEqual([['75.2', 4_500_000, 0], ['72.8', 5_000_000, 0], ['36.9', 0, 9_500_000]]);
+      const je = (await get(financeUser, `/v1/ledger/journal?from=${today}&to=${today}`))
+        .json()
+        .find((j: { reference: string }) => j.reference === ok.json().number);
+      expect(
+        je.lines.map((l: { account: string; debitMinor: number; creditMinor: number }) => [
+          l.account,
+          l.debitMinor,
+          l.creditMinor,
+        ]),
+      ).toEqual([
+        ['75.2', 4_500_000, 0],
+        ['72.8', 5_000_000, 0],
+        ['36.9', 0, 9_500_000],
+      ]);
     });
 
     it('Finanças reembolsa (ficheiro de transferências, lançamento, conciliação bancária) e pode estornar', async () => {
-      expect((await get(financeUser, '/v1/expenses?scope=pay')).json().map((x: { id: string }) => x.id)).toContain(claimId);
+      expect((await get(financeUser, '/v1/expenses?scope=pay')).json().map((x: { id: string }) => x.id)).toContain(
+        claimId,
+      );
       expect((await post(payrollUser, `/v1/expenses/${claimId}/pay`, { paidOn: today })).statusCode).toBe(403);
       const account = (await get(financeUser, '/v1/bank/accounts')).json()[0];
-      const paid = await post(financeUser, `/v1/expenses/${claimId}/pay`, { paidOn: today, reference: 'TRF 777', bankAccountId: account.id });
+      const paid = await post(financeUser, `/v1/expenses/${claimId}/pay`, {
+        paidOn: today,
+        reference: 'TRF 777',
+        bankAccountId: account.id,
+      });
       expect(paid.json()).toMatchObject({ status: 'paid', paidOn: today });
       const rec = (await get(financeUser, `/v1/bank/reconciliation?accountId=${account.id}`)).json();
       const p = rec.payments.find((x: { id: string }) => x.id === `exp:${claimId}`);
       expect(p).toMatchObject({ kind: 'expense', amountMinor: 9_500_000 });
       const csv = `Data;Descritivo;Montante\n${today.split('-').reverse().join('/')};TRF REEMB DESPESAS;-95.000,00\n`;
-      expect((await post(financeUser, '/v1/bank/statements', { accountId: account.id, text: csv })).json().matched).toBe(1);
-      expect((await post(financeUser, `/v1/expenses/${claimId}/reverse-payment`, { note: 'Transferência devolvida' })).statusCode).toBe(200);
+      expect(
+        (await post(financeUser, '/v1/bank/statements', { accountId: account.id, text: csv })).json().matched,
+      ).toBe(1);
+      expect(
+        (await post(financeUser, `/v1/expenses/${claimId}/reverse-payment`, { note: 'Transferência devolvida' }))
+          .statusCode,
+      ).toBe(200);
       const after = (await get(financeUser, `/v1/expenses/${claimId}`)).json();
       expect(after).toMatchObject({ status: 'approved', matchId: null });
       expect((await get(financeUser, '/v1/expenses-bank-file')).statusCode).toBe(200);
@@ -922,19 +1754,39 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
 
   describe('cessação de contrato (entrega 10)', () => {
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
-    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const post = (cookie: string, url: string, payload: object = {}) =>
+      app.inject({ method: 'POST', url, headers: as(cookie), payload });
     let leaverId = '';
     let terminationId = '';
-    const kase = () => ({ employeeId: leaverId, reason: 'objective_dismissal', effectiveDate: '2026-11-15', noticeDate: '2026-11-01' });
+    const kase = () => ({
+      employeeId: leaverId,
+      reason: 'objective_dismissal',
+      effectiveDate: '2026-11-15',
+      noticeDate: '2026-11-01',
+    });
 
     beforeAll(async () => {
       const e = await post(owner, '/v1/employees', {
-        number: '77', name: 'Saída Teste', jobTitle: 'Motorista', biNumber: '004512399LA041', iban: 'AO06 0040 0000 5521 8890 1015 5',
+        number: '77',
+        name: 'Saída Teste',
+        jobTitle: 'Motorista',
+        biNumber: '004512399LA041',
+        iban: 'AO06 0040 0000 5521 8890 1015 5',
         contract: { type: 'indefinite', startDate: '2019-03-01', base: 300000, meal: 30000, transport: 25000 },
       });
       expect(e.statusCode).toBe(201);
       leaverId = e.json().id;
-      expect((await post(owner, '/v1/users', { name: 'Saída', email: `saida+${stamp}@a.ao`, password: pw, role: 'employee', employeeId: leaverId })).statusCode).toBe(201);
+      expect(
+        (
+          await post(owner, '/v1/users', {
+            name: 'Saída',
+            email: `saida+${stamp}@a.ao`,
+            password: pw,
+            role: 'employee',
+            employeeId: leaverId,
+          })
+        ).statusCode,
+      ).toBe(201);
     });
 
     it('pré-visualiza o fecho de contas: compensação legal, aviso em falta, férias e recibo final estimado', async () => {
@@ -946,24 +1798,56 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(by('COMP')).toBe(30_000_000 * 5 + 15_000_000 * 3); // 7 anos e 8 meses → 8 anos (LGT, art. 311.º)
       expect(by('AVISO')).toBe(16_000_000);
       expect(by('FERNG')).toBe(30_000_000); // 22 dias por gozar = 1 mês
-      expect(p.payslip.lines.find((l: { code: string }) => l.code === 'BASE')).toMatchObject({ name: 'Vencimento base (15 dia(s))', amountMinor: 15_000_000 });
+      expect(p.payslip.lines.find((l: { code: string }) => l.code === 'BASE')).toMatchObject({
+        name: 'Vencimento base (15 dia(s))',
+        amountMinor: 15_000_000,
+      });
       expect(p.payslip.netMinor).toBeGreaterThan(by('COMP'));
     });
 
     it('rascunho com ajuste manual; confirmação cessa contrato, desactiva o acesso e põe o fecho no processamento', async () => {
       const p = (await post(owner, '/v1/terminations/preview', kase())).json();
-      const items = [...p.items, { code: 'OUTDESC', label: 'Devolução de telemóvel não efectuada', basis: 'Acordo', kind: 'deduction', amountMinor: 5_000_000, inInss: false, inIrt: false }];
-      const r = await post(owner, '/v1/terminations', { ...kase(), items, note: 'Extinção do posto (reestruturação logística)' });
+      const items = [
+        ...p.items,
+        {
+          code: 'OUTDESC',
+          label: 'Devolução de telemóvel não efectuada',
+          basis: 'Acordo',
+          kind: 'deduction',
+          amountMinor: 5_000_000,
+          inInss: false,
+          inIrt: false,
+        },
+      ];
+      const r = await post(owner, '/v1/terminations', {
+        ...kase(),
+        items,
+        note: 'Extinção do posto (reestruturação logística)',
+      });
       expect(r.statusCode).toBe(201);
       terminationId = r.json().id;
       expect((await post(owner, '/v1/terminations', kase())).json().error).toBe('cessacao_existente');
       const c = await post(owner, `/v1/terminations/${terminationId}/confirm`);
       expect(c.json().status).toBe('confirmed');
-      expect((await app.inject({ method: 'POST', url: '/v1/auth/login', payload: { email: `saida+${stamp}@a.ao`, password: pw } })).json().error).toBe('acesso_desactivado');
+      expect(
+        (
+          await app.inject({
+            method: 'POST',
+            url: '/v1/auth/login',
+            payload: { email: `saida+${stamp}@a.ao`, password: pw },
+          })
+        ).json().error,
+      ).toBe('acesso_desactivado');
       expect((await get(owner, `/v1/employees/${leaverId}`)).json().status).toBe('terminated');
-      const vars = (await get(payrollUser, '/v1/payroll-variables?period=2026-11')).json().filter((v: { employeeId: string }) => v.employeeId === leaverId);
+      const vars = (await get(payrollUser, '/v1/payroll-variables?period=2026-11'))
+        .json()
+        .filter((v: { employeeId: string }) => v.employeeId === leaverId);
       expect(vars.map((v: { code: string }) => v.code)).toContain('COMP');
-      expect((await app.inject({ method: 'DELETE', url: `/v1/payroll-variables/${vars[0].id}`, headers: as(payrollUser) })).json().error).toBe('gerida_pela_cessacao');
+      expect(
+        (
+          await app.inject({ method: 'DELETE', url: `/v1/payroll-variables/${vars[0].id}`, headers: as(payrollUser) })
+        ).json().error,
+      ).toBe('gerida_pela_cessacao');
       await post(payrollUser, '/v1/payroll-runs', { period: '2026-11' });
       const run = (await get(payrollUser, '/v1/payroll-runs?period=2026-11')).json()[0];
       const detail = (await get(payrollUser, `/v1/payroll-runs/${run.id}`)).json();
@@ -974,42 +1858,86 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       // Pressupostos do fecho de contas visíveis no recibo (rubrica — base de cálculo).
       // Recibo sem fórmulas nem artigos: só o nome da rubrica.
       expect(line.breakdown.find((b: { code: string }) => b.code === 'FERNG').name).not.toContain('×');
-      expect(line.breakdown.filter((b: { code: string }) => b.code === 'OUTDESC').map((b: { name: string }) => b.name)).toEqual([expect.stringContaining('Devolução de telemóvel')]);
+      expect(
+        line.breakdown.filter((b: { code: string }) => b.code === 'OUTDESC').map((b: { name: string }) => b.name),
+      ).toEqual([expect.stringContaining('Devolução de telemóvel')]);
       const dec = (await get(payrollUser, '/v1/payroll-runs?period=2026-12')).json()[0];
-      if (dec) expect((await get(payrollUser, `/v1/payroll-runs/${dec.id}`)).json().lines.some((l: { employeeId: string }) => l.employeeId === leaverId)).toBe(false);
+      if (dec)
+        expect(
+          (await get(payrollUser, `/v1/payroll-runs/${dec.id}`))
+            .json()
+            .lines.some((l: { employeeId: string }) => l.employeeId === leaverId),
+        ).toBe(false);
     });
 
     it('documentos: dados para fecho de contas e certificado; anular reverte tudo enquanto o mês não fecha', async () => {
       const d = (await get(financeUser, `/v1/terminations/${terminationId}`)).json();
-      expect(d).toMatchObject({ reasonLabel: 'Despedimento individual por causas objectivas', hireDate: '2019-03-01', employee: { name: 'Saída Teste' } });
+      expect(d).toMatchObject({
+        reasonLabel: 'Despedimento individual por causas objectivas',
+        hireDate: '2019-03-01',
+        employee: { name: 'Saída Teste' },
+      });
       expect(d.totals.deductionsMinor).toBe(5_000_000);
       expect((await post(owner, `/v1/terminations/${terminationId}/cancel`, {})).statusCode).toBe(400);
-      expect((await post(owner, `/v1/terminations/${terminationId}/cancel`, { note: 'Acordo de permanência' })).json().status).toBe('cancelled');
+      expect(
+        (await post(owner, `/v1/terminations/${terminationId}/cancel`, { note: 'Acordo de permanência' })).json()
+          .status,
+      ).toBe('cancelled');
       expect((await get(owner, `/v1/employees/${leaverId}`)).json().status).toBe('active');
-      expect((await app.inject({ method: 'POST', url: '/v1/auth/login', payload: { email: `saida+${stamp}@a.ao`, password: pw } })).statusCode).toBe(200);
-      expect((await get(payrollUser, '/v1/payroll-variables?period=2026-11')).json().some((v: { employeeId: string }) => v.employeeId === leaverId)).toBe(false);
+      expect(
+        (
+          await app.inject({
+            method: 'POST',
+            url: '/v1/auth/login',
+            payload: { email: `saida+${stamp}@a.ao`, password: pw },
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(
+        (await get(payrollUser, '/v1/payroll-variables?period=2026-11'))
+          .json()
+          .some((v: { employeeId: string }) => v.employeeId === leaverId),
+      ).toBe(false);
     });
   });
 
   describe('documentos (entrega 11)', () => {
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
-    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const post = (cookie: string, url: string, payload: object = {}) =>
+      app.inject({ method: 'POST', url, headers: as(cookie), payload });
     let docId = '';
     let code = '';
 
     it('modelos do Kianda versionados com o pacote; pré-visualização com campos preenchidos e em falta', async () => {
       expect((await get(employeeUser, '/v1/document-templates')).statusCode).toBe(403);
       const t = (await get(owner, '/v1/document-templates')).json();
-      expect(t.templates.find((x: { key: string }) => x.key === 'declaracao_servico')).toMatchObject({ source: 'kianda', version: expect.stringMatching(/^AO-2026/) });
-      const p = (await post(owner, '/v1/documents/preview', { employeeId: empId, templateKey: 'declaracao_rendimentos', inputs: {} })).json();
+      expect(t.templates.find((x: { key: string }) => x.key === 'declaracao_servico')).toMatchObject({
+        source: 'kianda',
+        version: expect.stringMatching(/^AO-2026/),
+      });
+      const p = (
+        await post(owner, '/v1/documents/preview', {
+          employeeId: empId,
+          templateKey: 'declaracao_rendimentos',
+          inputs: {},
+        })
+      ).json();
       expect(p.text).toContain('Joana Teste');
       expect(p.text).toMatch(/kwanzas/);
       expect(p.missingLabels).toEqual(['Finalidade']);
-      expect((await post(owner, '/v1/documents', { employeeId: empId, templateKey: 'declaracao_rendimentos', inputs: {} })).json().error).toBe('campos_em_falta');
+      expect(
+        (
+          await post(owner, '/v1/documents', { employeeId: empId, templateKey: 'declaracao_rendimentos', inputs: {} })
+        ).json().error,
+      ).toBe('campos_em_falta');
     });
 
     it('emite com número anual e código; o colaborador vê os seus; verificação pública sem conteúdo; anulação', async () => {
-      const r = await post(owner, '/v1/documents', { employeeId: empId, templateKey: 'declaracao_servico', inputs: { 'pedido.finalidade': 'abertura de conta bancária' } });
+      const r = await post(owner, '/v1/documents', {
+        employeeId: empId,
+        templateKey: 'declaracao_servico',
+        inputs: { 'pedido.finalidade': 'abertura de conta bancária' },
+      });
       expect(r.statusCode).toBe(201);
       docId = r.json().id;
       code = r.json().verificationCode;
@@ -1018,33 +1946,67 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect((await get(employeeUser, '/v1/documents')).json().map((d: { id: string }) => d.id)).toEqual([docId]);
       expect((await get(employeeUser, `/v1/documents/${docId}`)).statusCode).toBe(200);
       expect((await get(ownerB, `/v1/documents/${docId}`)).statusCode).toBe(404);
-      const v = (await app.inject({ method: 'GET', url: `/v1/public/documents/${code.toLowerCase().replace(/-/g, '')}` })).json();
+      const v = (
+        await app.inject({ method: 'GET', url: `/v1/public/documents/${code.toLowerCase().replace(/-/g, '')}` })
+      ).json();
       expect(v).toMatchObject({ valid: true, title: 'Declaração de serviço', employee: 'Joana Teste' });
       expect(v.body).toBeUndefined();
       expect((await post(employeeUser, `/v1/documents/${docId}/revoke`, { note: 'x' })).statusCode).toBe(403);
-      expect((await post(owner, `/v1/documents/${docId}/revoke`, { note: 'Dados desactualizados' })).statusCode).toBe(200);
-      expect((await app.inject({ method: 'GET', url: `/v1/public/documents/${code}` })).json()).toMatchObject({ valid: false, revoked: true });
+      expect((await post(owner, `/v1/documents/${docId}/revoke`, { note: 'Dados desactualizados' })).statusCode).toBe(
+        200,
+      );
+      expect((await app.inject({ method: 'GET', url: `/v1/public/documents/${code}` })).json()).toMatchObject({
+        valid: false,
+        revoked: true,
+      });
     });
 
     it('a empresa adapta um modelo (nova versão, campos validados) e pode voltar ao do Kianda', async () => {
-      const bad = await app.inject({ method: 'PUT', url: '/v1/document-templates/declaracao_servico', headers: as(owner), payload: { title: 'Declaração', body: 'Texto com {{colaborador.salario}} que não existe no Kianda.' } });
+      const bad = await app.inject({
+        method: 'PUT',
+        url: '/v1/document-templates/declaracao_servico',
+        headers: as(owner),
+        payload: { title: 'Declaração', body: 'Texto com {{colaborador.salario}} que não existe no Kianda.' },
+      });
       expect(bad.json().error).toBe('campos_desconhecidos');
-      const ok = await app.inject({ method: 'PUT', url: '/v1/document-templates/declaracao_servico', headers: as(owner), payload: { title: 'Declaração de vínculo', body: '# Declaração de vínculo\n\n{{colaborador.nome}} trabalha connosco desde {{contrato.admissao}} ({{pedido.finalidade}}).' } });
+      const ok = await app.inject({
+        method: 'PUT',
+        url: '/v1/document-templates/declaracao_servico',
+        headers: as(owner),
+        payload: {
+          title: 'Declaração de vínculo',
+          body: '# Declaração de vínculo\n\n{{colaborador.nome}} trabalha connosco desde {{contrato.admissao}} ({{pedido.finalidade}}).',
+        },
+      });
       expect(ok.json().version).toBe(1);
-      const t = (await get(owner, '/v1/document-templates')).json().templates.find((x: { key: string }) => x.key === 'declaracao_servico');
+      const t = (await get(owner, '/v1/document-templates'))
+        .json()
+        .templates.find((x: { key: string }) => x.key === 'declaracao_servico');
       expect(t).toMatchObject({ source: 'empresa', version: 'Empresa v1', title: 'Declaração de vínculo' });
-      const d = (await post(owner, '/v1/documents', { employeeId: empId, templateKey: 'declaracao_servico', inputs: { 'pedido.finalidade': 'visto' } })).json();
+      const d = (
+        await post(owner, '/v1/documents', {
+          employeeId: empId,
+          templateKey: 'declaracao_servico',
+          inputs: { 'pedido.finalidade': 'visto' },
+        })
+      ).json();
       expect(d).toMatchObject({ templateVersion: 'Empresa v1', title: 'Declaração de vínculo' });
       await post(owner, '/v1/document-templates/declaracao_servico/reset');
-      expect((await get(owner, '/v1/document-templates')).json().templates.find((x: { key: string }) => x.key === 'declaracao_servico').source).toBe('kianda');
+      expect(
+        (await get(owner, '/v1/document-templates'))
+          .json()
+          .templates.find((x: { key: string }) => x.key === 'declaracao_servico').source,
+      ).toBe('kianda');
       expect((await get(owner, `/v1/documents/${d.id}`)).json().body).toContain('trabalha connosco');
     });
   });
 
   describe('recrutamento e desempenho (entrega 12)', () => {
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
-    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
-    const put = (cookie: string, url: string, payload: object) => app.inject({ method: 'PUT', url, headers: as(cookie), payload });
+    const post = (cookie: string, url: string, payload: object = {}) =>
+      app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const put = (cookie: string, url: string, payload: object) =>
+      app.inject({ method: 'PUT', url, headers: as(cookie), payload });
     let manager = '';
     let chiefId = '';
     let openingId = '';
@@ -1059,17 +2021,42 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
 
     it('vaga publicada recebe candidaturas pela página de carreiras; repetida e robô recusados', async () => {
       expect((await post(employeeUser, '/v1/openings', { title: 'Motorista' })).statusCode).toBe(403);
-      const o = await post(owner, '/v1/openings', { title: 'Contabilista sénior', hiringManagerId: chiefId, positions: 1, salaryMin: 450000, salaryMax: 600000, status: 'open', isPublic: true, description: 'Fecho mensal e fiscalidade' });
+      const o = await post(owner, '/v1/openings', {
+        title: 'Contabilista sénior',
+        hiringManagerId: chiefId,
+        positions: 1,
+        salaryMin: 450000,
+        salaryMax: 600000,
+        status: 'open',
+        isPublic: true,
+        description: 'Fecho mensal e fiscalidade',
+      });
       expect(o.statusCode).toBe(201);
       openingId = o.json().id;
       const pub = (await app.inject({ method: 'GET', url: `/v1/public/careers/${companyId}` })).json();
       expect(pub.openings.map((x: { id: string }) => x.id)).toContain(openingId);
       expect(pub.openings[0].salaryMinMinor).toBeUndefined();
-      const apply = (p: object) => app.inject({ method: 'POST', url: `/v1/public/careers/${companyId}/openings/${openingId}/apply`, payload: p });
+      const apply = (p: object) =>
+        app.inject({ method: 'POST', url: `/v1/public/careers/${companyId}/openings/${openingId}/apply`, payload: p });
       expect((await apply({ name: 'Ana Candidata', email: 'ana@x.ao', phone: '923000000' })).statusCode).toBe(400);
-      expect((await apply({ name: 'Robô', email: 'r@x.ao', phone: '923000001', consent: true, website: 'spam.com' })).statusCode).toBe(400);
-      expect((await apply({ name: 'Ana Candidata', email: 'Ana@x.ao', phone: '923000000', consent: true, cvUrl: 'https://drive.example.com/cv.pdf' })).statusCode).toBe(201);
-      expect((await apply({ name: 'Ana Candidata', email: 'ana@x.ao', phone: '923000000', consent: true })).json().error).toBe('candidatura_repetida');
+      expect(
+        (await apply({ name: 'Robô', email: 'r@x.ao', phone: '923000001', consent: true, website: 'spam.com' }))
+          .statusCode,
+      ).toBe(400);
+      expect(
+        (
+          await apply({
+            name: 'Ana Candidata',
+            email: 'Ana@x.ao',
+            phone: '923000000',
+            consent: true,
+            cvUrl: 'https://drive.example.com/cv.pdf',
+          })
+        ).statusCode,
+      ).toBe(201);
+      expect(
+        (await apply({ name: 'Ana Candidata', email: 'ana@x.ao', phone: '923000000', consent: true })).json().error,
+      ).toBe('candidatura_repetida');
     });
 
     it('pipeline: chefia responsável vê e comenta; recusa exige motivo; só se admite a partir da proposta', async () => {
@@ -1079,12 +2066,35 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       candId = d.candidates[0].id;
       expect(d.stats).toMatchObject({ total: 1, active: 1, bySource: { site: 1 } });
       expect((await get(employeeUser, `/v1/candidates/${candId}`)).statusCode).toBe(404);
-      expect((await post(manager, `/v1/candidates/${candId}/events`, { kind: 'interview', text: 'Entrevista técnica' })).json().error).toBe('data_obrigatoria');
-      expect((await post(manager, `/v1/candidates/${candId}/events`, { kind: 'interview', text: 'Entrevista técnica', scheduledAt: '2026-11-03T10:00:00+01:00' })).statusCode).toBe(201);
-      expect((await post(manager, `/v1/candidates/${candId}/stage`, { stage: 'rejected' })).json().error).toBe('motivo_obrigatorio');
-      for (const stage of ['screening', 'interview', 'offer']) expect((await post(manager, `/v1/candidates/${candId}/stage`, { stage })).statusCode).toBe(200);
-      expect((await post(owner, `/v1/candidates/${candId}/stage`, { stage: 'hired' })).json().error).toBe('usar_admissao');
-      const hire = await post(owner, '/v1/employees', { number: '88', name: 'Ana Candidata', jobTitle: 'Contabilista sénior', candidateId: candId, contract: { type: 'indefinite', startDate: '2026-11-16', base: 500000, meal: 30000, transport: 25000 } });
+      expect(
+        (
+          await post(manager, `/v1/candidates/${candId}/events`, { kind: 'interview', text: 'Entrevista técnica' })
+        ).json().error,
+      ).toBe('data_obrigatoria');
+      expect(
+        (
+          await post(manager, `/v1/candidates/${candId}/events`, {
+            kind: 'interview',
+            text: 'Entrevista técnica',
+            scheduledAt: '2026-11-03T10:00:00+01:00',
+          })
+        ).statusCode,
+      ).toBe(201);
+      expect((await post(manager, `/v1/candidates/${candId}/stage`, { stage: 'rejected' })).json().error).toBe(
+        'motivo_obrigatorio',
+      );
+      for (const stage of ['screening', 'interview', 'offer'])
+        expect((await post(manager, `/v1/candidates/${candId}/stage`, { stage })).statusCode).toBe(200);
+      expect((await post(owner, `/v1/candidates/${candId}/stage`, { stage: 'hired' })).json().error).toBe(
+        'usar_admissao',
+      );
+      const hire = await post(owner, '/v1/employees', {
+        number: '88',
+        name: 'Ana Candidata',
+        jobTitle: 'Contabilista sénior',
+        candidateId: candId,
+        contract: { type: 'indefinite', startDate: '2026-11-16', base: 500000, meal: 30000, transport: 25000 },
+      });
       expect(hire.statusCode).toBe(201);
       const c = (await get(owner, `/v1/candidates/${candId}`)).json();
       expect(c).toMatchObject({ stage: 'hired', employeeId: hire.json().id });
@@ -1093,8 +2103,23 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
 
     it('ciclo de avaliação: pesos validados, lançamento com a chefia como avaliadora', async () => {
-      expect((await post(owner, '/v1/review-cycles', { name: 'Anual 2026', periodFrom: '2026-01-01', periodTo: '2026-12-31', competencies: [{ key: 'a', label: 'Qualidade', weight: 50 }] })).json().error).toBe('ciclo_invalido');
-      const cy = await post(owner, '/v1/review-cycles', { name: 'Avaliação anual 2026', periodFrom: '2026-01-01', periodTo: '2026-12-31', deadline: '2026-12-15', competencyWeight: 60 });
+      expect(
+        (
+          await post(owner, '/v1/review-cycles', {
+            name: 'Anual 2026',
+            periodFrom: '2026-01-01',
+            periodTo: '2026-12-31',
+            competencies: [{ key: 'a', label: 'Qualidade', weight: 50 }],
+          })
+        ).json().error,
+      ).toBe('ciclo_invalido');
+      const cy = await post(owner, '/v1/review-cycles', {
+        name: 'Avaliação anual 2026',
+        periodFrom: '2026-01-01',
+        periodTo: '2026-12-31',
+        deadline: '2026-12-15',
+        competencyWeight: 60,
+      });
       expect(cy.statusCode).toBe(201);
       const launch = await post(owner, `/v1/review-cycles/${cy.json().id}/launch`);
       expect(launch.json().reviews).toBeGreaterThan(1);
@@ -1105,17 +2130,57 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     it('auto-avaliação → chefia (objectivos e notas) → o colaborador toma conhecimento; notas da chefia só depois de submetidas', async () => {
       const mine = (await get(employeeUser, '/v1/reviews')).json().mine[0];
       const comps = (await get(employeeUser, `/v1/reviews/${mine.id}`)).json().cycle.competencies as { key: string }[];
-      const all = (v: number) => Object.fromEntries(comps.map((k) => [k.key, v]));
-      expect((await put(employeeUser, `/v1/reviews/${mine.id}/self`, { scores: { [comps[0]!.key]: 4 }, submit: true })).json().error).toBe('incompleta');
-      expect((await put(manager, `/v1/reviews/${mine.id}/objectives`, { objectives: [{ title: 'Fecho mensal até dia 5', weight: 60 }, { title: 'Reconciliações', weight: 30 }] })).json().error).toBe('pesos_invalidos');
-      expect((await put(manager, `/v1/reviews/${mine.id}/objectives`, { objectives: [{ title: 'Fecho mensal até dia 5', weight: 70 }, { title: 'Reconciliações bancárias semanais', weight: 30 }] })).statusCode).toBe(200);
-      expect((await put(employeeUser, `/v1/reviews/${mine.id}/self`, { scores: all(4), comment: 'Ano positivo', submit: true })).json().status).toBe('manager');
-      expect((await put(employeeUser, `/v1/reviews/${mine.id}/manager`, { scores: all(5), submit: false })).statusCode).toBe(409);
-      const m = await put(manager, `/v1/reviews/${mine.id}/manager`, { scores: all(3), objectives: [{ score: 5, result: 'Cumprido em 11 de 12 meses' }, { score: 4 }], comment: 'Bom ano; reforçar delegação', recommendation: 'training', submit: true });
+      const all = (v: number) => Object.fromEntries(comps.map(k => [k.key, v]));
+      expect(
+        (
+          await put(employeeUser, `/v1/reviews/${mine.id}/self`, { scores: { [comps[0]!.key]: 4 }, submit: true })
+        ).json().error,
+      ).toBe('incompleta');
+      expect(
+        (
+          await put(manager, `/v1/reviews/${mine.id}/objectives`, {
+            objectives: [
+              { title: 'Fecho mensal até dia 5', weight: 60 },
+              { title: 'Reconciliações', weight: 30 },
+            ],
+          })
+        ).json().error,
+      ).toBe('pesos_invalidos');
+      expect(
+        (
+          await put(manager, `/v1/reviews/${mine.id}/objectives`, {
+            objectives: [
+              { title: 'Fecho mensal até dia 5', weight: 70 },
+              { title: 'Reconciliações bancárias semanais', weight: 30 },
+            ],
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(
+        (
+          await put(employeeUser, `/v1/reviews/${mine.id}/self`, {
+            scores: all(4),
+            comment: 'Ano positivo',
+            submit: true,
+          })
+        ).json().status,
+      ).toBe('manager');
+      expect(
+        (await put(employeeUser, `/v1/reviews/${mine.id}/manager`, { scores: all(5), submit: false })).statusCode,
+      ).toBe(409);
+      const m = await put(manager, `/v1/reviews/${mine.id}/manager`, {
+        scores: all(3),
+        objectives: [{ score: 5, result: 'Cumprido em 11 de 12 meses' }, { score: 4 }],
+        comment: 'Bom ano; reforçar delegação',
+        recommendation: 'training',
+        submit: true,
+      });
       expect(m.json()).toMatchObject({ status: 'acknowledgement', finalScore: '3.68' });
       const seen = (await get(employeeUser, `/v1/reviews/${mine.id}`)).json();
       expect(seen).toMatchObject({ finalScore: 3.68, rating: 'Supera', role: 'self', can: { acknowledge: true } });
-      expect((await post(employeeUser, `/v1/reviews/${mine.id}/acknowledge`, { comment: 'Concordo' })).json().status).toBe('done');
+      expect(
+        (await post(employeeUser, `/v1/reviews/${mine.id}/acknowledge`, { comment: 'Concordo' })).json().status,
+      ).toBe('done');
       const cycles = (await get(owner, '/v1/review-cycles')).json();
       const det = (await get(owner, `/v1/review-cycles/${cycles[0].id}`)).json();
       expect(det.distribution.Supera).toBe(1);
@@ -1124,46 +2189,91 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
 
   describe('portal do colaborador (entrega 13)', () => {
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
-    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const post = (cookie: string, url: string, payload: object = {}) =>
+      app.inject({ method: 'POST', url, headers: as(cookie), payload });
 
     it('resumo do portal: último recibo, despesas, documentos e declarações disponíveis', async () => {
       const p = (await get(employeeUser, '/v1/portal')).json();
       expect(p.lastPayslip).toMatchObject({ period: expect.stringMatching(/^2026-/) });
-      expect(p.selfService.templates.map((t: { key: string }) => t.key)).toEqual(['declaracao_servico', 'declaracao_rendimentos']);
+      expect(p.selfService.templates.map((t: { key: string }) => t.key)).toEqual([
+        'declaracao_servico',
+        'declaracao_rendimentos',
+      ]);
       expect(p.selfService.autoIssue).toBe(false);
     });
 
     it('pedido de declaração: o RH emite ou recusa; com emissão automática sai logo', async () => {
-      expect((await post(employeeUser, '/v1/document-requests', { templateKey: 'contrato_indeterminado', inputs: {} })).statusCode).toBe(400);
-      expect((await post(employeeUser, '/v1/document-requests', { templateKey: 'declaracao_servico', inputs: {} })).json().error).toBe('campos_em_falta');
-      const r = await post(employeeUser, '/v1/document-requests', { templateKey: 'declaracao_servico', inputs: { 'pedido.finalidade': 'visto de turismo' } });
+      expect(
+        (await post(employeeUser, '/v1/document-requests', { templateKey: 'contrato_indeterminado', inputs: {} }))
+          .statusCode,
+      ).toBe(400);
+      expect(
+        (await post(employeeUser, '/v1/document-requests', { templateKey: 'declaracao_servico', inputs: {} })).json()
+          .error,
+      ).toBe('campos_em_falta');
+      const r = await post(employeeUser, '/v1/document-requests', {
+        templateKey: 'declaracao_servico',
+        inputs: { 'pedido.finalidade': 'visto de turismo' },
+      });
       expect(r.json().status).toBe('pending');
       const inbox = (await get(owner, '/v1/portal/inbox')).json();
       expect(inbox.documents.map((d: { id: string }) => d.id)).toContain(r.json().id);
       expect((await post(employeeUser, `/v1/document-requests/${r.json().id}/issue`)).statusCode).toBe(403);
       const issued = await post(owner, `/v1/document-requests/${r.json().id}/issue`);
       expect(issued.json()).toMatchObject({ status: 'issued', documentNumber: expect.stringMatching(/^DOC-/) });
-      expect((await get(employeeUser, `/v1/documents/${issued.json().documentId}`)).json().body).toContain('visto de turismo');
-      await app.inject({ method: 'PATCH', url: '/v1/company/settings', headers: as(owner), payload: { autoIssueDeclarations: true } });
-      const auto = await post(employeeUser, '/v1/document-requests', { templateKey: 'declaracao_rendimentos', inputs: { 'pedido.finalidade': 'crédito automóvel' } });
+      expect((await get(employeeUser, `/v1/documents/${issued.json().documentId}`)).json().body).toContain(
+        'visto de turismo',
+      );
+      await app.inject({
+        method: 'PATCH',
+        url: '/v1/company/settings',
+        headers: as(owner),
+        payload: { autoIssueDeclarations: true },
+      });
+      const auto = await post(employeeUser, '/v1/document-requests', {
+        templateKey: 'declaracao_rendimentos',
+        inputs: { 'pedido.finalidade': 'crédito automóvel' },
+      });
       expect(auto.json()).toMatchObject({ status: 'issued', decisionNote: 'Emitida automaticamente' });
-      await app.inject({ method: 'PATCH', url: '/v1/company/settings', headers: as(owner), payload: { autoIssueDeclarations: false } });
+      await app.inject({
+        method: 'PATCH',
+        url: '/v1/company/settings',
+        headers: as(owner),
+        payload: { autoIssueDeclarations: false },
+      });
     });
 
     it('alteração de dados pessoais: IBAN validado, sem alterações recusado, RH aprova e a ficha muda', async () => {
-      expect((await post(employeeUser, '/v1/profile-requests', { changes: { iban: 'AO06 1234' } })).json().error).toBe('iban_invalido');
+      expect((await post(employeeUser, '/v1/profile-requests', { changes: { iban: 'AO06 1234' } })).json().error).toBe(
+        'iban_invalido',
+      );
       const ficha = (await get(employeeUser, `/v1/employees/${empId}`)).json();
-      expect((await post(employeeUser, '/v1/profile-requests', { changes: { iban: ficha.iban } })).json().error).toBe('sem_alteracoes');
-      const r = await post(employeeUser, '/v1/profile-requests', { changes: { address: 'Rua Direita do Kinaxixi, 12, Luanda', phone: '923456789', iban: 'AO06.0040.0000.5521.8890.1025.2' }, note: 'Mudei de casa e de conta' });
+      expect((await post(employeeUser, '/v1/profile-requests', { changes: { iban: ficha.iban } })).json().error).toBe(
+        'sem_alteracoes',
+      );
+      const r = await post(employeeUser, '/v1/profile-requests', {
+        changes: {
+          address: 'Rua Direita do Kinaxixi, 12, Luanda',
+          phone: '923456789',
+          iban: 'AO06.0040.0000.5521.8890.1025.2',
+        },
+        note: 'Mudei de casa e de conta',
+      });
       expect(r.statusCode).toBe(201);
       expect(r.json().changes.iban).toBe('AO06004000005521889010252');
       expect(r.json().previous.address ?? null).toBe(ficha.address ?? null);
       expect((await post(employeeUser, `/v1/profile-requests/${r.json().id}/approve`)).statusCode).toBe(403);
       expect((await post(owner, `/v1/profile-requests/${r.json().id}/approve`)).json().status).toBe('approved');
       const after = (await get(employeeUser, `/v1/employees/${empId}`)).json();
-      expect(after).toMatchObject({ address: 'Rua Direita do Kinaxixi, 12, Luanda', phone: '923456789', iban: 'AO06004000005521889010252' });
+      expect(after).toMatchObject({
+        address: 'Rua Direita do Kinaxixi, 12, Luanda',
+        phone: '923456789',
+        iban: 'AO06004000005521889010252',
+      });
       const r2 = await post(employeeUser, '/v1/profile-requests', { changes: { phone: '912000000' } });
-      expect((await post(owner, `/v1/profile-requests/${r2.json().id}/reject`, { note: 'Número inválido' })).json().status).toBe('rejected');
+      expect(
+        (await post(owner, `/v1/profile-requests/${r2.json().id}/reject`, { note: 'Número inválido' })).json().status,
+      ).toBe('rejected');
       expect((await get(employeeUser, '/v1/profile-requests')).json().requests.length).toBeGreaterThanOrEqual(2);
     });
   });
@@ -1171,11 +2281,15 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
   describe('licenças e plataforma (entrega 14)', () => {
     beforeAll(async () => {
       const me = (await app.inject({ method: 'GET', url: '/v1/auth/me', headers: as(owner) })).json();
-      await getDb().execute(sql`update subscriptions set status='trial', paid_until=null where company_id=${me.company.id}`);
+      await getDb().execute(
+        sql`update subscriptions set status='trial', paid_until=null where company_id=${me.company.id}`,
+      );
     });
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
-    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
-    const patch = (cookie: string, url: string, payload: object) => app.inject({ method: 'PATCH', url, headers: as(cookie), payload });
+    const post = (cookie: string, url: string, payload: object = {}) =>
+      app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const patch = (cookie: string, url: string, payload: object) =>
+      app.inject({ method: 'PATCH', url, headers: as(cookie), payload });
     let companyId = '';
     beforeAll(async () => {
       await getDb().delete(platformSettings);
@@ -1189,11 +2303,26 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(me.company.code).toMatch(/^[A-Z2-9]{6}$/);
       expect(me.platformAdmin).toBe(false);
       const nif = String(Date.now()).slice(-10);
-      const big = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { company: { name: 'Grande Lda', nif, sector: 'mining', employeesEstimate: 300 }, name: 'Dono G', email: `g+${stamp}@g.ao`, password: pw, acceptTerms: true } });
+      const big = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/register',
+        payload: {
+          company: { name: 'Grande Lda', nif, sector: 'mining', employeesEstimate: 300 },
+          name: 'Dono G',
+          email: `g+${stamp}@g.ao`,
+          password: pw,
+          acceptTerms: true,
+        },
+      });
       expect(big.statusCode).toBe(201);
       const b = (await get(cookieOf(big), '/v1/billing')).json();
       expect(b).toMatchObject({ status: 'trial', tier: { key: 't3' }, limit: 500 });
-      const registeredOn = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Luanda', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(big.json().company.createdAt));
+      const registeredOn = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Africa/Luanda',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date(big.json().company.createdAt));
       expect((Date.parse(b.trialEndsAt) - Date.parse(registeredOn)) / 86_400_000).toBe(29); // activação é dia 1; total de trinta datas de calendário
     });
 
@@ -1201,12 +2330,25 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect((await get(employeeUser, '/v1/billing')).statusCode).toBe(403);
       const b = (await get(financeUser, '/v1/billing')).json();
       expect(b.prices.find((t: { key: string }) => t.key === 't1').prices.annual.totalMinor).toBe(30_498_000);
-      const r = await post(financeUser, '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'annual' });
-      expect(r.json()).toMatchObject({ amountMinor: 30_498_000, discountMinor: 5_382_000, status: 'pending', number: expect.stringMatching(/^PF-/) });
+      const r = await post(financeUser, '/v1/billing/requests', {
+        kind: 'subscription',
+        tierKey: 't1',
+        cycle: 'annual',
+      });
+      expect(r.json()).toMatchObject({
+        amountMinor: 30_498_000,
+        discountMinor: 5_382_000,
+        status: 'pending',
+        number: expect.stringMatching(/^PF-/),
+      });
       const me = (await get(owner, '/v1/auth/me')).json();
       expect(r.json().periodStart > me.licence.trialEndsAt).toBe(true); // começa depois do experimental
       expect((await get(financeUser, '/v1/billing')).json()).not.toHaveProperty('extraSeatMinor');
-      expect((await post(financeUser, `/v1/billing/requests/${r.json().id}/reference`, { payerReference: 'TRF BAI 778899' })).json().payerReference).toBe('TRF BAI 778899');
+      expect(
+        (
+          await post(financeUser, `/v1/billing/requests/${r.json().id}/reference`, { payerReference: 'TRF BAI 778899' })
+        ).json().payerReference,
+      ).toBe('TRF BAI 778899');
     });
 
     it('consola: só administradores; confirmar o plano activa a licença, sem venda de extras', async () => {
@@ -1214,24 +2356,56 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect((await get(owner, '/v1/auth/me')).json().platformAdmin).toBe(false);
       expect((await get(admin, '/v1/auth/me')).json().platformAdmin).toBe(true);
       const list = (await get(admin, '/v1/platform/companies')).json();
-      expect(list.companies.find((x: { id: string }) => x.id === companyId)).toMatchObject({ status: 'trial', pendingPayments: 1 });
-      const pending = (await get(admin, '/v1/platform/payment-requests')).json().find((x: { companyId: string }) => x.companyId === companyId);
-      const ok = await post(admin, `/v1/platform/payment-requests/${pending.id}/confirm`, { invoiceRef: 'FT KRH2026/0001' });
+      expect(list.companies.find((x: { id: string }) => x.id === companyId)).toMatchObject({
+        status: 'trial',
+        pendingPayments: 1,
+      });
+      const pending = (await get(admin, '/v1/platform/payment-requests'))
+        .json()
+        .find((x: { companyId: string }) => x.companyId === companyId);
+      const ok = await post(admin, `/v1/platform/payment-requests/${pending.id}/confirm`, {
+        invoiceRef: 'FT KRH2026/0001',
+      });
       expect(ok.json().status).toBe('paid');
       const b = (await get(financeUser, '/v1/billing')).json();
       expect(b).toMatchObject({ status: 'active', cycle: 'annual', paidUntil: pending.periodEnd });
       // MRR ao preço do ciclo contratado (anual com desconto ÷ 12), por módulo, incluindo o Valora.
-      const after = (await get(admin, '/v1/platform/companies')).json(), row = after.companies.find((x: { id: string }) => x.id === companyId);
-      expect(row.hrMrr).toBeGreaterThan(0); expect(row.hrMrr).toBeLessThan(row.monthlyMinor);
+      const after = (await get(admin, '/v1/platform/companies')).json(),
+        row = after.companies.find((x: { id: string }) => x.id === companyId);
+      expect(row.hrMrr).toBeGreaterThan(0);
+      expect(row.hrMrr).toBeLessThan(row.monthlyMinor);
       // Um ciclo pago a um preço anterior mantém o seu valor quando o catálogo muda.
       await getDb().execute(sql`update payment_requests set amount_minor = 28000000 where id = ${pending.id}`);
-      const repriced = (await get(admin, '/v1/platform/companies')).json().companies.find((x: { id: string }) => x.id === companyId);
+      const repriced = (await get(admin, '/v1/platform/companies'))
+        .json()
+        .companies.find((x: { id: string }) => x.id === companyId);
       expect(repriced.hrMrr).toBe(Math.round(28_000_000 / 12));
-      await getDb().execute(sql`update payment_requests set amount_minor = ${pending.amountMinor} where id = ${pending.id}`);
-      expect(after.summary.mrrByModule).toEqual(expect.objectContaining({ hr: expect.any(Number), modeling: expect.any(Number), valuation: expect.any(Number) }));
-      expect(after.summary.mrrMinor).toBe(after.summary.mrrByModule.hr + after.summary.mrrByModule.modeling + after.summary.mrrByModule.valuation);
-      expect(after.summary.modules.valuation).toEqual(expect.objectContaining({ trial: expect.any(Number), active: expect.any(Number) }));
-      await app.inject({ method: 'PUT', url: '/v1/platform/settings', headers: as(admin), payload: { bank: { holder: 'Kianda RH, Lda.', bankName: 'BAI', iban: 'AO06004000005521889010252' }, supportEmail: 'suporte@kianda.ao', supportPhone: '+244 923 000 000' } });
+      await getDb().execute(
+        sql`update payment_requests set amount_minor = ${pending.amountMinor} where id = ${pending.id}`,
+      );
+      expect(after.summary.mrrByModule).toEqual(
+        expect.objectContaining({
+          hr: expect.any(Number),
+          modeling: expect.any(Number),
+          valuation: expect.any(Number),
+        }),
+      );
+      expect(after.summary.mrrMinor).toBe(
+        after.summary.mrrByModule.hr + after.summary.mrrByModule.modeling + after.summary.mrrByModule.valuation,
+      );
+      expect(after.summary.modules.valuation).toEqual(
+        expect.objectContaining({ trial: expect.any(Number), active: expect.any(Number) }),
+      );
+      await app.inject({
+        method: 'PUT',
+        url: '/v1/platform/settings',
+        headers: as(admin),
+        payload: {
+          bank: { holder: 'Kianda RH, Lda.', bankName: 'BAI', iban: 'AO06004000005521889010252' },
+          supportEmail: 'suporte@kianda.ao',
+          supportPhone: '+244 923 000 000',
+        },
+      });
       const extra = await post(financeUser, '/v1/billing/requests', { kind: 'extra_seats', seats: 10 });
       expect(extra.statusCode).toBe(400);
       const fixed = (await get(financeUser, '/v1/billing')).json();
@@ -1240,28 +2414,53 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
 
     it('visitas ao site: sem cookies, uma por pessoa/página/dia, robôs ignorados; resumo só para a plataforma', async () => {
-      const visit = (ua: string, ip: string, payload: object, country = 'AO') => app.inject({ method: 'POST', url: '/v1/public/visit', headers: { 'content-type': 'application/json', 'user-agent': ua, 'x-forwarded-for': ip, 'cf-ipcountry': country }, payload });
+      const visit = (ua: string, ip: string, payload: object, country = 'AO') =>
+        app.inject({
+          method: 'POST',
+          url: '/v1/public/visit',
+          headers: {
+            'content-type': 'application/json',
+            'user-agent': ua,
+            'x-forwarded-for': ip,
+            'cf-ipcountry': country,
+          },
+          payload,
+        });
       const before = (await get(admin, '/v1/platform/visits?days=7')).json();
-      const phone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148', pc = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0';
+      const phone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148',
+        pc = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0';
       const ip = `10.${Number(stamp.slice(-3)) % 200}.7.1`;
-      const first = await visit(phone, ip, { path: '/?utm_source=x', referrer: 'https://l.facebook.com/l.php?u=kianda', source: 'Instagram' });
+      const first = await visit(phone, ip, {
+        path: '/?utm_source=x',
+        referrer: 'https://l.facebook.com/l.php?u=kianda',
+        source: 'Instagram',
+      });
       expect(first.statusCode).toBe(204);
       expect(first.headers['set-cookie']).toBeUndefined();
-      await visit(phone, ip, { path: '/' });                                  // mesma pessoa, mesma página, mesmo dia: não conta outra vez
-      await visit('facebookexternalhit/1.1', ip, { path: '/' });                // pré-visualização de link
-      await visit(pc, `10.${Number(stamp.slice(-3)) % 200}.7.2`, { path: '/registo', referrer: 'https://www.linkedin.com/feed/' }, 'PT');
-      expect((await visit(pc, ip, { path: 12 })).statusCode).toBe(204);         // corpo inválido: ignorado em silêncio
+      await visit(phone, ip, { path: '/' }); // mesma pessoa, mesma página, mesmo dia: não conta outra vez
+      await visit('facebookexternalhit/1.1', ip, { path: '/' }); // pré-visualização de link
+      await visit(
+        pc,
+        `10.${Number(stamp.slice(-3)) % 200}.7.2`,
+        { path: '/registo', referrer: 'https://www.linkedin.com/feed/' },
+        'PT',
+      );
+      expect((await visit(pc, ip, { path: 12 })).statusCode).toBe(204); // corpo inválido: ignorado em silêncio
       const r = (await get(admin, '/v1/platform/visits?days=7')).json();
       expect(r.totals.today - before.totals.today).toBe(2);
       expect(r.totals.views - before.totals.views).toBe(2);
       expect(r.series).toHaveLength(7);
-      expect(r.referrers.map((x: { key: string }) => x.key)).toEqual(expect.arrayContaining(['facebook.com', 'linkedin.com']));
+      expect(r.referrers.map((x: { key: string }) => x.key)).toEqual(
+        expect.arrayContaining(['facebook.com', 'linkedin.com']),
+      );
       expect(r.sources.map((x: { key: string }) => x.key)).toContain('instagram');
       expect(r.devices.map((x: { key: string }) => x.key)).toEqual(expect.arrayContaining(['mobile', 'desktop']));
       expect(r.pages.map((x: { key: string }) => x.key)).toEqual(expect.arrayContaining(['/', '/registo']));
       expect((await get(financeUser, '/v1/platform/visits')).statusCode).toBe(403);
-      const stored = (await getDb().execute(sql`select visitor from site_visits where day = ${luandaDate(new Date())} limit 50`)).rows.map((x) => String(x.visitor));
-      expect(stored.some((v) => v.includes(ip))).toBe(false);                  // o IP nunca é guardado
+      const stored = (
+        await getDb().execute(sql`select visitor from site_visits where day = ${luandaDate(new Date())} limit 50`)
+      ).rows.map(x => String(x.visitor));
+      expect(stored.some(v => v.includes(ip))).toBe(false); // o IP nunca é guardado
     });
 
     it('licença suspensa: só consulta (escrever dá 402), mas pode tratar da licença; limite de colaboradores', async () => {
@@ -1270,32 +2469,65 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       const w = await post(owner, '/v1/departments', { name: 'Bloqueado', costCenter: 'CC-X' });
       expect(w.statusCode).toBe(402);
       expect(w.json().error).toBe('licenca_inactiva');
-      expect((await post(financeUser, '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'monthly' })).statusCode).toBe(201);
+      expect(
+        (await post(financeUser, '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'monthly' }))
+          .statusCode,
+      ).toBe(201);
       await patch(admin, `/v1/platform/companies/${companyId}/subscription`, { status: 'active' });
-      const n = (await get(owner, '/v1/employees')).json().filter((e: { status: string }) => e.status === 'active').length;
-      await patch(admin, `/v1/platform/companies/${companyId}/subscription`, { tierKey: 'custom', customMaxEmployees: n });
-      const over = await post(owner, '/v1/employees', { number: '999', name: 'Excedente', jobTitle: 'Teste', contract: { type: 'indefinite', startDate: '2026-11-02', base: 150000 } });
+      const n = (await get(owner, '/v1/employees'))
+        .json()
+        .filter((e: { status: string }) => e.status === 'active').length;
+      await patch(admin, `/v1/platform/companies/${companyId}/subscription`, {
+        tierKey: 'custom',
+        customMaxEmployees: n,
+      });
+      const over = await post(owner, '/v1/employees', {
+        number: '999',
+        name: 'Excedente',
+        jobTitle: 'Teste',
+        contract: { type: 'indefinite', startDate: '2026-11-02', base: 150000 },
+      });
       expect(over.json().error).toBe('limite_colaboradores');
       await patch(admin, `/v1/platform/companies/${companyId}/subscription`, { tierKey: 't1' });
     });
 
     it('logotipo para o papel timbrado: só PNG/JPEG', async () => {
-      expect((await app.inject({ method: 'PUT', url: '/v1/company/logo', headers: as(owner), payload: { dataUrl: 'data:image/svg+xml;base64,PHN2Zz4=' } })).statusCode).toBe(400);
-      const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
-      expect((await app.inject({ method: 'PUT', url: '/v1/company/logo', headers: as(owner), payload: { dataUrl: png } })).statusCode).toBe(200);
+      expect(
+        (
+          await app.inject({
+            method: 'PUT',
+            url: '/v1/company/logo',
+            headers: as(owner),
+            payload: { dataUrl: 'data:image/svg+xml;base64,PHN2Zz4=' },
+          })
+        ).statusCode,
+      ).toBe(400);
+      const png =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+      expect(
+        (await app.inject({ method: 'PUT', url: '/v1/company/logo', headers: as(owner), payload: { dataUrl: png } }))
+          .statusCode,
+      ).toBe(200);
       expect((await get(employeeUser, '/v1/company/branding')).json().logo).toBe(png);
     });
   });
 
   describe('contas dos colaboradores (entrega 15)', () => {
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
-    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const post = (cookie: string, url: string, payload: object = {}) =>
+      app.inject({ method: 'POST', url, headers: as(cookie), payload });
     const pub = (method: 'GET' | 'POST', url: string, payload?: object) => app.inject({ method, url, payload });
     let pinEmpId = '';
     let code = '';
 
     beforeAll(async () => {
-      const e = await post(owner, '/v1/employees', { number: '55', name: 'Vigilante Sem Email', jobTitle: 'Vigilante', phone: '+244 923 555 111', contract: { type: 'indefinite', startDate: '2026-01-05', base: 120000 } });
+      const e = await post(owner, '/v1/employees', {
+        number: '55',
+        name: 'Vigilante Sem Email',
+        jobTitle: 'Vigilante',
+        phone: '+244 923 555 111',
+        contract: { type: 'indefinite', startDate: '2026-01-05', base: 120000 },
+      });
       pinEmpId = e.json().id;
       code = (await get(owner, '/v1/auth/me')).json().company.code;
     });
@@ -1306,21 +2538,42 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(inv.statusCode).toBe(201);
       const token = inv.json().path.split('/').pop();
       const info = (await pub('GET', `/v1/public/access/${token}`)).json();
-      expect(info).toMatchObject({ kind: 'invite', name: 'Vigilante Sem Email', companyCode: code, pinAllowed: true, number: '55' });
-      expect((await pub('POST', `/v1/public/access/${token}`, { method: 'pin', pin: '123456' })).json().error).toBe('pin_fraco');
+      expect(info).toMatchObject({
+        kind: 'invite',
+        name: 'Vigilante Sem Email',
+        companyCode: code,
+        pinAllowed: true,
+        number: '55',
+      });
+      expect((await pub('POST', `/v1/public/access/${token}`, { method: 'pin', pin: '123456' })).json().error).toBe(
+        'pin_fraco',
+      );
       const ok = await pub('POST', `/v1/public/access/${token}`, { method: 'pin', pin: '730418' });
       expect(ok.statusCode).toBe(200);
-      expect((await pub('POST', `/v1/public/access/${token}`, { method: 'pin', pin: '730418' })).json().error).toBe('ligacao_usada');
-      expect((await pub('POST', '/v1/auth/login-pin', { companyCode: code.toLowerCase(), identifier: '55', pin: '730418' })).statusCode).toBe(200);
-      expect((await pub('POST', '/v1/auth/login-pin', { companyCode: code, identifier: '923 555 111', pin: '730418' })).statusCode).toBe(200);
-      expect((await pub('POST', '/v1/auth/login-pin', { companyCode: code, identifier: '55', pin: '000001' })).json().error).toBe('credenciais_invalidas');
+      expect((await pub('POST', `/v1/public/access/${token}`, { method: 'pin', pin: '730418' })).json().error).toBe(
+        'ligacao_usada',
+      );
+      expect(
+        (await pub('POST', '/v1/auth/login-pin', { companyCode: code.toLowerCase(), identifier: '55', pin: '730418' }))
+          .statusCode,
+      ).toBe(200);
+      expect(
+        (await pub('POST', '/v1/auth/login-pin', { companyCode: code, identifier: '923 555 111', pin: '730418' }))
+          .statusCode,
+      ).toBe(200);
+      expect(
+        (await pub('POST', '/v1/auth/login-pin', { companyCode: code, identifier: '55', pin: '000001' })).json().error,
+      ).toBe('credenciais_invalidas');
       expect((await post(owner, '/v1/access/invites', { employeeId: pinEmpId })).json().error).toBe('ja_tem_acesso');
     });
 
     it('5 PINs errados bloqueiam a conta; a recuperação pelo RH desbloqueia e define um PIN novo', async () => {
-      for (let i = 0; i < 4; i++) await pub('POST', '/v1/auth/login-pin', { companyCode: code, identifier: '55', pin: '000002' });
+      for (let i = 0; i < 4; i++)
+        await pub('POST', '/v1/auth/login-pin', { companyCode: code, identifier: '55', pin: '000002' });
       await pub('POST', '/v1/auth/login-pin', { companyCode: code, identifier: '55', pin: '000003' });
-      expect((await pub('POST', '/v1/auth/login-pin', { companyCode: code, identifier: '55', pin: '730418' })).json().error).toBe('conta_bloqueada');
+      expect(
+        (await pub('POST', '/v1/auth/login-pin', { companyCode: code, identifier: '55', pin: '730418' })).json().error,
+      ).toBe('conta_bloqueada');
       const list = (await get(owner, '/v1/access')).json();
       const row = list.employees.find((e: { id: string }) => e.id === pinEmpId);
       expect(row.user).toMatchObject({ hasPin: true, locked: true, hasPassword: false });
@@ -1328,18 +2581,36 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       const token = rec.json().path.split('/').pop();
       expect((await pub('GET', `/v1/public/access/${token}`)).json().kind).toBe('reset');
       expect((await pub('POST', `/v1/public/access/${token}`, { method: 'pin', pin: '582947' })).statusCode).toBe(200);
-      expect((await pub('POST', '/v1/auth/login-pin', { companyCode: code, identifier: '55', pin: '582947' })).statusCode).toBe(200);
+      expect(
+        (await pub('POST', '/v1/auth/login-pin', { companyCode: code, identifier: '55', pin: '582947' })).statusCode,
+      ).toBe(200);
     });
 
     it('utilizador de gestão sem ficha: só email e palavra-passe; só o proprietário convida administração de RH', async () => {
       const bad = await post(owner, '/v1/access/invites', { name: 'Contabilista Externo', role: 'finance' });
       expect(bad.json().error).toBe('dados_em_falta');
-      const inv = await post(owner, '/v1/access/invites', { name: 'Contabilista Externo', email: `cont+${stamp}@x.ao`, role: 'finance' });
+      const inv = await post(owner, '/v1/access/invites', {
+        name: 'Contabilista Externo',
+        email: `cont+${stamp}@x.ao`,
+        role: 'finance',
+      });
       const token = inv.json().path.split('/').pop();
-      expect((await pub('POST', `/v1/public/access/${token}`, { method: 'pin', pin: '582947' })).json().error).toBe('metodo_invalido');
-      expect((await pub('POST', `/v1/public/access/${token}`, { method: 'password', email: `cont+${stamp}@x.ao`, password: 'Contas2026segura' })).statusCode).toBe(200);
+      expect((await pub('POST', `/v1/public/access/${token}`, { method: 'pin', pin: '582947' })).json().error).toBe(
+        'metodo_invalido',
+      );
+      expect(
+        (
+          await pub('POST', `/v1/public/access/${token}`, {
+            method: 'password',
+            email: `cont+${stamp}@x.ao`,
+            password: 'Contas2026segura',
+          })
+        ).statusCode,
+      ).toBe(200);
       const hr = await login(`payroll+${stamp}@a.ao`);
-      expect((await post(hr, '/v1/access/invites', { name: 'X', email: 'x@x.ao', role: 'hr_admin' })).statusCode).toBe(403);
+      expect((await post(hr, '/v1/access/invites', { name: 'X', email: 'x@x.ao', role: 'hr_admin' })).statusCode).toBe(
+        403,
+      );
     });
 
     it('verificação em dois passos: activar com código; o login passa a pedir o segundo passo', async () => {
@@ -1349,48 +2620,112 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(setup.uri).toMatch(/^otpauth:\/\/totp\//);
       expect((await post(fin, '/v1/auth/2fa/enable', { code: '000000' })).json().error).toBe('codigo_invalido');
       expect((await post(fin, '/v1/auth/2fa/enable', { code: await totp(secret) })).statusCode).toBe(200);
-      const first = (await app.inject({ method: 'POST', url: '/v1/auth/login', payload: { email: `finance+${stamp}@a.ao`, password: pw, companyNif: nifA } })).json();
+      const first = (
+        await app.inject({
+          method: 'POST',
+          url: '/v1/auth/login',
+          payload: { email: `finance+${stamp}@a.ao`, password: pw, companyNif: nifA },
+        })
+      ).json();
       expect(first).toMatchObject({ twoFactor: true });
-      expect((await pub('POST', '/v1/auth/login/2fa', { ticket: first.ticket, code: '111111' })).json().error).toBe('codigo_invalido');
+      expect((await pub('POST', '/v1/auth/login/2fa', { ticket: first.ticket, code: '111111' })).json().error).toBe(
+        'codigo_invalido',
+      );
       const second = await pub('POST', '/v1/auth/login/2fa', { ticket: first.ticket, code: await totp(secret) });
       expect(second.statusCode).toBe(200);
-      expect(second.cookies.find((c) => c.name === 'kianda_session')?.value).toBeTruthy();
-      expect((await post(cookieOf(second), '/v1/auth/2fa/disable', { password: pw, code: await totp(secret) })).statusCode).toBe(200);
+      expect(second.cookies.find(c => c.name === 'kianda_session')?.value).toBeTruthy();
+      expect(
+        (await post(cookieOf(second), '/v1/auth/2fa/disable', { password: pw, code: await totp(secret) })).statusCode,
+      ).toBe(200);
     });
 
     it('desactivar o acesso impede a entrada; não se mexe no próprio acesso', async () => {
       const list = (await get(owner, '/v1/access')).json();
       const u = list.employees.find((e: { id: string }) => e.id === pinEmpId).user;
-      expect((await app.inject({ method: 'PATCH', url: `/v1/users/${u.id}`, headers: as(owner), payload: { disabled: true } })).json().disabled).toBe(true);
-      expect((await pub('POST', '/v1/auth/login-pin', { companyCode: code, identifier: '55', pin: '582947' })).json().error).toBe('acesso_desactivado');
+      expect(
+        (
+          await app.inject({
+            method: 'PATCH',
+            url: `/v1/users/${u.id}`,
+            headers: as(owner),
+            payload: { disabled: true },
+          })
+        ).json().disabled,
+      ).toBe(true);
+      expect(
+        (await pub('POST', '/v1/auth/login-pin', { companyCode: code, identifier: '55', pin: '582947' })).json().error,
+      ).toBe('acesso_desactivado');
       const me = list.staff.find((s: { self: boolean }) => s.self);
-      expect((await app.inject({ method: 'PATCH', url: `/v1/users/${me.id}`, headers: as(owner), payload: { disabled: true } })).json().error).toBe('proprio');
+      expect(
+        (
+          await app.inject({
+            method: 'PATCH',
+            url: `/v1/users/${me.id}`,
+            headers: as(owner),
+            payload: { disabled: true },
+          })
+        ).json().error,
+      ).toBe('proprio');
     });
   });
 
   describe('sectores, regimes e subsídios (entrega 16)', () => {
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
-    const send = (method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', cookie: string, url: string, payload: object = {}) => app.inject({ method, url, headers: as(cookie), payload });
-    const nifM = String(Number(nifA) + 7).padStart(10, '0').slice(-10);
+    const send = (method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', cookie: string, url: string, payload: object = {}) =>
+      app.inject({ method, url, headers: as(cookie), payload });
+    const nifM = String(Number(nifA) + 7)
+      .padStart(10, '0')
+      .slice(-10);
     let mine = '';
     let minerId = '';
     let expatId = '';
     let rotationId = '';
-    const type = (sector: { allowanceTypes: { id: string; code: string }[] }, code: string) => sector.allowanceTypes.find((t) => t.code === code)!.id;
+    const type = (sector: { allowanceTypes: { id: string; code: string }[] }, code: string) =>
+      sector.allowanceTypes.find(t => t.code === code)!.id;
 
     beforeAll(async () => {
-      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Mineira do Cuango', nif: nifM, sector: 'mining' }, name: 'Dono M', email: `dono+${stamp}@m.ao`, password: pw } });
+      const r = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/register',
+        payload: {
+          acceptTerms: true,
+          company: { name: 'Mineira do Cuango', nif: nifM, sector: 'mining' },
+          name: 'Dono M',
+          email: `dono+${stamp}@m.ao`,
+          password: pw,
+        },
+      });
       expect(r.statusCode).toBe(201);
       mine = cookieOf(r);
-      minerId = (await send('POST', mine, '/v1/employees', { number: '1', name: 'Mineiro Rotação', jobTitle: 'Operador de máquinas', contract: { type: 'indefinite', startDate: '2026-01-05', base: 300000 } })).json().id;
-      expatId = (await send('POST', mine, '/v1/employees', { number: '2', name: 'Expat Geólogo', jobTitle: 'Geólogo', nationality: 'Sul-africana', contract: { type: 'indefinite', startDate: '2026-01-05', base: 900000 } })).json().id;
+      minerId = (
+        await send('POST', mine, '/v1/employees', {
+          number: '1',
+          name: 'Mineiro Rotação',
+          jobTitle: 'Operador de máquinas',
+          contract: { type: 'indefinite', startDate: '2026-01-05', base: 300000 },
+        })
+      ).json().id;
+      expatId = (
+        await send('POST', mine, '/v1/employees', {
+          number: '2',
+          name: 'Expat Geólogo',
+          jobTitle: 'Geólogo',
+          nationality: 'Sul-africana',
+          contract: { type: 'indefinite', startDate: '2026-01-05', base: 900000 },
+        })
+      ).json().id;
     });
 
     it('o registo aplica a pré-configuração do sector (rotações e subsídios da mineração)', async () => {
       const s = (await get(mine, '/v1/sector')).json();
       expect(s.sector).toBe('mining');
       expect(s.schedules.map((x: { name: string }) => x.name)).toContain('Rotação 28/28 (12 h no local)');
-      expect(s.allowanceTypes.map((x: { code: string }) => x.code).sort()).toEqual(['SUBALOJ', 'SUBCAMPO', 'SUBISOL', 'SUBRISCO']);
+      expect(s.allowanceTypes.map((x: { code: string }) => x.code).sort()).toEqual([
+        'SUBALOJ',
+        'SUBCAMPO',
+        'SUBISOL',
+        'SUBRISCO',
+      ]);
       expect(s.profile.schedules.every((x: { applied: boolean }) => x.applied)).toBe(true);
       const rot = s.schedules.find((x: { presetKey: string }) => x.presetKey === 'rotation_28');
       expect(rot.stats.avgWeeklyMinutes).toBe(2520);
@@ -1398,21 +2733,60 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       rotationId = rot.id;
       // Aplicar outra vez não duplica nada.
       expect((await send('POST', mine, '/v1/sector/apply')).json()).toEqual({ schedules: 0, allowances: 0 });
-      expect((await send('POST', mine, '/v1/sector/apply', { schedules: ['rotation_14'] })).json()).toEqual({ schedules: 1, allowances: 0 });
+      expect((await send('POST', mine, '/v1/sector/apply', { schedules: ['rotation_14'] })).json()).toEqual({
+        schedules: 1,
+        allowances: 0,
+      });
     });
 
     it('catálogo: códigos reservados e código fixo depois de criado', async () => {
-      expect((await send('POST', mine, '/v1/allowance-types', { code: 'BASE', label: 'Teste', calc: 'fixed', value: 1000 })).json().error).toBe('codigo_reservado');
-      const t = await send('POST', mine, '/v1/allowance-types', { code: 'SUBPO', label: 'Subsídio de poeiras', calc: 'base_pct', pct: 5 });
+      expect(
+        (
+          await send('POST', mine, '/v1/allowance-types', { code: 'BASE', label: 'Teste', calc: 'fixed', value: 1000 })
+        ).json().error,
+      ).toBe('codigo_reservado');
+      const t = await send('POST', mine, '/v1/allowance-types', {
+        code: 'SUBPO',
+        label: 'Subsídio de poeiras',
+        calc: 'base_pct',
+        pct: 5,
+      });
       expect(t.statusCode).toBe(201);
       expect(t.json()).toMatchObject({ bps: 500, valueMinor: null });
-      expect((await send('PATCH', mine, `/v1/allowance-types/${t.json().id}`, { code: 'SUBPO2', label: 'Poeiras', calc: 'base_pct', pct: 5 })).json().error).toBe('codigo_fixo');
-      expect((await send('POST', employeeUser, '/v1/allowance-types', { code: 'SUBXX', label: 'X', calc: 'fixed', value: 1 })).statusCode).toBe(403);
+      expect(
+        (
+          await send('PATCH', mine, `/v1/allowance-types/${t.json().id}`, {
+            code: 'SUBPO2',
+            label: 'Poeiras',
+            calc: 'base_pct',
+            pct: 5,
+          })
+        ).json().error,
+      ).toBe('codigo_fixo');
+      expect(
+        (
+          await send('POST', employeeUser, '/v1/allowance-types', {
+            code: 'SUBXX',
+            label: 'X',
+            calc: 'fixed',
+            value: 1,
+          })
+        ).statusCode,
+      ).toBe(403);
     });
 
     it('rotação 28/28: exige início do ciclo; o ponto prevê 28 dias de 12 h e o 29.º é descanso', async () => {
-      expect((await send('PUT', mine, `/v1/work-regime/${minerId}`, { scheduleId: rotationId })).json().error).toBe('sem_inicio_ciclo');
-      expect((await send('PUT', mine, `/v1/work-regime/${minerId}`, { scheduleId: rotationId, scheduleAnchor: '2026-08-01' })).statusCode).toBe(200);
+      expect((await send('PUT', mine, `/v1/work-regime/${minerId}`, { scheduleId: rotationId })).json().error).toBe(
+        'sem_inicio_ciclo',
+      );
+      expect(
+        (
+          await send('PUT', mine, `/v1/work-regime/${minerId}`, {
+            scheduleId: rotationId,
+            scheduleAnchor: '2026-08-01',
+          })
+        ).statusCode,
+      ).toBe(200);
       const sheet = (await get(mine, `/v1/attendance/sheet?period=2026-08&employeeId=${minerId}`)).json();
       expect(sheet.schedule).toMatchObject({ name: 'Rotação 28/28 (12 h no local)', anchor: '2026-08-01' });
       expect(sheet.summary.expectedMinutes).toBe(28 * 720);
@@ -1422,29 +2796,66 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
 
     it('subsídios recorrentes entram no processamento: isolamento por dia de escala e risco proporcional', async () => {
       const s = (await get(mine, '/v1/sector')).json();
-      const isol = await send('POST', mine, `/v1/work-regime/${minerId}/allowances`, { typeId: type(s, 'SUBISOL'), startDate: '2026-08-01' });
+      const isol = await send('POST', mine, `/v1/work-regime/${minerId}/allowances`, {
+        typeId: type(s, 'SUBISOL'),
+        startDate: '2026-08-01',
+      });
       expect(isol.statusCode).toBe(201);
-      expect((await send('POST', mine, `/v1/work-regime/${minerId}/allowances`, { typeId: type(s, 'SUBISOL'), startDate: '2026-09-01' })).json().error).toBe('sobreposicao');
-      expect((await send('POST', mine, `/v1/work-regime/${minerId}/allowances`, { typeId: type(s, 'SUBRISCO'), startDate: '2026-08-16' })).statusCode).toBe(201);
+      expect(
+        (
+          await send('POST', mine, `/v1/work-regime/${minerId}/allowances`, {
+            typeId: type(s, 'SUBISOL'),
+            startDate: '2026-09-01',
+          })
+        ).json().error,
+      ).toBe('sobreposicao');
+      expect(
+        (
+          await send('POST', mine, `/v1/work-regime/${minerId}/allowances`, {
+            typeId: type(s, 'SUBRISCO'),
+            startDate: '2026-08-16',
+          })
+        ).statusCode,
+      ).toBe(201);
       const draft = (await send('POST', mine, '/v1/payroll-runs', { period: '2026-08' })).json();
       const run = (await get(mine, `/v1/payroll-runs/${draft.run.id}`)).json();
       const line = run.lines.find((l: { employeeId: string }) => l.employeeId === minerId);
-      const by = Object.fromEntries(line.breakdown.map((x: { code: string; amountMinor: number; name: string }) => [x.code, x]));
+      const by = Object.fromEntries(
+        line.breakdown.map((x: { code: string; amountMinor: number; name: string }) => [x.code, x]),
+      );
       expect(by.SUBISOL).toMatchObject({ amountMinor: 28 * 500_000, name: 'Subsídio de isolamento (28 dia(s))' });
       expect(by.SUBRISCO.amountMinor).toBe(1_600_000); // 10% de 300 000 × 16/30
       expect(line.grossMinor).toBe(30_000_000 + 14_000_000 + 1_600_000);
       expect(line.bonusMinor).toBe(0);
       // Fechado o mês, a atribuição não se apaga nem termina dentro dele.
       expect((await send('POST', mine, `/v1/payroll-runs/${draft.run.id}/close`)).statusCode).toBe(200);
-      expect((await send('DELETE', mine, `/v1/employee-allowances/${isol.json().id}`)).json().error).toBe('periodo_fechado');
-      expect((await send('PATCH', mine, `/v1/employee-allowances/${isol.json().id}`, { endDate: '2026-08-20' })).json().error).toBe('periodo_fechado');
-      expect((await send('PATCH', mine, `/v1/employee-allowances/${isol.json().id}`, { endDate: '2026-08-31' })).statusCode).toBe(200);
+      expect((await send('DELETE', mine, `/v1/employee-allowances/${isol.json().id}`)).json().error).toBe(
+        'periodo_fechado',
+      );
+      expect(
+        (await send('PATCH', mine, `/v1/employee-allowances/${isol.json().id}`, { endDate: '2026-08-20' })).json()
+          .error,
+      ).toBe('periodo_fechado');
+      expect(
+        (await send('PATCH', mine, `/v1/employee-allowances/${isol.json().id}`, { endDate: '2026-08-31' })).statusCode,
+      ).toBe(200);
       const regime = (await get(mine, `/v1/work-regime/${minerId}`)).json();
-      expect(regime.allowances.map((a: { type: { code: string }; endDate: string | null }) => [a.type.code, a.endDate])).toEqual([['SUBISOL', '2026-08-31'], ['SUBRISCO', null]]);
+      expect(
+        regime.allowances.map((a: { type: { code: string }; endDate: string | null }) => [a.type.code, a.endDate]),
+      ).toEqual([
+        ['SUBISOL', '2026-08-31'],
+        ['SUBRISCO', null],
+      ]);
     });
 
     it('acordo de regime de horário com o regime e os subsídios do colaborador', async () => {
-      const p = (await send('POST', mine, '/v1/documents/preview', { employeeId: minerId, templateKey: 'acordo_regime_horario', inputs: { 'pedido.local_trabalho': 'Mina do Cuango, Lunda Norte' } })).json();
+      const p = (
+        await send('POST', mine, '/v1/documents/preview', {
+          employeeId: minerId,
+          templateKey: 'acordo_regime_horario',
+          inputs: { 'pedido.local_trabalho': 'Mina do Cuango, Lunda Norte' },
+        })
+      ).json();
       expect(p.missing).toEqual(['colaborador.bi']); // a ficha de teste não tem BI
       expect(p.text).toContain('Rotação 28/28 (12 h no local)');
       expect(p.text).toContain('Ciclo de 56 dias: 28 de trabalho (12h00), 28 de descanso');
@@ -1455,26 +2866,56 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
 
     it('conformidade: estrangeiro sem visto; vigilantes sem cartão quando o sector é segurança', async () => {
       let c = (await get(mine, '/v1/compliance')).json();
-      expect(c.checks.find((x: { code: string }) => x.code === 'foreign_visa').employees.map((e: { id: string }) => e.id)).toEqual([expatId]);
+      expect(
+        c.checks.find((x: { code: string }) => x.code === 'foreign_visa').employees.map((e: { id: string }) => e.id),
+      ).toEqual([expatId]);
       expect(c.notes.join(' ')).toMatch(/acidentes de trabalho/);
-      expect((await send('POST', mine, `/v1/employees/${expatId}/documents`, { type: 'work_visa', number: 'VT-2026-001', expiryDate: '2027-12-31' })).statusCode).toBe(201);
+      expect(
+        (
+          await send('POST', mine, `/v1/employees/${expatId}/documents`, {
+            type: 'work_visa',
+            number: 'VT-2026-001',
+            expiryDate: '2027-12-31',
+          })
+        ).statusCode,
+      ).toBe(201);
       c = (await get(mine, '/v1/compliance')).json();
       expect(c.checks.some((x: { code: string }) => x.code === 'foreign_visa')).toBe(false);
       expect((await send('PUT', mine, '/v1/sector', { sector: 'security' })).statusCode).toBe(200);
-      const guard = (await send('POST', mine, '/v1/employees', { number: '3', name: 'Vigilante Nocturno', jobTitle: 'Vigilante', contract: { type: 'indefinite', startDate: '2026-01-05', base: 120000 } })).json().id;
+      const guard = (
+        await send('POST', mine, '/v1/employees', {
+          number: '3',
+          name: 'Vigilante Nocturno',
+          jobTitle: 'Vigilante',
+          contract: { type: 'indefinite', startDate: '2026-01-05', base: 120000 },
+        })
+      ).json().id;
       c = (await get(mine, '/v1/compliance')).json();
       // Só a função de vigilante exige o cartão — o operador de máquinas e o geólogo não.
-      expect(c.checks.find((x: { code: string }) => x.code === 'doc_professional_card').employees.map((e: { id: string }) => e.id)).toEqual([guard]);
+      expect(
+        c.checks
+          .find((x: { code: string }) => x.code === 'doc_professional_card')
+          .employees.map((e: { id: string }) => e.id),
+      ).toEqual([guard]);
       expect((await send('PUT', mine, '/v1/sector', { sector: 'mining' })).statusCode).toBe(200);
     });
   });
 
   describe('pagamentos Multicaixa, facturação e emails (entrega 17)', () => {
-    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
-    const put = (cookie: string, url: string, payload: object) => app.inject({ method: 'PUT', url, headers: as(cookie), payload });
+    const post = (cookie: string, url: string, payload: object = {}) =>
+      app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const put = (cookie: string, url: string, payload: object) =>
+      app.inject({ method: 'PUT', url, headers: as(cookie), payload });
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
     const KEY = 'chave-de-teste-proxypay';
-    const ENV = { PROXYPAY_API_KEY: KEY, PROXYPAY_ENTITY: '01234', RESEND_API_KEY: 're_teste', MAIL_FROM: 'Kianda RH <noreply@kianda.test>', VENDUS_API_KEY: 'vendus-teste', APP_BASE_URL: 'https://kianda.test' };
+    const ENV = {
+      PROXYPAY_API_KEY: KEY,
+      PROXYPAY_ENTITY: '01234',
+      RESEND_API_KEY: 're_teste',
+      MAIL_FROM: 'Kianda RH <noreply@kianda.test>',
+      VENDUS_API_KEY: 'vendus-teste',
+      APP_BASE_URL: 'https://kianda.test',
+    };
     const realFetch = globalThis.fetch;
     // Base de testes persistente: referências e ids de pagamento únicos por execução.
     let nextRef = 900_000_000 + (Number(stamp) % 90_000) * 1000;
@@ -1485,14 +2926,20 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     let queue: object[] = [];
     const emails: { to: string[]; subject: string; text: string }[] = [];
     const invoices: Record<string, unknown>[] = [];
-    const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { 'content-type': 'application/json' } });
+    const json = (b: unknown, status = 200) =>
+      new Response(JSON.stringify(b), { status, headers: { 'content-type': 'application/json' } });
     const sign = async (body: string) => {
       const { hmacHex } = await import('../src/services/integrations.js');
       return hmacHex(KEY, body);
     };
     const webhook = async (payload: object, signature?: string) => {
       const raw = JSON.stringify(payload);
-      return app.inject({ method: 'POST', url: '/v1/public/gateway/proxypay', headers: { 'content-type': 'application/json', 'x-signature': signature ?? await sign(raw) }, payload: raw });
+      return app.inject({
+        method: 'POST',
+        url: '/v1/public/gateway/proxypay',
+        headers: { 'content-type': 'application/json', 'x-signature': signature ?? (await sign(raw)) },
+        payload: raw,
+      });
     };
 
     beforeAll(() => {
@@ -1501,43 +2948,77 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
         const method = init?.method ?? 'GET';
         const body = init?.body ? JSON.parse(String(init.body)) : undefined;
         if (url.includes('proxypay.co.ao')) {
-          if ((init?.headers as Record<string, string>)?.Authorization !== `Token ${KEY}`) return json({ error: 'auth' }, 401);
+          if ((init?.headers as Record<string, string>)?.Authorization !== `Token ${KEY}`)
+            return json({ error: 'auth' }, 401);
           const path = new URL(url).pathname;
           if (method === 'POST' && path === '/reference_ids') return json(++nextRef);
-          if (method === 'PUT' && path.startsWith('/references/')) { references.set(path.split('/')[2]!, body); return new Response(null, { status: 204 }); }
-          if (method === 'DELETE' && path.startsWith('/references/')) { deleted.push(path.split('/')[2]!); return new Response(null, { status: 204 }); }
-          if (method === 'GET' && path === '/payments') { const q = queue; queue = []; return json(q); }
-          if (method === 'DELETE' && path.startsWith('/payments/')) { acked.push(path.split('/')[2]!); return new Response(null, { status: 204 }); }
+          if (method === 'PUT' && path.startsWith('/references/')) {
+            references.set(path.split('/')[2]!, body);
+            return new Response(null, { status: 204 });
+          }
+          if (method === 'DELETE' && path.startsWith('/references/')) {
+            deleted.push(path.split('/')[2]!);
+            return new Response(null, { status: 204 });
+          }
+          if (method === 'GET' && path === '/payments') {
+            const q = queue;
+            queue = [];
+            return json(q);
+          }
+          if (method === 'DELETE' && path.startsWith('/payments/')) {
+            acked.push(path.split('/')[2]!);
+            return new Response(null, { status: 204 });
+          }
         }
-        if (url === 'https://api.resend.com/emails') { emails.push(body); return json({ id: `em_${emails.length}` }); }
+        if (url === 'https://api.resend.com/emails') {
+          emails.push(body);
+          return json({ id: `em_${emails.length}` });
+        }
         if (url.startsWith('https://www.vendus.co.ao/ws/v1.1/documents')) {
-          if (url.endsWith('.pdf')) return new Response('%PDF-1.4 teste', { headers: { 'content-type': 'application/pdf' } });
+          if (url.endsWith('.pdf'))
+            return new Response('%PDF-1.4 teste', { headers: { 'content-type': 'application/pdf' } });
           invoices.push(body);
           return json({ id: 5000 + invoices.length, number: `FR KRH2026/${invoices.length}` }, 201);
         }
         return realFetch(input, init);
       }) as typeof fetch;
     });
-    afterAll(() => { globalThis.fetch = realFetch; for (const k of Object.keys(ENV)) delete process.env[k]; });
+    afterAll(() => {
+      globalThis.fetch = realFetch;
+      for (const k of Object.keys(ENV)) delete process.env[k];
+    });
 
     it('sem integrações: o pedido fica com transferência e o email é registado como não enviado', async () => {
-      const r = (await post(financeUser, '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'monthly' })).json();
+      const r = (
+        await post(financeUser, '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'monthly' })
+      ).json();
       expect(r.gatewayReference).toBeNull();
-      expect((await get(financeUser, '/v1/billing')).json()).toMatchObject({ multicaixa: false, invoicesOnline: false });
+      expect((await get(financeUser, '/v1/billing')).json()).toMatchObject({
+        multicaixa: false,
+        invoicesOnline: false,
+      });
       const integ = (await get(admin, '/v1/platform/integrations')).json();
-      expect(integ.status).toMatchObject({ proxypay: { enabled: false }, email: { enabled: false }, vendus: { enabled: false } });
+      expect(integ.status).toMatchObject({
+        proxypay: { enabled: false },
+        email: { enabled: false },
+        vendus: { enabled: false },
+      });
       expect(integ.emails.find((e: { kind: string }) => e.kind === 'pedido_pagamento').status).toBe('skipped');
     });
 
     it('com ProxyPay: referência Multicaixa no pedido e instruções por email; o pedido substituído deixa de poder ser pago', async () => {
       Object.assign(process.env, ENV);
-      const before = (await get(financeUser, '/v1/billing')).json().requests.find((x: { status: string; kind: string }) => x.status === 'pending' && x.kind === 'subscription');
-      const r = (await post(financeUser, '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'semiannual' })).json();
+      const before = (await get(financeUser, '/v1/billing'))
+        .json()
+        .requests.find((x: { status: string; kind: string }) => x.status === 'pending' && x.kind === 'subscription');
+      const r = (
+        await post(financeUser, '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'semiannual' })
+      ).json();
       expect(r).toMatchObject({ gateway: 'proxypay', gatewayEntity: '01234', gatewayReference: String(nextRef) });
       expect(references.get(r.gatewayReference)!.amount).toBe((r.amountMinor / 100).toFixed(2));
-      const mail = emails.find((e) => e.subject.includes(r.number))!;
+      const mail = emails.find(e => e.subject.includes(r.number))!;
       // Vai para o proprietário e para Finanças (um email por pessoa).
-      expect(emails.filter((e) => e.subject.includes(r.number)).flatMap((e) => e.to)).toContain(`dona+${stamp}@a.ao`);
+      expect(emails.filter(e => e.subject.includes(r.number)).flatMap(e => e.to)).toContain(`dona+${stamp}@a.ao`);
       expect(mail.text).toContain('Entidade: 01234');
       expect(mail.text).toContain('Referência:');
       // O pedido anterior (sem referência) não tinha nada a anular; uma nova referência anula a anterior.
@@ -1548,67 +3029,177 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
 
     it('webhook: assinatura obrigatória, montante errado fica para revisão, pagamento certo activa a licença uma única vez', async () => {
-      const r = (await get(financeUser, '/v1/billing')).json().requests.find((x: { status: string; kind: string }) => x.status === 'pending' && x.kind === 'subscription');
-      expect((await webhook({ id: pid(0), reference_id: Number(r.gatewayReference), amount: '1.00' }, 'f'.repeat(64))).statusCode).toBe(401);
-      expect((await webhook({ id: pid(1), reference_id: Number(r.gatewayReference), amount: '1000.00', datetime: '2026-10-27T10:00:00' })).json().outcome).toBe('amount_mismatch');
-      expect((await get(financeUser, '/v1/billing')).json().requests.find((x: { id: string }) => x.id === r.id).status).toBe('pending');
-      const ok = await webhook({ id: pid(2), reference_id: Number(r.gatewayReference), amount: (r.amountMinor / 100).toFixed(2), datetime: '2026-10-27T10:05:00' });
+      const r = (await get(financeUser, '/v1/billing'))
+        .json()
+        .requests.find((x: { status: string; kind: string }) => x.status === 'pending' && x.kind === 'subscription');
+      expect(
+        (await webhook({ id: pid(0), reference_id: Number(r.gatewayReference), amount: '1.00' }, 'f'.repeat(64)))
+          .statusCode,
+      ).toBe(401);
+      expect(
+        (
+          await webhook({
+            id: pid(1),
+            reference_id: Number(r.gatewayReference),
+            amount: '1000.00',
+            datetime: '2026-10-27T10:00:00',
+          })
+        ).json().outcome,
+      ).toBe('amount_mismatch');
+      expect(
+        (await get(financeUser, '/v1/billing')).json().requests.find((x: { id: string }) => x.id === r.id).status,
+      ).toBe('pending');
+      const ok = await webhook({
+        id: pid(2),
+        reference_id: Number(r.gatewayReference),
+        amount: (r.amountMinor / 100).toFixed(2),
+        datetime: '2026-10-27T10:05:00',
+      });
       expect(ok.json().outcome).toBe('applied');
       expect(acked).toContain(String(pid(2)));
-      expect((await webhook({ id: pid(2), reference_id: Number(r.gatewayReference), amount: (r.amountMinor / 100).toFixed(2) })).json().outcome).toBe('duplicate');
+      expect(
+        (
+          await webhook({
+            id: pid(2),
+            reference_id: Number(r.gatewayReference),
+            amount: (r.amountMinor / 100).toFixed(2),
+          })
+        ).json().outcome,
+      ).toBe('duplicate');
       const b = (await get(financeUser, '/v1/billing')).json();
       const paid = b.requests.find((x: { id: string }) => x.id === r.id);
       expect(paid).toMatchObject({ status: 'paid', confirmedVia: 'gateway', invoiceRef: null });
       expect(b.paidUntil).toBe(r.periodEnd);
-      expect(emails.some((e) => e.subject === `Kianda RH — pagamento ${r.number} recebido`)).toBe(true);
+      expect(emails.some(e => e.subject === `Kianda RH — pagamento ${r.number} recebido`)).toBe(true);
       const events = (await get(admin, '/v1/platform/integrations')).json().events;
-      expect(events.map((e: { outcome: string }) => e.outcome).slice(0, 2).sort()).toEqual(['amount_mismatch', 'applied']);
+      expect(
+        events
+          .map((e: { outcome: string }) => e.outcome)
+          .slice(0, 2)
+          .sort(),
+      ).toEqual(['amount_mismatch', 'applied']);
     });
 
     it('factura certificada no Vendus: emissão pela consola, PDF pela página Licença; automática quando activada', async () => {
-      const paid = (await get(financeUser, '/v1/billing')).json().requests.find((x: { confirmedVia: string | null }) => x.confirmedVia === 'gateway');
-      expect((await put(admin, '/v1/platform/invoicing', { autoIssue: true, taxId: 'ISE', exemptionCode: null, exemptionLaw: null, paymentMethodId: null, registerId: null })).statusCode).toBe(400);
-      expect((await put(admin, '/v1/platform/invoicing', { autoIssue: true, taxId: 'NOR', exemptionCode: null, exemptionLaw: null, paymentMethodId: 3, registerId: null })).statusCode).toBe(200);
+      const paid = (await get(financeUser, '/v1/billing'))
+        .json()
+        .requests.find((x: { confirmedVia: string | null }) => x.confirmedVia === 'gateway');
+      expect(
+        (
+          await put(admin, '/v1/platform/invoicing', {
+            autoIssue: true,
+            taxId: 'ISE',
+            exemptionCode: null,
+            exemptionLaw: null,
+            paymentMethodId: null,
+            registerId: null,
+          })
+        ).statusCode,
+      ).toBe(400);
+      expect(
+        (
+          await put(admin, '/v1/platform/invoicing', {
+            autoIssue: true,
+            taxId: 'NOR',
+            exemptionCode: null,
+            exemptionLaw: null,
+            paymentMethodId: 3,
+            registerId: null,
+          })
+        ).statusCode,
+      ).toBe(200);
       const inv = (await post(admin, `/v1/platform/payment-requests/${paid.id}/invoice`)).json();
       expect(inv).toMatchObject({ invoiceRef: 'FR KRH2026/1', invoiceProvider: 'vendus', invoiceError: null });
-      expect(invoices[0]).toMatchObject({ type: 'FR', mode: 'tests', tx_id: paid.number, client: { fiscal_id: nifA, country: 'AO' }, payments: [{ id: 3 }] });
-      expect((invoices[0] as { items: { gross_price: string; tax_id: string }[] }).items[0]).toMatchObject({ gross_price: (paid.amountMinor / 100).toFixed(2), tax_id: 'NOR' });
+      expect(invoices[0]).toMatchObject({
+        type: 'FR',
+        mode: 'tests',
+        tx_id: paid.number,
+        client: { fiscal_id: nifA, country: 'AO' },
+        payments: [{ id: 3 }],
+      });
+      expect((invoices[0] as { items: { gross_price: string; tax_id: string }[] }).items[0]).toMatchObject({
+        gross_price: (paid.amountMinor / 100).toFixed(2),
+        tax_id: 'NOR',
+      });
       const pdf = await get(financeUser, `/v1/billing/requests/${paid.id}/invoice`);
       expect(pdf.headers['content-type']).toBe('application/pdf');
       // Sincronização: renovação da faixa fixa → aplicada, factura automática, pagamento reconhecido.
-      const renewal = (await post(financeUser, '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'monthly' })).json();
-      queue = [{ id: pid(3), reference_id: Number(renewal.gatewayReference), amount: (renewal.amountMinor / 100).toFixed(2) }];
-      expect((await post(admin, '/v1/platform/gateway/sync')).json()).toMatchObject({ enabled: true, processed: 1, applied: 1, issues: 0 });
+      const renewal = (
+        await post(financeUser, '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'monthly' })
+      ).json();
+      queue = [
+        { id: pid(3), reference_id: Number(renewal.gatewayReference), amount: (renewal.amountMinor / 100).toFixed(2) },
+      ];
+      expect((await post(admin, '/v1/platform/gateway/sync')).json()).toMatchObject({
+        enabled: true,
+        processed: 1,
+        applied: 1,
+        issues: 0,
+      });
       expect(acked).toContain(String(pid(3)));
-      const after = (await get(financeUser, '/v1/billing')).json().requests.find((x: { id: string }) => x.id === renewal.id);
+      const after = (await get(financeUser, '/v1/billing'))
+        .json()
+        .requests.find((x: { id: string }) => x.id === renewal.id);
       expect(after).toMatchObject({ status: 'paid', invoiceRef: 'FR KRH2026/2' });
     });
 
     it('convite por email com a ligação pessoal; avisos de licença por data', async () => {
-      const e = (await post(owner, '/v1/employees', { number: `E${stamp.slice(-5)}`, name: 'Convidado Por Email', jobTitle: 'Técnico', email: `convidado+${stamp}@a.ao`, contract: { type: 'indefinite', startDate: '2026-01-05', base: 150000 } })).json();
+      const e = (
+        await post(owner, '/v1/employees', {
+          number: `E${stamp.slice(-5)}`,
+          name: 'Convidado Por Email',
+          jobTitle: 'Técnico',
+          email: `convidado+${stamp}@a.ao`,
+          contract: { type: 'indefinite', startDate: '2026-01-05', base: 150000 },
+        })
+      ).json();
       const invRes = await post(owner, '/v1/access/invites', { employeeId: e.id });
       expect(invRes.statusCode).toBe(201);
       const inv = invRes.json();
       expect(inv.emailed).toBe(true);
-      const m = emails.find((x) => x.to[0] === `convidado+${stamp}@a.ao`)!;
+      const m = emails.find(x => x.to[0] === `convidado+${stamp}@a.ao`)!;
       expect(m.text).toContain(`https://kianda.test${inv.path}`);
       const { reminderFor } = await import('../src/services/jobs.js');
-      expect(reminderFor({ status: 'trial', trialEndsAt: '2026-11-03', paidUntil: null }, '2026-11-01')?.kind).toBe('experimental_2d');
-      expect(reminderFor({ status: 'trial', trialEndsAt: '2026-11-03', paidUntil: null }, '2026-11-04')?.kind).toBe('experimental_fim');
-      expect(reminderFor({ status: 'active', trialEndsAt: '2026-10-01', paidUntil: '2026-12-31' }, '2026-12-24')?.kind).toBe('renovacao_7d');
-      expect(reminderFor({ status: 'active', trialEndsAt: null, paidUntil: '2026-12-31' }, '2027-01-08')?.kind).toBe('modo_consulta');
+      expect(reminderFor({ status: 'trial', trialEndsAt: '2026-11-03', paidUntil: null }, '2026-11-01')?.kind).toBe(
+        'experimental_2d',
+      );
+      expect(reminderFor({ status: 'trial', trialEndsAt: '2026-11-03', paidUntil: null }, '2026-11-04')?.kind).toBe(
+        'experimental_fim',
+      );
+      expect(
+        reminderFor({ status: 'active', trialEndsAt: '2026-10-01', paidUntil: '2026-12-31' }, '2026-12-24')?.kind,
+      ).toBe('renovacao_7d');
+      expect(reminderFor({ status: 'active', trialEndsAt: null, paidUntil: '2026-12-31' }, '2027-01-08')?.kind).toBe(
+        'modo_consulta',
+      );
       expect(reminderFor({ status: 'active', trialEndsAt: null, paidUntil: '2099-12-31' }, '2026-12-24')).toBeNull();
       // Integra e Valora: os mesmos marcos, com o nome do módulo e um tipo próprio (não se confundem com o RH).
-      const integra = reminderFor({ status: 'active', trialEndsAt: null, paidUntil: '2026-12-31' }, '2026-12-24', 'Kianda Integra', 'modeling_');
-      expect(integra).toMatchObject({ kind: 'modeling_renovacao_7d', subject: 'A sua licença Kianda Integra termina dentro de 7 dias' });
-      expect(reminderFor({ status: 'trial', trialEndsAt: '2026-11-03', paidUntil: null }, '2026-11-03', 'Kianda Valora', 'valuation_')?.subject).toBe('O período experimental do Kianda Valora termina hoje');
+      const integra = reminderFor(
+        { status: 'active', trialEndsAt: null, paidUntil: '2026-12-31' },
+        '2026-12-24',
+        'Kianda Integra',
+        'modeling_',
+      );
+      expect(integra).toMatchObject({
+        kind: 'modeling_renovacao_7d',
+        subject: 'A sua licença Kianda Integra termina dentro de 7 dias',
+      });
+      expect(
+        reminderFor(
+          { status: 'trial', trialEndsAt: '2026-11-03', paidUntil: null },
+          '2026-11-03',
+          'Kianda Valora',
+          'valuation_',
+        )?.subject,
+      ).toBe('O período experimental do Kianda Valora termina hoje');
       expect((await post(admin, '/v1/platform/jobs/reminders')).json().checked).toBeGreaterThan(0);
     });
   });
 
   describe('blindagem: RLS, exportação e eliminação de dados (entrega 18)', () => {
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
-    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const post = (cookie: string, url: string, payload: object = {}) =>
+      app.inject({ method: 'POST', url, headers: as(cookie), payload });
     let companyA = '';
     let companyB = '';
     beforeAll(async () => {
@@ -1618,13 +3209,24 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
 
     it('guarda: todas as tabelas com dados de empresa têm RLS e entram na eliminação', async () => {
       const db = getDb();
-      const withCompany = (await db.execute(sql`select table_name from information_schema.columns where table_schema = 'public' and column_name = 'company_id'`)).rows.map((r) => String(r.table_name));
-      const rls = new Set((await db.execute(sql`select relname from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relrowsecurity`)).rows.map((r) => String(r.relname)));
+      const withCompany = (
+        await db.execute(
+          sql`select table_name from information_schema.columns where table_schema = 'public' and column_name = 'company_id'`,
+        )
+      ).rows.map(r => String(r.table_name));
+      const rls = new Set(
+        (
+          await db.execute(
+            sql`select relname from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relrowsecurity`,
+          )
+        ).rows.map(r => String(r.relname)),
+      );
       const exempt = ['gateway_events']; // registo da plataforma (sem acesso do papel da aplicação)
-      expect(withCompany.filter((t) => !rls.has(t) && !exempt.includes(t))).toEqual([]);
-      for (const t of ['companies', 'contracts', 'payroll_lines', 'journal_lines', 'expense_lines', 'candidate_events']) expect(rls.has(t), t).toBe(true);
-      const purged = new Set(COMPANY_TABLES_PURGE_ORDER.map((x) => x.table));
-      expect(withCompany.filter((t) => !purged.has(t))).toEqual([]);
+      expect(withCompany.filter(t => !rls.has(t) && !exempt.includes(t))).toEqual([]);
+      for (const t of ['companies', 'contracts', 'payroll_lines', 'journal_lines', 'expense_lines', 'candidate_events'])
+        expect(rls.has(t), t).toBe(true);
+      const purged = new Set(COMPANY_TABLES_PURGE_ORDER.map(x => x.table));
+      expect(withCompany.filter(t => !purged.has(t))).toEqual([]);
     });
 
     it('RLS: dentro de um pedido da empresa A, a base de dados só mostra e só aceita dados da A', async () => {
@@ -1635,16 +3237,21 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
         let insertError = '';
         try {
           await db.execute(sql`savepoint t`);
-          await db.insert(employeesTable).values({ companyId: companyB, number: 'X1', name: 'Intruso', jobTitle: 'Teste' });
-        } catch (e) { insertError = String((e as { cause?: { message?: string } }).cause?.message ?? (e as Error).message); await db.execute(sql`rollback to savepoint t`); }
+          await db
+            .insert(employeesTable)
+            .values({ companyId: companyB, number: 'X1', name: 'Intruso', jobTitle: 'Teste' });
+        } catch (e) {
+          insertError = String((e as { cause?: { message?: string } }).cause?.message ?? (e as Error).message);
+          await db.execute(sql`rollback to savepoint t`);
+        }
         return { all, cos, insertError };
       });
       expect(r.all.length).toBeGreaterThan(0);
-      expect(new Set(r.all.map((x) => x.companyId))).toEqual(new Set([companyA]));
+      expect(new Set(r.all.map(x => x.companyId))).toEqual(new Set([companyA]));
       expect(r.cos).toEqual([{ id: companyA }]);
       expect(r.insertError).toMatch(/row-level security/);
       // Papel da aplicação sem empresa definida: não vê nada (falha fechada).
-      const none = await getDb().transaction(async (tx) => {
+      const none = await getDb().transaction(async tx => {
         await tx.execute(sql`set local role kianda_app`);
         return (await tx.execute(sql`select count(*)::int as n from employees`)).rows[0];
       });
@@ -1659,105 +3266,291 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect(d).toMatchObject({ format: 'kianda-export', company: { id: companyA } });
       expect(d.tables.employees.every((e: { company_id: string }) => e.company_id === companyA)).toBe(true);
       expect(d.tables.users.length).toBeGreaterThan(0);
-      expect(d.tables.users.some((u: Record<string, unknown>) => 'password_hash' in u || 'pin_hash' in u || 'totp_secret' in u)).toBe(false);
+      expect(
+        d.tables.users.some(
+          (u: Record<string, unknown>) => 'password_hash' in u || 'pin_hash' in u || 'totp_secret' in u,
+        ),
+      ).toBe(false);
       expect(d.tables.payroll_lines.length).toBeGreaterThan(0);
       expect(JSON.stringify(d)).not.toContain(companyB);
     });
 
     it('ex-colaborador: eliminação dos dados não obrigatórios, com confirmação; mantém o necessário por lei', async () => {
-      const e = (await post(owner, '/v1/employees', { number: `M${stamp.slice(-5)}`, name: 'Ex Colaborador', jobTitle: 'Técnico', email: `ex+${stamp}@a.ao`, phone: '923111222', iban: 'AO06 0040 0000 5521 8890 1015 5', nif: '004512398LA041', contract: { type: 'indefinite', startDate: '2026-01-05', base: 150000 } })).json();
-      expect((await post(owner, `/v1/privacy/employees/${e.id}/minimize`, { confirm: e.number })).json().error).toBe('nao_cessado');
-      await getDb().update(employeesTable).set({ status: 'terminated' }).where(sql`id = ${e.id}`);
+      const e = (
+        await post(owner, '/v1/employees', {
+          number: `M${stamp.slice(-5)}`,
+          name: 'Ex Colaborador',
+          jobTitle: 'Técnico',
+          email: `ex+${stamp}@a.ao`,
+          phone: '923111222',
+          iban: 'AO06 0040 0000 5521 8890 1015 5',
+          nif: '004512398LA041',
+          contract: { type: 'indefinite', startDate: '2026-01-05', base: 150000 },
+        })
+      ).json();
+      expect((await post(owner, `/v1/privacy/employees/${e.id}/minimize`, { confirm: e.number })).json().error).toBe(
+        'nao_cessado',
+      );
+      await getDb()
+        .update(employeesTable)
+        .set({ status: 'terminated' })
+        .where(sql`id = ${e.id}`);
       expect((await post(owner, `/v1/privacy/employees/${e.id}/minimize`, { confirm: 'errado' })).statusCode).toBe(422);
-      expect((await post(financeUser, `/v1/privacy/employees/${e.id}/minimize`, { confirm: e.number })).statusCode).toBe(403);
+      expect(
+        (await post(financeUser, `/v1/privacy/employees/${e.id}/minimize`, { confirm: e.number })).statusCode,
+      ).toBe(403);
       expect((await post(owner, `/v1/privacy/employees/${e.id}/minimize`, { confirm: e.number })).statusCode).toBe(200);
-      const [row] = await getDb().select().from(employeesTable).where(sql`id = ${e.id}`);
-      expect(row).toMatchObject({ name: 'Ex Colaborador', email: null, phone: null, iban: null, nif: '004512398LA041' });
+      const [row] = await getDb()
+        .select()
+        .from(employeesTable)
+        .where(sql`id = ${e.id}`);
+      expect(row).toMatchObject({
+        name: 'Ex Colaborador',
+        email: null,
+        phone: null,
+        iban: null,
+        nif: '004512398LA041',
+      });
       expect(row!.dataMinimizedAt).not.toBeNull();
-      expect((await post(owner, `/v1/privacy/employees/${e.id}/minimize`, { confirm: e.number })).json().error).toBe('ja_eliminado');
+      expect((await post(owner, `/v1/privacy/employees/${e.id}/minimize`, { confirm: e.number })).json().error).toBe(
+        'ja_eliminado',
+      );
     });
 
     it('candidato: eliminação total; não se apaga quem foi contratado; outra empresa não lhe toca', async () => {
-      const [op] = await getDb().insert(jobOpenings).values({ companyId: companyA, title: 'Vaga RGPD', createdBy: 'teste' } as typeof jobOpenings.$inferInsert).returning();
-      const [cand] = await getDb().insert(candidates).values({ companyId: companyA, openingId: op!.id, name: 'Candidato Teste', email: `c+${stamp}@x.ao` } as typeof candidates.$inferInsert).returning();
-      expect((await app.inject({ method: 'DELETE', url: `/v1/privacy/candidates/${cand!.id}`, headers: as(ownerB) })).statusCode).toBe(404);
-      expect((await app.inject({ method: 'DELETE', url: `/v1/privacy/candidates/${cand!.id}`, headers: as(owner) })).statusCode).toBe(200);
-      expect(await getDb().select().from(candidates).where(sql`id = ${cand!.id}`)).toEqual([]);
+      const [op] = await getDb()
+        .insert(jobOpenings)
+        .values({ companyId: companyA, title: 'Vaga RGPD', createdBy: 'teste' } as typeof jobOpenings.$inferInsert)
+        .returning();
+      const [cand] = await getDb()
+        .insert(candidates)
+        .values({
+          companyId: companyA,
+          openingId: op!.id,
+          name: 'Candidato Teste',
+          email: `c+${stamp}@x.ao`,
+        } as typeof candidates.$inferInsert)
+        .returning();
+      expect(
+        (await app.inject({ method: 'DELETE', url: `/v1/privacy/candidates/${cand!.id}`, headers: as(ownerB) }))
+          .statusCode,
+      ).toBe(404);
+      expect(
+        (await app.inject({ method: 'DELETE', url: `/v1/privacy/candidates/${cand!.id}`, headers: as(owner) }))
+          .statusCode,
+      ).toBe(200);
+      expect(
+        await getDb()
+          .select()
+          .from(candidates)
+          .where(sql`id = ${cand!.id}`),
+      ).toEqual([]);
     });
 
     it('eliminar uma empresa: só cancelada e com o NIF confirmado; não fica nenhuma linha', async () => {
-      const nifP = String(Number(nifA) + 9).padStart(10, '0').slice(-10);
-      const reg = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Empresa a eliminar', nif: nifP, sector: 'security' }, name: 'Dono P', email: `dono+${stamp}@p.ao`, password: pw } });
+      const nifP = String(Number(nifA) + 9)
+        .padStart(10, '0')
+        .slice(-10);
+      const reg = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/register',
+        payload: {
+          acceptTerms: true,
+          company: { name: 'Empresa a eliminar', nif: nifP, sector: 'security' },
+          name: 'Dono P',
+          email: `dono+${stamp}@p.ao`,
+          password: pw,
+        },
+      });
       const ownerP = cookieOf(reg);
       const idP = reg.json().company.id;
-      await post(ownerP, '/v1/employees', { number: '1', name: 'Vigia', jobTitle: 'Vigilante', contract: { type: 'indefinite', startDate: '2026-01-05', base: 120000 } });
+      await post(ownerP, '/v1/employees', {
+        number: '1',
+        name: 'Vigia',
+        jobTitle: 'Vigilante',
+        contract: { type: 'indefinite', startDate: '2026-01-05', base: 120000 },
+      });
       await post(ownerP, '/v1/billing/requests', { kind: 'subscription', tierKey: 't1', cycle: 'monthly' });
-      expect((await post(admin, `/v1/platform/companies/${idP}/purge`, { confirmNif: nifP })).json().error).toBe('nao_cancelada');
-      await app.inject({ method: 'PATCH', url: `/v1/platform/companies/${idP}/subscription`, headers: as(admin), payload: { status: 'cancelled' } });
+      expect((await post(admin, `/v1/platform/companies/${idP}/purge`, { confirmNif: nifP })).json().error).toBe(
+        'nao_cancelada',
+      );
+      await app.inject({
+        method: 'PATCH',
+        url: `/v1/platform/companies/${idP}/subscription`,
+        headers: as(admin),
+        payload: { status: 'cancelled' },
+      });
       expect((await get(admin, `/v1/platform/companies/${idP}/export`)).json().tables.employees).toHaveLength(1);
-      expect((await post(admin, `/v1/platform/companies/${idP}/purge`, { confirmNif: '0000000000' })).statusCode).toBe(422);
-      expect((await post(financeUser, `/v1/platform/companies/${idP}/purge`, { confirmNif: nifP })).statusCode).toBe(403);
+      expect((await post(admin, `/v1/platform/companies/${idP}/purge`, { confirmNif: '0000000000' })).statusCode).toBe(
+        422,
+      );
+      expect((await post(financeUser, `/v1/platform/companies/${idP}/purge`, { confirmNif: nifP })).statusCode).toBe(
+        403,
+      );
       const ok = (await post(admin, `/v1/platform/companies/${idP}/purge`, { confirmNif: nifP })).json();
       expect(ok.deleted).toMatchObject({ companies: 1, employees: 1, users: 1, subscriptions: 1, payment_requests: 1 });
       const db = getDb();
-      const tables = (await db.execute(sql`select table_name from information_schema.columns where table_schema = 'public' and column_name = 'company_id'`)).rows.map((r) => String(r.table_name));
-      for (const t of tables) expect((await db.execute(sql`select count(*)::int as n from ${sql.identifier(t)} where company_id = ${idP}`)).rows[0], t).toEqual({ n: 0 });
+      const tables = (
+        await db.execute(
+          sql`select table_name from information_schema.columns where table_schema = 'public' and column_name = 'company_id'`,
+        )
+      ).rows.map(r => String(r.table_name));
+      for (const t of tables)
+        expect(
+          (await db.execute(sql`select count(*)::int as n from ${sql.identifier(t)} where company_id = ${idP}`))
+            .rows[0],
+          t,
+        ).toEqual({ n: 0 });
       const internal = (await get(admin, '/v1/auth/me')).json().user.companyId;
-      expect((await post(admin, `/v1/platform/companies/${internal}/purge`, { confirmNif: 'PLATAFORMA' })).json().error).toBe('protegida');
+      expect(
+        (await post(admin, `/v1/platform/companies/${internal}/purge`, { confirmNif: 'PLATAFORMA' })).json().error,
+      ).toBe('protegida');
     });
   });
 
   describe('adiantamentos salariais e revisão da LGT (entrega 19)', () => {
-    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const post = (cookie: string, url: string, payload: object = {}) =>
+      app.inject({ method: 'POST', url, headers: as(cookie), payload });
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
     let ownerQ = '';
     let empQ = '';
     let advId = '';
 
     beforeAll(async () => {
-      const nifQ = String(Number(nifA) + 11).padStart(10, '0').slice(-10);
-      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Empresa Adiantamentos', nif: nifQ }, name: 'Dono Q', email: `dono+${stamp}@q.ao`, password: pw } });
+      const nifQ = String(Number(nifA) + 11)
+        .padStart(10, '0')
+        .slice(-10);
+      const r = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/register',
+        payload: {
+          acceptTerms: true,
+          company: { name: 'Empresa Adiantamentos', nif: nifQ },
+          name: 'Dono Q',
+          email: `dono+${stamp}@q.ao`,
+          password: pw,
+        },
+      });
       ownerQ = cookieOf(r);
-      empQ = (await post(ownerQ, '/v1/employees', { number: '1', name: 'Pedro Adiantamento', jobTitle: 'Técnico', contract: { type: 'indefinite', startDate: '2025-01-06', base: 300000 } })).json().id;
+      empQ = (
+        await post(ownerQ, '/v1/employees', {
+          number: '1',
+          name: 'Pedro Adiantamento',
+          jobTitle: 'Técnico',
+          contract: { type: 'indefinite', startDate: '2025-01-06', base: 300000 },
+        })
+      ).json().id;
     });
 
     it('limites legais: 25% do líquido por prestação e 3 salários base no total (art. 248.º)', async () => {
-      const sim = (await get(ownerQ, `/v1/advances/simulate?employeeId=${empQ}&amount=200000&installments=1&firstPeriod=2026-11`)).json();
+      const sim = (
+        await get(ownerQ, `/v1/advances/simulate?employeeId=${empQ}&amount=200000&installments=1&firstPeriod=2026-11`)
+      ).json();
       expect(sim.maxAmountMinor).toBe(90_000_000);
       expect(sim.minInstallments).toBeGreaterThan(1);
       expect(sim.problems.join()).toMatch(/pelo menos \d+ prestações/);
-      expect((await post(ownerQ, '/v1/advances', { employeeId: empQ, amount: 200000, installments: 1, firstPeriod: '2026-11', confirm: true })).json().error).toBe('limite_legal');
-      expect((await post(ownerQ, '/v1/advances', { employeeId: empQ, amount: 950000, installments: 24, firstPeriod: '2026-11', confirm: true })).json().message).toMatch(/3 salários base/);
-      expect((await post(ownerQ, '/v1/advances', { employeeId: empQ, amount: 100000, installments: 2, firstPeriod: '2026-11' })).statusCode).toBe(400); // sem confirmação do pedido escrito
-      expect((await post(ownerQ, '/v1/advances', { employeeId: empQ, amount: 100000, installments: 2, firstPeriod: '2025-01', confirm: true })).json().error).toBe('periodo_passado');
+      expect(
+        (
+          await post(ownerQ, '/v1/advances', {
+            employeeId: empQ,
+            amount: 200000,
+            installments: 1,
+            firstPeriod: '2026-11',
+            confirm: true,
+          })
+        ).json().error,
+      ).toBe('limite_legal');
+      expect(
+        (
+          await post(ownerQ, '/v1/advances', {
+            employeeId: empQ,
+            amount: 950000,
+            installments: 24,
+            firstPeriod: '2026-11',
+            confirm: true,
+          })
+        ).json().message,
+      ).toMatch(/3 salários base/);
+      expect(
+        (
+          await post(ownerQ, '/v1/advances', {
+            employeeId: empQ,
+            amount: 100000,
+            installments: 2,
+            firstPeriod: '2026-11',
+          })
+        ).statusCode,
+      ).toBe(400); // sem confirmação do pedido escrito
+      expect(
+        (
+          await post(ownerQ, '/v1/advances', {
+            employeeId: empQ,
+            amount: 100000,
+            installments: 2,
+            firstPeriod: '2025-01',
+            confirm: true,
+          })
+        ).json().error,
+      ).toBe('periodo_passado');
     });
 
     it('pedido → aprovação → pagamento com lançamento 36.3 → prestações no processamento', async () => {
-      const r = await post(ownerQ, '/v1/advances', { employeeId: empQ, amount: 200000, installments: 4, firstPeriod: '2026-11', reason: 'Despesas de saúde', confirm: true });
+      const r = await post(ownerQ, '/v1/advances', {
+        employeeId: empQ,
+        amount: 200000,
+        installments: 4,
+        firstPeriod: '2026-11',
+        reason: 'Despesas de saúde',
+        confirm: true,
+      });
       expect(r.statusCode).toBe(201);
       advId = r.json().id;
       expect(r.json()).toMatchObject({ status: 'pending', number: expect.stringMatching(/^AD-\d{4}-0001$/) });
-      expect((await post(ownerQ, `/v1/advances/${advId}/pay`, { paidOn: '2026-10-20' })).json().error).toBe('estado_invalido');
+      expect((await post(ownerQ, `/v1/advances/${advId}/pay`, { paidOn: '2026-10-20' })).json().error).toBe(
+        'estado_invalido',
+      );
       expect((await post(ownerQ, `/v1/advances/${advId}/decide`, { approve: false })).statusCode).toBe(400); // recusa exige motivo
       expect((await post(ownerQ, `/v1/advances/${advId}/decide`, { approve: true })).json().status).toBe('approved');
       const paid = await post(ownerQ, `/v1/advances/${advId}/pay`, { paidOn: '2026-10-20' });
       expect(paid.json().status).toBe('paid');
       const ledger = (await get(ownerQ, '/v1/ledger/journal?from=2026-10-01&to=2026-10-31')).json();
       const je = ledger.find((x: { reference: string }) => x.reference === paid.json().number);
-      expect(je.lines.map((l: { account: string; debitMinor: number; creditMinor: number }) => [l.account, l.debitMinor, l.creditMinor])).toEqual([['36.3', 20_000_000, 0], ['43.1', 0, 20_000_000]]);
+      expect(
+        je.lines.map((l: { account: string; debitMinor: number; creditMinor: number }) => [
+          l.account,
+          l.debitMinor,
+          l.creditMinor,
+        ]),
+      ).toEqual([
+        ['36.3', 20_000_000, 0],
+        ['43.1', 0, 20_000_000],
+      ]);
       const list = (await get(ownerQ, '/v1/advances')).json();
-      expect(list[0]).toMatchObject({ outstandingMinor: 20_000_000, plan: [{ period: '2026-11', amountMinor: 5_000_000 }, {}, {}, { period: '2027-02' }] });
+      expect(list[0]).toMatchObject({
+        outstandingMinor: 20_000_000,
+        plan: [{ period: '2026-11', amountMinor: 5_000_000 }, {}, {}, { period: '2027-02' }],
+      });
       const vars = (await get(ownerQ, '/v1/payroll-variables?period=2026-11')).json();
       const inst = vars.find((v: { advanceId: string | null }) => v.advanceId === advId);
       expect(inst).toMatchObject({ kind: 'advance', amountMinor: 5_000_000 });
-      expect((await app.inject({ method: 'DELETE', url: `/v1/payroll-variables/${inst.id}`, headers: as(ownerQ) })).json().error).toBe('gerida_pelo_adiantamento');
+      expect(
+        (await app.inject({ method: 'DELETE', url: `/v1/payroll-variables/${inst.id}`, headers: as(ownerQ) })).json()
+          .error,
+      ).toBe('gerida_pelo_adiantamento');
       const draft = (await post(ownerQ, '/v1/payroll-runs', { period: '2026-11' })).json();
       const run = (await get(ownerQ, `/v1/payroll-runs/${draft.run.id}`)).json();
       const line = run.lines.find((l: { employeeId: string }) => l.employeeId === empQ);
       expect(line.breakdown.find((x: { code: string }) => x.code === 'ADIANT').amountMinor).toBe(5_000_000);
       expect(draft.warnings.some((w: { message: string }) => /25%/.test(w.message))).toBe(false);
       // Em dívida conta para o limite de 3 salários: agora só cabem 900 000 − 200 000.
-      expect((await get(ownerQ, `/v1/advances/simulate?employeeId=${empQ}&amount=750000&installments=24&firstPeriod=2027-03`)).json().maxAmountMinor).toBe(70_000_000);
+      expect(
+        (
+          await get(
+            ownerQ,
+            `/v1/advances/simulate?employeeId=${empQ}&amount=750000&installments=24&firstPeriod=2027-03`,
+          )
+        ).json().maxAmountMinor,
+      ).toBe(70_000_000);
     });
 
     it('cancelar: pago já não se cancela; o colaborador não vê os pedidos de outros', async () => {
@@ -1769,19 +3562,35 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
 
   describe('ficheiros e recuperação por email (entrega 20)', () => {
     const get = (cookie: string, url: string) => app.inject({ method: 'GET', url, headers: as(cookie) });
-    const post = (cookie: string, url: string, payload: object = {}) => app.inject({ method: 'POST', url, headers: as(cookie), payload });
+    const post = (cookie: string, url: string, payload: object = {}) =>
+      app.inject({ method: 'POST', url, headers: as(cookie), payload });
     const upload = (cookie: string, entity: string, entityId: string, data: Uint8Array, name = 'scan.pdf') =>
-      app.inject({ method: 'POST', url: `/v1/files?entity=${entity}&entityId=${entityId}&name=${encodeURIComponent(name)}`, headers: as(cookie), payload: data });
+      app.inject({
+        method: 'POST',
+        url: `/v1/files?entity=${entity}&entityId=${entityId}&name=${encodeURIComponent(name)}`,
+        headers: as(cookie),
+        payload: data,
+      });
     const pdf = (extra = '') => new TextEncoder().encode(`%PDF-1.4\n% teste ${extra}\n%%EOF`);
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
     let absenceId = '';
     let docId = '';
 
     beforeAll(async () => {
-      const a = await post(owner, '/v1/absences', { employeeId: empId, type: 'justified', startDate: '2026-09-14', endDate: '2026-09-14', reason: 'Consulta' });
+      const a = await post(owner, '/v1/absences', {
+        employeeId: empId,
+        type: 'justified',
+        startDate: '2026-09-14',
+        endDate: '2026-09-14',
+        reason: 'Consulta',
+      });
       expect(a.statusCode).toBe(201);
       absenceId = a.json().id;
-      const d = await post(owner, `/v1/employees/${empId}/documents`, { type: 'passport', number: `N${stamp.slice(-7)}`, expiryDate: '2031-01-01' });
+      const d = await post(owner, `/v1/employees/${empId}/documents`, {
+        type: 'passport',
+        number: `N${stamp.slice(-7)}`,
+        expiryDate: '2031-01-01',
+      });
       expect(d.statusCode).toBe(201);
       docId = d.json().id;
     });
@@ -1801,9 +3610,13 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
 
     it('tipo pelo conteúdo, limite de 5 MB e ficheiro vazio', async () => {
-      expect((await upload(owner, 'absence', absenceId, new TextEncoder().encode('<script>alert(1)</script>'), 'x.pdf')).statusCode).toBe(415);
+      expect(
+        (await upload(owner, 'absence', absenceId, new TextEncoder().encode('<script>alert(1)</script>'), 'x.pdf'))
+          .statusCode,
+      ).toBe(415);
       expect((await upload(owner, 'absence', absenceId, new Uint8Array(0))).statusCode).toBe(400);
-      const big = new Uint8Array(5 * 1024 * 1024 + 1); big.set(pdf());
+      const big = new Uint8Array(5 * 1024 * 1024 + 1);
+      big.set(pdf());
       expect((await upload(owner, 'absence', absenceId, big)).statusCode).toBe(413);
       const p = await upload(owner, 'absence', absenceId, png, 'foto.jpeg');
       expect(p.json()).toMatchObject({ name: 'foto.png', mime: 'image/png' });
@@ -1813,15 +3626,25 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       const data = fixtureWord([['Justificativo'], ['Documento de teste']]);
       const uploaded = await upload(employeeUser, 'absence', absenceId, data, '../../Justificativo.pdf');
       expect(uploaded.statusCode).toBe(201);
-      expect(uploaded.json()).toMatchObject({ name: 'Justificativo.docx', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      expect(uploaded.json()).toMatchObject({
+        name: 'Justificativo.docx',
+        mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      });
       const id = uploaded.json().id;
       const downloaded = await get(employeeUser, `/v1/files/${id}`);
       expect(downloaded.headers['content-disposition']).toMatch(/^attachment;/);
       expect(downloaded.bytes).toEqual(data);
-      expect((await app.inject({ method: 'DELETE', url: `/v1/files/${id}`, headers: as(ownerB) })).statusCode).toBe(404);
-      expect((await app.inject({ method: 'DELETE', url: `/v1/files/${id}`, headers: as(employeeUser) })).statusCode).toBe(200);
+      expect((await app.inject({ method: 'DELETE', url: `/v1/files/${id}`, headers: as(ownerB) })).statusCode).toBe(
+        404,
+      );
+      expect(
+        (await app.inject({ method: 'DELETE', url: `/v1/files/${id}`, headers: as(employeeUser) })).statusCode,
+      ).toBe(200);
       expect((await get(owner, `/v1/files/${id}`)).statusCode).toBe(404);
-      expect((await upload(owner, 'absence', absenceId, fixtureZip([['texto.txt', 'não é Word']]), 'enganado.docx')).statusCode).toBe(415);
+      expect(
+        (await upload(owner, 'absence', absenceId, fixtureZip([['texto.txt', 'não é Word']]), 'enganado.docx'))
+          .statusCode,
+      ).toBe(415);
     });
 
     it('cópias de documentos: só o RH anexa; o próprio vê; Finanças e outra empresa não', async () => {
@@ -1834,55 +3657,93 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       expect((await get(ownerB, `/v1/files/${f.json().id}`)).statusCode).toBe(404);
       expect((await upload(ownerB, 'employee_document', docId, pdf())).statusCode).toBe(404);
       // Apagar o documento da ficha apaga as cópias.
-      expect((await app.inject({ method: 'DELETE', url: `/v1/employees/${empId}/documents/${docId}`, headers: as(owner) })).statusCode).toBeLessThan(300);
+      expect(
+        (await app.inject({ method: 'DELETE', url: `/v1/employees/${empId}/documents/${docId}`, headers: as(owner) }))
+          .statusCode,
+      ).toBeLessThan(300);
       expect((await get(owner, `/v1/files/${f.json().id}`)).statusCode).toBe(404);
-      const [n] = (await getDb().execute(sql`select count(*)::int as n from file_blobs where file_id = ${f.json().id}`)).rows;
+      const [n] = (await getDb().execute(sql`select count(*)::int as n from file_blobs where file_id = ${f.json().id}`))
+        .rows;
       expect(n!.n).toBe(0);
     });
 
     it('notas de despesas: comprovativos só enquanto a nota está em rascunho ou recusada', async () => {
-      const claim = await post(employeeUser, '/v1/expenses', { title: 'Deslocação a Viana', lines: [{ kind: 'expense', date: '2026-10-05', description: 'Táxi', category: 'transport', documentRef: 'R-1', amount: 5000 }] });
+      const claim = await post(employeeUser, '/v1/expenses', {
+        title: 'Deslocação a Viana',
+        lines: [
+          {
+            kind: 'expense',
+            date: '2026-10-05',
+            description: 'Táxi',
+            category: 'transport',
+            documentRef: 'R-1',
+            amount: 5000,
+          },
+        ],
+      });
       expect(claim.statusCode).toBe(201);
       const id = claim.json().id;
       expect((await upload(employeeUser, 'expense_claim', id, pdf('recibo'))).statusCode).toBe(201);
       expect((await post(employeeUser, `/v1/expenses/${id}/submit`)).statusCode).toBe(200);
       expect((await upload(employeeUser, 'expense_claim', id, pdf())).statusCode).toBe(403);
-      expect((await get(financeUser, `/v1/files?entity=expense_claim&entityId=${id}`)).json()).toMatchObject({ canUpload: false, files: [{}] });
+      expect((await get(financeUser, `/v1/files?entity=expense_claim&entityId=${id}`)).json()).toMatchObject({
+        canUpload: false,
+        files: [{}],
+      });
     });
 
     it('com R2: preserva o anexo no rollback e retoma uma eliminação falhada', async () => {
       const objects = new Map<string, Uint8Array>();
       let failDelete = false;
       const fake: ObjectStore = {
-        async put(k, d) { objects.set(k, d); }, async get(k) { return objects.get(k) ?? null; },
-        async delete(ks) { if (failDelete) throw new Error('R2 indisponível'); for (const k of ks) objects.delete(k); },
+        async put(k, d) {
+          objects.set(k, d);
+        },
+        async get(k) {
+          return objects.get(k) ?? null;
+        },
+        async delete(ks) {
+          if (failDelete) throw new Error('R2 indisponível');
+          for (const k of ks) objects.delete(k);
+        },
       };
       setObjectStore(fake);
       try {
         const f = await upload(owner, 'employee', empId, pdf('r2'), 'Contrato assinado.pdf');
         expect(f.statusCode).toBe(201);
         expect(objects.size).toBe(1);
-        const [n] = (await getDb().execute(sql`select count(*)::int as n from file_blobs where file_id = ${f.json().id}`)).rows;
+        const [n] = (
+          await getDb().execute(sql`select count(*)::int as n from file_blobs where file_id = ${f.json().id}`)
+        ).rows;
         expect(n!.n).toBe(0);
         expect((await get(owner, `/v1/files/${f.json().id}`)).body).toContain('r2');
         const fileId = f.json().id as string;
-        const db = getDb(), [file] = await db.select().from(files).where(eq(files.id, fileId));
+        const db = getDb(),
+          [file] = await db.select().from(files).where(eq(files.id, fileId));
         const key = `${file!.companyId}/${fileId}`;
-        await expect(withTenant(file!.companyId, async () => {
-          await removeFiles(getDb(), [file!]);
-          throw new Error('rollback de ensaio');
-        })).rejects.toThrow('rollback de ensaio');
+        await expect(
+          withTenant(file!.companyId, async () => {
+            await removeFiles(getDb(), [file!]);
+            throw new Error('rollback de ensaio');
+          }),
+        ).rejects.toThrow('rollback de ensaio');
         expect(objects.has(key)).toBe(true);
-        expect((await db.execute(sql`select object_key from r2_deletion_queue where object_key = ${key}`)).rows).toEqual([]);
+        expect(
+          (await db.execute(sql`select object_key from r2_deletion_queue where object_key = ${key}`)).rows,
+        ).toEqual([]);
         expect((await get(owner, `/v1/files/${fileId}`)).statusCode).toBe(200);
-        expect((await app.inject({ method: 'DELETE', url: `/v1/files/${fileId}`, headers: as(owner) })).statusCode).toBe(200);
+        expect(
+          (await app.inject({ method: 'DELETE', url: `/v1/files/${fileId}`, headers: as(owner) })).statusCode,
+        ).toBe(200);
         expect(objects.has(key)).toBe(true);
         expect((await get(owner, `/v1/files/${fileId}`)).statusCode).toBe(404);
         failDelete = true;
         const now = new Date();
         await drainR2Deletions(db, now);
         expect(objects.has(key)).toBe(true);
-        expect((await db.execute(sql`select object_key from r2_deletion_queue where object_key = ${key}`)).rows).toHaveLength(1);
+        expect(
+          (await db.execute(sql`select object_key from r2_deletion_queue where object_key = ${key}`)).rows,
+        ).toHaveLength(1);
         failDelete = false;
         await drainR2Deletions(db, new Date(now.getTime() + 31 * 60_000));
         expect(objects.has(key)).toBe(false);
@@ -1892,7 +3753,11 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
     });
 
     describe('esqueci a palavra-passe', () => {
-      const ENV = { RESEND_API_KEY: 're_teste', MAIL_FROM: 'Kianda RH <noreply@kianda.test>', APP_BASE_URL: 'https://kianda.test' };
+      const ENV = {
+        RESEND_API_KEY: 're_teste',
+        MAIL_FROM: 'Kianda RH <noreply@kianda.test>',
+        APP_BASE_URL: 'https://kianda.test',
+      };
       const realFetch = globalThis.fetch;
       const emails: { to: string[]; subject: string; text: string }[] = [];
       const email = `rec+${stamp}@a.ao`;
@@ -1900,13 +3765,21 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
       const tokenOf = (t: string) => /\/acesso\/([A-Za-z0-9_-]+)/.exec(t)![1]!;
 
       beforeAll(async () => {
-        expect((await post(owner, '/v1/users', { name: 'Recuperação', email, password: pw, role: 'finance' })).statusCode).toBe(201);
+        expect(
+          (await post(owner, '/v1/users', { name: 'Recuperação', email, password: pw, role: 'finance' })).statusCode,
+        ).toBe(201);
         globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-          if (String(input) === 'https://api.resend.com/emails') { emails.push(JSON.parse(String(init!.body))); return new Response(JSON.stringify({ id: 'em' }), { status: 200 }); }
+          if (String(input) === 'https://api.resend.com/emails') {
+            emails.push(JSON.parse(String(init!.body)));
+            return new Response(JSON.stringify({ id: 'em' }), { status: 200 });
+          }
           return realFetch(input, init);
         }) as typeof fetch;
       });
-      afterAll(() => { globalThis.fetch = realFetch; for (const k of Object.keys(ENV)) delete process.env[k]; });
+      afterAll(() => {
+        globalThis.fetch = realFetch;
+        for (const k of Object.keys(ENV)) delete process.env[k];
+      });
 
       it('sem email configurado: manda pedir ao RH', async () => {
         const r = (await pub('POST', '/v1/auth/forgot', { email })).json();
@@ -1930,23 +3803,45 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
 
       it('define a nova palavra-passe; a antiga deixa de servir; a ligação é de uso único', async () => {
         const token = tokenOf(emails[0]!.text);
-        expect((await pub('POST', `/v1/public/access/${token}`, { method: 'pin', pin: '493817' })).json().error).toBe('metodo_invalido');
-        const r = await pub('POST', `/v1/public/access/${token}`, { method: 'password', email, password: 'NovaSegura2026x' });
+        expect((await pub('POST', `/v1/public/access/${token}`, { method: 'pin', pin: '493817' })).json().error).toBe(
+          'metodo_invalido',
+        );
+        const r = await pub('POST', `/v1/public/access/${token}`, {
+          method: 'password',
+          email,
+          password: 'NovaSegura2026x',
+        });
         expect(r.statusCode).toBe(200);
-        expect(r.cookies.find((c) => c.name === 'kianda_session')?.value).toBeTruthy();
+        expect(r.cookies.find(c => c.name === 'kianda_session')?.value).toBeTruthy();
         expect((await pub('POST', '/v1/auth/login', { email, password: pw, companyNif: nifA })).statusCode).toBe(401);
-        expect((await pub('POST', '/v1/auth/login', { email, password: 'NovaSegura2026x', companyNif: nifA })).statusCode).toBe(200);
-        expect((await pub('POST', `/v1/public/access/${token}`, { method: 'password', email, password: 'OutraSegura2026y' })).json().error).toBe('ligacao_usada');
+        expect(
+          (await pub('POST', '/v1/auth/login', { email, password: 'NovaSegura2026x', companyNif: nifA })).statusCode,
+        ).toBe(200);
+        expect(
+          (
+            await pub('POST', `/v1/public/access/${token}`, { method: 'password', email, password: 'OutraSegura2026y' })
+          ).json().error,
+        ).toBe('ligacao_usada');
       });
 
       it('com verificação em dois passos: mantém-se e é pedida depois da recuperação', async () => {
-        const s = cookieOf(await pub('POST', '/v1/auth/login', { email, password: 'NovaSegura2026x', companyNif: nifA }));
+        const s = cookieOf(
+          await pub('POST', '/v1/auth/login', { email, password: 'NovaSegura2026x', companyNif: nifA }),
+        );
         const secret = (await post(s, '/v1/auth/2fa/setup')).json().secret.replace(/\s/g, '');
         expect((await post(s, '/v1/auth/2fa/enable', { code: await totp(secret) })).statusCode).toBe(200);
-        await getDb().execute(sql`update access_links set created_at = now() - interval '5 minutes' where kind = 'self_reset' and email = ${email}`);
+        await getDb().execute(
+          sql`update access_links set created_at = now() - interval '5 minutes' where kind = 'self_reset' and email = ${email}`,
+        );
         await pub('POST', '/v1/auth/forgot', { email });
         expect(emails).toHaveLength(2);
-        const r = (await pub('POST', `/v1/public/access/${tokenOf(emails[1]!.text)}`, { method: 'password', email, password: 'Terceira2026zz' })).json();
+        const r = (
+          await pub('POST', `/v1/public/access/${tokenOf(emails[1]!.text)}`, {
+            method: 'password',
+            email,
+            password: 'Terceira2026zz',
+          })
+        ).json();
         expect(r).toMatchObject({ twoFactor: true });
         const ok = await pub('POST', '/v1/auth/login/2fa', { ticket: r.ticket, code: await totp(secret) });
         expect(ok.statusCode).toBe(200);
@@ -1956,50 +3851,110 @@ describe.skipIf(!process.env.DATABASE_URL)('autenticação, perfis e fluxo de ne
 
   it('logout limpa o cookie', async () => {
     const r = await app.inject({ method: 'POST', url: '/v1/auth/logout', headers: as(owner) });
-    expect(r.cookies.find((c) => c.name === 'kianda_session')?.value).toBe('');
+    expect(r.cookies.find(c => c.name === 'kianda_session')?.value).toBe('');
   });
 });
 
 describe.skipIf(!process.env.DATABASE_URL)('Integra: módulos e importação opcional de pessoal', () => {
   const stamp = String(Date.now()) + 'mf';
   const password = 'IntegraSegura2026';
-  let cookie = '', admin = '', other = '', companyId = '', modelId = '', budgetId = '';
-  const request = (method: string, url: string, payload?: unknown, session = cookie) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
+  let cookie = '',
+    admin = '',
+    other = '',
+    companyId = '',
+    modelId = '',
+    budgetId = '';
+  const request = (method: string, url: string, payload?: unknown, session = cookie) =>
+    app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
   beforeAll(async () => {
     for (const [i, name] of ['Integra A', 'Integra B'].entries()) {
       const nif = String(Date.now() + i + 200).slice(-10);
-      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name, nif }, name, email: `${stamp}${i}@integra.ao`, password } });
+      const r = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/register',
+        payload: { acceptTerms: true, company: { name, nif }, name, email: `${stamp}${i}@integra.ao`, password },
+      });
       expect(r.statusCode).toBe(201);
-      if (i === 0) cookie = cookieOf(r); else other = cookieOf(r);
+      if (i === 0) cookie = cookieOf(r);
+      else other = cookieOf(r);
     }
     companyId = (await request('GET', '/v1/auth/me')).json().company.id;
   });
   it('não concede Modelagem através da licença RH e protege a consola', async () => {
     expect((await request('GET', '/v1/modeling/models')).statusCode).toBe(403);
-    expect((await request('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 })).statusCode).toBe(403);
+    expect(
+      (
+        await request('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, {
+          enabled: true,
+          status: 'active',
+          paidUntil: '2099-12-31',
+          projectLimit: 2,
+        })
+      ).statusCode,
+    ).toBe(403);
     admin = await platformCookie(app, `${stamp}0@integra.ao`);
-    expect((await request('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 }, admin)).statusCode).toBe(200);
+    expect(
+      (
+        await request(
+          'PUT',
+          `/v1/platform/companies/${companyId}/modules/modeling`,
+          { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 },
+          admin,
+        )
+      ).statusCode,
+    ).toBe(200);
     expect((await request('GET', '/v1/modules')).json().modeling.canWrite).toBe(true);
   });
   it('cria modelo com pressupostos manuais e impede sobrescrita concorrente', async () => {
-    const values = { name: 'Estudo independente', sector: 'servicos', currency: 'Kz', assumptions: { pessoal: 123, receitas: [] } };
+    const values = {
+      name: 'Estudo independente',
+      sector: 'servicos',
+      currency: 'Kz',
+      assumptions: { pessoal: 123, receitas: [] },
+    };
     const r = await request('POST', '/v1/modeling/models', values);
-    expect(r.statusCode).toBe(201); modelId = r.json().id;
-    expect((await request('PUT', `/v1/modeling/models/${modelId}`, { ...values, revision: 1 })).json().revision).toBe(2);
+    expect(r.statusCode).toBe(201);
+    modelId = r.json().id;
+    expect((await request('PUT', `/v1/modeling/models/${modelId}`, { ...values, revision: 1 })).json().revision).toBe(
+      2,
+    );
     expect((await request('PUT', `/v1/modeling/models/${modelId}`, { ...values, revision: 1 })).statusCode).toBe(409);
   });
   it('isola modelos entre empresas, incluindo a pesquisa por identificador', async () => {
-    await request('PUT', `/v1/platform/companies/${(await request('GET', '/v1/auth/me', undefined, other)).json().company.id}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 }, admin);
+    await request(
+      'PUT',
+      `/v1/platform/companies/${(await request('GET', '/v1/auth/me', undefined, other)).json().company.id}/modules/modeling`,
+      { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 },
+      admin,
+    );
     expect((await request('GET', `/v1/modeling/models/${modelId}`, undefined, other)).statusCode).toBe(404);
     expect((await request('GET', '/v1/modeling/models', undefined, other)).json()).toEqual([]);
   });
   it('recusa orçamento por aprovar e importa o custo anual com INSS incluído', async () => {
-    const [{ id }] = (await getDb().execute(sql`insert into personnel_budgets(company_id,year,created_by) values (${companyId}, 2026, 'test') returning id`)).rows as { id: string }[];
+    const [{ id }] = (
+      await getDb().execute(
+        sql`insert into personnel_budgets(company_id,year,created_by) values (${companyId}, 2026, 'test') returning id`,
+      )
+    ).rows as { id: string }[];
     budgetId = id;
-    expect((await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'budget', budgetId, revision: 2 })).statusCode).toBe(409);
+    expect(
+      (
+        await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, {
+          source: 'budget',
+          budgetId,
+          revision: 2,
+        })
+      ).statusCode,
+    ).toBe(409);
     await getDb().execute(sql`update personnel_budgets set status='approved' where id=${budgetId}`);
-    await getDb().execute(sql`insert into personnel_budget_lines(company_id,budget_id,period,headcount,gross_minor,cost_minor) values (${companyId},${budgetId},'2026-01',2,100000,108000)`);
-    const r = await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'budget', budgetId, revision: 2 });
+    await getDb().execute(
+      sql`insert into personnel_budget_lines(company_id,budget_id,period,headcount,gross_minor,cost_minor) values (${companyId},${budgetId},'2026-01',2,100000,108000)`,
+    );
+    const r = await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, {
+      source: 'budget',
+      budgetId,
+      revision: 2,
+    });
     expect(r.statusCode).toBe(201);
     expect(r.json().model.assumptions.pessoal).toBe(1080);
     expect(r.json().model.assumptions.receitas).toEqual([]);
@@ -2010,13 +3965,50 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: módulos e importação opc
     const r = (await request('GET', `/v1/modeling/models/${modelId}`)).json();
     expect(r.assumptions.pessoal).toBe(1080);
     expect(r.imports[0].snapshot.totalMinor).toBe(108000);
-    await expect(withTenant(companyId, () => getDb().execute(sql`update financial_personnel_imports set source='actual' where model_id=${modelId}`))).rejects.toThrow();
+    await expect(
+      withTenant(companyId, () =>
+        getDb().execute(sql`update financial_personnel_imports set source='actual' where model_id=${modelId}`),
+      ),
+    ).rejects.toThrow();
   });
   it('exige doze meses fechados e câmbio explícito para moeda estrangeira', async () => {
-    expect((await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'actual', from: '2026-01', to: '2026-12', revision: 3 })).statusCode).toBe(409);
-    expect((await request('POST', `/v1/modeling/models/${modelId}/convert-currency`, { revision: 3, from: 'Kz', to: 'USD', rate: 1, rateDate: '2026-10-28', source: 'Taxa sintética do teste' })).statusCode).toBe(200);
-    expect((await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'budget', budgetId, revision: 4 })).statusCode).toBe(400);
-    const r = await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'budget', budgetId, revision: 4, exchangeRate: 0.001 });
+    expect(
+      (
+        await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, {
+          source: 'actual',
+          from: '2026-01',
+          to: '2026-12',
+          revision: 3,
+        })
+      ).statusCode,
+    ).toBe(409);
+    expect(
+      (
+        await request('POST', `/v1/modeling/models/${modelId}/convert-currency`, {
+          revision: 3,
+          from: 'Kz',
+          to: 'USD',
+          rate: 1,
+          rateDate: '2026-10-28',
+          source: 'Taxa sintética do teste',
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, {
+          source: 'budget',
+          budgetId,
+          revision: 4,
+        })
+      ).statusCode,
+    ).toBe(400);
+    const r = await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, {
+      source: 'budget',
+      budgetId,
+      revision: 4,
+      exchangeRate: 0.001,
+    });
     expect(r.statusCode).toBe(201);
     expect(r.json().model.assumptions.pessoal).toBeCloseTo(9.99999);
   });
@@ -2027,63 +4019,141 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: módulos e importação opc
     expect((await request('POST', '/v1/payroll-runs', {})).statusCode).toBe(403);
     const values = { name: 'Sem RH', sector: 'servicos', currency: 'Kz', assumptions: { pessoal: 700 } };
     expect((await request('POST', '/v1/modeling/models', values)).statusCode).toBe(201);
-    expect((await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, { source: 'budget', budgetId, revision: 5, exchangeRate: 0.001 })).statusCode).toBe(403);
+    expect(
+      (
+        await request('POST', `/v1/modeling/models/${modelId}/import-personnel`, {
+          source: 'budget',
+          budgetId,
+          revision: 5,
+          exchangeRate: 0.001,
+        })
+      ).statusCode,
+    ).toBe(403);
   });
   it('suspender Modelagem mantém consulta e bloqueia alterações; empresa não altera direitos', async () => {
-    await request('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'suspended' }, admin);
+    await request(
+      'PUT',
+      `/v1/platform/companies/${companyId}/modules/modeling`,
+      { enabled: true, status: 'suspended' },
+      admin,
+    );
     expect((await request('GET', `/v1/modeling/models/${modelId}`)).statusCode).toBe(200);
     expect((await request('POST', '/v1/modeling/models', {})).statusCode).toBe(402);
-    await expect(withTenant(companyId, () => getDb().execute(sql`update company_modules set enabled=true where company_id=${companyId}`))).rejects.toThrow();
+    await expect(
+      withTenant(companyId, () =>
+        getDb().execute(sql`update company_modules set enabled=true where company_id=${companyId}`),
+      ),
+    ).rejects.toThrow();
   });
 });
 
 describe.skipIf(!process.env.DATABASE_URL)('Integra: projectos, cinco acessos e exportações', () => {
   const stamp = String(Date.now()) + 'plans';
-  let cookie = '', admin = '', companyId = '', ownerId = '', first = '', second = '';
+  let cookie = '',
+    admin = '',
+    companyId = '',
+    ownerId = '',
+    first = '',
+    second = '';
   const memberIds: string[] = [];
-  const req = (method: string, url: string, payload?: unknown, session = cookie) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
-  const grant = (extraUsers = 0, projectLimit = 2) => req('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit, extraUsers }, admin);
+  const req = (method: string, url: string, payload?: unknown, session = cookie) =>
+    app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
+  const grant = (extraUsers = 0, projectLimit = 2) =>
+    req(
+      'PUT',
+      `/v1/platform/companies/${companyId}/modules/modeling`,
+      { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit, extraUsers },
+      admin,
+    );
   const model = { name: 'Projecto', sector: 'servicos', currency: 'Kz', assumptions: { pessoal: 100 } };
   beforeAll(async () => {
-    const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Projectos Integra', nif: String(Date.now() + 700).slice(-10) }, name: 'Gestor', email: `${stamp}@plans.ao`, password: 'Projectos2026Seguros' } });
-    expect(r.statusCode).toBe(201); cookie = cookieOf(r);
+    const r = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/register',
+      payload: {
+        acceptTerms: true,
+        company: { name: 'Projectos Integra', nif: String(Date.now() + 700).slice(-10) },
+        name: 'Gestor',
+        email: `${stamp}@plans.ao`,
+        password: 'Projectos2026Seguros',
+      },
+    });
+    expect(r.statusCode).toBe(201);
+    cookie = cookieOf(r);
     const me = (await req('GET', '/v1/auth/me')).json();
-    companyId = me.company.id; ownerId = me.user.sub;
+    companyId = me.company.id;
+    ownerId = me.user.sub;
     expect(ownerId).toBeTypeOf('string');
     admin = await platformCookie(app, `${stamp}@plans.ao`);
     expect((await grant()).statusCode).toBe(200);
   });
   it('serializa criações concorrentes e não permite ultrapassar a quota', async () => {
-    const responses = await Promise.all([req('POST', '/v1/modeling/models', model), req('POST', '/v1/modeling/models', model), req('POST', '/v1/modeling/models', model)]);
-    expect(responses.map((r) => r.statusCode).sort()).toEqual([201, 201, 409]);
-    const created = responses.filter((r) => r.statusCode === 201);
-    first = created[0]!.json().id; second = created[1]!.json().id;
-    expect((await req('GET', '/v1/modeling/usage')).json()).toMatchObject({ activeProjects: 2, enabledUsers: 1, userLimit: 5, projectLimit: 2 });
+    const responses = await Promise.all([
+      req('POST', '/v1/modeling/models', model),
+      req('POST', '/v1/modeling/models', model),
+      req('POST', '/v1/modeling/models', model),
+    ]);
+    expect(responses.map(r => r.statusCode).sort()).toEqual([201, 201, 409]);
+    const created = responses.filter(r => r.statusCode === 201);
+    first = created[0]!.json().id;
+    second = created[1]!.json().id;
+    expect((await req('GET', '/v1/modeling/usage')).json()).toMatchObject({
+      activeProjects: 2,
+      enabledUsers: 1,
+      userLimit: 5,
+      projectLimit: 2,
+    });
   });
   it('arquiva sem apagar histórico e sujeita o restauro à quota', async () => {
-    expect((await req('POST', `/v1/modeling/models/${first}/archive`, { archived: true, revision: 1 })).statusCode).toBe(200);
+    expect(
+      (await req('POST', `/v1/modeling/models/${first}/archive`, { archived: true, revision: 1 })).statusCode,
+    ).toBe(200);
     expect((await req('GET', `/v1/modeling/models/${first}`)).statusCode).toBe(200);
-    expect((await req('PUT', `/v1/modeling/models/${first}`, { ...model, revision: 2 })).json().error).toBe('projecto_arquivado');
+    expect((await req('PUT', `/v1/modeling/models/${first}`, { ...model, revision: 2 })).json().error).toBe(
+      'projecto_arquivado',
+    );
     const created = await req('POST', '/v1/modeling/models', model);
     expect(created.statusCode).toBe(201);
-    expect((await req('POST', `/v1/modeling/models/${first}/archive`, { archived: false, revision: 2 })).json().error).toBe('limite_projectos');
-    expect((await req('POST', `/v1/modeling/models/${second}/archive`, { archived: true, revision: 1 })).statusCode).toBe(200);
-    expect((await req('POST', `/v1/modeling/models/${first}/archive`, { archived: false, revision: 2 })).statusCode).toBe(200);
+    expect(
+      (await req('POST', `/v1/modeling/models/${first}/archive`, { archived: false, revision: 2 })).json().error,
+    ).toBe('limite_projectos');
+    expect(
+      (await req('POST', `/v1/modeling/models/${second}/archive`, { archived: true, revision: 1 })).statusCode,
+    ).toBe(200);
+    expect(
+      (await req('POST', `/v1/modeling/models/${first}/archive`, { archived: false, revision: 2 })).statusCode,
+    ).toBe(200);
   });
   it('inclui o proprietário nos cinco acessos e não limita o número de funcionários RH', async () => {
     for (let i = 0; i < 5; i++) {
-      const r = await req('POST', '/v1/users', { name: `Participante ${i}`, email: `${stamp}${i}@plans.ao`, password: 'Projectos2026Seguros', role: 'finance' });
-      expect(r.statusCode).toBe(201); memberIds.push(r.json().id);
+      const r = await req('POST', '/v1/users', {
+        name: `Participante ${i}`,
+        email: `${stamp}${i}@plans.ao`,
+        password: 'Projectos2026Seguros',
+        role: 'finance',
+      });
+      expect(r.statusCode).toBe(201);
+      memberIds.push(r.json().id);
     }
-    const responses = await Promise.all(memberIds.map((id) => req('PUT', `/v1/modeling/members/${id}`, { enabled: true, permission: 'editor' })));
-    expect(responses.map((r) => r.statusCode).sort()).toEqual([200, 200, 200, 200, 409]);
-    const deniedIndex = responses.findIndex((r) => r.statusCode === 409);
+    const responses = await Promise.all(
+      memberIds.map(id => req('PUT', `/v1/modeling/members/${id}`, { enabled: true, permission: 'editor' })),
+    );
+    expect(responses.map(r => r.statusCode).sort()).toEqual([200, 200, 200, 200, 409]);
+    const deniedIndex = responses.findIndex(r => r.statusCode === 409);
     const deniedId = memberIds[deniedIndex]!;
-    const user = (await getDb().execute(sql`select email from users where id=${deniedId}`)).rows[0] as { email: string };
-    const login = await app.inject({ method: 'POST', url: '/v1/auth/login', payload: { email: user.email, password: 'Projectos2026Seguros' } });
+    const user = (await getDb().execute(sql`select email from users where id=${deniedId}`)).rows[0] as {
+      email: string;
+    };
+    const login = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: { email: user.email, password: 'Projectos2026Seguros' },
+    });
     expect((await req('GET', '/v1/modeling/models', undefined, cookieOf(login))).statusCode).toBe(403);
     expect((await grant(1)).statusCode).toBe(200);
-    expect((await req('PUT', `/v1/modeling/members/${deniedId}`, { enabled: true, permission: 'viewer' })).statusCode).toBe(200);
+    expect(
+      (await req('PUT', `/v1/modeling/members/${deniedId}`, { enabled: true, permission: 'viewer' })).statusCode,
+    ).toBe(200);
     expect((await req('GET', '/v1/modeling/models', undefined, cookieOf(login))).statusCode).toBe(200);
     expect((await req('POST', '/v1/modeling/models', model, cookieOf(login))).statusCode).toBe(403);
     expect((await req('GET', '/v1/modeling/usage')).json().userLimit).toBe(6);
@@ -2099,32 +4169,60 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: projectos, cinco acessos e 
       process.env.KIANDA_MODELING_OWNER_USER_ID = 'outro-utilizador';
       expect((await req('GET', '/v1/modeling/export-options')).json().xlsx).toBe(false);
     } finally {
-      if (previous === undefined) delete process.env.KIANDA_MODELING_OWNER_USER_ID; else process.env.KIANDA_MODELING_OWNER_USER_ID = previous;
+      if (previous === undefined) delete process.env.KIANDA_MODELING_OWNER_USER_ID;
+      else process.env.KIANDA_MODELING_OWNER_USER_ID = previous;
     }
   });
 });
 
 describe.skipIf(!process.env.DATABASE_URL)('Integra: motor financeiro e modelos sectoriais', () => {
   const stamp = String(Date.now()) + 'engine';
-  let cookie = '', admin = '', other = '', companyId = '', modelId = '', draftId = '';
+  let cookie = '',
+    admin = '',
+    other = '',
+    companyId = '',
+    modelId = '',
+    draftId = '';
   let assumptions: Record<string, unknown>;
   let inputHash = '';
-  const req = (method: string, url: string, payload?: unknown, session = cookie) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
+  const req = (method: string, url: string, payload?: unknown, session = cookie) =>
+    app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
   beforeAll(async () => {
     for (const i of [0, 1]) {
-      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Motor Integra', nif: String(Date.now() + 1400 + i).slice(-10) }, name: 'Gestor', email: `${stamp}${i}@engine.ao`, password: 'MotorSeguro2026abc' } });
+      const r = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/register',
+        payload: {
+          acceptTerms: true,
+          company: { name: 'Motor Integra', nif: String(Date.now() + 1400 + i).slice(-10) },
+          name: 'Gestor',
+          email: `${stamp}${i}@engine.ao`,
+          password: 'MotorSeguro2026abc',
+        },
+      });
       expect(r.statusCode).toBe(201);
-      if (i === 0) cookie = cookieOf(r); else other = cookieOf(r);
+      if (i === 0) cookie = cookieOf(r);
+      else other = cookieOf(r);
     }
     companyId = (await req('GET', '/v1/auth/me')).json().company.id;
     admin = await platformCookie(app, `${stamp}0@engine.ao`);
     for (const id of [companyId, (await req('GET', '/v1/auth/me', undefined, other)).json().company.id]) {
-      expect((await req('PUT', `/v1/platform/companies/${id}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 }, admin)).statusCode).toBe(200);
+      expect(
+        (
+          await req(
+            'PUT',
+            `/v1/platform/companies/${id}/modules/modeling`,
+            { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 },
+            admin,
+          )
+        ).statusCode,
+      ).toBe(200);
     }
   });
   it('fornece oito templates demonstrativos sem consumir quota de projectos', async () => {
     const templates = await req('GET', '/v1/modeling/templates');
-    expect(templates.statusCode).toBe(200); expect(templates.json()).toHaveLength(8);
+    expect(templates.statusCode).toBe(200);
+    expect(templates.json()).toHaveLength(8);
     expect(templates.json().every((t: { sampleOnly: boolean }) => t.sampleOnly)).toBe(true);
     assumptions = (await req('GET', '/v1/modeling/templates/servicos')).json().assumptions;
     expect((await req('GET', '/v1/modeling/usage')).json().activeProjects).toBe(0);
@@ -2134,96 +4232,210 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: motor financeiro e modelos 
     expect(r.statusCode).toBe(200);
     expect(r.json()).toMatchObject({ engineVersion: 'integra-1.1.0', checks: { balance: true, cashFlow: true } });
     expect((await req('GET', '/v1/modeling/usage')).json().activeProjects).toBe(0);
-    const invalid = await req('POST', '/v1/modeling/simulate', { assumptions: { ...assumptions, tv: { metodo: 'gordon', g: 100, mult: 6 } } });
-    expect(invalid.statusCode).toBe(422); expect(invalid.json().error).toBe('pressupostos_invalidos'); expect(invalid.json().issues[0].path).toBe('tv.g');
+    const invalid = await req('POST', '/v1/modeling/simulate', {
+      assumptions: { ...assumptions, tv: { metodo: 'gordon', g: 100, mult: 6 } },
+    });
+    expect(invalid.statusCode).toBe(422);
+    expect(invalid.json().error).toBe('pressupostos_invalidos');
+    expect(invalid.json().issues[0].path).toBe('tv.g');
   });
   it('calcula a revisão guardada, com origem verificável, e recusa rascunho incompleto', async () => {
     const model = { name: 'Estudo de serviços', sector: 'servicos', currency: 'Kz', assumptions };
     const saved = await req('POST', '/v1/modeling/models', model);
-    expect(saved.statusCode).toBe(201); modelId = saved.json().id;
+    expect(saved.statusCode).toBe(201);
+    modelId = saved.json().id;
     const calc = await req('GET', `/v1/modeling/models/${modelId}/calculation?revision=1`);
-    expect(calc.statusCode).toBe(200); expect(calc.json().sourceRevision).toBe(1);
-    expect(calc.json().result.checks.balance).toBe(true); inputHash = calc.json().sourceAssumptionsHash; expect(inputHash).toMatch(/^[a-f0-9]{64}$/);
-    const repeated = await req('GET', `/v1/modeling/models/${modelId}/calculation`); expect(repeated.json()).toEqual(calc.json());
+    expect(calc.statusCode).toBe(200);
+    expect(calc.json().sourceRevision).toBe(1);
+    expect(calc.json().result.checks.balance).toBe(true);
+    inputHash = calc.json().sourceAssumptionsHash;
+    expect(inputHash).toMatch(/^[a-f0-9]{64}$/);
+    const repeated = await req('GET', `/v1/modeling/models/${modelId}/calculation`);
+    expect(repeated.json()).toEqual(calc.json());
     const draft = await req('POST', '/v1/modeling/models', { ...model, assumptions: { pessoal: 123 } });
-    expect(draft.statusCode).toBe(201); draftId = draft.json().id;
+    expect(draft.statusCode).toBe(201);
+    draftId = draft.json().id;
     expect((await req('GET', `/v1/modeling/models/${draftId}/calculation`)).statusCode).toBe(422);
     const reversed = Object.fromEntries(Object.entries(assumptions).reverse());
-    expect((await req('PUT', `/v1/modeling/models/${modelId}`, { ...model, assumptions: reversed, revision: 1 })).statusCode).toBe(200);
+    expect(
+      (await req('PUT', `/v1/modeling/models/${modelId}`, { ...model, assumptions: reversed, revision: 1 })).statusCode,
+    ).toBe(200);
     expect((await req('GET', `/v1/modeling/models/${modelId}/calculation?revision=1`)).statusCode).toBe(409);
-    expect((await req('GET', `/v1/modeling/models/${modelId}/calculation?revision=2`)).json().sourceAssumptionsHash).toBe(inputHash);
+    expect(
+      (await req('GET', `/v1/modeling/models/${modelId}/calculation?revision=2`)).json().sourceAssumptionsHash,
+    ).toBe(inputHash);
   });
   it('cenários e sensibilidade usam o mesmo modelo sem criar projectos ou alterar pressupostos', async () => {
     const scenarios = await req('GET', `/v1/modeling/models/${modelId}/scenarios`);
-    expect(scenarios.statusCode).toBe(200); expect(scenarios.json().results.pess.npv).toBeLessThan(scenarios.json().results.base.npv);
+    expect(scenarios.statusCode).toBe(200);
+    expect(scenarios.json().results.pess.npv).toBeLessThan(scenarios.json().results.base.npv);
     const sensitivity = await req('GET', `/v1/modeling/models/${modelId}/sensitivity`);
-    expect(sensitivity.statusCode).toBe(200); expect(sensitivity.json().rows).toHaveLength(6); expect(sensitivity.json().breakEvenPriceMultiplier).toBeGreaterThan(0);
+    expect(sensitivity.statusCode).toBe(200);
+    expect(sensitivity.json().rows).toHaveLength(6);
+    expect(sensitivity.json().breakEvenPriceMultiplier).toBeGreaterThan(0);
     expect((await req('GET', `/v1/modeling/models/${modelId}`)).json().revision).toBe(2);
     expect((await req('GET', '/v1/modeling/usage')).json().activeProjects).toBe(2);
   });
   it('outra empresa não calcula nem obtém cenários de projectos alheios', async () => {
-    for (const route of ['calculation', 'scenarios', 'sensitivity']) expect((await req('GET', `/v1/modeling/models/${modelId}/${route}`, undefined, other)).statusCode).toBe(404);
+    for (const route of ['calculation', 'scenarios', 'sensitivity'])
+      expect((await req('GET', `/v1/modeling/models/${modelId}/${route}`, undefined, other)).statusCode).toBe(404);
     expect((await req('POST', '/v1/modeling/simulate', { assumptions }, '')).statusCode).toBe(401);
   });
   it('projectos arquivados e licença em consulta mantêm cálculo; novas simulações ficam bloqueadas', async () => {
-    expect((await req('POST', `/v1/modeling/models/${modelId}/archive`, { archived: true, revision: 2 })).statusCode).toBe(200);
-    expect((await req('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'suspended' }, admin)).statusCode).toBe(200);
+    expect(
+      (await req('POST', `/v1/modeling/models/${modelId}/archive`, { archived: true, revision: 2 })).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await req(
+          'PUT',
+          `/v1/platform/companies/${companyId}/modules/modeling`,
+          { enabled: true, status: 'suspended' },
+          admin,
+        )
+      ).statusCode,
+    ).toBe(200);
     const calc = await req('GET', `/v1/modeling/models/${modelId}/calculation`);
-    expect(calc.statusCode).toBe(200); expect(calc.json().model.archived).toBe(true); expect(calc.json().sourceAssumptionsHash).toBe(inputHash);
+    expect(calc.statusCode).toBe(200);
+    expect(calc.json().model.archived).toBe(true);
+    expect(calc.json().sourceAssumptionsHash).toBe(inputHash);
     expect((await req('POST', '/v1/modeling/simulate', { assumptions })).statusCode).toBe(402);
   });
 });
 
 describe.skipIf(!process.env.DATABASE_URL)('Integra: versões aprovadas e downloads privados', () => {
   const stamp = String(Date.now()) + 'versions';
-  let owner = '', admin = '', other = '', finance = '', viewer = '', companyId = '', otherCompany = '', ownerId = '', modelId = '', versionId = '';
+  let owner = '',
+    admin = '',
+    other = '',
+    finance = '',
+    viewer = '',
+    companyId = '',
+    otherCompany = '',
+    ownerId = '',
+    modelId = '',
+    versionId = '';
   let assumptions: Record<string, any>, snapshotPdf: Uint8Array;
-  const req = (method: string, url: string, payload?: unknown, session = owner) => app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
-  const report = (format = 'pdf', version = versionId, session = owner) => req('GET', `/v1/modeling/models/${modelId}/reports/sumario?format=${format}${version ? '&version=' + version : ''}`, undefined, session);
+  const req = (method: string, url: string, payload?: unknown, session = owner) =>
+    app.inject({ method, url, headers: { cookie: session }, ...(payload === undefined ? {} : { payload }) });
+  const report = (format = 'pdf', version = versionId, session = owner) =>
+    req(
+      'GET',
+      `/v1/modeling/models/${modelId}/reports/sumario?format=${format}${version ? '&version=' + version : ''}`,
+      undefined,
+      session,
+    );
   beforeAll(async () => {
     for (const i of [0, 1]) {
-      const r = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: { acceptTerms: true, company: { name: 'Empresa de versões', nif: String(Date.now() + 2400 + i).slice(-10) }, name: 'Proprietário', email: `${stamp}${i}@versions.ao`, password: 'VersoesSeguras2026abc' } });
-      expect(r.statusCode).toBe(201); if (!i) owner = cookieOf(r); else other = cookieOf(r);
+      const r = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/register',
+        payload: {
+          acceptTerms: true,
+          company: { name: 'Empresa de versões', nif: String(Date.now() + 2400 + i).slice(-10) },
+          name: 'Proprietário',
+          email: `${stamp}${i}@versions.ao`,
+          password: 'VersoesSeguras2026abc',
+        },
+      });
+      expect(r.statusCode).toBe(201);
+      if (!i) owner = cookieOf(r);
+      else other = cookieOf(r);
     }
-    const me = (await req('GET', '/v1/auth/me')).json(); companyId = me.company.id; ownerId = me.user.sub;
+    const me = (await req('GET', '/v1/auth/me')).json();
+    companyId = me.company.id;
+    ownerId = me.user.sub;
     otherCompany = (await req('GET', '/v1/auth/me', undefined, other)).json().company.id;
     admin = await platformCookie(app, `${stamp}0@versions.ao`);
-    for (const id of [companyId, otherCompany]) expect((await req('PUT', `/v1/platform/companies/${id}/modules/modeling`, { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 }, admin)).statusCode).toBe(200);
+    for (const id of [companyId, otherCompany])
+      expect(
+        (
+          await req(
+            'PUT',
+            `/v1/platform/companies/${id}/modules/modeling`,
+            { enabled: true, status: 'active', paidUntil: '2099-12-31', projectLimit: 2 },
+            admin,
+          )
+        ).statusCode,
+      ).toBe(200);
     for (const [i, permission] of ['editor', 'viewer'].entries()) {
       const email = `${stamp}user${i}@versions.ao`;
-      const user = await req('POST', '/v1/users', { name: permission, email, password: 'VersoesSeguras2026abc', role: 'finance' });
+      const user = await req('POST', '/v1/users', {
+        name: permission,
+        email,
+        password: 'VersoesSeguras2026abc',
+        role: 'finance',
+      });
       expect(user.statusCode).toBe(201);
-      expect((await req('PUT', `/v1/modeling/members/${user.json().id}`, { enabled: true, permission })).statusCode).toBe(200);
-      const login = await app.inject({ method: 'POST', url: '/v1/auth/login', payload: { email, password: 'VersoesSeguras2026abc' } });
-      if (!i) finance = cookieOf(login); else viewer = cookieOf(login);
+      expect(
+        (await req('PUT', `/v1/modeling/members/${user.json().id}`, { enabled: true, permission })).statusCode,
+      ).toBe(200);
+      const login = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/login',
+        payload: { email, password: 'VersoesSeguras2026abc' },
+      });
+      if (!i) finance = cookieOf(login);
+      else viewer = cookieOf(login);
     }
     assumptions = (await req('GET', '/v1/modeling/templates/mineracao')).json().assumptions;
-    assumptions.promotor = 'Promotor externo'; assumptions.promotorNif = '0012345678';
-    const model = await req('POST', '/v1/modeling/models', { name: 'Estudo aprovado', sector: 'mineracao', currency: 'USD', assumptions });
-    expect(model.statusCode).toBe(201); modelId = model.json().id;
+    assumptions.promotor = 'Promotor externo';
+    assumptions.promotorNif = '0012345678';
+    const model = await req('POST', '/v1/modeling/models', {
+      name: 'Estudo aprovado',
+      sector: 'mineracao',
+      currency: 'USD',
+      assumptions,
+    });
+    expect(model.statusCode).toBe(201);
+    modelId = model.json().id;
   });
   it('a interface recebe a permissão efectiva da Modelagem e formatos sem expor outra empresa', async () => {
     const editor = (await req('GET', '/v1/modeling/session', undefined, finance)).json();
-    expect(editor).toMatchObject({ company: { id: companyId }, permission: 'editor', canWrite: true, formats: { pdf: true, xlsx: false, csv: false }, usage: { userLimit: 5 } });
+    expect(editor).toMatchObject({
+      company: { id: companyId },
+      permission: 'editor',
+      canWrite: true,
+      formats: { pdf: true, xlsx: false, csv: false },
+      usage: { userLimit: 5 },
+    });
     const reader = (await req('GET', '/v1/modeling/session', undefined, viewer)).json();
     expect(reader).toMatchObject({ company: { id: companyId }, permission: 'viewer', canWrite: false });
     expect((await req('GET', '/v1/modeling/session', undefined, other)).json().company.id).toBe(otherCompany);
     expect((await app.inject({ method: 'GET', url: '/v1/modeling/session' })).statusCode).toBe(401);
   });
   it('só o proprietário aprova uma revisão completa e identificada', async () => {
-    for (const session of [finance, viewer]) expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'V comité' }, session)).statusCode).toBe(403);
-    expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 99, label: 'V comité' })).statusCode).toBe(409);
+    for (const session of [finance, viewer])
+      expect(
+        (await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'V comité' }, session))
+          .statusCode,
+      ).toBe(403);
+    expect(
+      (await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 99, label: 'V comité' })).statusCode,
+    ).toBe(409);
     const approved = await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'V comité' });
-    expect(approved.statusCode).toBe(201); versionId = approved.json().id;
+    expect(approved.statusCode).toBe(201);
+    versionId = approved.json().id;
     const version = (await req('GET', `/v1/modeling/models/${modelId}/versions/${versionId}`)).json();
-    expect(version.payload.source).toMatchObject({ state: 'approved', versionNumber: 1, revision: 1, promoter: 'Promotor externo', promoterNif: '0012345678' });
+    expect(version.payload.source).toMatchObject({
+      state: 'approved',
+      versionNumber: 1,
+      revision: 1,
+      promoter: 'Promotor externo',
+      promoterNif: '0012345678',
+    });
     expect(version.payload.inputAssumptions.promotor).toBe('Promotor externo');
     expect(version.payloadHash).toMatch(/^[a-f0-9]{64}$/);
-    expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'V comité' })).statusCode).toBe(200);
+    expect(
+      (await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'V comité' })).statusCode,
+    ).toBe(200);
   });
   it('numera versões concorrentes sem duplicar pedidos nem consumir projectos', async () => {
-    const attempts = await Promise.all([req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'V banco' }), req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'V banco' })]);
-    expect(attempts.map((r) => r.statusCode).sort()).toEqual([200, 201]);
+    const attempts = await Promise.all([
+      req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'V banco' }),
+      req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 1, label: 'V banco' }),
+    ]);
+    expect(attempts.map(r => r.statusCode).sort()).toEqual([200, 201]);
     const list = (await req('GET', `/v1/modeling/models/${modelId}/versions`)).json();
     expect(list.map((v: { versionNumber: number }) => v.versionNumber)).toEqual([2, 1]);
     expect((await req('GET', '/v1/modeling/usage')).json().activeProjects).toBe(1);
@@ -2234,59 +4446,125 @@ describe.skipIf(!process.env.DATABASE_URL)('Integra: versões aprovadas e downlo
     expect(catalogue.reports.find((r: { key: string }) => r.key === 'analise').available).toBe(true);
     for (const session of [owner, finance, viewer]) {
       const pdf = await report('pdf', versionId, session);
-      expect(pdf.statusCode).toBe(200); expect(pdf.headers['content-type']).toBe('application/pdf');
-      expect(pdf.headers['cache-control']).toContain('no-store'); expect(pdf.headers['content-disposition']).toContain('.pdf');
+      expect(pdf.statusCode).toBe(200);
+      expect(pdf.headers['content-type']).toBe('application/pdf');
+      expect(pdf.headers['cache-control']).toContain('no-store');
+      expect(pdf.headers['content-disposition']).toContain('.pdf');
       expect(new TextDecoder().decode(pdf.bytes.slice(0, 8))).toBe('%PDF-1.7');
       expect((await report('xlsx', versionId, session)).statusCode).toBe(403);
     }
     expect((await report('csv')).statusCode).toBe(400);
-    const analysis = await req('GET', `/v1/modeling/models/${modelId}/reports/analise`); expect(analysis.statusCode).toBe(200); expect(analysis.headers['content-type']).toBe('application/pdf');
+    const analysis = await req('GET', `/v1/modeling/models/${modelId}/reports/analise`);
+    expect(analysis.statusCode).toBe(200);
+    expect(analysis.headers['content-type']).toBe('application/pdf');
     snapshotPdf = (await report()).bytes;
   });
   it('o PDF de consulta respeita o cenário escolhido sem escrever nem modificar versões aprovadas', async () => {
     const path = `/v1/modeling/models/${modelId}/reports/sumario?format=pdf&revision=1&scenario=pess`;
     const draft = await req('GET', path, undefined, viewer);
-    expect(draft.statusCode).toBe(200); expect(draft.headers['x-source-scenario']).toBe('pess');
+    expect(draft.statusCode).toBe(200);
+    expect(draft.headers['x-source-scenario']).toBe('pess');
     const current = (await req('GET', `/v1/modeling/models/${modelId}`)).json();
-    expect(current.revision).toBe(1); expect(current.assumptions.cen).toBe('base');
+    expect(current.revision).toBe(1);
+    expect(current.assumptions.cen).toBe('base');
     expect((await req('GET', path + `&version=${versionId}`, undefined, viewer)).statusCode).toBe(400);
   });
   it('Excel exige o ID exacto do proprietário do produto e o estatuto de administrador', async () => {
     const previous = process.env.KIANDA_MODELING_OWNER_USER_ID;
     try {
       process.env.KIANDA_MODELING_OWNER_USER_ID = ownerId;
-      const file = await report('xlsx'); expect(file.statusCode).toBe(200);
-      expect(file.headers['content-type']).toContain('spreadsheetml'); expect(new TextDecoder().decode(file.bytes.slice(0, 2))).toBe('PK');
+      const file = await report('xlsx');
+      expect(file.statusCode).toBe(200);
+      expect(file.headers['content-type']).toContain('spreadsheetml');
+      expect(new TextDecoder().decode(file.bytes.slice(0, 2))).toBe('PK');
       expect((await report('xlsx', versionId, finance)).statusCode).toBe(403);
-      process.env.KIANDA_MODELING_OWNER_USER_ID = 'conta-diferente'; expect((await report('xlsx')).statusCode).toBe(403);
-    } finally { if (previous === undefined) delete process.env.KIANDA_MODELING_OWNER_USER_ID; else process.env.KIANDA_MODELING_OWNER_USER_ID = previous; }
+      process.env.KIANDA_MODELING_OWNER_USER_ID = 'conta-diferente';
+      expect((await report('xlsx')).statusCode).toBe(403);
+    } finally {
+      if (previous === undefined) delete process.env.KIANDA_MODELING_OWNER_USER_ID;
+      else process.env.KIANDA_MODELING_OWNER_USER_ID = previous;
+    }
   });
   it('o PDF aprovado fica igual byte a byte depois de alterar o rascunho e os dados da empresa', async () => {
     const updated = { ...assumptions, pessoal: assumptions.pessoal + 1000000 };
-    expect((await req('PUT', `/v1/modeling/models/${modelId}`, { name: 'Novo rascunho', sector: 'mineracao', currency: 'USD', revision: 1, assumptions: updated })).statusCode).toBe(200);
+    expect(
+      (
+        await req('PUT', `/v1/modeling/models/${modelId}`, {
+          name: 'Novo rascunho',
+          sector: 'mineracao',
+          currency: 'USD',
+          revision: 1,
+          assumptions: updated,
+        })
+      ).statusCode,
+    ).toBe(200);
     await getDb().execute(sql`update companies set name='Empresa alterada' where id=${companyId}`);
-    const frozen = await report(); expect(frozen.statusCode).toBe(200); expect(frozen.bytes).toEqual(snapshotPdf); expect(frozen.headers['x-source-revision']).toBe('1');
-    const draft = await report('pdf', ''); expect(draft.statusCode).toBe(200); expect(draft.bytes).not.toEqual(snapshotPdf); expect(draft.headers['x-source-revision']).toBe('2');
+    const frozen = await report();
+    expect(frozen.statusCode).toBe(200);
+    expect(frozen.bytes).toEqual(snapshotPdf);
+    expect(frozen.headers['x-source-revision']).toBe('1');
+    const draft = await report('pdf', '');
+    expect(draft.statusCode).toBe(200);
+    expect(draft.bytes).not.toEqual(snapshotPdf);
+    expect(draft.headers['x-source-revision']).toBe('2');
   });
   it('a base de dados impede editar versões aprovadas, mesmo fora das rotas', async () => {
-    await expect(getDb().execute(sql`update financial_model_versions set label='Alterada' where id=${versionId}`)).rejects.toThrow();
-    await expect(withTenant(companyId, () => getDb().execute(sql`delete from financial_model_versions where id=${versionId}`))).rejects.toThrow();
-    const r = await withTenant(otherCompany, () => getDb().execute(sql`select id from financial_model_versions where id=${versionId}`)); expect(r.rows).toEqual([]);
-    for (const path of [`versions/${versionId}`, `reports/sumario?version=${versionId}`]) expect((await req('GET', `/v1/modeling/models/${modelId}/${path}`, undefined, other)).statusCode).toBe(404);
+    await expect(
+      getDb().execute(sql`update financial_model_versions set label='Alterada' where id=${versionId}`),
+    ).rejects.toThrow();
+    await expect(
+      withTenant(companyId, () => getDb().execute(sql`delete from financial_model_versions where id=${versionId}`)),
+    ).rejects.toThrow();
+    const r = await withTenant(otherCompany, () =>
+      getDb().execute(sql`select id from financial_model_versions where id=${versionId}`),
+    );
+    expect(r.rows).toEqual([]);
+    for (const path of [`versions/${versionId}`, `reports/sumario?version=${versionId}`])
+      expect((await req('GET', `/v1/modeling/models/${modelId}/${path}`, undefined, other)).statusCode).toBe(404);
   });
   it('rascunhos incompletos não geram versões aprovadas nem ficheiros vazios', async () => {
-    expect((await req('PUT', `/v1/modeling/models/${modelId}`, { name: 'Incompleto', sector: 'mineracao', currency: 'USD', revision: 2, assumptions: { pessoal: 1 } })).statusCode).toBe(200);
-    expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 3, label: 'Inválida' })).statusCode).toBe(422);
+    expect(
+      (
+        await req('PUT', `/v1/modeling/models/${modelId}`, {
+          name: 'Incompleto',
+          sector: 'mineracao',
+          currency: 'USD',
+          revision: 2,
+          assumptions: { pessoal: 1 },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 3, label: 'Inválida' })).statusCode,
+    ).toBe(422);
     expect((await report('pdf', '')).statusCode).toBe(422);
     expect((await req('GET', `/v1/modeling/models/${modelId}/versions`)).json()).toHaveLength(2);
     expect((await report()).bytes).toEqual(snapshotPdf);
   });
   it('arquivo e licença em consulta conservam a pré-visualização mas bloqueiam downloads e aprovações', async () => {
-    expect((await req('POST', `/v1/modeling/models/${modelId}/archive`, { archived: true, revision: 3 })).statusCode).toBe(200);
-    expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 4, label: 'Arquivo' })).statusCode).toBe(409);
-    expect((await req('PUT', `/v1/platform/companies/${companyId}/modules/modeling`, { enabled: true, status: 'suspended' }, admin)).statusCode).toBe(200);
+    expect(
+      (await req('POST', `/v1/modeling/models/${modelId}/archive`, { archived: true, revision: 3 })).statusCode,
+    ).toBe(200);
+    expect(
+      (await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 4, label: 'Arquivo' })).statusCode,
+    ).toBe(409);
+    expect(
+      (
+        await req(
+          'PUT',
+          `/v1/platform/companies/${companyId}/modules/modeling`,
+          { enabled: true, status: 'suspended' },
+          admin,
+        )
+      ).statusCode,
+    ).toBe(200);
     expect((await report('pdf', versionId, viewer)).statusCode).toBe(402);
-    expect((await req('GET', `/v1/modeling/models/${modelId}/versions/${versionId}`, undefined, viewer)).json().payload.source.versionId).toBe(versionId);
-    expect((await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 4, label: 'Suspensa' })).statusCode).toBe(402);
+    expect(
+      (await req('GET', `/v1/modeling/models/${modelId}/versions/${versionId}`, undefined, viewer)).json().payload
+        .source.versionId,
+    ).toBe(versionId);
+    expect(
+      (await req('POST', `/v1/modeling/models/${modelId}/versions`, { revision: 4, label: 'Suspensa' })).statusCode,
+    ).toBe(402);
   });
 });

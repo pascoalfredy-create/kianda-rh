@@ -12,10 +12,14 @@ export function VisitBeacon() {
       if (nav.doNotTrack === '1' || nav.globalPrivacyControl) return;
       const source = new URLSearchParams(location.search).get('utm_source');
       void fetch('/api/v1/public/visit', {
-        method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' },
+        method: 'POST',
+        keepalive: true,
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ path: location.pathname, referrer: document.referrer || null, source }),
       }).catch(() => {});
-    } catch { /* a contagem nunca pode estragar a página */ }
+    } catch {
+      /* a contagem nunca pode estragar a página */
+    }
   }, []);
   return null;
 }

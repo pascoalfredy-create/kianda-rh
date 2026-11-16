@@ -26,8 +26,17 @@ interface Env {
 
 /** Secrets e variáveis do Worker → process.env, lidos pela app (mesmo código que em Node). */
 const SETTINGS = [
-  'API_JWT_SECRET', 'APP_BASE_URL', 'KIANDA_HOSTNAME', 'KIANDA_MODELING_OWNER_USER_ID',
-  'PROXYPAY_API_KEY', 'PROXYPAY_ENV', 'PROXYPAY_ENTITY', 'RESEND_API_KEY', 'MAIL_FROM', 'VENDUS_API_KEY', 'VENDUS_MODE',
+  'API_JWT_SECRET',
+  'APP_BASE_URL',
+  'KIANDA_HOSTNAME',
+  'KIANDA_MODELING_OWNER_USER_ID',
+  'PROXYPAY_API_KEY',
+  'PROXYPAY_ENV',
+  'PROXYPAY_ENTITY',
+  'RESEND_API_KEY',
+  'MAIL_FROM',
+  'VENDUS_API_KEY',
+  'VENDUS_MODE',
 ];
 function loadEnv(env: Env) {
   setObjectStore(env.FILES ? r2Store(env.FILES) : null);
@@ -41,13 +50,18 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     loadEnv(env);
     // Sem segredo de sessão forte, a API não arranca: nunca assina sessões com o segredo de desenvolvimento.
-    if (!process.env.API_JWT_SECRET || process.env.API_JWT_SECRET.length < 32) return Response.json({ error: 'configuracao', message: 'Segredo de sessão em falta' }, { status: 500 });
+    if (!process.env.API_JWT_SECRET || process.env.API_JWT_SECRET.length < 32)
+      return Response.json({ error: 'configuracao', message: 'Segredo de sessão em falta' }, { status: 500 });
     app ??= buildApp();
     const connectionString = connection(env);
-    if (!connectionString) return Response.json({ error: 'configuracao', message: 'Base de dados não configurada (HYPERDRIVE ou DATABASE_URL)' }, { status: 500 });
+    if (!connectionString)
+      return Response.json(
+        { error: 'configuracao', message: 'Base de dados não configurada (HYPERDRIVE ou DATABASE_URL)' },
+        { status: 500 },
+      );
     // O envio de notificações corre depois da resposta, com uma ligação própria (a do pedido fecha-se).
-    setPushRunner((work) => withRequestDb(connectionString, () => work(getDb())));
-    setRecruitmentMailRunner((work) => withRequestDb(connectionString, () => work(getDb())));
+    setPushRunner(work => withRequestDb(connectionString, () => work(getDb())));
+    setRecruitmentMailRunner(work => withRequestDb(connectionString, () => work(getDb())));
     return withRequestDb(connectionString, async () => app!.fetch(request, env, ctx));
   },
 

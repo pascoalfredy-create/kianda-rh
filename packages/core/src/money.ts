@@ -37,10 +37,17 @@ export function prorate(amount: Minor, numerator: number, denominator: number): 
 }
 
 export function sum(...values: Minor[]): Minor {
-  return assertMinor(values.reduce((a, b) => a + b, 0), 'soma');
+  return assertMinor(
+    values.reduce((a, b) => a + b, 0),
+    'soma',
+  );
 }
 
-const fmt = new Intl.NumberFormat('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' } as Intl.NumberFormatOptions);
+const fmt = new Intl.NumberFormat('pt-PT', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+  useGrouping: 'always',
+} as Intl.NumberFormatOptions);
 /** Formata cêntimos como "1 234,56 Kz". */
 export function formatKz(minor: Minor): string {
   return `${fmt.format(toKz(minor))} Kz`;
@@ -58,13 +65,25 @@ const percentFormats = new Map<number, Intl.NumberFormat>();
 export function formatPercent(points: number | null | undefined, digits = 2, signed = false): string {
   if (points === null || points === undefined || !Number.isFinite(points)) return '—';
   let f = percentFormats.get(digits);
-  if (!f) { f = new Intl.NumberFormat('pt-PT', { minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: 'always' } as Intl.NumberFormatOptions); percentFormats.set(digits, f); }
-  const rounded = Number(points.toFixed(digits)), value = Object.is(rounded, -0) || rounded === 0 ? 0 : rounded;
+  if (!f) {
+    f = new Intl.NumberFormat('pt-PT', {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+      useGrouping: 'always',
+    } as Intl.NumberFormatOptions);
+    percentFormats.set(digits, f);
+  }
+  const rounded = Number(points.toFixed(digits)),
+    value = Object.is(rounded, -0) || rounded === 0 ? 0 : rounded;
   return `${signed && value > 0 ? '+' : ''}${f.format(value)}%`;
 }
 /** Número com separador de milhares e vírgula decimal ("12 345,6"). */
 export function formatDecimal(value: number | null | undefined, digits = 2): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
   const rounded = Number(value.toFixed(digits));
-  return new Intl.NumberFormat('pt-PT', { minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: 'always' } as Intl.NumberFormatOptions).format(Object.is(rounded, -0) ? 0 : rounded);
+  return new Intl.NumberFormat('pt-PT', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+    useGrouping: 'always',
+  } as Intl.NumberFormatOptions).format(Object.is(rounded, -0) ? 0 : rounded);
 }

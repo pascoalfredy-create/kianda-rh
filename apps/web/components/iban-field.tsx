@@ -19,13 +19,18 @@ export function IbanField({ defaultValue, className }: { defaultValue?: string |
         name="iban"
         value={value}
         placeholder="AO06 0040 0000 5521 8890 1015 5"
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={() => { setTouched(true); if (value.trim() && !angolanIbanProblem(value)) setValue(formatIban(value)); }}
+        onChange={e => setValue(e.target.value)}
+        onBlur={() => {
+          setTouched(true);
+          if (value.trim() && !angolanIbanProblem(value)) setValue(formatIban(value));
+        }}
         aria-invalid={!!problem && touched}
         style={problem && touched ? { borderColor: 'var(--red)' } : undefined}
       />
       {problem && touched && <span style={{ color: 'var(--red)', fontWeight: 500 }}>{problem}</span>}
-      {!problem && value.trim() && <span style={{ color: 'var(--brand)', fontWeight: 500 }}>IBAN válido{bank ? ` · ${bank}` : ''}</span>}
+      {!problem && value.trim() && (
+        <span style={{ color: 'var(--brand)', fontWeight: 500 }}>IBAN válido{bank ? ` · ${bank}` : ''}</span>
+      )}
     </label>
   );
 }

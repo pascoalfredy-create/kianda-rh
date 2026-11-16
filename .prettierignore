@@ -1,0 +1,20 @@
+# Gerados, protótipos aprovados e artefactos de build não são formatados.
+node_modules
+dist
+.next
+.open-next
+coverage
+**/public/**
+**/*.generated.*
+**/generated.ts
+apps/web/valuation/prototype.html
+apps/web/modeling/prototype.html
+apps/api/src/lib/financial-fonts.ts
+pnpm-lock.yaml
+packages/db/migrations/**
+*.md
+*.html
+*.json
+*.yml
+*.yaml
+*.css

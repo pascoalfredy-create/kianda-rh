@@ -36,7 +36,7 @@ export function costGroup(code: string): CostGroup {
 /** Dias úteis do mês (segunda a sexta, sem feriados nacionais). */
 export function workingDaysInMonth(period: string): number {
   const [y, m] = period.split('-').map(Number) as [number, number];
-  const holidays = new Set(angolaHolidays(y).map((h) => h.date));
+  const holidays = new Set(angolaHolidays(y).map(h => h.date));
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
   let n = 0;
   for (let d = 1; d <= last; d++) {
@@ -51,7 +51,12 @@ export function workingDaysInMonth(period: string): number {
 export const ABSENTEEISM_TYPES = new Set(['sick', 'justified', 'unjustified', 'marriage', 'bereavement', 'training']);
 
 export interface ReportLine {
-  period: string; employeeId: string; grossMinor: Minor; inssEmployerMinor: Minor; overtimeHours: number; absenceDays: number;
+  period: string;
+  employeeId: string;
+  grossMinor: Minor;
+  inssEmployerMinor: Minor;
+  overtimeHours: number;
+  absenceDays: number;
   breakdown: { code: string; kind: string; amountMinor: number }[];
   /** Departamento no momento do cálculo da folha (fotografia); sem ele, usa-se o departamento actual da ficha. */
   departmentId?: string | null;
@@ -66,20 +71,51 @@ export interface ReportInput {
 }
 
 export interface MonthReport {
-  period: string; headcount: number; hires: number; exits: number;
-  grossMinor: Minor; employerInssMinor: Minor; costMinor: Minor; groups: Record<CostGroup, Minor>;
-  overtimeHours: number; overtimeMinor: Minor; absenceDays: number; workingDays: number; absenteeismPct: number;
+  period: string;
+  headcount: number;
+  hires: number;
+  exits: number;
+  grossMinor: Minor;
+  employerInssMinor: Minor;
+  costMinor: Minor;
+  groups: Record<CostGroup, Minor>;
+  overtimeHours: number;
+  overtimeMinor: Minor;
+  absenceDays: number;
+  workingDays: number;
+  absenteeismPct: number;
 }
 export interface DepartmentReport {
-  id: string | null; name: string; costCenter: string; headcount: number; costMinor: Minor; avgMonthlyCostMinor: Minor;
-  overtimeMinor: Minor; absenceDays: number; sharePct: number;
+  id: string | null;
+  name: string;
+  costCenter: string;
+  headcount: number;
+  costMinor: Minor;
+  avgMonthlyCostMinor: Minor;
+  overtimeMinor: Minor;
+  absenceDays: number;
+  sharePct: number;
 }
 export interface PeopleReport {
-  from: string; to: string; months: MonthReport[]; departments: DepartmentReport[];
+  from: string;
+  to: string;
+  months: MonthReport[];
+  departments: DepartmentReport[];
   totals: {
-    costMinor: Minor; grossMinor: Minor; employerInssMinor: Minor; groups: Record<CostGroup, Minor>;
-    headcountEnd: number; avgHeadcount: number; hires: number; exits: number; turnoverPct: number;
-    avgMonthlyCostPerHeadMinor: Minor; overtimeHours: number; overtimeMinor: Minor; overtimeSharePct: number; absenteeismPct: number;
+    costMinor: Minor;
+    grossMinor: Minor;
+    employerInssMinor: Minor;
+    groups: Record<CostGroup, Minor>;
+    headcountEnd: number;
+    avgHeadcount: number;
+    hires: number;
+    exits: number;
+    turnoverPct: number;
+    avgMonthlyCostPerHeadMinor: Minor;
+    overtimeHours: number;
+    overtimeMinor: Minor;
+    overtimeSharePct: number;
+    absenteeismPct: number;
   };
 }
 
@@ -88,28 +124,39 @@ const emptyGroups = (): Record<CostGroup, Minor> => ({ base: 0, allowances: 0, a
 
 export function peopleReport(input: ReportInput): PeopleReport {
   const periods = [...input.periods].sort();
-  const deptOf = new Map(input.employees.map((e) => [e.id, e.departmentId]));
-  const months: MonthReport[] = periods.map((period) => {
-    const lines = input.lines.filter((l) => l.period === period);
+  const deptOf = new Map(input.employees.map(e => [e.id, e.departmentId]));
+  const months: MonthReport[] = periods.map(period => {
+    const lines = input.lines.filter(l => l.period === period);
     const groups = emptyGroups();
     let overtimeMinor = 0;
-    for (const l of lines) for (const b of l.breakdown) {
-      if (b.kind !== 'earning') continue;
-      const g = costGroup(b.code);
-      groups[g] += b.amountMinor;
-      if (g === 'variable' && !b.code.startsWith('BONUS')) overtimeMinor += b.amountMinor;
-    }
+    for (const l of lines)
+      for (const b of l.breakdown) {
+        if (b.kind !== 'earning') continue;
+        const g = costGroup(b.code);
+        groups[g] += b.amountMinor;
+        if (g === 'variable' && !b.code.startsWith('BONUS')) overtimeMinor += b.amountMinor;
+      }
     const grossMinor = lines.reduce((s, l) => s + l.grossMinor, 0);
     const employerInssMinor = lines.reduce((s, l) => s + l.inssEmployerMinor, 0);
-    const headcount = new Set(lines.map((l) => l.employeeId)).size;
+    const headcount = new Set(lines.map(l => l.employeeId)).size;
     const workingDays = workingDaysInMonth(period);
-    const absenceDays = lines.reduce((s, l) => s + l.absenceDays, 0) + input.leaveDays.filter((d) => d.period === period).reduce((s, d) => s + d.days, 0);
+    const absenceDays =
+      lines.reduce((s, l) => s + l.absenceDays, 0) +
+      input.leaveDays.filter(d => d.period === period).reduce((s, d) => s + d.days, 0);
     return {
-      period, headcount, grossMinor, employerInssMinor, costMinor: grossMinor + employerInssMinor, groups,
-      hires: input.employees.filter((e) => e.hireDate?.startsWith(period)).length,
-      exits: input.employees.filter((e) => e.exitDate?.startsWith(period)).length,
-      overtimeHours: Math.round(lines.reduce((s, l) => s + l.overtimeHours, 0) * 100) / 100, overtimeMinor,
-      absenceDays: Math.round(absenceDays * 10) / 10, workingDays, absenteeismPct: pct(absenceDays, headcount * workingDays),
+      period,
+      headcount,
+      grossMinor,
+      employerInssMinor,
+      costMinor: grossMinor + employerInssMinor,
+      groups,
+      hires: input.employees.filter(e => e.hireDate?.startsWith(period)).length,
+      exits: input.employees.filter(e => e.exitDate?.startsWith(period)).length,
+      overtimeHours: Math.round(lines.reduce((s, l) => s + l.overtimeHours, 0) * 100) / 100,
+      overtimeMinor,
+      absenceDays: Math.round(absenceDays * 10) / 10,
+      workingDays,
+      absenteeismPct: pct(absenceDays, headcount * workingDays),
     };
   });
 
@@ -122,44 +169,81 @@ export function peopleReport(input: ReportInput): PeopleReport {
   for (const m of months) for (const g of Object.keys(groups) as CostGroup[]) groups[g] += m.groups[g];
 
   // Por departamento: o do momento de cada folha (fotografia na linha) ou, nas linhas antigas, o actual da ficha.
-  const deptRows = new Map<string | null, { cost: number; headMonths: number; head: Set<string>; overtime: number; absence: number }>();
-  const row = (id: string | null) => deptRows.get(id) ?? (deptRows.set(id, { cost: 0, headMonths: 0, head: new Set(), overtime: 0, absence: 0 }), deptRows.get(id)!);
+  const deptRows = new Map<
+    string | null,
+    { cost: number; headMonths: number; head: Set<string>; overtime: number; absence: number }
+  >();
+  const row = (id: string | null) =>
+    deptRows.get(id) ??
+    (deptRows.set(id, { cost: 0, headMonths: 0, head: new Set(), overtime: 0, absence: 0 }), deptRows.get(id)!);
   for (const l of input.lines) {
     if (!periods.includes(l.period)) continue;
-    const r = row(l.departmentId !== undefined && l.departmentId !== null ? l.departmentId : deptOf.get(l.employeeId) ?? null);
+    const r = row(
+      l.departmentId !== undefined && l.departmentId !== null ? l.departmentId : (deptOf.get(l.employeeId) ?? null),
+    );
     r.cost += l.grossMinor + l.inssEmployerMinor;
     r.headMonths += 1;
     if (l.period === lastPeriod) r.head.add(l.employeeId);
-    r.overtime += l.breakdown.filter((b) => b.kind === 'earning' && VARIABLE.has(b.code)).reduce((s, b) => s + b.amountMinor, 0);
+    r.overtime += l.breakdown
+      .filter(b => b.kind === 'earning' && VARIABLE.has(b.code))
+      .reduce((s, b) => s + b.amountMinor, 0);
     r.absence += l.absenceDays;
   }
-  for (const d of input.leaveDays) if (periods.includes(d.period)) row(deptOf.get(d.employeeId) ?? null).absence += d.days;
-  const departments: DepartmentReport[] = [...deptRows.entries()].map(([id, r]) => {
-    const dep = input.departments.find((d) => d.id === id);
-    return {
-      id, name: dep?.name ?? 'Sem departamento', costCenter: dep?.costCenter ?? '—', headcount: r.head.size, costMinor: r.cost,
-      avgMonthlyCostMinor: r.headMonths ? Math.round(r.cost / r.headMonths) : 0, overtimeMinor: r.overtime,
-      absenceDays: Math.round(r.absence * 10) / 10, sharePct: pct(r.cost, costMinor),
-    };
-  }).sort((a, b) => b.costMinor - a.costMinor);
+  for (const d of input.leaveDays)
+    if (periods.includes(d.period)) row(deptOf.get(d.employeeId) ?? null).absence += d.days;
+  const departments: DepartmentReport[] = [...deptRows.entries()]
+    .map(([id, r]) => {
+      const dep = input.departments.find(d => d.id === id);
+      return {
+        id,
+        name: dep?.name ?? 'Sem departamento',
+        costCenter: dep?.costCenter ?? '—',
+        headcount: r.head.size,
+        costMinor: r.cost,
+        avgMonthlyCostMinor: r.headMonths ? Math.round(r.cost / r.headMonths) : 0,
+        overtimeMinor: r.overtime,
+        absenceDays: Math.round(r.absence * 10) / 10,
+        sharePct: pct(r.cost, costMinor),
+      };
+    })
+    .sort((a, b) => b.costMinor - a.costMinor);
 
   const overtimeMinor = sum('overtimeMinor');
   const grossMinor = sum('grossMinor');
   const exits = sum('exits');
   return {
-    from: periods[0] ?? '', to: lastPeriod ?? '', months, departments,
+    from: periods[0] ?? '',
+    to: lastPeriod ?? '',
+    months,
+    departments,
     totals: {
-      costMinor, grossMinor, employerInssMinor: sum('employerInssMinor'), groups,
-      headcountEnd: months[months.length - 1]?.headcount ?? 0, avgHeadcount, hires: sum('hires'), exits,
-      turnoverPct: pct(exits, avgHeadcount), avgMonthlyCostPerHeadMinor: headMonths ? Math.round(costMinor / headMonths) : 0,
-      overtimeHours: Math.round(sum('overtimeHours') * 100) / 100, overtimeMinor, overtimeSharePct: pct(overtimeMinor, grossMinor),
-      absenteeismPct: pct(sum('absenceDays'), months.reduce((s, m) => s + m.headcount * m.workingDays, 0)),
+      costMinor,
+      grossMinor,
+      employerInssMinor: sum('employerInssMinor'),
+      groups,
+      headcountEnd: months[months.length - 1]?.headcount ?? 0,
+      avgHeadcount,
+      hires: sum('hires'),
+      exits,
+      turnoverPct: pct(exits, avgHeadcount),
+      avgMonthlyCostPerHeadMinor: headMonths ? Math.round(costMinor / headMonths) : 0,
+      overtimeHours: Math.round(sum('overtimeHours') * 100) / 100,
+      overtimeMinor,
+      overtimeSharePct: pct(overtimeMinor, grossMinor),
+      absenteeismPct: pct(
+        sum('absenceDays'),
+        months.reduce((s, m) => s + m.headcount * m.workingDays, 0),
+      ),
     },
   };
 }
 
 /** Reparte uma ausência pelos meses, em proporção dos dias de calendário (os dias úteis já vêm contados na ausência). */
-export function splitAbsenceByMonth(a: { startDate: string; endDate: string; workingDays: number }): { period: string; days: number }[] {
+export function splitAbsenceByMonth(a: {
+  startDate: string;
+  endDate: string;
+  workingDays: number;
+}): { period: string; days: number }[] {
   const start = Date.parse(`${a.startDate}T00:00:00Z`);
   const end = Date.parse(`${a.endDate}T00:00:00Z`);
   const total = Math.round((end - start) / 86_400_000) + 1;
@@ -169,5 +253,8 @@ export function splitAbsenceByMonth(a: { startDate: string; endDate: string; wor
     const p = new Date(t).toISOString().slice(0, 7);
     byMonth.set(p, (byMonth.get(p) ?? 0) + 1);
   }
-  return [...byMonth.entries()].map(([period, days]) => ({ period, days: Math.round((a.workingDays * days / total) * 10) / 10 }));
+  return [...byMonth.entries()].map(([period, days]) => ({
+    period,
+    days: Math.round(((a.workingDays * days) / total) * 10) / 10,
+  }));
 }

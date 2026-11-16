@@ -13,6 +13,8 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint packages/core/src packages/db/src apps/api/src apps/web",
+    "format": "prettier --write \"packages/*/src/**/*.{ts,tsx}\" \"packages/*/test/**/*.ts\" \"apps/api/src/**/*.ts\" \"apps/api/test/**/*.ts\" \"apps/web/**/*.{ts,tsx}\" \"apps/e2e/**/*.ts\"",
+    "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx}\" \"packages/*/test/**/*.ts\" \"apps/api/src/**/*.ts\" \"apps/api/test/**/*.ts\" \"apps/web/**/*.{ts,tsx}\" \"apps/e2e/**/*.ts\"",
     "db:up": "docker compose up -d postgres",
     "db:generate": "pnpm --filter @kianda/db generate",
     "db:migrate": "pnpm --filter @kianda/db migrate",
@@ -22,6 +24,8 @@
     "@types/node": "22.19.19",
     "eslint": "9.39.5",
     "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-sonarjs": "3.0.5",
+    "prettier": "3.6.2",
     "typescript": "5.9.3",
     "typescript-eslint": "8.72.2",
     "wrangler": "4.152.0"

@@ -6,7 +6,21 @@ test.afterAll(closePool);
 
 test('Aceitação: publicar o regulamento interno, aceitar no portal e ver a prova', async ({ page, context }) => {
   const owner = await registerCompany();
-  const emp = await apiAs(owner.token, 'POST', '/v1/employees', { number: '41', name: 'Teresa Ngola', gender: 'F', jobTitle: 'Contabilista', province: 'Luanda', nif: '0000004141', contract: { type: 'indefinite', startDate: new Date().toISOString().slice(0, 10), base: 400000, meal: 30000, transport: 25000 } });
+  const emp = await apiAs(owner.token, 'POST', '/v1/employees', {
+    number: '41',
+    name: 'Teresa Ngola',
+    gender: 'F',
+    jobTitle: 'Contabilista',
+    province: 'Luanda',
+    nif: '0000004141',
+    contract: {
+      type: 'indefinite',
+      startDate: new Date().toISOString().slice(0, 10),
+      base: 400000,
+      meal: 30000,
+      transport: 25000,
+    },
+  });
   expect(emp.status, JSON.stringify(emp.body)).toBe(201);
   const teresa = await addUser(owner, 'Teresa Ngola', 'employee', emp.body.id);
 
@@ -17,7 +31,11 @@ test('Aceitação: publicar o regulamento interno, aceitar no portal e ver a pro
   await page.getByLabel('Título').fill('Regulamento interno');
   await page.getByRole('button', { name: 'Criar rascunho' }).click();
   await expect(page.getByRole('heading', { name: 'Rascunho · versão 1' })).toBeVisible();
-  await page.getByLabel('Texto do documento').fill('Artigo 1.º — Horário de trabalho: das 8h00 às 17h00, com uma hora de intervalo.\nArtigo 2.º — Uso obrigatório do cartão de identificação.');
+  await page
+    .getByLabel('Texto do documento')
+    .fill(
+      'Artigo 1.º — Horário de trabalho: das 8h00 às 17h00, com uma hora de intervalo.\nArtigo 2.º — Uso obrigatório do cartão de identificação.',
+    );
   await page.screenshot({ path: '/tmp/e2e/aceitacao-01-rascunho.png', fullPage: false });
   page.once('dialog', d => d.accept());
   await page.getByRole('button', { name: 'Publicar para aceitação' }).click();

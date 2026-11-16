@@ -23,7 +23,9 @@ describe('verificação em dois passos (TOTP)', () => {
     expect(await verifyTotp(SECRET, 'abc', t)).toBe(false);
   });
   it('otpauth para a aplicação', () => {
-    expect(otpauthUri('ABC', 'ana@x.ao')).toBe('otpauth://totp/Kianda%20RH%3Aana%40x.ao?secret=ABC&issuer=Kianda%20RH&algorithm=SHA1&digits=6&period=30');
+    expect(otpauthUri('ABC', 'ana@x.ao')).toBe(
+      'otpauth://totp/Kianda%20RH%3Aana%40x.ao?secret=ABC&issuer=Kianda%20RH&algorithm=SHA1&digits=6&period=30',
+    );
   });
 });
 

@@ -1,11 +1,57 @@
-import { REGISTRATION_TERMS_VERSION, DEFAULT_TIERS, FINANCIAL_SECTORS, MODELING_PLANS, defaultModelingSector, isValidCompanyNif, luandaDate, SECTORS, sha256Hex, tierFor, trialEndDate, TRIAL_DAYS, VALUATION_PLANS, VALUATION_PLAN_KEYS, verifyTotp } from '@kianda/core';
-import { auditLogs, companies, companyModules, employees, getDb, modelingMembers, revokedSessions, valuationMembers, PLATFORM_NIF, platformAdmins, hashPassword, passwordProblems, subscriptions, users, verifyPassword, type Db } from '@kianda/db';
+import {
+  REGISTRATION_TERMS_VERSION,
+  DEFAULT_TIERS,
+  FINANCIAL_SECTORS,
+  MODELING_PLANS,
+  defaultModelingSector,
+  isValidCompanyNif,
+  luandaDate,
+  SECTORS,
+  sha256Hex,
+  tierFor,
+  trialEndDate,
+  TRIAL_DAYS,
+  VALUATION_PLANS,
+  VALUATION_PLAN_KEYS,
+  verifyTotp,
+} from '@kianda/core';
+import {
+  auditLogs,
+  companies,
+  companyModules,
+  employees,
+  getDb,
+  modelingMembers,
+  revokedSessions,
+  valuationMembers,
+  PLATFORM_NIF,
+  platformAdmins,
+  hashPassword,
+  passwordProblems,
+  subscriptions,
+  users,
+  verifyPassword,
+  type Db,
+} from '@kianda/db';
 import { and, eq, sql } from '@kianda/db';
 import { Hono } from 'hono';
 import { deleteCookie, setCookie } from 'hono/cookie';
 import { sign, verify } from 'hono/jwt';
 import { z } from 'zod';
-import { body, jwtSecret, rateLimit, requireAccount, requireCompany, requireRole, SESSION_COOKIE, sessionToken, type AppEnv, type Ctx, type Role, type SessionClaims } from '../plugins/tenant.js';
+import {
+  body,
+  jwtSecret,
+  rateLimit,
+  requireAccount,
+  requireCompany,
+  requireRole,
+  SESSION_COOKIE,
+  sessionToken,
+  type AppEnv,
+  type Ctx,
+  type Role,
+  type SessionClaims,
+} from '../plugins/tenant.js';
 import { applySectorPreset } from '../services/sector.js';
 import { appBaseUrl } from '../services/integrations.js';
 import { sendMail } from '../services/mail.js';
@@ -14,40 +60,93 @@ import { accountOverview } from '../services/account-overview.js';
 import { issueEmailVerification } from '../services/email-verification.js';
 
 const SESSION_HOURS = 12;
-const password = z.string().superRefine((v, ctx) => { const p = passwordProblems(v); if (p) ctx.addIssue({ code: 'custom', message: p }); });
+const password = z.string().superRefine((v, ctx) => {
+  const p = passwordProblems(v);
+  if (p) ctx.addIssue({ code: 'custom', message: p });
+});
 
 const MAX_FAILURES = 5;
 const LOCK_MINUTES = 15;
-export const LOCKED = { error: 'conta_bloqueada', message: `Demasiadas tentativas falhadas. Tente de novo dentro de ${LOCK_MINUTES} minutos ou peça ao RH uma ligação de recuperação.` };
+export const LOCKED = {
+  error: 'conta_bloqueada',
+  message: `Demasiadas tentativas falhadas. Tente de novo dentro de ${LOCK_MINUTES} minutos ou peça ao RH uma ligação de recuperação.`,
+};
 export const isLocked = (u: { lockedUntil: Date | null }) => Boolean(u.lockedUntil && u.lockedUntil > new Date());
 
 /** Conta falhas por utilizador: à 5.ª, bloqueia 15 minutos (protege PINs de 6 dígitos contra tentativas). */
 export async function registerFailure(db: Db, u: { id: string; failedAttempts: number }) {
   const n = u.failedAttempts + 1;
-  await db.update(users).set(n >= MAX_FAILURES ? { failedAttempts: 0, lockedUntil: new Date(Date.now() + LOCK_MINUTES * 60_000) } : { failedAttempts: n }).where(eq(users.id, u.id));
+  await db
+    .update(users)
+    .set(
+      n >= MAX_FAILURES
+        ? { failedAttempts: 0, lockedUntil: new Date(Date.now() + LOCK_MINUTES * 60_000) }
+        : { failedAttempts: n },
+    )
+    .where(eq(users.id, u.id));
 }
 
 /** Fim do login: verificação em dois passos (se activa), sessão, auditoria. */
-export async function completeLogin(c: Ctx, db: Db, u: typeof users.$inferSelect, co: typeof companies.$inferSelect, method: string, secondFactorDone = false) {
+export async function completeLogin(
+  c: Ctx,
+  db: Db,
+  u: typeof users.$inferSelect,
+  co: typeof companies.$inferSelect,
+  method: string,
+  secondFactorDone = false,
+) {
   const platformAdmin = co.nif === PLATFORM_NIF;
   if (platformAdmin) {
-    const [admin] = await db.select().from(platformAdmins).where(eq(platformAdmins.email, u.email?.toLowerCase() ?? ''));
-    if (!admin || u.role !== 'owner' || u.disabledAt) return c.json({ error: 'acesso_desactivado', message: 'O acesso administrativo foi desactivado.' }, 403);
+    const [admin] = await db
+      .select()
+      .from(platformAdmins)
+      .where(eq(platformAdmins.email, u.email?.toLowerCase() ?? ''));
+    if (!admin || u.role !== 'owner' || u.disabledAt)
+      return c.json({ error: 'acesso_desactivado', message: 'O acesso administrativo foi desactivado.' }, 403);
   }
-  if (u.disabledAt) return c.json({ error: 'acesso_desactivado', message: 'O seu acesso foi desactivado. Contacte os Recursos Humanos.' }, 403);
+  if (u.disabledAt)
+    return c.json(
+      { error: 'acesso_desactivado', message: 'O seu acesso foi desactivado. Contacte os Recursos Humanos.' },
+      403,
+    );
   if (u.totpEnabledAt && !secondFactorDone) {
-    const ticket = await sign({ sub: u.id, purpose: '2fa', exp: Math.floor(Date.now() / 1000) + 300 }, jwtSecret(), 'HS256');
+    const ticket = await sign(
+      { sub: u.id, purpose: '2fa', exp: Math.floor(Date.now() / 1000) + 300 },
+      jwtSecret(),
+      'HS256',
+    );
     return c.json({ twoFactor: true, ticket });
   }
-  const token = await startSession(c, { sub: u.id, companyId: co.id, role: u.role, employeeId: u.employeeId, name: u.name });
-  await db.update(users).set({ failedAttempts: 0, lockedUntil: null, lastLoginAt: new Date() }).where(eq(users.id, u.id));
-  await db.insert(auditLogs).values({ companyId: co.id, actorId: u.id, action: 'login', entity: 'user', entityId: u.id, after: { method } });
-  return c.json({ user: { id: u.id, name: u.name, email: u.email, role: u.role }, company: platformAdmin ? null : { id: co.id, name: co.name }, platformAdmin, token, requiresEmailVerification: u.emailVerificationRequired && !u.emailVerifiedAt });
+  const token = await startSession(c, {
+    sub: u.id,
+    companyId: co.id,
+    role: u.role,
+    employeeId: u.employeeId,
+    name: u.name,
+  });
+  await db
+    .update(users)
+    .set({ failedAttempts: 0, lockedUntil: null, lastLoginAt: new Date() })
+    .where(eq(users.id, u.id));
+  await db
+    .insert(auditLogs)
+    .values({ companyId: co.id, actorId: u.id, action: 'login', entity: 'user', entityId: u.id, after: { method } });
+  return c.json({
+    user: { id: u.id, name: u.name, email: u.email, role: u.role },
+    company: platformAdmin ? null : { id: co.id, name: co.name },
+    platformAdmin,
+    token,
+    requiresEmailVerification: u.emailVerificationRequired && !u.emailVerifiedAt,
+  });
 }
 
 /** O cookie de sessão é sempre Secure em HTTPS (também atrás de um proxy), qualquer que seja o NODE_ENV. */
 export function secureCookie(c: Ctx) {
-  return process.env.NODE_ENV === 'production' || new URL(c.req.url).protocol === 'https:' || c.req.header('x-forwarded-proto')?.split(',')[0]?.trim() === 'https';
+  return (
+    process.env.NODE_ENV === 'production' ||
+    new URL(c.req.url).protocol === 'https:' ||
+    c.req.header('x-forwarded-proto')?.split(',')[0]?.trim() === 'https'
+  );
 }
 
 export async function startSession(c: Ctx, claims: SessionClaims) {
@@ -56,7 +155,11 @@ export async function startSession(c: Ctx, claims: SessionClaims) {
   const { requiresEmailVerification: _r, ...stable } = claims;
   const token = await sign({ ...stable, sv: u?.sv ?? 0, jti: crypto.randomUUID(), exp }, jwtSecret(), 'HS256');
   setCookie(c, SESSION_COOKIE, token, {
-    path: '/', httpOnly: true, sameSite: 'Lax', secure: secureCookie(c), maxAge: SESSION_HOURS * 3600,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+    secure: secureCookie(c),
+    maxAge: SESSION_HOURS * 3600,
   });
   return token;
 }
@@ -64,88 +167,239 @@ export async function startSession(c: Ctx, claims: SessionClaims) {
 /** Código curto da empresa (6 caracteres sem ambiguidades) para a entrada por n.º/telefone + PIN. */
 export function companyCode() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  return [...crypto.getRandomValues(new Uint8Array(6))].map((b) => alphabet[b % alphabet.length]).join('');
+  return [...crypto.getRandomValues(new Uint8Array(6))].map(b => alphabet[b % alphabet.length]).join('');
 }
 
 export function authRoutes() {
   const app = new Hono<AppEnv>();
 
   /** Registo de uma nova empresa com o seu utilizador proprietário. */
-  app.post('/v1/auth/register', rateLimit('register', 5, 3_600_000), async (c) => {
-    const b = z.object({
-      company: z.object({
-        name: z.string().trim().min(2), nif: z.string().trim().refine(isValidCompanyNif, 'NIF de empresa deve ter 10 dígitos'),
-        sector: z.enum(Object.keys(SECTORS) as [keyof typeof SECTORS]).optional(), address: z.string().trim().max(200).optional().nullable(),
-        employeesEstimate: z.number().int().min(1).max(100_000).optional(),
-      }),
-      name: z.string().min(2),
-      email: z.email(),
-      password,
-      acceptTerms: z.literal(true, { message: 'É necessário aceitar os termos de utilização' }),
-      modules: z.array(z.enum(['hr', 'modeling', 'valuation'])).min(1, 'Escolha pelo menos um módulo').max(3).refine(v => new Set(v).size === v.length, 'Módulo repetido').default(['hr']),
-      hrPlan: z.object({ tierKey: z.enum(DEFAULT_TIERS.map(t => t.key) as [string, ...string[]]), cycle: z.enum(['monthly', 'semiannual', 'annual']) }).optional(),
-      valuationPlan: z.object({ key: z.enum(VALUATION_PLAN_KEYS), cycle: z.enum(['monthly', 'semiannual', 'annual']) }).optional(),
-      modelingPlan: z.object({ key: z.enum(MODELING_PLANS.map(p => p.key) as [string, ...string[]]), cycle: z.enum(['monthly', 'semiannual', 'annual']), primarySector: z.enum(FINANCIAL_SECTORS), sectors: z.array(z.enum(FINANCIAL_SECTORS)).min(1).max(8) }).optional(),
-    }).parse(await body(c));
-    const hasHr = b.modules.includes('hr'), hasModeling = b.modules.includes('modeling'), hasValuation = b.modules.includes('valuation');
+  app.post('/v1/auth/register', rateLimit('register', 5, 3_600_000), async c => {
+    const b = z
+      .object({
+        company: z.object({
+          name: z.string().trim().min(2),
+          nif: z.string().trim().refine(isValidCompanyNif, 'NIF de empresa deve ter 10 dígitos'),
+          sector: z.enum(Object.keys(SECTORS) as [keyof typeof SECTORS]).optional(),
+          address: z.string().trim().max(200).optional().nullable(),
+          employeesEstimate: z.number().int().min(1).max(100_000).optional(),
+        }),
+        name: z.string().min(2),
+        email: z.email(),
+        password,
+        acceptTerms: z.literal(true, { message: 'É necessário aceitar os termos de utilização' }),
+        modules: z
+          .array(z.enum(['hr', 'modeling', 'valuation']))
+          .min(1, 'Escolha pelo menos um módulo')
+          .max(3)
+          .refine(v => new Set(v).size === v.length, 'Módulo repetido')
+          .default(['hr']),
+        hrPlan: z
+          .object({
+            tierKey: z.enum(DEFAULT_TIERS.map(t => t.key) as [string, ...string[]]),
+            cycle: z.enum(['monthly', 'semiannual', 'annual']),
+          })
+          .optional(),
+        valuationPlan: z
+          .object({ key: z.enum(VALUATION_PLAN_KEYS), cycle: z.enum(['monthly', 'semiannual', 'annual']) })
+          .optional(),
+        modelingPlan: z
+          .object({
+            key: z.enum(MODELING_PLANS.map(p => p.key) as [string, ...string[]]),
+            cycle: z.enum(['monthly', 'semiannual', 'annual']),
+            primarySector: z.enum(FINANCIAL_SECTORS),
+            sectors: z.array(z.enum(FINANCIAL_SECTORS)).min(1).max(8),
+          })
+          .optional(),
+      })
+      .parse(await body(c));
+    const hasHr = b.modules.includes('hr'),
+      hasModeling = b.modules.includes('modeling'),
+      hasValuation = b.modules.includes('valuation');
     const hrTier = DEFAULT_TIERS.find(t => t.key === b.hrPlan?.tierKey) ?? tierFor(b.company.employeesEstimate ?? 1);
-    if (hasHr && hrTier.maxEmployees !== null && hrTier.maxEmployees < (b.company.employeesEstimate ?? 1)) return c.json({ error: 'escalao_pequeno', message: 'Escolha uma faixa que inclua todos os colaboradores declarados.' }, 400);
+    if (hasHr && hrTier.maxEmployees !== null && hrTier.maxEmployees < (b.company.employeesEstimate ?? 1))
+      return c.json(
+        { error: 'escalao_pequeno', message: 'Escolha uma faixa que inclua todos os colaboradores declarados.' },
+        400,
+      );
     const modelingPlan = MODELING_PLANS.find(p => p.key === b.modelingPlan?.key) ?? MODELING_PLANS[0];
     // Valora: a avaliação trabalha dentro das quotas do plano escolhido (por omissão, o Essencial mensal).
-    const valuationPlan = VALUATION_PLANS.find(p => p.key === b.valuationPlan?.key) ?? VALUATION_PLANS[0], valuationCycle = b.valuationPlan?.cycle ?? 'monthly';
+    const valuationPlan = VALUATION_PLANS.find(p => p.key === b.valuationPlan?.key) ?? VALUATION_PLANS[0],
+      valuationCycle = b.valuationPlan?.cycle ?? 'monthly';
     const modelingCycle = b.modelingPlan?.cycle ?? 'monthly';
     const primarySector = b.modelingPlan?.primarySector ?? defaultModelingSector(b.company.sector);
-    const selectedSectors = b.modelingPlan?.sectors ?? [primarySector, ...[...new Set(['servicos', 'comercio', ...FINANCIAL_SECTORS])].filter(s => s !== primarySector).slice(0, modelingPlan.sectorLimit - 1)];
-    const modelingSectors = hasModeling ? validateModelingSectors(modelingPlan.key, primarySector, selectedSectors) : [];
-    if (hasModeling && modelingPlan.prices[modelingCycle] === null) return c.json({ error: 'ciclo_indisponivel', message: 'O plano não está disponível no ciclo escolhido.' }, 400);
+    const selectedSectors = b.modelingPlan?.sectors ?? [
+      primarySector,
+      ...[...new Set(['servicos', 'comercio', ...FINANCIAL_SECTORS])]
+        .filter(s => s !== primarySector)
+        .slice(0, modelingPlan.sectorLimit - 1),
+    ];
+    const modelingSectors = hasModeling
+      ? validateModelingSectors(modelingPlan.key, primarySector, selectedSectors)
+      : [];
+    if (hasModeling && modelingPlan.prices[modelingCycle] === null)
+      return c.json({ error: 'ciclo_indisponivel', message: 'O plano não está disponível no ciclo escolhido.' }, 400);
     const db = getDb();
     const passwordHash = await hashPassword(b.password);
-    const result = await db.transaction(async (tx) => {
-      const [co] = await tx.insert(companies).values({ name: b.company.name, nif: b.company.nif, sector: b.company.sector ?? null, address: b.company.address ?? null, code: companyCode() }).returning();
+    const result = await db.transaction(async tx => {
+      const [co] = await tx
+        .insert(companies)
+        .values({
+          name: b.company.name,
+          nif: b.company.nif,
+          sector: b.company.sector ?? null,
+          address: b.company.address ?? null,
+          code: companyCode(),
+        })
+        .returning();
       // Período experimental com o escalão adequado à dimensão declarada.
       const trialEnd = trialEndDate(luandaDate(co!.createdAt));
-      await tx.insert(subscriptions).values({ companyId: co!.id, status: hasHr ? 'trial' : 'cancelled', tierKey: hrTier.key, cycle: b.hrPlan?.cycle ?? 'monthly', trialEndsAt: hasHr ? trialEnd : null });
-      const [u] = await tx.insert(users).values({ companyId: co!.id, email: b.email.toLowerCase(), name: b.name, passwordHash, role: 'owner', emailVerificationRequired: true }).returning();
+      await tx.insert(subscriptions).values({
+        companyId: co!.id,
+        status: hasHr ? 'trial' : 'cancelled',
+        tierKey: hrTier.key,
+        cycle: b.hrPlan?.cycle ?? 'monthly',
+        trialEndsAt: hasHr ? trialEnd : null,
+      });
+      const [u] = await tx
+        .insert(users)
+        .values({
+          companyId: co!.id,
+          email: b.email.toLowerCase(),
+          name: b.name,
+          passwordHash,
+          role: 'owner',
+          emailVerificationRequired: true,
+        })
+        .returning();
       await tx.insert(companyModules).values([
         { companyId: co!.id, module: 'hr', enabled: hasHr, status: hasHr ? 'trial' : 'cancelled' },
-        ...(hasValuation ? [{ companyId: co!.id, module: 'valuation', enabled: true, status: 'trial', trialEndsAt: trialEnd, projectLimit: valuationPlan.analysisLimit, planKey: valuationPlan.key, cycle: valuationCycle }] : []),
-        ...(hasModeling ? [{ companyId: co!.id, module: 'modeling', enabled: true, status: 'trial', trialEndsAt: trialEnd, planKey: modelingPlan.key, cycle: modelingCycle, projectLimit: modelingPlan.projectLimit, primarySector, modelingSectors }] : []),
+        ...(hasValuation
+          ? [
+              {
+                companyId: co!.id,
+                module: 'valuation',
+                enabled: true,
+                status: 'trial',
+                trialEndsAt: trialEnd,
+                projectLimit: valuationPlan.analysisLimit,
+                planKey: valuationPlan.key,
+                cycle: valuationCycle,
+              },
+            ]
+          : []),
+        ...(hasModeling
+          ? [
+              {
+                companyId: co!.id,
+                module: 'modeling',
+                enabled: true,
+                status: 'trial',
+                trialEndsAt: trialEnd,
+                planKey: modelingPlan.key,
+                cycle: modelingCycle,
+                projectLimit: modelingPlan.projectLimit,
+                primarySector,
+                modelingSectors,
+              },
+            ]
+          : []),
       ]);
       if (hasModeling) await tx.insert(modelingMembers).values({ companyId: co!.id, userId: u!.id, addedBy: u!.id });
       if (hasValuation) await tx.insert(valuationMembers).values({ companyId: co!.id, userId: u!.id, addedBy: u!.id });
       // Pré-configuração do sector: regimes de horário e subsídios sugeridos (a empresa ajusta depois).
       if (hasHr) await applySectorPreset(tx, co!.id, co!.sector, u!.id);
-      await tx.insert(auditLogs).values({ companyId: co!.id, actorId: u!.id, action: 'register', entity: 'company', entityId: co!.id, after: { company: co, owner: { id: u!.id, email: u!.email }, terms: { accepted: true, version: REGISTRATION_TERMS_VERSION, acceptedAt: new Date().toISOString() }, modules: b.modules, hrPlan: hasHr ? { tierKey: hrTier.key, cycle: b.hrPlan?.cycle ?? 'monthly' } : null, modelingPlan: hasModeling ? { key: modelingPlan.key, cycle: modelingCycle } : null, valuation: hasValuation ? { planKey: valuationPlan.key, cycle: valuationCycle, analysisLimit: valuationPlan.analysisLimit } : null } });
+      await tx.insert(auditLogs).values({
+        companyId: co!.id,
+        actorId: u!.id,
+        action: 'register',
+        entity: 'company',
+        entityId: co!.id,
+        after: {
+          company: co,
+          owner: { id: u!.id, email: u!.email },
+          terms: { accepted: true, version: REGISTRATION_TERMS_VERSION, acceptedAt: new Date().toISOString() },
+          modules: b.modules,
+          hrPlan: hasHr ? { tierKey: hrTier.key, cycle: b.hrPlan?.cycle ?? 'monthly' } : null,
+          modelingPlan: hasModeling ? { key: modelingPlan.key, cycle: modelingCycle } : null,
+          valuation: hasValuation
+            ? { planKey: valuationPlan.key, cycle: valuationCycle, analysisLimit: valuationPlan.analysisLimit }
+            : null,
+        },
+      });
       return { company: co!, user: u!, trialEnd };
     });
-    const token = await startSession(c, { sub: result.user.id, companyId: result.company.id, role: 'owner', employeeId: null, name: result.user.name });
+    const token = await startSession(c, {
+      sub: result.user.id,
+      companyId: result.company.id,
+      role: 'owner',
+      employeeId: null,
+      name: result.user.name,
+    });
     const verification = await issueEmailVerification(db, result.user.id);
     // Boas-vindas ao proprietário e aviso à administração da plataforma (sem bloquear o registo).
     const base = appBaseUrl();
     await sendMail(db, {
-      to: result.user.email, companyId: result.company.id, kind: 'boas_vindas', subject: 'Bem-vindo ao Kianda', title: `Bem-vindo ao Kianda, ${result.user.name.split(' ')[0]}`,
-      paragraphs: [`A conta de ${result.company.name} está criada. Confirme o email na ligação enviada separadamente para iniciar os ${TRIAL_DAYS} dias de experiência nos módulos escolhidos: ${new Intl.ListFormat('pt', { type: 'conjunction' }).format([hasHr ? 'Recursos Humanos' : '', hasModeling ? 'Modelagem Financeira' : '', hasValuation ? 'Análise e Avaliação (Valora)' : ''].filter(Boolean))}.`, 'Sem cobrança automática. Durante a avaliação, pode introduzir dados e pré-visualizar os documentos; exportar e imprimir exige uma subscrição paga. Escolha o plano e o pagamento depois de entrar na conta, em Módulos e licenças.'],
-      facts: [['Código da empresa', result.company.code ?? '—']], button: base ? { label: 'Ver módulos e licenças', url: `${base}/licenca` } : null,
+      to: result.user.email,
+      companyId: result.company.id,
+      kind: 'boas_vindas',
+      subject: 'Bem-vindo ao Kianda',
+      title: `Bem-vindo ao Kianda, ${result.user.name.split(' ')[0]}`,
+      paragraphs: [
+        `A conta de ${result.company.name} está criada. Confirme o email na ligação enviada separadamente para iniciar os ${TRIAL_DAYS} dias de experiência nos módulos escolhidos: ${new Intl.ListFormat('pt', { type: 'conjunction' }).format([hasHr ? 'Recursos Humanos' : '', hasModeling ? 'Modelagem Financeira' : '', hasValuation ? 'Análise e Avaliação (Valora)' : ''].filter(Boolean))}.`,
+        'Sem cobrança automática. Durante a avaliação, pode introduzir dados e pré-visualizar os documentos; exportar e imprimir exige uma subscrição paga. Escolha o plano e o pagamento depois de entrar na conta, em Módulos e licenças.',
+      ],
+      facts: [['Código da empresa', result.company.code ?? '—']],
+      button: base ? { label: 'Ver módulos e licenças', url: `${base}/licenca` } : null,
     });
     for (const a of await db.select().from(platformAdmins)) {
       await sendMail(db, {
-        to: a.email, kind: 'plataforma_registo', subject: `Nova empresa no Kianda — ${result.company.name}`, title: 'Nova empresa registada',
-        paragraphs: [`${result.company.name} (NIF ${result.company.nif}) registou-se${b.company.sector ? ` — sector ${SECTORS[b.company.sector]}` : ''}${b.company.employeesEstimate ? `, cerca de ${b.company.employeesEstimate} colaboradores` : ''}.`, `Proprietário: ${result.user.name} (${result.user.email}).`],
+        to: a.email,
+        kind: 'plataforma_registo',
+        subject: `Nova empresa no Kianda — ${result.company.name}`,
+        title: 'Nova empresa registada',
+        paragraphs: [
+          `${result.company.name} (NIF ${result.company.nif}) registou-se${b.company.sector ? ` — sector ${SECTORS[b.company.sector]}` : ''}${b.company.employeesEstimate ? `, cerca de ${b.company.employeesEstimate} colaboradores` : ''}.`,
+          `Proprietário: ${result.user.name} (${result.user.email}).`,
+        ],
         button: base ? { label: 'Abrir consola', url: `${base}/plataforma` } : null,
       });
     }
-    return c.json({ company: result.company, user: { id: result.user.id, name: result.user.name, email: result.user.email, role: 'owner' }, token, requiresEmailVerification: true, verification }, 201);
+    return c.json(
+      {
+        company: result.company,
+        user: { id: result.user.id, name: result.user.name, email: result.user.email, role: 'owner' },
+        token,
+        requiresEmailVerification: true,
+        verification,
+      },
+      201,
+    );
   });
 
-  app.post('/v1/auth/login', rateLimit('login', 10, 900_000), async (c) => {
-    const b = z.object({ email: z.email(), password: z.string().min(1), companyNif: z.string().optional(), area: z.literal('plataforma').optional() }).parse(await body(c));
+  app.post('/v1/auth/login', rateLimit('login', 10, 900_000), async c => {
+    const b = z
+      .object({
+        email: z.email(),
+        password: z.string().min(1),
+        companyNif: z.string().optional(),
+        area: z.literal('plataforma').optional(),
+      })
+      .parse(await body(c));
     const db = getDb();
     const nif = b.area === 'plataforma' ? PLATFORM_NIF : b.companyNif;
-    const rows = await db.select({ u: users, co: companies }).from(users).innerJoin(companies, eq(companies.id, users.companyId))
+    const rows = await db
+      .select({ u: users, co: companies })
+      .from(users)
+      .innerJoin(companies, eq(companies.id, users.companyId))
       .where(and(eq(users.email, b.email.toLowerCase()), nif ? eq(companies.nif, nif) : undefined));
     const companyRows = rows.filter(({ co }) => co.nif !== PLATFORM_NIF);
     const matches = companyRows.length ? companyRows : rows;
-    if (matches.length > 1) return c.json({ error: 'varias_empresas', message: 'Este email existe em várias empresas. Indique o NIF da empresa.' }, 409);
+    if (matches.length > 1)
+      return c.json(
+        { error: 'varias_empresas', message: 'Este email existe em várias empresas. Indique o NIF da empresa.' },
+        409,
+      );
     const row = matches[0];
     if (row && isLocked(row.u)) return c.json(LOCKED, 429);
     // Mesma resposta para email inexistente e palavra-passe errada (não revela contas).
@@ -157,7 +411,7 @@ export function authRoutes() {
   });
 
   /** Segundo passo: código da aplicação autenticadora (bilhete de 5 minutos emitido no primeiro passo). */
-  app.post('/v1/auth/login/2fa', rateLimit('login2fa', 10, 900_000), async (c) => {
+  app.post('/v1/auth/login/2fa', rateLimit('login2fa', 10, 900_000), async c => {
     const b = z.object({ ticket: z.string(), code: z.string().trim() }).parse(await body(c));
     let claims: { sub: string; purpose: string };
     try {
@@ -167,78 +421,152 @@ export function authRoutes() {
       return c.json({ error: 'bilhete_expirado', message: 'O pedido expirou. Volte a iniciar sessão.' }, 401);
     }
     const db = getDb();
-    const [row] = await db.select({ u: users, co: companies }).from(users).innerJoin(companies, eq(companies.id, users.companyId)).where(eq(users.id, claims.sub));
-    if (!row || !row.u.totpSecret || !row.u.totpEnabledAt) return c.json({ error: 'bilhete_expirado', message: 'Volte a iniciar sessão.' }, 401);
+    const [row] = await db
+      .select({ u: users, co: companies })
+      .from(users)
+      .innerJoin(companies, eq(companies.id, users.companyId))
+      .where(eq(users.id, claims.sub));
+    if (!row || !row.u.totpSecret || !row.u.totpEnabledAt)
+      return c.json({ error: 'bilhete_expirado', message: 'Volte a iniciar sessão.' }, 401);
     if (isLocked(row.u)) return c.json(LOCKED, 429);
     if (!(await verifyTotp(row.u.totpSecret, b.code))) {
       await registerFailure(db, row.u);
-      return c.json({ error: 'codigo_invalido', message: 'Código incorrecto. Confirme a hora do telemóvel e use o código mais recente.' }, 401);
+      return c.json(
+        {
+          error: 'codigo_invalido',
+          message: 'Código incorrecto. Confirme a hora do telemóvel e use o código mais recente.',
+        },
+        401,
+      );
     }
     return completeLogin(c, db, row.u, row.co, '2fa', true);
   });
 
   /** Alterar a própria palavra-passe (confirma a actual). */
-  app.post('/v1/auth/password', requireAccount, rateLimit('password', 10, 900_000), async (c) => {
+  app.post('/v1/auth/password', requireAccount, rateLimit('password', 10, 900_000), async c => {
     const actor = c.get('actor');
-    const b = z.object({ current: z.string().min(1, 'Indique a palavra-passe actual'), next: password }).parse(await body(c));
+    const b = z
+      .object({ current: z.string().min(1, 'Indique a palavra-passe actual'), next: password })
+      .parse(await body(c));
     const db = getDb();
     const [u] = await db.select().from(users).where(eq(users.id, actor.actorId));
-    if (!u || !(await verifyPassword(b.current, u.passwordHash))) return c.json({ error: 'credenciais_invalidas', message: 'A palavra-passe actual está errada.' }, 400);
-    if (b.current === b.next) return c.json({ error: 'igual', message: 'A nova palavra-passe tem de ser diferente da actual.' }, 400);
+    if (!u || !(await verifyPassword(b.current, u.passwordHash)))
+      return c.json({ error: 'credenciais_invalidas', message: 'A palavra-passe actual está errada.' }, 400);
+    if (b.current === b.next)
+      return c.json({ error: 'igual', message: 'A nova palavra-passe tem de ser diferente da actual.' }, 400);
     // Nova palavra-passe termina as outras sessões; esta continua com um token novo.
-    await db.update(users).set({ passwordHash: await hashPassword(b.next), sessionVersion: sql`${users.sessionVersion} + 1` }).where(eq(users.id, u.id));
-    await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'change_password', entity: 'user', entityId: u.id });
+    await db
+      .update(users)
+      .set({ passwordHash: await hashPassword(b.next), sessionVersion: sql`${users.sessionVersion} + 1` })
+      .where(eq(users.id, u.id));
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'change_password',
+      entity: 'user',
+      entityId: u.id,
+    });
     await startSession(c, actor.session);
     return c.json({ ok: true });
   });
 
   /** Terminar a sessão em todos os outros dispositivos (telemóvel perdido, computador partilhado). */
-  app.post('/v1/auth/sessions/end-others', requireAccount, rateLimit('sessions', 10, 900_000), async (c) => {
-    const actor = c.get('actor'), db = getDb();
-    await db.update(users).set({ sessionVersion: sql`${users.sessionVersion} + 1` }).where(eq(users.id, actor.actorId));
-    await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'end_sessions', entity: 'user', entityId: actor.actorId });
+  app.post('/v1/auth/sessions/end-others', requireAccount, rateLimit('sessions', 10, 900_000), async c => {
+    const actor = c.get('actor'),
+      db = getDb();
+    await db
+      .update(users)
+      .set({ sessionVersion: sql`${users.sessionVersion} + 1` })
+      .where(eq(users.id, actor.actorId));
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'end_sessions',
+      entity: 'user',
+      entityId: actor.actorId,
+    });
     await startSession(c, actor.session);
     return c.json({ ok: true });
   });
 
-  app.post('/v1/auth/logout', async (c) => {
+  app.post('/v1/auth/logout', async c => {
     const token = sessionToken(c);
     if (token) {
       const claims = await verify(token, jwtSecret(), 'HS256').catch(() => null);
       if (typeof claims?.sub === 'string' && typeof claims.companyId === 'string' && typeof claims.exp === 'number') {
-        await getDb().insert(revokedSessions).values({ tokenHash: await sha256Hex(token), expiresAt: new Date(claims.exp * 1000) }).onConflictDoNothing();
+        await getDb()
+          .insert(revokedSessions)
+          .values({ tokenHash: await sha256Hex(token), expiresAt: new Date(claims.exp * 1000) })
+          .onConflictDoNothing();
       }
     }
     deleteCookie(c, SESSION_COOKIE, { path: '/', secure: secureCookie(c), httpOnly: true, sameSite: 'Lax' });
     return c.json({ ok: true });
   });
 
-  app.get('/v1/auth/me', requireAccount, async (c) => {
+  app.get('/v1/auth/me', requireAccount, async c => {
     const { session } = c.get('actor');
     const { exp: _exp, ...user } = session as SessionClaims & { exp?: number };
-    return c.json({ user, ...await accountOverview(getDb(), c.get('actor')) });
+    return c.json({ user, ...(await accountOverview(getDb(), c.get('actor'))) });
   });
 
   /** Gestão de utilizadores da empresa (proprietário e administração de RH). */
-  app.get('/v1/users', requireCompany, requireRole('hr_admin'), async (c) => {
-    return c.json(await getDb().select({ id: users.id, name: users.name, email: users.email, role: users.role, employeeId: users.employeeId, createdAt: users.createdAt }).from(users).where(eq(users.companyId, c.get('actor').companyId)));
+  app.get('/v1/users', requireCompany, requireRole('hr_admin'), async c => {
+    return c.json(
+      await getDb()
+        .select({
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          role: users.role,
+          employeeId: users.employeeId,
+          createdAt: users.createdAt,
+        })
+        .from(users)
+        .where(eq(users.companyId, c.get('actor').companyId)),
+    );
   });
 
-  app.post('/v1/users', requireCompany, requireRole('hr_admin'), async (c) => {
+  app.post('/v1/users', requireCompany, requireRole('hr_admin'), async c => {
     const actor = c.get('actor');
-    const b = z.object({
-      name: z.string().min(2), email: z.email(), password,
-      role: z.enum(['hr_admin', 'payroll', 'finance', 'manager', 'employee']),
-      employeeId: z.string().optional(),
-    }).parse(await body(c));
-    if (b.role === 'hr_admin' && actor.role !== 'owner') return c.json({ error: 'sem_permissao', message: 'Só o proprietário pode criar administradores de RH.' }, 403);
+    const b = z
+      .object({
+        name: z.string().min(2),
+        email: z.email(),
+        password,
+        role: z.enum(['hr_admin', 'payroll', 'finance', 'manager', 'employee']),
+        employeeId: z.string().optional(),
+      })
+      .parse(await body(c));
+    if (b.role === 'hr_admin' && actor.role !== 'owner')
+      return c.json({ error: 'sem_permissao', message: 'Só o proprietário pode criar administradores de RH.' }, 403);
     const db = getDb();
     if (b.employeeId) {
-      const [e] = await db.select().from(employees).where(and(eq(employees.id, b.employeeId), eq(employees.companyId, actor.companyId)));
+      const [e] = await db
+        .select()
+        .from(employees)
+        .where(and(eq(employees.id, b.employeeId), eq(employees.companyId, actor.companyId)));
       if (!e) return c.json({ error: 'colaborador_inexistente', message: 'Colaborador inexistente' }, 404);
     }
-    const [u] = await db.insert(users).values({ companyId: actor.companyId, name: b.name, email: b.email.toLowerCase(), passwordHash: await hashPassword(b.password), role: b.role as Role, employeeId: b.employeeId }).returning();
-    await db.insert(auditLogs).values({ companyId: actor.companyId, actorId: actor.actorId, action: 'create', entity: 'user', entityId: u!.id, after: { email: u!.email, role: u!.role } });
+    const [u] = await db
+      .insert(users)
+      .values({
+        companyId: actor.companyId,
+        name: b.name,
+        email: b.email.toLowerCase(),
+        passwordHash: await hashPassword(b.password),
+        role: b.role as Role,
+        employeeId: b.employeeId,
+      })
+      .returning();
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'create',
+      entity: 'user',
+      entityId: u!.id,
+      after: { email: u!.email, role: u!.role },
+    });
     return c.json({ id: u!.id, name: u!.name, email: u!.email, role: u!.role, employeeId: u!.employeeId }, 201);
   });
 

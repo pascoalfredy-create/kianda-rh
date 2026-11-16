@@ -1,4 +1,13 @@
-import { AO_2026, calculatePayroll, getPack, kz, labourRules, listPacks, PackNotFoundError, solveBaseForNet } from '@kianda/core';
+import {
+  AO_2026,
+  calculatePayroll,
+  getPack,
+  kz,
+  labourRules,
+  listPacks,
+  PackNotFoundError,
+  solveBaseForNet,
+} from '@kianda/core';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { body, clientIp, jwtSecret, type AppEnv } from '../plugins/tenant.js';
@@ -7,62 +16,95 @@ import { appBaseUrl } from '../services/integrations.js';
 import { getDb } from '@kianda/db';
 import { platformSettingsGet } from '../services/licence.js';
 
-const simulateBody = z.object({
-  period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
-  /** Valores em kwanzas (a API converte para cêntimos). */
-  base: z.number().nonnegative().optional(),
-  targetNet: z.number().nonnegative().optional(),
-  meal: z.number().nonnegative().default(0),
-  transport: z.number().nonnegative().default(0),
-  overtimeHours: z.number().nonnegative().default(0),
-  holidaySubsidy: z.boolean().default(false),
-  christmasSubsidy: z.boolean().default(false),
-}).refine((b) => b.base !== undefined || b.targetNet !== undefined, { message: 'Indique base ou targetNet' });
+const simulateBody = z
+  .object({
+    period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+    /** Valores em kwanzas (a API converte para cêntimos). */
+    base: z.number().nonnegative().optional(),
+    targetNet: z.number().nonnegative().optional(),
+    meal: z.number().nonnegative().default(0),
+    transport: z.number().nonnegative().default(0),
+    overtimeHours: z.number().nonnegative().default(0),
+    holidaySubsidy: z.boolean().default(false),
+    christmasSubsidy: z.boolean().default(false),
+  })
+  .refine(b => b.base !== undefined || b.targetNet !== undefined, { message: 'Indique base ou targetNet' });
 
 /** Rotas sem empresa: saúde, regras publicadas e simulador salarial. */
 export function publicRoutes() {
   const app = new Hono<AppEnv>();
 
-  app.get('/health', (c) => c.json({ status: 'ok', packs: listPacks() }));
+  app.get('/health', c => c.json({ status: 'ok', packs: listPacks() }));
   /** Contacto de suporte comercial, para a página pública e o cadastro (sem sessão). */
-  app.get('/v1/public/support', async (c) => {
+  app.get('/v1/public/support', async c => {
     const { supportEmail, supportPhone } = await platformSettingsGet(getDb());
     return c.json({ email: supportEmail, phone: supportPhone }, 200, { 'cache-control': 'public, max-age=600' });
   });
 
   /** Contador de visitas do site público: sem cookies, sem IP guardado; robôs ignorados. Responde sempre 204. */
-  app.post('/v1/public/visit', async (c) => {
-    const v = z.object({ path: z.string().max(300).default('/'), referrer: z.string().max(500).nullish(), source: z.string().max(80).nullish() }).safeParse(await body(c));
+  app.post('/v1/public/visit', async c => {
+    const v = z
+      .object({
+        path: z.string().max(300).default('/'),
+        referrer: z.string().max(500).nullish(),
+        source: z.string().max(80).nullish(),
+      })
+      .safeParse(await body(c));
     if (v.success) {
       const host = appBaseUrl()?.replace(/^https?:\/\//, '') ?? null;
-      await recordVisit(getDb(), v.data, { ip: clientIp(c), ua: c.req.header('user-agent') ?? '', country: c.req.header('cf-ipcountry')?.toUpperCase() ?? null, ownHost: host, secret: jwtSecret() });
+      await recordVisit(getDb(), v.data, {
+        ip: clientIp(c),
+        ua: c.req.header('user-agent') ?? '',
+        country: c.req.header('cf-ipcountry')?.toUpperCase() ?? null,
+        ownHost: host,
+        secret: jwtSecret(),
+      });
     }
     return c.body(null, 204, { 'cache-control': 'no-store' });
   });
 
-  app.get('/v1/packs/AO/:year', (c) => {
+  app.get('/v1/packs/AO/:year', c => {
     const { year } = z.object({ year: z.coerce.number().int() }).parse(c.req.param());
     try {
       const p = getPack('AO', year);
-      return c.json({ version: p.version, irtBrackets: p.irt.brackets.length, minimumWage: p.minimumWage, labour: p.labour, holidays: p.holidays, toValidate: p.toValidate, sources: p.sources });
+      return c.json({
+        version: p.version,
+        irtBrackets: p.irt.brackets.length,
+        minimumWage: p.minimumWage,
+        labour: p.labour,
+        holidays: p.holidays,
+        toValidate: p.toValidate,
+        sources: p.sources,
+      });
     } catch (e) {
       if (e instanceof PackNotFoundError) return c.json({ error: 'pacote_inexistente', message: e.message }, 404);
       throw e;
     }
   });
 
-  app.post('/v1/payroll/simulate', async (c) => {
+  app.post('/v1/payroll/simulate', async c => {
     const b = simulateBody.parse(await body(c));
-    const rest = { period: b.period, mealMinor: kz(b.meal), transportMinor: kz(b.transport), overtimeHours: b.overtimeHours, holidaySubsidy: b.holidaySubsidy, christmasSubsidy: b.christmasSubsidy };
-    return c.json(b.base !== undefined ? calculatePayroll({ ...rest, baseMinor: kz(b.base) }) : solveBaseForNet(kz(b.targetNet!), rest));
+    const rest = {
+      period: b.period,
+      mealMinor: kz(b.meal),
+      transportMinor: kz(b.transport),
+      overtimeHours: b.overtimeHours,
+      holidaySubsidy: b.holidaySubsidy,
+      christmasSubsidy: b.christmasSubsidy,
+    };
+    return c.json(
+      b.base !== undefined
+        ? calculatePayroll({ ...rest, baseMinor: kz(b.base) })
+        : solveBaseForNet(kz(b.targetNet!), rest),
+    );
   });
 
   /** Feriados nacionais do ano (gerados; disponíveis mesmo sem pacote fiscal publicado). */
-  app.get('/v1/holidays/:year', (c) => {
+  app.get('/v1/holidays/:year', c => {
     const { year } = z.object({ year: z.coerce.number().int().min(2020).max(2100) }).parse(c.req.param());
     return c.json(labourRules('AO', year).holidays);
   });
 
-  app.get('/v1/packs', (c) => c.json({ available: listPacks(), current: AO_2026.version }));
+  app.get('/v1/packs', c => c.json({ available: listPacks(), current: AO_2026.version }));
   return app;
 }

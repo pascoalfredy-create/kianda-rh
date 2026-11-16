@@ -38,7 +38,9 @@ jobs:
       - run: pnpm --filter @kianda/db build
       - run: pnpm db:migrate
       - run: pnpm typecheck
-      - name: Análise estática (ESLint com tipos)
+      - name: Formatação (Prettier)
+        run: pnpm format:check
+      - name: Análise estática (ESLint com tipos e complexidade)
         run: pnpm lint
       - run: pnpm test
       - name: Build Cloudflare (OpenNext)

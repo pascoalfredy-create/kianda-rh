@@ -11,25 +11,103 @@ import { fullMonthsBetween } from './leave.js';
  */
 
 export type TerminationReason =
-  | 'resignation' | 'resignation_just_cause' | 'mutual_agreement' | 'fixed_term_expiry' | 'objective_dismissal'
-  | 'collective_dismissal' | 'disciplinary_dismissal' | 'probation' | 'retirement' | 'death' | 'employer_extinction';
+  | 'resignation'
+  | 'resignation_just_cause'
+  | 'mutual_agreement'
+  | 'fixed_term_expiry'
+  | 'objective_dismissal'
+  | 'collective_dismissal'
+  | 'disciplinary_dismissal'
+  | 'probation'
+  | 'retirement'
+  | 'death'
+  | 'employer_extinction';
 
-export const TERMINATION_REASONS: Record<TerminationReason, { label: string; legal: string; notice: 'employee' | 'employer' | null; compensation: 'objective' | 'just_cause' | 'agreed' | 'extinction' | null }> = {
-  resignation: { label: 'Denúncia pelo trabalhador (demissão)', legal: 'Art. 305.º — aviso prévio do trabalhador', notice: 'employee', compensation: null },
-  resignation_just_cause: { label: 'Rescisão pelo trabalhador com justa causa (despedimento indirecto)', legal: 'Arts. 303.º e 310.º — indemnização de 1 salário base por ano, mínimo de 3', notice: null, compensation: 'just_cause' },
-  mutual_agreement: { label: 'Revogação por mútuo acordo', legal: 'Compensação acordada entre as partes', notice: null, compensation: 'agreed' },
-  fixed_term_expiry: { label: 'Caducidade do contrato por tempo determinado', legal: 'Art. 17.º, n.º 3 e 4 — aviso de não renovação', notice: 'employer', compensation: null },
-  objective_dismissal: { label: 'Despedimento individual por causas objectivas', legal: 'Arts. 284.º a 289.º — aviso prévio e compensação', notice: 'employer', compensation: 'objective' },
-  collective_dismissal: { label: 'Despedimento colectivo', legal: 'Arts. 290.º a 295.º — aviso prévio e compensação', notice: 'employer', compensation: 'objective' },
-  disciplinary_dismissal: { label: 'Despedimento disciplinar', legal: 'Sem compensação (procedimento disciplinar)', notice: null, compensation: null },
-  probation: { label: 'Cessação no período experimental', legal: 'Art. 18.º, n.º 4 — sem aviso nem indemnização', notice: null, compensation: null },
+export const TERMINATION_REASONS: Record<
+  TerminationReason,
+  {
+    label: string;
+    legal: string;
+    notice: 'employee' | 'employer' | null;
+    compensation: 'objective' | 'just_cause' | 'agreed' | 'extinction' | null;
+  }
+> = {
+  resignation: {
+    label: 'Denúncia pelo trabalhador (demissão)',
+    legal: 'Art. 305.º — aviso prévio do trabalhador',
+    notice: 'employee',
+    compensation: null,
+  },
+  resignation_just_cause: {
+    label: 'Rescisão pelo trabalhador com justa causa (despedimento indirecto)',
+    legal: 'Arts. 303.º e 310.º — indemnização de 1 salário base por ano, mínimo de 3',
+    notice: null,
+    compensation: 'just_cause',
+  },
+  mutual_agreement: {
+    label: 'Revogação por mútuo acordo',
+    legal: 'Compensação acordada entre as partes',
+    notice: null,
+    compensation: 'agreed',
+  },
+  fixed_term_expiry: {
+    label: 'Caducidade do contrato por tempo determinado',
+    legal: 'Art. 17.º, n.º 3 e 4 — aviso de não renovação',
+    notice: 'employer',
+    compensation: null,
+  },
+  objective_dismissal: {
+    label: 'Despedimento individual por causas objectivas',
+    legal: 'Arts. 284.º a 289.º — aviso prévio e compensação',
+    notice: 'employer',
+    compensation: 'objective',
+  },
+  collective_dismissal: {
+    label: 'Despedimento colectivo',
+    legal: 'Arts. 290.º a 295.º — aviso prévio e compensação',
+    notice: 'employer',
+    compensation: 'objective',
+  },
+  disciplinary_dismissal: {
+    label: 'Despedimento disciplinar',
+    legal: 'Sem compensação (procedimento disciplinar)',
+    notice: null,
+    compensation: null,
+  },
+  probation: {
+    label: 'Cessação no período experimental',
+    legal: 'Art. 18.º, n.º 4 — sem aviso nem indemnização',
+    notice: null,
+    compensation: null,
+  },
   retirement: { label: 'Caducidade por reforma do trabalhador', legal: 'Caducidade', notice: null, compensation: null },
-  death: { label: 'Caducidade por morte do trabalhador', legal: 'Caducidade — créditos pagos aos herdeiros', notice: null, compensation: null },
-  employer_extinction: { label: 'Caducidade por morte, reforma, insolvência ou extinção do empregador', legal: 'Arts. 277.º, 278.º e 307.º — compensação de 50% do salário base por ano', notice: null, compensation: 'extinction' },
+  death: {
+    label: 'Caducidade por morte do trabalhador',
+    legal: 'Caducidade — créditos pagos aos herdeiros',
+    notice: null,
+    compensation: null,
+  },
+  employer_extinction: {
+    label: 'Caducidade por morte, reforma, insolvência ou extinção do empregador',
+    legal: 'Arts. 277.º, 278.º e 307.º — compensação de 50% do salário base por ano',
+    notice: null,
+    compensation: 'extinction',
+  },
 };
 
 export interface SettlementItem {
-  code: 'FERNG' | 'FERPROP' | 'SUBFER' | 'SUBFERPROP' | 'SUBNAT' | 'COMP' | 'COMPEXC' | 'AVISO' | 'AVISODESC' | 'OUTABON' | 'OUTDESC';
+  code:
+    | 'FERNG'
+    | 'FERPROP'
+    | 'SUBFER'
+    | 'SUBFERPROP'
+    | 'SUBNAT'
+    | 'COMP'
+    | 'COMPEXC'
+    | 'AVISO'
+    | 'AVISODESC'
+    | 'OUTABON'
+    | 'OUTDESC';
   label: string;
   basis: string;
   kind: 'earning' | 'deduction';
@@ -39,10 +117,17 @@ export interface SettlementItem {
 }
 
 export const SETTLEMENT_LABEL: Record<SettlementItem['code'], string> = {
-  FERNG: 'Férias vencidas e não gozadas', FERPROP: 'Férias proporcionais ao tempo de serviço no ano da cessação',
-  SUBFER: 'Subsídio de férias do ano', SUBFERPROP: 'Subsídio de férias proporcional', SUBNAT: 'Subsídio de Natal proporcional',
-  COMP: 'Compensação por cessação', COMPEXC: 'Compensação acordada acima do valor legal', AVISO: 'Compensação por falta de aviso prévio',
-  AVISODESC: 'Falta de aviso prévio do trabalhador', OUTABON: 'Outro abono', OUTDESC: 'Outro desconto',
+  FERNG: 'Férias vencidas e não gozadas',
+  FERPROP: 'Férias proporcionais ao tempo de serviço no ano da cessação',
+  SUBFER: 'Subsídio de férias do ano',
+  SUBFERPROP: 'Subsídio de férias proporcional',
+  SUBNAT: 'Subsídio de Natal proporcional',
+  COMP: 'Compensação por cessação',
+  COMPEXC: 'Compensação acordada acima do valor legal',
+  AVISO: 'Compensação por falta de aviso prévio',
+  AVISODESC: 'Falta de aviso prévio do trabalhador',
+  OUTABON: 'Outro abono',
+  OUTDESC: 'Outro desconto',
 };
 
 export interface TerminationInput {
@@ -72,7 +157,8 @@ export interface TerminationProposal {
 }
 
 const DAY = 86_400_000;
-const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / DAY);
+const daysBetween = (a: string, b: string) =>
+  Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / DAY);
 
 /** Antiguidade em anos, meses e dias completos entre o início e a data de efeito (inclusive). */
 export function seniority(from: string, to: string) {
@@ -81,8 +167,14 @@ export function seniority(from: string, to: string) {
   let y = end.getUTCFullYear() - fy;
   let m = end.getUTCMonth() + 1 - fm;
   let d = end.getUTCDate() - fd;
-  if (d < 0) { m -= 1; d += new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 0)).getUTCDate(); }
-  if (m < 0) { y -= 1; m += 12; }
+  if (d < 0) {
+    m -= 1;
+    d += new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 0)).getUTCDate();
+  }
+  if (m < 0) {
+    y -= 1;
+    m += 12;
+  }
   const parts = [y ? `${y} ano(s)` : '', m ? `${m} mês(es)` : '', d ? `${d} dia(s)` : ''].filter(Boolean);
   return { years: Math.max(0, y), months: Math.max(0, m), days: Math.max(0, d), label: parts.join(', ') || '0 dias' };
 }
@@ -106,7 +198,14 @@ export function terminationProposal(i: TerminationInput): TerminationProposal {
   const sen = seniority(i.hireDate, i.effectiveDate);
   const notes: string[] = [];
   const items: SettlementItem[] = [];
-  const add = (code: SettlementItem['code'], basis: string, amountMinor: Minor, kind: SettlementItem['kind'], inInss: boolean, inIrt: boolean) => {
+  const add = (
+    code: SettlementItem['code'],
+    basis: string,
+    amountMinor: Minor,
+    kind: SettlementItem['kind'],
+    inInss: boolean,
+    inIrt: boolean,
+  ) => {
     if (amountMinor > 0) items.push({ code, label: SETTLEMENT_LABEL[code], basis, kind, amountMinor, inInss, inIrt });
   };
   const year = Number(i.effectiveDate.slice(0, 4));
@@ -114,61 +213,144 @@ export function terminationProposal(i: TerminationInput): TerminationProposal {
   const kz = (m: Minor) => (m / 100).toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   // Férias e subsídios
-  if (i.vacationUnusedDays > 0) add('FERNG', `${i.vacationUnusedDays} dia(s) úteis × base/${pack.labour.vacationWorkingDays}`, daily(i.vacationUnusedDays), 'earning', true, true);
+  if (i.vacationUnusedDays > 0)
+    add(
+      'FERNG',
+      `${i.vacationUnusedDays} dia(s) úteis × base/${pack.labour.vacationWorkingDays}`,
+      daily(i.vacationUnusedDays),
+      'earning',
+      true,
+      true,
+    );
   const yearStart = `${year}-01-01`;
   const hiredThisYear = i.hireDate >= yearStart;
   const monthsThisYear = fullMonthsBetween(hiredThisYear ? i.hireDate : yearStart, i.effectiveDate);
   // A remuneração de férias proporcionais segue o art. 212.º. A gratificação usa meses completos (art. 238.º).
   const propDays = Math.min(pack.labour.vacationWorkingDays, monthsThisYear * pack.leave.firstYearDaysPerMonth);
-  add('FERPROP', `${monthsThisYear} mês(es) completo(s) × ${pack.leave.firstYearDaysPerMonth} dias = ${propDays} dia(s) × base/${pack.labour.vacationWorkingDays}`, daily(propDays), 'earning', true, true);
+  add(
+    'FERPROP',
+    `${monthsThisYear} mês(es) completo(s) × ${pack.leave.firstYearDaysPerMonth} dias = ${propDays} dia(s) × base/${pack.labour.vacationWorkingDays}`,
+    daily(propDays),
+    'earning',
+    true,
+    true,
+  );
   const holidayBase = applyBps(i.baseMinor, pack.labour.holidaySubsidyBps);
   if (!hiredThisYear) {
-    add('SUBFERPROP', `${pack.labour.holidaySubsidyBps / 100}% da base × ${monthsThisYear}/12 meses completos`, prorate(holidayBase, monthsThisYear, 12), 'earning', pack.inss.holidaySubsidyInBase, true);
+    add(
+      'SUBFERPROP',
+      `${pack.labour.holidaySubsidyBps / 100}% da base × ${monthsThisYear}/12 meses completos`,
+      prorate(holidayBase, monthsThisYear, 12),
+      'earning',
+      pack.inss.holidaySubsidyInBase,
+      true,
+    );
   }
   if (!i.holidaySubsidyPaidThisYear) {
     const holidayMonths = hiredThisYear ? monthsThisYear : 12;
-    add('SUBFER', `${pack.labour.holidaySubsidyBps / 100}% da base × ${holidayMonths}/12 meses (não pago em ${year})`, prorate(holidayBase, holidayMonths, 12), 'earning', pack.inss.holidaySubsidyInBase, true);
+    add(
+      'SUBFER',
+      `${pack.labour.holidaySubsidyBps / 100}% da base × ${holidayMonths}/12 meses (não pago em ${year})`,
+      prorate(holidayBase, holidayMonths, 12),
+      'earning',
+      pack.inss.holidaySubsidyInBase,
+      true,
+    );
   }
   if (!i.christmasSubsidyPaidThisYear) {
     // Art. 238.º, n.º 3: proporcional aos meses completos trabalhados no ano.
-    add('SUBNAT', `${pack.labour.christmasSubsidyBps / 100}% da base × ${monthsThisYear}/12 meses completos`, prorate(applyBps(i.baseMinor, pack.labour.christmasSubsidyBps), monthsThisYear, 12), 'earning', pack.inss.christmasSubsidyInBase, true);
+    add(
+      'SUBNAT',
+      `${pack.labour.christmasSubsidyBps / 100}% da base × ${monthsThisYear}/12 meses completos`,
+      prorate(applyBps(i.baseMinor, pack.labour.christmasSubsidyBps), monthsThisYear, 12),
+      'earning',
+      pack.inss.christmasSubsidyInBase,
+      true,
+    );
   }
 
   // Aviso prévio
   const t = pack.termination;
-  const required = i.reason === 'resignation' ? t.resignationNoticeDays
-    : i.reason === 'objective_dismissal' ? t.objectiveDismissalNoticeDays
-      : i.reason === 'collective_dismissal' ? t.collectiveDismissalNoticeDays
-        : i.reason === 'fixed_term_expiry' ? t.fixedTermNoticeDays : 0;
+  const required =
+    i.reason === 'resignation'
+      ? t.resignationNoticeDays
+      : i.reason === 'objective_dismissal'
+        ? t.objectiveDismissalNoticeDays
+        : i.reason === 'collective_dismissal'
+          ? t.collectiveDismissalNoticeDays
+          : i.reason === 'fixed_term_expiry'
+            ? t.fixedTermNoticeDays
+            : 0;
   const given = i.noticeDate && i.noticeDate <= i.effectiveDate ? daysBetween(i.noticeDate, i.effectiveDate) : 0;
   const missing = Math.max(0, required - given);
   if (missing > 0 && def.notice === 'employee') {
-    add('AVISODESC', `${missing} dia(s) de aviso em falta × base/${pack.labour.dailyRateDivisor}`, prorate(i.baseMinor, missing, pack.labour.dailyRateDivisor), 'deduction', false, false);
-    notes.push(`O trabalhador deu ${given} de ${required} dias de aviso prévio: a falta é descontada no fecho de contas (pode ser dispensada pela empresa).`);
+    add(
+      'AVISODESC',
+      `${missing} dia(s) de aviso em falta × base/${pack.labour.dailyRateDivisor}`,
+      prorate(i.baseMinor, missing, pack.labour.dailyRateDivisor),
+      'deduction',
+      false,
+      false,
+    );
+    notes.push(
+      `O trabalhador deu ${given} de ${required} dias de aviso prévio: a falta é descontada no fecho de contas (pode ser dispensada pela empresa).`,
+    );
   } else if (missing > 0 && def.notice === 'employer') {
     const days = i.reason === 'fixed_term_expiry' ? t.fixedTermMissingNoticeDays : missing;
-    add('AVISO', i.reason === 'fixed_term_expiry' ? `Aviso de não renovação em falta: ${days} dias × base/${pack.labour.dailyRateDivisor}` : `${missing} dia(s) de aviso em falta × base/${pack.labour.dailyRateDivisor}`,
-      prorate(i.baseMinor, days, pack.labour.dailyRateDivisor), 'earning', false, false);
+    add(
+      'AVISO',
+      i.reason === 'fixed_term_expiry'
+        ? `Aviso de não renovação em falta: ${days} dias × base/${pack.labour.dailyRateDivisor}`
+        : `${missing} dia(s) de aviso em falta × base/${pack.labour.dailyRateDivisor}`,
+      prorate(i.baseMinor, days, pack.labour.dailyRateDivisor),
+      'earning',
+      false,
+      false,
+    );
     notes.push(`A empresa deu ${given} de ${required} dias de aviso prévio: a falta é paga como compensação.`);
   }
 
   // Compensação legal
   let legal = 0;
   const years = compensationYears(sen, pack);
-  const yearsNote = years !== sen.years ? ` (${sen.label}: fracção ≥ ${t.seniorityFractionMonths} meses conta 1 ano)` : '';
+  const yearsNote =
+    years !== sen.years ? ` (${sen.label}: fracção ≥ ${t.seniorityFractionMonths} meses conta 1 ano)` : '';
   if (def.compensation === 'objective') {
     legal = objectiveCompensation(i.baseMinor, years, pack);
     const over = Math.max(0, years - t.compensationFullYears);
-    add('COMP', `Base ${kz(i.baseMinor)} × ${Math.min(years, t.compensationFullYears)} ano(s)${over ? ` + ${t.compensationExtraYearBps / 100}% × ${over} ano(s)` : ''}${yearsNote}`, legal, 'earning', false, false);
+    add(
+      'COMP',
+      `Base ${kz(i.baseMinor)} × ${Math.min(years, t.compensationFullYears)} ano(s)${over ? ` + ${t.compensationExtraYearBps / 100}% × ${over} ano(s)` : ''}${yearsNote}`,
+      legal,
+      'earning',
+      false,
+      false,
+    );
     if (!years) notes.push(`Antiguidade inferior a ${t.seniorityFractionMonths} meses: sem compensação.`);
   } else if (def.compensation === 'just_cause') {
     const byYears = Math.round(applyBps(i.baseMinor, t.justCauseYearBps) * years);
     const min = i.baseMinor * t.justCauseMinBaseSalaries;
     legal = Math.max(byYears, min);
-    add('COMP', byYears >= min ? `Base ${kz(i.baseMinor)} × ${years} ano(s) de antiguidade${yearsNote}` : `Mínimo legal de ${t.justCauseMinBaseSalaries} salários base`, legal, 'earning', false, false);
+    add(
+      'COMP',
+      byYears >= min
+        ? `Base ${kz(i.baseMinor)} × ${years} ano(s) de antiguidade${yearsNote}`
+        : `Mínimo legal de ${t.justCauseMinBaseSalaries} salários base`,
+      legal,
+      'earning',
+      false,
+      false,
+    );
   } else if (def.compensation === 'extinction') {
     legal = Math.round(applyBps(i.baseMinor, t.employerExtinctionYearBps) * years);
-    add('COMP', `${t.employerExtinctionYearBps / 100}% da base ${kz(i.baseMinor)} × ${years} ano(s)${yearsNote}`, legal, 'earning', false, false);
+    add(
+      'COMP',
+      `${t.employerExtinctionYearBps / 100}% da base ${kz(i.baseMinor)} × ${years} ano(s)${yearsNote}`,
+      legal,
+      'earning',
+      false,
+      false,
+    );
   }
   const agreed = i.agreedCompensationMinor ?? 0;
   if (def.compensation === 'agreed' && agreed > 0) {
@@ -182,20 +364,36 @@ export function terminationProposal(i: TerminationInput): TerminationProposal {
   }
 
   if (i.reason === 'probation' && sen.years === 0 && sen.months * 30 + sen.days > pack.labour.probationDaysIndefinite) {
-    notes.push(`Atenção: o período experimental por omissão é de ${pack.labour.probationDaysIndefinite} dias — confirme que o contrato previa um período mais longo.`);
+    notes.push(
+      `Atenção: o período experimental por omissão é de ${pack.labour.probationDaysIndefinite} dias — confirme que o contrato previa um período mais longo.`,
+    );
   }
   if (i.reason === 'death') notes.push('Os créditos são pagos aos herdeiros, mediante habilitação.');
   if (i.reason === 'objective_dismissal' || i.reason === 'collective_dismissal') {
-    notes.push(`Durante o aviso prévio o trabalhador tem ${t.noticeJobSearchDays} dias de dispensa remunerada para procurar emprego, se os motivos não forem económicos. A compensação e os créditos têm de estar à disposição até ao fim do aviso.`);
+    notes.push(
+      `Durante o aviso prévio o trabalhador tem ${t.noticeJobSearchDays} dias de dispensa remunerada para procurar emprego, se os motivos não forem económicos. A compensação e os créditos têm de estar à disposição até ao fim do aviso.`,
+    );
   }
-  if (i.reason === 'mutual_agreement') notes.push('O acordo é escrito, em duplicado, com a data de efeito e a data de pagamento da compensação.');
+  if (i.reason === 'mutual_agreement')
+    notes.push('O acordo é escrito, em duplicado, com a data de efeito e a data de pagamento da compensação.');
   notes.push(`Prazo de pagamento do fecho de contas: ${t.settlementPaymentDays} dias após a cessação.`);
-  return { seniority: sen, notice: { requiredDays: required, givenDays: Math.min(given, required || given), missingDays: missing, by: def.notice }, legalCompensationMinor: legal, items, notes };
+  return {
+    seniority: sen,
+    notice: {
+      requiredDays: required,
+      givenDays: Math.min(given, required || given),
+      missingDays: missing,
+      by: def.notice,
+    },
+    legalCompensationMinor: legal,
+    items,
+    notes,
+  };
 }
 
 export const settlementTotals = (items: SettlementItem[]) => ({
-  earningsMinor: sum(...items.filter((x) => x.kind === 'earning').map((x) => x.amountMinor)),
-  deductionsMinor: sum(...items.filter((x) => x.kind === 'deduction').map((x) => x.amountMinor)),
+  earningsMinor: sum(...items.filter(x => x.kind === 'earning').map(x => x.amountMinor)),
+  deductionsMinor: sum(...items.filter(x => x.kind === 'deduction').map(x => x.amountMinor)),
 });
 
 // ——— Compatibilidade (protótipo) ———
@@ -207,16 +405,51 @@ export interface SettlementInput {
   compensationMinor?: Minor;
   holidaySubsidyAlreadyPaid?: boolean;
 }
-export interface SettlementLine { code: string; name: string; basis: string; amountMinor: Minor }
+export interface SettlementLine {
+  code: string;
+  name: string;
+  basis: string;
+  amountMinor: Minor;
+}
 /** @deprecated substituída por terminationProposal (usada só pelos testes do protótipo). */
-export function finalSettlement(input: SettlementInput, pack: CountryPack): { lines: SettlementLine[]; totalMinor: Minor } {
+export function finalSettlement(
+  input: SettlementInput,
+  pack: CountryPack,
+): { lines: SettlementLine[]; totalMinor: Minor } {
   const month = Number(input.terminationDate.slice(5, 7));
   const lines: SettlementLine[] = [
-    { code: 'SAL', name: 'Remuneração do mês da cessação', basis: 'Base + subsídios', amountMinor: input.baseMinor + input.monthlyAllowancesMinor },
-    { code: 'FER', name: 'Férias vencidas e não gozadas', basis: `${input.unusedVacationDays} dia(s) úteis × base/22`, amountMinor: prorate(input.baseMinor, input.unusedVacationDays, 22) },
+    {
+      code: 'SAL',
+      name: 'Remuneração do mês da cessação',
+      basis: 'Base + subsídios',
+      amountMinor: input.baseMinor + input.monthlyAllowancesMinor,
+    },
+    {
+      code: 'FER',
+      name: 'Férias vencidas e não gozadas',
+      basis: `${input.unusedVacationDays} dia(s) úteis × base/22`,
+      amountMinor: prorate(input.baseMinor, input.unusedVacationDays, 22),
+    },
   ];
-  if (!input.holidaySubsidyAlreadyPaid) lines.push({ code: 'SUBFER', name: 'Subsídio de férias proporcional', basis: '', amountMinor: prorate(applyBps(input.baseMinor, pack.labour.holidaySubsidyBps), month, 12) });
-  lines.push({ code: 'SUBNAT', name: 'Subsídio de Natal proporcional', basis: '', amountMinor: prorate(applyBps(input.baseMinor, pack.labour.christmasSubsidyBps), month, 12) });
-  if (input.compensationMinor) lines.push({ code: 'COMP', name: 'Compensação', basis: 'Acordada / apurada', amountMinor: input.compensationMinor });
-  return { lines, totalMinor: sum(...lines.map((l) => l.amountMinor)) };
+  if (!input.holidaySubsidyAlreadyPaid)
+    lines.push({
+      code: 'SUBFER',
+      name: 'Subsídio de férias proporcional',
+      basis: '',
+      amountMinor: prorate(applyBps(input.baseMinor, pack.labour.holidaySubsidyBps), month, 12),
+    });
+  lines.push({
+    code: 'SUBNAT',
+    name: 'Subsídio de Natal proporcional',
+    basis: '',
+    amountMinor: prorate(applyBps(input.baseMinor, pack.labour.christmasSubsidyBps), month, 12),
+  });
+  if (input.compensationMinor)
+    lines.push({
+      code: 'COMP',
+      name: 'Compensação',
+      basis: 'Acordada / apurada',
+      amountMinor: input.compensationMinor,
+    });
+  return { lines, totalMinor: sum(...lines.map(l => l.amountMinor)) };
 }

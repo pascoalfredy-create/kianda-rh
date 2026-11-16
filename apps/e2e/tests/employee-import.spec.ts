@@ -1,18 +1,34 @@
 import { expect, test } from '@playwright/test';
 import { xlsx } from '../../api/src/lib/xlsx.js';
 import { apiAs, registerCompany, signIn, watchErrors } from './support.js';
-test('uma empresa migra o Excel, remove a prévia errada e confirma as fichas sem duplicados', async ({ page, context }) => {
-  const company = await registerCompany(), errors = watchErrors(page);
+test('uma empresa migra o Excel, remove a prévia errada e confirma as fichas sem duplicados', async ({
+  page,
+  context,
+}) => {
+  const company = await registerCompany(),
+    errors = watchErrors(page);
   const bytes = xlsx([
     { name: 'Orientações', rows: [['Instruções da empresa']] },
-    { name: 'Pessoal', rows: [['Folha de pessoal'], ['N.º mecanográfico', 'Nome', 'Função', 'Data de admissão', 'Salário base'], ['0001', 'Ana Migração', 'Técnica', '2024-03-04', 150000], ['0002', 'Bento Migração', 'Técnico', '2024-05-01', 170000]] },
+    {
+      name: 'Pessoal',
+      rows: [
+        ['Folha de pessoal'],
+        ['N.º mecanográfico', 'Nome', 'Função', 'Data de admissão', 'Salário base'],
+        ['0001', 'Ana Migração', 'Técnica', '2024-03-04', 150000],
+        ['0002', 'Bento Migração', 'Técnico', '2024-05-01', 170000],
+      ],
+    },
   ]);
   await signIn(context, company.token);
   await page.goto('/colaboradores');
   await page.getByRole('link', { name: 'Importar colaboradores', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Importar colaboradores', exact: true })).toBeVisible();
   const upload = async () => {
-    await page.getByLabel('Ficheiro de colaboradores').setInputFiles({ name: 'Pessoal.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(bytes) });
+    await page.getByLabel('Ficheiro de colaboradores').setInputFiles({
+      name: 'Pessoal.xlsx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      buffer: Buffer.from(bytes),
+    });
     await page.getByLabel('Folha do Excel').selectOption('1');
     await expect(page.getByLabel('Coluna: Nome completo', { exact: true })).toHaveValue('1');
     await page.getByRole('button', { name: 'Validar e pré-visualizar', exact: true }).click();

@@ -1,8 +1,33 @@
 import type { Me } from './api';
 
-export type NavIcon = 'home' | 'users' | 'clock' | 'cal' | 'money' | 'receipt' | 'doc' | 'brief' | 'star' | 'chart' | 'gear' | 'check' | 'modules' | 'lock' | 'bell' | 'search';
-export interface NavItem { href: string; label: string; icon: NavIcon; badge?: number; locked?: boolean }
-export interface NavGroup { label: string; items: NavItem[] }
+export type NavIcon =
+  | 'home'
+  | 'users'
+  | 'clock'
+  | 'cal'
+  | 'money'
+  | 'receipt'
+  | 'doc'
+  | 'brief'
+  | 'star'
+  | 'chart'
+  | 'gear'
+  | 'check'
+  | 'modules'
+  | 'lock'
+  | 'bell'
+  | 'search';
+export interface NavItem {
+  href: string;
+  label: string;
+  icon: NavIcon;
+  badge?: number;
+  locked?: boolean;
+}
+export interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
 const staff = ['owner', 'hr_admin', 'payroll', 'finance', 'manager'];
 export function navigation(me: Me, counts: { absences: number; expenses: number; tasks?: number; acks?: number }) {
   const groups: NavGroup[] = [];
@@ -14,8 +39,17 @@ export function navigation(me: Me, counts: { absences: number; expenses: number;
     if (shown.length) groups.push({ label, items: shown });
   };
   if (me.modules.hr.canAccess && staff.includes(role)) {
-    add('Equipa', [item('/', 'Hoje', 'home'), item('/colaboradores', 'Colaboradores', 'users'), item('/organograma', 'Organograma', 'brief'), has('hr_admin') && item('/pedidos', 'Pedidos da equipa', 'doc')]);
-    add('Tempo', [item('/assiduidade', 'Ponto e assiduidade', 'clock'), item('/turnos', 'Turnos', 'cal'), item('/ausencias', 'Férias e ausências', 'cal', counts.absences)]);
+    add('Equipa', [
+      item('/', 'Hoje', 'home'),
+      item('/colaboradores', 'Colaboradores', 'users'),
+      item('/organograma', 'Organograma', 'brief'),
+      has('hr_admin') && item('/pedidos', 'Pedidos da equipa', 'doc'),
+    ]);
+    add('Tempo', [
+      item('/assiduidade', 'Ponto e assiduidade', 'clock'),
+      item('/turnos', 'Turnos', 'cal'),
+      item('/ausencias', 'Férias e ausências', 'cal', counts.absences),
+    ]);
     add('Salários', [
       has('payroll', 'finance', 'hr_admin') && item('/processamento', 'Processamento do mês', 'money'),
       has('payroll', 'finance', 'hr_admin') && item('/obrigacoes', 'IRT e INSS', 'receipt'),
@@ -33,20 +67,33 @@ export function navigation(me: Me, counts: { absences: number; expenses: number;
       has('payroll', 'finance', 'hr_admin') && item('/analitica', 'Centros de custo', 'brief'),
       has('payroll', 'finance') && item('/financas?s=plano', 'Plano de contas', 'gear'),
     ]);
-    add('Talento', [item('/acolhimento', 'Acolhimento e saída', 'check', counts.tasks), (has('hr_admin') || !!me.user.employeeId) && item('/aceitacao', has('hr_admin') ? 'Aceitação de documentos' : 'Para ler e aceitar', 'doc', counts.acks), has('hr_admin', 'manager') && item('/recrutamento', 'Recrutamento', 'brief'), item('/desempenho', 'Desempenho', 'star'), item('/documentos', 'Documentos', 'doc')]);
+    add('Talento', [
+      item('/acolhimento', 'Acolhimento e saída', 'check', counts.tasks),
+      (has('hr_admin') || !!me.user.employeeId) &&
+        item('/aceitacao', has('hr_admin') ? 'Aceitação de documentos' : 'Para ler e aceitar', 'doc', counts.acks),
+      has('hr_admin', 'manager') && item('/recrutamento', 'Recrutamento', 'brief'),
+      item('/desempenho', 'Desempenho', 'star'),
+      item('/documentos', 'Documentos', 'doc'),
+    ]);
     add('Relatórios', [
       has('payroll', 'finance', 'hr_admin') && item('/relatorios', 'Relatórios', 'chart'),
       has('payroll', 'finance', 'hr_admin') && item('/bi', 'BI', 'chart'),
     ]);
   } else if (me.modules.hr.canAccess) {
     add('O meu espaço', [
-      item('/', 'Hoje', 'home'), item('/recibos', 'Os meus recibos', 'money'), item('/ausencias', 'As minhas férias', 'cal'),
-      item('/despesas', 'As minhas despesas', 'receipt'), item('/documentos', 'Documentos', 'doc'), item('/assiduidade', 'O meu ponto', 'clock'), !!me.user.employeeId && item('/turnos', 'Os meus turnos', 'cal'),
+      item('/', 'Hoje', 'home'),
+      item('/recibos', 'Os meus recibos', 'money'),
+      item('/ausencias', 'As minhas férias', 'cal'),
+      item('/despesas', 'As minhas despesas', 'receipt'),
+      item('/documentos', 'Documentos', 'doc'),
+      item('/assiduidade', 'O meu ponto', 'clock'),
+      !!me.user.employeeId && item('/turnos', 'Os meus turnos', 'cal'),
       !!me.user.employeeId && item('/adiantamentos', 'Adiantamentos', 'money'),
       !!me.user.employeeId && item(`/colaboradores/${me.user.employeeId}`, 'A minha ficha', 'users'),
       !!me.user.employeeId && item('/acolhimento', 'As minhas tarefas', 'check', counts.tasks),
       !!me.user.employeeId && item('/aceitacao', 'Para ler e aceitar', 'doc', counts.acks),
-      !!me.user.employeeId && item('/portal/dados', 'Os meus dados', 'doc'), item('/desempenho', 'Desempenho', 'star'),
+      !!me.user.employeeId && item('/portal/dados', 'Os meus dados', 'doc'),
+      item('/desempenho', 'Desempenho', 'star'),
     ]);
   }
   add('Definições', [
@@ -59,8 +106,14 @@ export function navigation(me: Me, counts: { absences: number; expenses: number;
   add('Módulos', [
     item('/modulos', 'Módulos', 'modules'),
     !me.modules.hr.canAccess && { ...item('/modulos#hr', 'Recursos Humanos', 'users'), locked: true },
-    { ...item(me.modules.modeling.canAccess ? '/modelagem' : '/modulos#modeling', 'Modelagem Financeira', 'chart'), locked: !me.modules.modeling.canAccess },
-    { ...item(me.modules.valuation?.canAccess ? '/valora' : '/modulos#valuation', 'Análise e Avaliação', 'money'), locked: !me.modules.valuation?.canAccess },
+    {
+      ...item(me.modules.modeling.canAccess ? '/modelagem' : '/modulos#modeling', 'Modelagem Financeira', 'chart'),
+      locked: !me.modules.modeling.canAccess,
+    },
+    {
+      ...item(me.modules.valuation?.canAccess ? '/valora' : '/modulos#valuation', 'Análise e Avaliação', 'money'),
+      locked: !me.modules.valuation?.canAccess,
+    },
     has('finance') && item('/licenca', 'Módulos e licenças', 'lock'),
   ]);
   return groups;
@@ -69,6 +122,7 @@ export function navigation(me: Me, counts: { absences: number; expenses: number;
 export function navActive(href: string, pathname: string, search: URLSearchParams) {
   if (href.includes('#')) return false;
   const [path, query] = href.split('?');
-  if (path === '/financas') return pathname === path && (query === 's=plano' ? search.get('s') === 'plano' : search.get('s') !== 'plano');
+  if (path === '/financas')
+    return pathname === path && (query === 's=plano' ? search.get('s') === 'plano' : search.get('s') !== 'plano');
   return path === '/' ? pathname === '/' : pathname === path || pathname.startsWith(`${path}/`);
 }

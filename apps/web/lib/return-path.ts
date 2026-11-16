@@ -5,5 +5,7 @@ export function returnPath(value: string | null | undefined, fallback = '/'): st
     const base = 'https://kianda.invalid';
     const url = new URL(value, base);
     return url.origin === base ? `${url.pathname}${url.search}${url.hash}` : fallback;
-  } catch { return fallback; }
+  } catch {
+    return fallback;
+  }
 }

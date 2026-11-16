@@ -6,12 +6,31 @@ import { useState } from 'react';
 import { jsonRequest } from './json-request';
 
 const FIELD_LABELS: Record<string, string> = {
-  name: 'Nome', jobTitle: 'Função', number: 'Número', biNumber: 'BI', iban: 'IBAN', email: 'Email', birthDate: 'Data de nascimento',
-  base: 'Salário base', meal: 'Subsídio de alimentação', transport: 'Subsídio de transporte', effectiveDate: 'Data de efeito', reason: 'Motivo',
-  startDate: 'Início', endDate: 'Fim', termJustification: 'Fundamento do termo', type: 'Tipo', expiryDate: 'Validade', issueDate: 'Emissão',
+  name: 'Nome',
+  jobTitle: 'Função',
+  number: 'Número',
+  biNumber: 'BI',
+  iban: 'IBAN',
+  email: 'Email',
+  birthDate: 'Data de nascimento',
+  base: 'Salário base',
+  meal: 'Subsídio de alimentação',
+  transport: 'Subsídio de transporte',
+  effectiveDate: 'Data de efeito',
+  reason: 'Motivo',
+  startDate: 'Início',
+  endDate: 'Fim',
+  termJustification: 'Fundamento do termo',
+  type: 'Tipo',
+  expiryDate: 'Validade',
+  issueDate: 'Emissão',
 };
 
-export interface SendResult<T = unknown> { ok: boolean; data?: T; message?: string }
+export interface SendResult<T = unknown> {
+  ok: boolean;
+  data?: T;
+  message?: string;
+}
 
 /** Pedido à API através do proxy /api do Next (cookie de sessão no mesmo domínio). */
 export async function send<T = unknown>(path: string, method: string, body?: unknown): Promise<SendResult<T>> {
@@ -24,7 +43,7 @@ export async function send<T = unknown>(path: string, method: string, body?: unk
   if (res.ok) return { ok: true, data: json as T };
   if (res.status === 401) window.location.assign('/login');
   const issues = (json.issues as { path: string; message: string }[] | undefined)
-    ?.map((i) => `${FIELD_LABELS[i.path.split('.').pop() ?? ''] ?? i.path}: ${i.message}`)
+    ?.map(i => `${FIELD_LABELS[i.path.split('.').pop() ?? ''] ?? i.path}: ${i.message}`)
     .join(' · ');
   return { ok: false, message: issues || json.message || `Erro ${res.status}` };
 }
@@ -39,7 +58,7 @@ export function useMutation() {
     setError('');
     const r = await send<T>(path, method, body);
     setBusy(false);
-    if (!r.ok) return setError(r.message ?? 'Erro'), false;
+    if (!r.ok) return (setError(r.message ?? 'Erro'), false);
     onOk?.(r.data);
     router.refresh();
     return true;
@@ -52,7 +71,16 @@ export function formObject(form: HTMLFormElement, numeric: string[] = []): Recor
   const out: Record<string, unknown> = {};
   for (const [k, v] of new FormData(form).entries()) {
     const s = String(v).trim();
-    out[k] = numeric.includes(k) ? (s === '' ? 0 : (() => { const m = parseAmount(s); return m === null ? NaN : m / 100; })()) : s === '' ? null : s;
+    out[k] = numeric.includes(k)
+      ? s === ''
+        ? 0
+        : (() => {
+            const m = parseAmount(s);
+            return m === null ? NaN : m / 100;
+          })()
+      : s === ''
+        ? null
+        : s;
   }
   return out;
 }

@@ -4,7 +4,10 @@ import { apiAs, closePool, expectRecoveryPdf, registerCompany, signIn, sql, watc
 /** Kianda Valora: o protótipo aprovado a funcionar dentro da plataforma, com os dados no servidor. */
 test.afterAll(closePool);
 
-test('Valora: cria uma análise, edita o orçamento e os dados ficam no servidor depois de recarregar', async ({ page, context }) => {
+test('Valora: cria uma análise, edita o orçamento e os dados ficam no servidor depois de recarregar', async ({
+  page,
+  context,
+}) => {
   const owner = await registerCompany({ modules: ['hr', 'valuation'] });
   await signIn(context, owner.token);
   const errors = watchErrors(page);
@@ -52,7 +55,11 @@ test('Valora: cria uma análise, edita o orçamento e os dados ficam no servidor
   // Balancete mensal: unidade obrigatória, valores ao cêntimo, controlo antes de aplicar e desfazer.
   await valoraGo(page, 'dados');
   const initialClose = saved.body.data.fecho;
-  await page.locator('#paste').fill('conta;descricao;Jan\n61;Vendas;-1 000 000,25\n72;Pessoal;400 000,00\n43;Bancos;1 600 000,25\n51;Capital;-1 000 000,00');
+  await page
+    .locator('#paste')
+    .fill(
+      'conta;descricao;Jan\n61;Vendas;-1 000 000,25\n72;Pessoal;400 000,00\n43;Bancos;1 600 000,25\n51;Capital;-1 000 000,00',
+    );
   await page.locator('#btnParse').click();
   await expect(page.locator('#imp-prev')).toContainText('Indique a unidade');
   await page.locator('#impUnit').selectOption('kz');
@@ -67,9 +74,18 @@ test('Valora: cria uma análise, edita o orçamento e os dados ficam no servidor
   const acceptImport = page.waitForEvent('dialog').then(dialog => dialog.accept());
   await Promise.all([acceptImport, page.locator('#btnApply').click()]);
   await expect(page.locator('#imp-prev')).toContainText('ao cêntimo');
-  await expect.poll(async () => (await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}`)).body.data.real.v61[0], { timeout: 15_000 }).toBeCloseTo(1.00000025, 10);
-  expect((await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}`)).body.data.fecho).toBe(Math.max(initialClose, 1));
-  expect((await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}/versions`)).body[0]).toMatchObject({ reason: 'import_balance', revision: saved.body.revision });
+  await expect
+    .poll(async () => (await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}`)).body.data.real.v61[0], {
+      timeout: 15_000,
+    })
+    .toBeCloseTo(1.00000025, 10);
+  expect((await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}`)).body.data.fecho).toBe(
+    Math.max(initialClose, 1),
+  );
+  expect((await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}/versions`)).body[0]).toMatchObject({
+    reason: 'import_balance',
+    revision: saved.body.revision,
+  });
   await page.locator('#btnUndoImp').click();
   await expect(page.locator('#imp-prev')).toContainText('Importação desfeita');
 
@@ -78,7 +94,11 @@ test('Valora: cria uma análise, edita o orçamento e os dados ficam no servidor
   const vc = page.locator('input[data-arr="imo"][data-i="0"][data-k="vc"]');
   await vc.fill('2 500 000,00');
   await vc.press('Tab');
-  await expect.poll(async () => (await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}`)).body.data.imo[0].vc, { timeout: 15_000 }).toBeCloseTo(2.5, 10);
+  await expect
+    .poll(async () => (await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}`)).body.data.imo[0].vc, {
+      timeout: 15_000,
+    })
+    .toBeCloseTo(2.5, 10);
   await expect(page.locator('input[data-arr="imo"][data-i="0"][data-k="vc"]')).toHaveValue(/^2\s500\s000,00$/);
   // A análise aberta fica identificada no cabeçalho mesmo em ecrãs de portátil.
   await expect(page.locator('#hdrEnt')).toBeVisible();
@@ -95,20 +115,28 @@ test('Valora: cria uma análise, edita o orçamento e os dados ficam no servidor
   await expect(page.locator('#valoraDialogBox')).toContainText('Versão reposta');
   const reverted = await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}`);
   expect(reverted.body.data.orc.vendas).not.toBeCloseTo(12345.0000005, 3);
-  expect((await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}/versions`)).body[0].reason).toBe('before_restore');
+  expect((await apiAs(owner.token, 'GET', `/v1/valuation/analyses/${id}/versions`)).body[0].reason).toBe(
+    'before_restore',
+  );
   await page.screenshot({ path: '/tmp/e2e/valora-05-versoes.png', fullPage: false });
   await page.locator('#valoraClose').click();
 
   // Avaliação e relatórios abrem sem erros; no período experimental não exporta.
   for (const view of ['demonstracoes', 'racios', 'dcf', 'sintese']) {
-    if (await page.locator(`#nav a[data-v="${view}"]`).count()) { await valoraGo(page, view); await expect(page.locator(`#v-${view}`)).toHaveClass(/on/); }
+    if (await page.locator(`#nav a[data-v="${view}"]`).count()) {
+      await valoraGo(page, view);
+      await expect(page.locator(`#v-${view}`)).toHaveClass(/on/);
+    }
   }
   await page.screenshot({ path: '/tmp/e2e/valora-03-avaliacao.png', fullPage: false });
   const relatorios = page.locator('#nav a[data-v="relatorios"]');
   if (await relatorios.count()) {
     await valoraGo(page, 'relatorios');
     const pdf = page.locator('[data-exp="pdf"]').first();
-    if (await pdf.count()) { await pdf.click(); await expect(page.locator('#rep-msg')).toContainText('Pré-visualização'); }
+    if (await pdf.count()) {
+      await pdf.click();
+      await expect(page.locator('#rep-msg')).toContainText('Pré-visualização');
+    }
   }
   // Sair para os outros módulos a partir do cabeçalho; o rodapé do menu fica sempre ao alcance (menu com scroll próprio).
   await page.setViewportSize({ width: 1366, height: 640 });
@@ -122,7 +150,10 @@ test('Valora: cria uma análise, edita o orçamento e os dados ficam no servidor
   expect(errors).toEqual([]);
 });
 
-test('Valora: reutiliza o mapeamento da empresa e mostra o movimento no controlo orçamental', async ({ page, context }) => {
+test('Valora: reutiliza o mapeamento da empresa e mostra o movimento no controlo orçamental', async ({
+  page,
+  context,
+}) => {
   const owner = await registerCompany({ modules: ['valuation'] });
   await signIn(context, owner.token);
   await page.goto('/valora');
@@ -135,7 +166,9 @@ test('Valora: reutiliza o mapeamento da empresa e mostra o movimento no controlo
   await valoraGo(page, 'dados');
   await page.getByText('Mapeamento de contas da empresa', { exact: true }).click();
   await page.getByLabel('Conta', { exact: true }).fill('61001');
-  const mapping = page.locator('details').filter({ has: page.getByText('Mapeamento de contas da empresa', { exact: true }) });
+  const mapping = page
+    .locator('details')
+    .filter({ has: page.getByText('Mapeamento de contas da empresa', { exact: true }) });
   await mapping.locator('select[name="rubric"]').selectOption('v62', { timeout: 10_000 });
   await page.getByRole('button', { name: 'Guardar mapeamento' }).click();
   await expect(page.getByText('Mapeamento guardado para as próximas importações da empresa.')).toBeVisible();
@@ -197,7 +230,10 @@ test('Valora: cancelar ou trocar de análise elimina a prévia do balancete', as
 
 test('Valora: com licença paga exporta o relatório em PDF descarregado no navegador', async ({ page, context }) => {
   const owner = await registerCompany({ modules: ['valuation'] });
-  await sql(`update company_modules set status = 'active', paid_until = '2099-12-31' where company_id = $1 and module = 'valuation'`, [owner.id]);
+  await sql(
+    `update company_modules set status = 'active', paid_until = '2099-12-31' where company_id = $1 and module = 'valuation'`,
+    [owner.id],
+  );
   await signIn(context, owner.token);
   const errors = watchErrors(page);
   await page.goto('/valora');
@@ -214,7 +250,10 @@ test('Valora: com licença paga exporta o relatório em PDF descarregado no nave
   expect(file.suggestedFilename()).toMatch(/^Relatorio_de_gestao_mensal_Entidade_\d{4}-\d{2}-\d{2}\.pdf$/);
   await expectRecoveryPdf(file, 'Interpretação dos resultados');
   await page.screenshot({ path: '/tmp/e2e/valora-04-relatorios.png', fullPage: false });
-  for (const [kind, ext] of [['docx', 'docx'], ['xlsx', 'xlsx']] as const) {
+  for (const [kind, ext] of [
+    ['docx', 'docx'],
+    ['xlsx', 'xlsx'],
+  ] as const) {
     const next = page.waitForEvent('download', { timeout: 30_000 });
     await page.locator(`[data-exp="${kind}"]`).first().click();
     expect((await next).suggestedFilename()).toMatch(new RegExp(`\\.${ext}$`));
@@ -248,7 +287,10 @@ test('Valora: na licença, tabela de preços e pedido de pagamento do plano esco
   await form.getByRole('button', { name: 'Gerar pedido de pagamento do Valora' }).click();
   await expect(page.getByText(/Valora · Corporate · até 20 análises/).first()).toBeVisible();
   await page.screenshot({ path: '/tmp/e2e/valora-05-licenca.png', fullPage: false });
-  const pending = await sql<{ amount_minor: string; tier_key: string }>(`select amount_minor, tier_key from payment_requests where company_id = $1 and kind = 'valuation_subscription' and status = 'pending'`, [owner.id]);
+  const pending = await sql<{ amount_minor: string; tier_key: string }>(
+    `select amount_minor, tier_key from payment_requests where company_id = $1 and kind = 'valuation_subscription' and status = 'pending'`,
+    [owner.id],
+  );
   expect(pending).toEqual([{ amount_minor: '74358000', tier_key: 'corporate' }]);
   expect(errors).toEqual([]);
 });

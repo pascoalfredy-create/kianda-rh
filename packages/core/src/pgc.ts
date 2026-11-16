@@ -50,8 +50,20 @@ export const DEFAULT_PGC_ACCOUNTS: PgcAccountMap = {
   terminationIncome: '63',
 };
 
-export interface JournalLine { account: string; description: string; costCenter?: string; debitMinor: Minor; creditMinor: Minor }
-export interface JournalEntry { date: string; journal: string; reference: string; description: string; lines: JournalLine[] }
+export interface JournalLine {
+  account: string;
+  description: string;
+  costCenter?: string;
+  debitMinor: Minor;
+  creditMinor: Minor;
+}
+export interface JournalEntry {
+  date: string;
+  journal: string;
+  reference: string;
+  description: string;
+  lines: JournalLine[];
+}
 
 export interface PayrollTotalsByCostCenter {
   costCenter: string;
@@ -79,17 +91,25 @@ export interface PayrollTotals {
 export class UnbalancedEntryError extends Error {}
 
 export function assertBalanced(e: JournalEntry): JournalEntry {
-  const d = sum(...e.lines.map((l) => l.debitMinor));
-  const c = sum(...e.lines.map((l) => l.creditMinor));
+  const d = sum(...e.lines.map(l => l.debitMinor));
+  const c = sum(...e.lines.map(l => l.creditMinor));
   if (d !== c) throw new UnbalancedEntryError(`Lançamento ${e.reference} desequilibrado: D ${d} ≠ C ${c}`);
   return e;
 }
 
 /** Lançamento do processamento: custos (classe 7) por centro de custo contra Estado (34) e Pessoal (36). */
-export function payrollJournal(period: string, t: PayrollTotals, accounts: PgcAccountMap = DEFAULT_PGC_ACCOUNTS): JournalEntry {
+export function payrollJournal(
+  period: string,
+  t: PayrollTotals,
+  accounts: PgcAccountMap = DEFAULT_PGC_ACCOUNTS,
+): JournalEntry {
   const lines: JournalLine[] = [];
-  const dr = (account: string, description: string, v: Minor, costCenter: string) => { if (v) lines.push({ account, description, costCenter, debitMinor: v, creditMinor: 0 }); };
-  const cr = (account: string, description: string, v: Minor) => { if (v) lines.push({ account, description, debitMinor: 0, creditMinor: v }); };
+  const dr = (account: string, description: string, v: Minor, costCenter: string) => {
+    if (v) lines.push({ account, description, costCenter, debitMinor: v, creditMinor: 0 });
+  };
+  const cr = (account: string, description: string, v: Minor) => {
+    if (v) lines.push({ account, description, debitMinor: 0, creditMinor: v });
+  };
   for (const c of t.byCostCenter) {
     dr(accounts.baseSalary, `Vencimentos ${period}`, c.baseMinor, c.costCenter);
     dr(accounts.allowances, `Subsídios ${period}`, c.allowancesMinor, c.costCenter);
@@ -104,13 +124,32 @@ export function payrollJournal(period: string, t: PayrollTotals, accounts: PgcAc
   cr(accounts.otherDeductions, `Outros descontos retidos ${period}`, t.otherDeductionsMinor ?? 0);
   cr(accounts.terminationIncome, `Compensação por falta de aviso prévio ${period}`, t.noticeIncomeMinor ?? 0);
   cr(accounts.netPayable, `Remunerações a pagar ${period}`, t.netMinor);
-  return assertBalanced({ date: lastDayOfMonth(period), journal: 'Pessoal', reference: `PS-${period.replace('-', '')}`, description: `Processamento salarial ${period}`, lines });
+  return assertBalanced({
+    date: lastDayOfMonth(period),
+    journal: 'Pessoal',
+    reference: `PS-${period.replace('-', '')}`,
+    description: `Processamento salarial ${period}`,
+    lines,
+  });
 }
 
 /** Lançamento de pagamento (salários, IRT ou INSS) contra a conta bancária. */
-export function paymentJournal(date: string, reference: string, description: string, payableAccount: string, amount: Minor, accounts: PgcAccountMap = DEFAULT_PGC_ACCOUNTS): JournalEntry {
-  return assertBalanced({ date, journal: 'Bancos', reference, description, lines: [
-    { account: payableAccount, description, debitMinor: amount, creditMinor: 0 },
-    { account: accounts.bank, description, debitMinor: 0, creditMinor: amount },
-  ] });
+export function paymentJournal(
+  date: string,
+  reference: string,
+  description: string,
+  payableAccount: string,
+  amount: Minor,
+  accounts: PgcAccountMap = DEFAULT_PGC_ACCOUNTS,
+): JournalEntry {
+  return assertBalanced({
+    date,
+    journal: 'Bancos',
+    reference,
+    description,
+    lines: [
+      { account: payableAccount, description, debitMinor: amount, creditMinor: 0 },
+      { account: accounts.bank, description, debitMinor: 0, creditMinor: amount },
+    ],
+  });
 }

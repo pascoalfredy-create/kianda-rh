@@ -10,30 +10,77 @@ import { sql, type Db } from '@kianda/db';
 type Scope = { table: string; via?: { column: string; parent: string } };
 
 export const COMPANY_TABLES_PURGE_ORDER: Scope[] = [
-  { table: 'valuation_versions' }, { table: 'valuation_analyses' }, { table: 'valuation_members' }, { table: 'financial_model_versions' }, { table: 'modeling_project_access' }, { table: 'modeling_members' }, { table: 'financial_personnel_imports' }, { table: 'financial_historical_inputs' }, { table: 'financial_models' }, { table: 'company_modules' },
+  { table: 'valuation_versions' },
+  { table: 'valuation_analyses' },
+  { table: 'valuation_members' },
+  { table: 'financial_model_versions' },
+  { table: 'modeling_project_access' },
+  { table: 'modeling_members' },
+  { table: 'financial_personnel_imports' },
+  { table: 'financial_historical_inputs' },
+  { table: 'financial_models' },
+  { table: 'company_modules' },
   { table: 'candidate_events', via: { column: 'candidate_id', parent: 'candidates' } },
-  { table: 'recruitment_mail' }, { table: 'recruitment_offers' },
-  { table: 'candidates' }, { table: 'job_openings' },
-  { table: 'reviews' }, { table: 'review_cycles' },
+  { table: 'recruitment_mail' },
+  { table: 'recruitment_offers' },
+  { table: 'candidates' },
+  { table: 'job_openings' },
+  { table: 'reviews' },
+  { table: 'review_cycles' },
   { table: 'expense_lines', via: { column: 'claim_id', parent: 'expense_claims' } },
   { table: 'expense_claims' },
-  { table: 'bank_lines' }, { table: 'bank_matches' }, { table: 'bank_statements' },
+  { table: 'bank_lines' },
+  { table: 'bank_matches' },
+  { table: 'bank_statements' },
   { table: 'journal_lines', via: { column: 'entry_id', parent: 'journal_entries' } },
   { table: 'journal_entries' },
   { table: 'payroll_lines', via: { column: 'run_id', parent: 'payroll_runs' } },
-  { table: 'payroll_payments' }, { table: 'payroll_runs' }, { table: 'payroll_variables' },
-  { table: 'checklist_tasks' }, { table: 'employee_checklists' }, { table: 'checklist_templates' }, { table: 'ack_requests' }, { table: 'ack_documents' }, { table: 'push_outbox' }, { table: 'push_subscriptions' }, { table: 'shift_assignments' }, { table: 'shift_types' },
-  { table: 'terminations' }, { table: 'issued_documents' }, { table: 'document_templates' }, { table: 'document_requests' }, { table: 'profile_change_requests' },
-  { table: 'employee_allowances' }, { table: 'allowance_types' }, { table: 'work_schedules' },
+  { table: 'payroll_payments' },
+  { table: 'payroll_runs' },
+  { table: 'payroll_variables' },
+  { table: 'checklist_tasks' },
+  { table: 'employee_checklists' },
+  { table: 'checklist_templates' },
+  { table: 'ack_requests' },
+  { table: 'ack_documents' },
+  { table: 'push_outbox' },
+  { table: 'push_subscriptions' },
+  { table: 'shift_assignments' },
+  { table: 'shift_types' },
+  { table: 'terminations' },
+  { table: 'issued_documents' },
+  { table: 'document_templates' },
+  { table: 'document_requests' },
+  { table: 'profile_change_requests' },
+  { table: 'employee_allowances' },
+  { table: 'allowance_types' },
+  { table: 'work_schedules' },
   { table: 'compensation_changes' },
   { table: 'contracts', via: { column: 'employee_id', parent: 'employees' } },
-  { table: 'personnel_cash_plans' }, { table: 'personnel_budget_lines' }, { table: 'personnel_budgets' },
-  { table: 'file_blobs' }, { table: 'files' },
-  { table: 'employee_documents' }, { table: 'documents' }, { table: 'absences' }, { table: 'attendance_entries' }, { table: 'attendance_months' },
-  { table: 'salary_advances' }, { table: 'access_links' }, { table: 'email_verifications' }, { table: 'users' }, { table: 'employees' }, { table: 'workplaces' }, { table: 'departments' },
-  { table: 'bank_accounts' }, { table: 'account_mappings' },
+  { table: 'personnel_cash_plans' },
+  { table: 'personnel_budget_lines' },
+  { table: 'personnel_budgets' },
+  { table: 'file_blobs' },
+  { table: 'files' },
+  { table: 'employee_documents' },
+  { table: 'documents' },
+  { table: 'absences' },
+  { table: 'attendance_entries' },
+  { table: 'attendance_months' },
+  { table: 'salary_advances' },
+  { table: 'access_links' },
+  { table: 'email_verifications' },
+  { table: 'users' },
+  { table: 'employees' },
+  { table: 'workplaces' },
+  { table: 'departments' },
+  { table: 'bank_accounts' },
+  { table: 'account_mappings' },
   { table: 'gateway_events', via: { column: 'payment_request_id', parent: 'payment_requests' } },
-  { table: 'payment_requests' }, { table: 'subscriptions' }, { table: 'outbound_emails' }, { table: 'audit_logs' },
+  { table: 'payment_requests' },
+  { table: 'subscriptions' },
+  { table: 'outbound_emails' },
+  { table: 'audit_logs' },
 ];
 
 /** Colunas que nunca saem numa exportação (segredos de acesso). */
@@ -58,19 +105,24 @@ export async function exportCompany(db: Db, companyId: string) {
   const [company] = (await db.execute(sql`select * from companies where id = ${companyId}`)).rows;
   for (const s of [...COMPANY_TABLES_PURGE_ORDER].reverse()) {
     if (NOT_EXPORTED.has(s.table)) continue;
-    const rows = (await db.execute(sql`select * from ${sql.identifier(s.table)} where ${where(s, companyId)}`)).rows as Record<string, unknown>[];
+    const rows = (await db.execute(sql`select * from ${sql.identifier(s.table)} where ${where(s, companyId)}`))
+      .rows as Record<string, unknown>[];
     const hide = SECRET_COLUMNS[s.table] ?? [];
-    tables[s.table] = rows.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => !hide.includes(k))));
+    tables[s.table] = rows.map(r => Object.fromEntries(Object.entries(r).filter(([k]) => !hide.includes(k))));
   }
   return {
-    format: 'kianda-export', version: 1, generatedAt: new Date().toISOString(),
-    company, counts: Object.fromEntries(Object.entries(tables).map(([k, v]) => [k, v.length])), tables,
+    format: 'kianda-export',
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    company,
+    counts: Object.fromEntries(Object.entries(tables).map(([k, v]) => [k, v.length])),
+    tables,
   };
 }
 
 /** Elimina todos os dados da empresa (irreversível). Corre numa transacção: ou sai tudo, ou nada. */
 export async function purgeCompany(db: Db, companyId: string) {
-  return db.transaction(async (tx) => {
+  return db.transaction(async tx => {
     const deleted: Record<string, number> = {};
     for (const s of COMPANY_TABLES_PURGE_ORDER) {
       const r = await tx.execute(sql`delete from ${sql.identifier(s.table)} where ${where(s, companyId)}`);

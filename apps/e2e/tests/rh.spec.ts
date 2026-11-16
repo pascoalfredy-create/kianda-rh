@@ -3,12 +3,44 @@ import { apiAs, closePool, openMaps, registerCompany, signIn, watchErrors, type 
 
 /** Ecrãs do RH para o proprietário de uma empresa nova (com dois colaboradores). */
 const ROUTES = [
-  '/', '/colaboradores', '/organograma', '/assiduidade', '/turnos', '/turnos?v=tipos', '/turnos?vista=mes', '/ausencias', '/processamento', '/obrigacoes', '/relatorios', '/analitica', '/bi',
-  '/orcamento', '/financas', '/tesouraria', '/conciliacao', '/despesas', '/adiantamentos', '/documentos', '/recrutamento', '/desempenho',
-  '/cessacoes', '/simulador', '/acessos', '/pedidos', '/sector', '/conformidade', '/definicoes', '/licenca', '/modulos', '/conta',
+  '/',
+  '/colaboradores',
+  '/organograma',
+  '/assiduidade',
+  '/turnos',
+  '/turnos?v=tipos',
+  '/turnos?vista=mes',
+  '/ausencias',
+  '/processamento',
+  '/obrigacoes',
+  '/relatorios',
+  '/analitica',
+  '/bi',
+  '/orcamento',
+  '/financas',
+  '/tesouraria',
+  '/conciliacao',
+  '/despesas',
+  '/adiantamentos',
+  '/documentos',
+  '/recrutamento',
+  '/desempenho',
+  '/cessacoes',
+  '/simulador',
+  '/acessos',
+  '/pedidos',
+  '/sector',
+  '/conformidade',
+  '/definicoes',
+  '/licenca',
+  '/modulos',
+  '/conta',
 ];
 
-test('o simulador abre em Salários e Voltar regressa à página anterior sem terminar sessão', async ({ page, context }) => {
+test('o simulador abre em Salários e Voltar regressa à página anterior sem terminar sessão', async ({
+  page,
+  context,
+}) => {
   const owner = await registerCompany();
   await signIn(context, owner.token);
   await page.goto('/colaboradores');
@@ -31,8 +63,15 @@ const people = [
 test.beforeAll(async () => {
   company = await registerCompany({ name: 'Logística Kwanza E2E' });
   for (const p of people) {
-    const r = await apiAs(company.token, 'POST', '/v1/employees', { number: p.number, name: p.name, gender: 'F', jobTitle: p.jobTitle, province: 'Luanda', nif: '00' + p.number.padStart(8, '0'),
-      contract: { type: 'indefinite', startDate: '2026-01-05', base: p.base, meal: 30000, transport: 25000 } });
+    const r = await apiAs(company.token, 'POST', '/v1/employees', {
+      number: p.number,
+      name: p.name,
+      gender: 'F',
+      jobTitle: p.jobTitle,
+      province: 'Luanda',
+      nif: '00' + p.number.padStart(8, '0'),
+      contract: { type: 'indefinite', startDate: '2026-01-05', base: p.base, meal: 30000, transport: 25000 },
+    });
     expect(r.status, JSON.stringify(r.body)).toBe(201);
   }
 });
@@ -64,7 +103,10 @@ test('colaboradores: lista e ficha com contrato', async ({ page, context }) => {
   expect(errors).toEqual([]);
 });
 
-test('processamento salarial: preparar calcula sem variáveis; prémio lançado no separador Variáveis entra na folha', async ({ page, context }) => {
+test('processamento salarial: preparar calcula sem variáveis; prémio lançado no separador Variáveis entra na folha', async ({
+  page,
+  context,
+}) => {
   await signIn(context, company.token);
   const errors = watchErrors(page);
   await page.goto('/processamento?mes=2026-10');
@@ -88,7 +130,9 @@ test('processamento salarial: preparar calcula sem variáveis; prémio lançado 
   await preparation.getByRole('button', { name: 'Calcular folha', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Recalcular' })).toBeVisible();
   await page.goto('/processamento?mes=2026-10');
-  await expect(page.locator('details.map-disclosure').filter({ hasText: 'Mapa de processamento salarial' })).toBeVisible();
+  await expect(
+    page.locator('details.map-disclosure').filter({ hasText: 'Mapa de processamento salarial' }),
+  ).toBeVisible();
   await openMaps(page);
   for (const p of people) await expect(page.getByText(p.name).first()).toBeVisible();
   await expect(page.getByRole('row', { name: new RegExp(people[0]!.name) })).toContainText(/12[\s.]000,00/);

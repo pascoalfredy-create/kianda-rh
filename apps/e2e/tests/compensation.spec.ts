@@ -4,16 +4,28 @@ import { apiAs, closePool, registerCompany, signIn, watchErrors } from './suppor
 test.afterAll(closePool);
 const usd = (value: string) => new RegExp(`USD ${value.replace('.', '[\\s.]')},00`);
 
-test('corrigir erro salarial actualiza ficha e lista sem recarregar nem criar redução salarial', async ({ page, context }) => {
+test('corrigir erro salarial actualiza ficha e lista sem recarregar nem criar redução salarial', async ({
+  page,
+  context,
+}) => {
   const company = await registerCompany();
-  const created = await apiAs(company.token, 'POST', '/v1/employees', { number: '1', name: 'Pessoa com erro de digitação', jobTitle: 'Técnico', contract: { type: 'indefinite', startDate: '2026-11-01', base: 285600000, currency: 'USD', baseUsd: 300000 } });
+  const created = await apiAs(company.token, 'POST', '/v1/employees', {
+    number: '1',
+    name: 'Pessoa com erro de digitação',
+    jobTitle: 'Técnico',
+    contract: { type: 'indefinite', startDate: '2026-11-01', base: 285600000, currency: 'USD', baseUsd: 300000 },
+  });
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   await signIn(context, company.token);
   const errors = watchErrors(page);
   await page.goto(`/colaboradores?ficha=${created.body.id}&s=contrato`);
   let navigations = 0;
-  page.on('request', request => { if (request.isNavigationRequest() && request.resourceType() === 'document') navigations++; });
-  const current = page.locator('.card.section').filter({ has: page.getByRole('heading', { name: 'Remuneração em vigor', exact: true }) });
+  page.on('request', request => {
+    if (request.isNavigationRequest() && request.resourceType() === 'document') navigations++;
+  });
+  const current = page
+    .locator('.card.section')
+    .filter({ has: page.getByRole('heading', { name: 'Remuneração em vigor', exact: true }) });
   await expect(current).toContainText(usd('300.000'));
   await page.getByRole('button', { name: 'Corrigir erro de registo', exact: true }).click();
   const form = page.getByRole('form', { name: 'Correcção de remuneração', exact: true });
@@ -25,7 +37,9 @@ test('corrigir erro salarial actualiza ficha e lista sem recarregar nem criar re
   await expect(current).toContainText(usd('3.000'));
   await expect(current).not.toContainText(usd('300.000'));
   await expect(page.locator('.hero .facts')).toContainText(usd('3.000'));
-  const history = page.locator('.card.section').filter({ has: page.getByRole('heading', { name: 'Histórico salarial', exact: true }) });
+  const history = page
+    .locator('.card.section')
+    .filter({ has: page.getByRole('heading', { name: 'Histórico salarial', exact: true }) });
   await expect(history.getByRole('row')).toHaveCount(2);
   await expect(history).not.toContainText('-99');
   const profile = await apiAs(company.token, 'GET', `/v1/employees/${created.body.id}`);
@@ -37,17 +51,30 @@ test('corrigir erro salarial actualiza ficha e lista sem recarregar nem criar re
   await expect(page.locator('.timeline')).toContainText(usd('300.000'));
   await expect(page.locator('.timeline')).toContainText(usd('3.000'));
   await page.getByRole('button', { name: 'Fechar janela', exact: true }).click();
-  await expect(page.getByRole('row', { name: /Pessoa com erro de digitação/ })).toContainText(/2[\s.]856[\s.]000,00 Kz/);
+  await expect(page.getByRole('row', { name: /Pessoa com erro de digitação/ })).toContainText(
+    /2[\s.]856[\s.]000,00 Kz/,
+  );
   expect(navigations).toBe(0);
   expect(errors).toEqual([]);
 });
 
-test('alteração futura informa o agendamento; efeito hoje actualiza o cartão e os campos reabertos', async ({ page, context }) => {
+test('alteração futura informa o agendamento; efeito hoje actualiza o cartão e os campos reabertos', async ({
+  page,
+  context,
+}) => {
   const company = await registerCompany();
-  const created = await apiAs(company.token, 'POST', '/v1/employees', { number: '1', name: 'Pessoa com aumento', jobTitle: 'Técnico', contract: { type: 'indefinite', startDate: '2026-11-01', base: 2856000, currency: 'USD', baseUsd: 3000 } });
-  expect(created.status).toBe(201); await signIn(context, company.token);
+  const created = await apiAs(company.token, 'POST', '/v1/employees', {
+    number: '1',
+    name: 'Pessoa com aumento',
+    jobTitle: 'Técnico',
+    contract: { type: 'indefinite', startDate: '2026-11-01', base: 2856000, currency: 'USD', baseUsd: 3000 },
+  });
+  expect(created.status).toBe(201);
+  await signIn(context, company.token);
   await page.goto(`/colaboradores/${created.body.id}?s=contrato`);
-  const current = page.locator('.card.section').filter({ has: page.getByRole('heading', { name: 'Remuneração em vigor', exact: true }) });
+  const current = page
+    .locator('.card.section')
+    .filter({ has: page.getByRole('heading', { name: 'Remuneração em vigor', exact: true }) });
   await page.getByRole('button', { name: 'Registar alteração salarial', exact: true }).click();
   let form = page.getByRole('form', { name: 'Alteração salarial', exact: true });
   await form.getByLabel('Data de efeito', { exact: true }).fill('2026-12-01');
@@ -66,5 +93,9 @@ test('alteração futura informa o agendamento; efeito hoje actualiza o cartão 
   await form.getByRole('button', { name: 'Registar', exact: true }).click();
   await expect(current).toContainText(usd('3.200'));
   await page.getByRole('button', { name: 'Registar alteração salarial', exact: true }).click();
-  await expect(page.getByRole('form', { name: 'Alteração salarial', exact: true }).getByLabel('Salário base (USD)', { exact: true })).toHaveValue(/3[\s.]200,00/);
+  await expect(
+    page
+      .getByRole('form', { name: 'Alteração salarial', exact: true })
+      .getByLabel('Salário base (USD)', { exact: true }),
+  ).toHaveValue(/3[\s.]200,00/);
 });

@@ -1,5 +1,11 @@
 import type { Minor } from './money.js';
-import { assertBalanced, DEFAULT_PGC_ACCOUNTS, type JournalEntry, type JournalLine, type PgcAccountMap } from './pgc.js';
+import {
+  assertBalanced,
+  DEFAULT_PGC_ACCOUNTS,
+  type JournalEntry,
+  type JournalLine,
+  type PgcAccountMap,
+} from './pgc.js';
 
 /**
  * Despesas e ajudas de custo do pessoal.
@@ -20,7 +26,10 @@ export const EXPENSE_CATEGORIES = {
 export type ExpenseCategory = keyof typeof EXPENSE_CATEGORIES;
 
 export type PerDiemZone = 'national' | 'international';
-export const PER_DIEM_ZONE: Record<PerDiemZone, string> = { national: 'Diária — território nacional', international: 'Diária — estrangeiro' };
+export const PER_DIEM_ZONE: Record<PerDiemZone, string> = {
+  national: 'Diária — território nacional',
+  international: 'Diária — estrangeiro',
+};
 
 export interface ExpenseLineInput {
   kind: 'expense' | 'per_diem';
@@ -39,9 +48,14 @@ export interface ExpenseLineInput {
   rateMinor?: Minor;
 }
 
-export interface ExpenseLine extends ExpenseLineInput { amountMinor: Minor }
+export interface ExpenseLine extends ExpenseLineInput {
+  amountMinor: Minor;
+}
 
-export interface PerDiemRates { national: Minor | null; international: Minor | null }
+export interface PerDiemRates {
+  national: Minor | null;
+  international: Minor | null;
+}
 
 /** Valor de cada linha: o documento para despesas; dias × diária (arredondado ao cêntimo) para ajudas de custo. */
 export function lineAmount(l: ExpenseLineInput): Minor {
@@ -50,15 +64,18 @@ export function lineAmount(l: ExpenseLineInput): Minor {
 }
 
 export function claimTotals(lines: ExpenseLineInput[]) {
-  const expensesMinor = lines.filter((l) => l.kind === 'expense').reduce((s, l) => s + lineAmount(l), 0);
-  const perDiemMinor = lines.filter((l) => l.kind === 'per_diem').reduce((s, l) => s + lineAmount(l), 0);
+  const expensesMinor = lines.filter(l => l.kind === 'expense').reduce((s, l) => s + lineAmount(l), 0);
+  const perDiemMinor = lines.filter(l => l.kind === 'per_diem').reduce((s, l) => s + lineAmount(l), 0);
   return { expensesMinor, perDiemMinor, totalMinor: expensesMinor + perDiemMinor };
 }
 
 const DAY = 86_400_000;
 
 /** Problemas que impedem submeter a nota (lista vazia = pode seguir). */
-export function claimProblems(lines: ExpenseLineInput[], opts: { today: string; rates: PerDiemRates; maxAgeDays?: number }): string[] {
+export function claimProblems(
+  lines: ExpenseLineInput[],
+  opts: { today: string; rates: PerDiemRates; maxAgeDays?: number },
+): string[] {
   const out: string[] = [];
   if (!lines.length) out.push('A nota não tem linhas');
   const maxAge = opts.maxAgeDays ?? 120;
@@ -66,7 +83,8 @@ export function claimProblems(lines: ExpenseLineInput[], opts: { today: string; 
     const n = `Linha ${i + 1}`;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(l.date)) out.push(`${n}: data inválida`);
     else if (l.date > opts.today) out.push(`${n}: data futura`);
-    else if ((Date.parse(opts.today) - Date.parse(l.date)) / DAY > maxAge) out.push(`${n}: despesa com mais de ${maxAge} dias`);
+    else if ((Date.parse(opts.today) - Date.parse(l.date)) / DAY > maxAge)
+      out.push(`${n}: despesa com mais de ${maxAge} dias`);
     if (!l.description.trim()) out.push(`${n}: indique a descrição`);
     if (l.kind === 'expense') {
       if (!l.category || !(l.category in EXPENSE_CATEGORIES)) out.push(`${n}: escolha a categoria`);
@@ -74,7 +92,8 @@ export function claimProblems(lines: ExpenseLineInput[], opts: { today: string; 
       if (!l.documentRef?.trim()) out.push(`${n}: indique o n.º do recibo ou factura`);
     } else {
       if (!l.zone || !(l.zone in PER_DIEM_ZONE)) out.push(`${n}: indique se a deslocação é nacional ou no estrangeiro`);
-      if (!l.days || l.days <= 0 || Math.round(l.days * 2) !== l.days * 2) out.push(`${n}: dias em múltiplos de meio dia`);
+      if (!l.days || l.days <= 0 || Math.round(l.days * 2) !== l.days * 2)
+        out.push(`${n}: dias em múltiplos de meio dia`);
       if (!l.rateMinor || l.rateMinor <= 0) out.push(`${n}: indique a diária`);
       const max = l.zone ? opts.rates[l.zone] : null;
       if (max !== null && l.rateMinor && l.rateMinor > max) out.push(`${n}: diária acima da fixada pela empresa`);
@@ -84,11 +103,43 @@ export function claimProblems(lines: ExpenseLineInput[], opts: { today: string; 
 }
 
 /** Aprovação: custo (classe 7) contra a dívida ao trabalhador (classe 3). */
-export function expenseApprovalJournal(date: string, reference: string, description: string, lines: ExpenseLineInput[], costCenter: string | undefined, accounts: PgcAccountMap = DEFAULT_PGC_ACCOUNTS): JournalEntry {
+export function expenseApprovalJournal(
+  date: string,
+  reference: string,
+  description: string,
+  lines: ExpenseLineInput[],
+  costCenter: string | undefined,
+  accounts: PgcAccountMap = DEFAULT_PGC_ACCOUNTS,
+): JournalEntry {
   const t = claimTotals(lines);
   const out: JournalLine[] = [];
-  if (t.expensesMinor) out.push({ account: accounts.staffExpenses, description: `Despesas ${description}`, costCenter, debitMinor: t.expensesMinor, creditMinor: 0 });
-  if (t.perDiemMinor) out.push({ account: accounts.perDiem, description: `Ajudas de custo ${description}`, costCenter, debitMinor: t.perDiemMinor, creditMinor: 0 });
-  out.push({ account: accounts.expensesPayable, description: `A reembolsar ${description}`, debitMinor: 0, creditMinor: t.totalMinor });
-  return assertBalanced({ date, journal: 'Pessoal', reference, description: `Nota de despesas ${reference} — ${description}`, lines: out });
+  if (t.expensesMinor)
+    out.push({
+      account: accounts.staffExpenses,
+      description: `Despesas ${description}`,
+      costCenter,
+      debitMinor: t.expensesMinor,
+      creditMinor: 0,
+    });
+  if (t.perDiemMinor)
+    out.push({
+      account: accounts.perDiem,
+      description: `Ajudas de custo ${description}`,
+      costCenter,
+      debitMinor: t.perDiemMinor,
+      creditMinor: 0,
+    });
+  out.push({
+    account: accounts.expensesPayable,
+    description: `A reembolsar ${description}`,
+    debitMinor: 0,
+    creditMinor: t.totalMinor,
+  });
+  return assertBalanced({
+    date,
+    journal: 'Pessoal',
+    reference,
+    description: `Nota de despesas ${reference} — ${description}`,
+    lines: out,
+  });
 }

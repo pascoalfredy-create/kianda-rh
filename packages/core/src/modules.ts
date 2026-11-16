@@ -2,23 +2,43 @@ import { canWrite, effectiveStatus, type SubscriptionStatus } from './licensing.
 import type { FinancialSector } from './modeling/types.js';
 
 export const PLATFORM_MODULES = ['hr', 'modeling', 'valuation'] as const;
-export type PlatformModule = typeof PLATFORM_MODULES[number];
+export type PlatformModule = (typeof PLATFORM_MODULES)[number];
 export interface ModuleGrant {
-  enabled: boolean; status: SubscriptionStatus; trialEndsAt: string | null; paidUntil: string | null;
+  enabled: boolean;
+  status: SubscriptionStatus;
+  trialEndsAt: string | null;
+  paidUntil: string | null;
 }
 export type ModuleAccess = ReturnType<typeof moduleAccess>;
 export interface CompanyModuleAccess extends ModuleAccess {
-  trialEndsAt: string | null; paidUntil: string | null; canAccess: boolean;
+  trialEndsAt: string | null;
+  paidUntil: string | null;
+  canAccess: boolean;
 }
 export interface CompanyModulesOverview {
   hr: CompanyModuleAccess;
-  modeling: CompanyModuleAccess & { projectLimit: number | null; extraUsers: number; userLimit: number; planKey: string | null; cycle: string | null; primarySector: FinancialSector | null; sectors: FinancialSector[] };
+  modeling: CompanyModuleAccess & {
+    projectLimit: number | null;
+    extraUsers: number;
+    userLimit: number;
+    planKey: string | null;
+    cycle: string | null;
+    primarySector: FinancialSector | null;
+    sectors: FinancialSector[];
+  };
   /** Kianda Valora: análise financeira, orçamento, tesouraria e avaliação de empresas. */
-  valuation: CompanyModuleAccess & { analysisLimit: number | null; extraUsers: number; userLimit: number; planKey: string | null; cycle: string | null };
+  valuation: CompanyModuleAccess & {
+    analysisLimit: number | null;
+    extraUsers: number;
+    userLimit: number;
+    planKey: string | null;
+    cycle: string | null;
+  };
 }
 /** Ausência de licença nunca concede Modelagem. RH conserva a licença existente. */
 export function moduleAccess(grant: ModuleGrant | null, today: string) {
-  if (!grant?.enabled) return { subscribed: false, status: 'cancelled' as SubscriptionStatus, canRead: false, canWrite: false };
+  if (!grant?.enabled)
+    return { subscribed: false, status: 'cancelled' as SubscriptionStatus, canRead: false, canWrite: false };
   const status = effectiveStatus(grant, today);
   return { subscribed: true, status, canRead: true, canWrite: canWrite(status) };
 }

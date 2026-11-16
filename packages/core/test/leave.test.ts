@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
-  AO_2026, ABSENCE_POLICIES, checkAbsenceLimit, fullMonthsBetween, getPack, vacationBalance, vacationEligibleFrom, vacationEntitlement, workingDaysByYear,
+  AO_2026,
+  ABSENCE_POLICIES,
+  checkAbsenceLimit,
+  fullMonthsBetween,
+  getPack,
+  vacationBalance,
+  vacationEligibleFrom,
+  vacationEntitlement,
+  workingDaysByYear,
 } from '../src/index.js';
 
 describe('férias (LGT)', () => {
@@ -23,14 +31,18 @@ describe('férias (LGT)', () => {
   });
   it('dias úteis repartidos por ano, com feriados', () => {
     // 22–31 Dez 2026: 25/12 é feriado → 7 dias úteis
-    expect(workingDaysByYear('2026-12-22', '2026-12-31', (y) => getPack('AO', y))).toEqual({ 2026: 7 });
+    expect(workingDaysByYear('2026-12-22', '2026-12-31', y => getPack('AO', y))).toEqual({ 2026: 7 });
   });
   it('saldo disponível desconta aprovados e pendentes', () => {
-    expect(vacationBalance({ year: 2026, entitlement: 22, carriedOver: 3, approvedDays: 10, pendingDays: 5 }).available).toBe(10);
+    expect(
+      vacationBalance({ year: 2026, entitlement: 22, carriedOver: 3, approvedDays: 10, pendingDays: 5 }).available,
+    ).toBe(10);
   });
   it('limites legais por ocorrência', () => {
     expect(checkAbsenceLimit('paternity', '2026-11-02', '2026-11-13', 10, AO_2026)).toMatch(/máximo de 8 dias úteis/);
-    expect(checkAbsenceLimit('maternity', '2026-11-01', '2027-02-15', 70, AO_2026)).toMatch(/máximo de 90 dias seguidos/);
+    expect(checkAbsenceLimit('maternity', '2026-11-01', '2027-02-15', 70, AO_2026)).toMatch(
+      /máximo de 90 dias seguidos/,
+    );
     expect(checkAbsenceLimit('vacation', '2026-11-02', '2026-12-31', 40, AO_2026)).toBeNull();
     expect(ABSENCE_POLICIES.unjustified.selfService).toBe(false);
   });
@@ -42,7 +54,7 @@ describe('feriados gerados e regras laborais por ano', async () => {
     expect(easterSunday(2026)).toBe('2026-04-05');
     expect(easterSunday(2027)).toBe('2027-03-28');
     expect(angolaHolidays(2026)).toEqual([...AO_2026.holidays]);
-    expect(angolaHolidays(2027).find((h) => h.name === 'Carnaval')?.date).toBe('2027-02-09');
+    expect(angolaHolidays(2027).find(h => h.name === 'Carnaval')?.date).toBe('2027-02-09');
   });
   it('2027: férias planeáveis e regras de 2026 em vigor até haver pacote próprio', () => {
     const r = labourRules('AO', 2027);
@@ -51,6 +63,6 @@ describe('feriados gerados e regras laborais por ano', async () => {
     expect(getPack('AO', 2027).irt).toEqual(getPack('AO', 2026).irt);
     expect(packOrLatest('AO', 2027).version).toBe('AO-2026.2');
     // férias de 21/12/2026 a 08/01/2027: 8 dias úteis em 2026 (25/12 feriado) + 5 em 2027 (01/01 feriado)
-    expect(workingDaysByYear('2026-12-21', '2027-01-08', (y) => labourRules('AO', y))).toEqual({ 2026: 8, 2027: 5 });
+    expect(workingDaysByYear('2026-12-21', '2027-01-08', y => labourRules('AO', y))).toEqual({ 2026: 8, 2027: 5 });
   });
 });

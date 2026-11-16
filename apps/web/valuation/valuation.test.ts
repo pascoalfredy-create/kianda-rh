@@ -13,8 +13,23 @@ const runtime = readFileSync(new URL('../public/valuation-runtime.js', import.me
 
 /** Motor do Valora tal como corre na interface (mesmo texto gerado), sem DOM. */
 function engine(data: unknown) {
-  const ctx: Record<string, unknown> = { console, Math, JSON, Number, Object, Array, String, Intl, Date, isFinite, isNaN };
-  runInNewContext(`${VALUATION_ENGINE_SOURCE}\nD=__data;EX=D.ex;globalThis.__R=compute();`, Object.assign(ctx, { __data: structuredClone(data) }));
+  const ctx: Record<string, unknown> = {
+    console,
+    Math,
+    JSON,
+    Number,
+    Object,
+    Array,
+    String,
+    Intl,
+    Date,
+    isFinite,
+    isNaN,
+  };
+  runInNewContext(
+    `${VALUATION_ENGINE_SOURCE}\nD=__data;EX=D.ex;globalThis.__R=compute();`,
+    Object.assign(ctx, { __data: structuredClone(data) }),
+  );
   return ctx.__R as Record<string, any>;
 }
 
@@ -22,12 +37,32 @@ function engine(data: unknown) {
 function sample() {
   const d = blankValuationData({ entity: 'Kalunga Distribuição, S.A.', lastClosedYear: 2025, historyYears: 3 });
   const n = d.years.length;
-  const put = (group: Record<string, number[]>, key: string, values: number[]) => { group[key] = values.slice(0, n); };
-  put(d.dr, 'v61', [800, 900, 1000]); put(d.dr, 'c71', [400, 450, 500]); put(d.dr, 'c72', [150, 160, 170]); put(d.dr, 'c75', [50, 55, 60]); put(d.dr, 'c73', [30, 30, 30]);
-  for (const [k, v] of Object.entries({ imob: 500, amort: 200, exist: 100, clientes: 150, caixa: 50, capital: 300, empMLP: 100, fornec: 80 })) put(d.bal, k, [v, v, v]);
+  const put = (group: Record<string, number[]>, key: string, values: number[]) => {
+    group[key] = values.slice(0, n);
+  };
+  put(d.dr, 'v61', [800, 900, 1000]);
+  put(d.dr, 'c71', [400, 450, 500]);
+  put(d.dr, 'c72', [150, 160, 170]);
+  put(d.dr, 'c75', [50, 55, 60]);
+  put(d.dr, 'c73', [30, 30, 30]);
+  for (const [k, v] of Object.entries({
+    imob: 500,
+    amort: 200,
+    exist: 100,
+    clientes: 150,
+    caixa: 50,
+    capital: 300,
+    empMLP: 100,
+    fornec: 80,
+  }))
+    put(d.bal, k, [v, v, v]);
   // Reservas fecham o balanço depois do resultado líquido de cada ano (imposto de 25 %).
   const rl = d.dr.v61.map((v, i) => (v - d.dr.c71[i]! - d.dr.c72[i]! - d.dr.c75[i]! - d.dr.c73[i]!) * 0.75);
-  put(d.bal, 'reservas', rl.map(r => 600 - 300 - 100 - 80 - r));
+  put(
+    d.bal,
+    'reservas',
+    rl.map(r => 600 - 300 - 100 - 80 - r),
+  );
   d.orc.vendas = 1100;
   return d;
 }
@@ -45,24 +80,40 @@ describe('Kianda Valora: interface aprovada servida pela plataforma', () => {
     expect(runtime).toContain('/api/v1/valuation');
   });
   it('isola a sessão JSON de HTML executável e aplica a política de segurança', () => {
-    const session = { user: { id: 'u', name: '</script><script>alert(1)</script>', role: 'owner' }, licence: { status: 'active', trialEndsAt: null, paidUntil: null }, formats: { pdf: true, docx: true, xlsx: true } } as ValuationSession;
+    const session = {
+      user: { id: 'u', name: '</script><script>alert(1)</script>', role: 'owner' },
+      licence: { status: 'active', trialEndsAt: null, paidUntil: null },
+      formats: { pdf: true, docx: true, xlsx: true },
+    } as ValuationSession;
     const html = valuationPage(session, 'n1');
-    expect(html).not.toContain(session.user.name); expect(html).toContain('\\u003c/script>');
+    expect(html).not.toContain(session.user.name);
+    expect(html).toContain('\\u003c/script>');
     const json = html.split('id="valora-session" type="application/json" nonce="n1">')[1]!.split('</script>')[0]!;
     expect(JSON.parse(json)).toEqual(session);
     const csp = valuationHeaders('n1')['content-security-policy'];
-    expect(csp).toContain("script-src 'self' 'nonce-n1'"); expect(csp).not.toContain('unsafe-eval'); expect(csp).toContain("connect-src 'self'");
+    expect(csp).toContain("script-src 'self' 'nonce-n1'");
+    expect(csp).not.toContain('unsafe-eval');
+    expect(csp).toContain("connect-src 'self'");
     expect(valuationHeaders('n1')['x-robots-tag']).toBe('noindex, nofollow');
   });
   it('sem sessão mostra o erro escapado e não entrega o código da interface', () => {
     const html = valuationPage(null, 'n', '<img onerror="x">');
-    expect(html).toContain('&lt;img'); expect(html).not.toContain('/valuation-runtime.js');
+    expect(html).toContain('&lt;img');
+    expect(html).not.toContain('/valuation-runtime.js');
   });
   it('no período experimental avisa que os documentos ficam em pré-visualização e bloqueia a impressão', () => {
     // Fim da avaliação sempre 10 dias depois de hoje (hora de Luanda): o teste não depende da data em que corre.
     const until = new Date(Date.now() + 3600_000 + 10 * 86400_000).toISOString().slice(0, 10);
-    const html = valuationPage({ licence: { status: 'trial', trialEndsAt: until, paidUntil: null }, formats: { pdf: false, docx: false, xlsx: false } } as ValuationSession, 'n');
-    expect(html).toContain('Avaliação gratuita'); expect(html).toContain(until.split('-').reverse().join('/')); expect(html).toContain('@media print');
+    const html = valuationPage(
+      {
+        licence: { status: 'trial', trialEndsAt: until, paidUntil: null },
+        formats: { pdf: false, docx: false, xlsx: false },
+      } as ValuationSession,
+      'n',
+    );
+    expect(html).toContain('Avaliação gratuita');
+    expect(html).toContain(until.split('-').reverse().join('/'));
+    expect(html).toContain('@media print');
   });
 });
 
@@ -70,12 +121,15 @@ describe('Kianda Valora: motor de cálculo (PGC Angola, classe 6 proveitos, clas
   it('uma análise em branco é válida e abre no motor sem meses reais', () => {
     const blank = blankValuationData({ entity: 'Nova', lastClosedYear: 2025 });
     expect(valuationDataIssue(blank)).toBeNull();
-    expect(blank.fecho).toBe(0); expect(blank.ex).toBe(2026);
+    expect(blank.fecho).toBe(0);
+    expect(blank.ex).toBe(2026);
     expect(() => engine(blank)).not.toThrow();
   });
   it('demonstrações históricas: resultados, margens e balanço equilibrado', () => {
-    const d = sample(); expect(valuationDataIssue(d)).toBeNull();
-    const R = engine(d), L = R.L;
+    const d = sample();
+    expect(valuationDataIssue(d)).toBeNull();
+    const R = engine(d),
+      L = R.L;
     expect(R.rec[L]).toBe(1000);
     expect(R.ebitda[L]).toBe(270); // 1000 − 500 − 170 − 60
     expect(R.ebit[L]).toBe(240);
@@ -101,12 +155,21 @@ describe('Kianda Valora: motor de cálculo (PGC Angola, classe 6 proveitos, clas
 describe('Kianda Valora: Excel sem bibliotecas externas', () => {
   it('o relatório escrito volta a ser lido com números e texto', async () => {
     const book = utils.book_new();
-    utils.book_append_sheet(book, utils.aoa_to_sheet([['Rubrica', 'Jan', 'Fev'], ['61 Vendas', 120.5, 130], ['72 Custos com o pessoal', 40, null]]), 'Real');
+    utils.book_append_sheet(
+      book,
+      utils.aoa_to_sheet([
+        ['Rubrica', 'Jan', 'Fev'],
+        ['61 Vendas', 120.5, 130],
+        ['72 Custos com o pessoal', 40, null],
+      ]),
+      'Real',
+    );
     const bytes = write(book);
     const rows = await readXlsxRows(bytes.slice().buffer);
     expect(rows[0]).toEqual(['Rubrica', 'Jan', 'Fev']);
     expect(rows[1]).toEqual(['61 Vendas', 120.5, 130]);
-    expect(rows[2]![0]).toBe('72 Custos com o pessoal'); expect(rows[2]![1]).toBe(40);
+    expect(rows[2]![0]).toBe('72 Custos com o pessoal');
+    expect(rows[2]![1]).toBe(40);
   });
   it('recusa um ficheiro que não é .xlsx', async () => {
     await expect(readXlsxRows(new TextEncoder().encode('não é um zip').buffer)).rejects.toThrow();
@@ -115,16 +178,32 @@ describe('Kianda Valora: Excel sem bibliotecas externas', () => {
   it('imposto do orçamento: calculado sobre o resultado acumulado do ano, e não mês a mês', () => {
     const d = sample();
     Object.assign(d.orc, { vendas: 1200, saz: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 89], mb: 40, salBase: 20, fseFix: 10 });
-    const R = engine(d), fy = R.fyO;
+    const R = engine(d),
+      fy = R.fyO;
     expect(fy.rai).toBeGreaterThan(0);
     expect(fy.imp).toBeCloseTo(Math.max(0, fy.rai) * 0.25, 6);
   });
   it('resultados não operacionais (68/69, 78/79) entram no resultado e o fluxo de caixa continua a reconciliar', () => {
-    const ctx: Record<string, unknown> = { console, Math, JSON, Number, Object, Array, String, Intl, Date, isFinite, isNaN };
-    runInNewContext(`${VALUATION_ENGINE_SOURCE}\nD=__data;EX=D.ex;compute();
+    const ctx: Record<string, unknown> = {
+      console,
+      Math,
+      JSON,
+      Number,
+      Object,
+      Array,
+      String,
+      Intl,
+      Date,
+      isFinite,
+      isNaN,
+    };
+    runInNewContext(
+      `${VALUATION_ENGINE_SOURCE}\nD=__data;EX=D.ex;compute();
       const E=engine(D.orc,{open:open25(),hist:hist25()});FKEYS.forEach(k=>D.real[k][0]=E[0].f[k]||0);BKEYS.forEach(k=>D.real[k][0]=E[0].b[k]);
       D.fecho=1;CACHE={};const base=periods('real','M',false)[0];D.real.p68[0]=5;D.real.c78[0]=2;D.real.caixa[0]+=3;CACHE={};
-      globalThis.__out={base,p:periods('real','M',false)[0]};`, Object.assign(ctx, { __data: structuredClone(sample()) }));
+      globalThis.__out={base,p:periods('real','M',false)[0]};`,
+      Object.assign(ctx, { __data: structuredClone(sample()) }),
+    );
     const { base, p } = ctx.__out as Record<string, any>;
     expect(p.resNop).toBeCloseTo(3, 9);
     expect(p.rai).toBeCloseTo(base.rai + 3, 9);
@@ -136,15 +215,49 @@ describe('Kianda Valora: Excel sem bibliotecas externas', () => {
   it('prazo médio de pagamento inclui fornecimentos e serviços externos e reproduz o prazo orçamentado (V-4)', () => {
     const d = sample();
     Object.assign(d.orc, { vendas: 1200, mb: 40, salBase: 20, fseFix: 10, fseVar: 5, pmp: 60 });
-    const ctx: Record<string, unknown> = { console, Math, JSON, Number, Object, Array, String, Intl, Date, isFinite, isNaN };
-    runInNewContext(`${VALUATION_ENGINE_SOURCE}\nD=__data;EX=D.ex;compute();globalThis.__P=periods('orc','M',false);`, Object.assign(ctx, { __data: structuredClone(d) }));
+    const ctx: Record<string, unknown> = {
+      console,
+      Math,
+      JSON,
+      Number,
+      Object,
+      Array,
+      String,
+      Intl,
+      Date,
+      isFinite,
+      isNaN,
+    };
+    runInNewContext(
+      `${VALUATION_ENGINE_SOURCE}\nD=__data;EX=D.ex;compute();globalThis.__P=periods('orc','M',false);`,
+      Object.assign(ctx, { __data: structuredClone(d) }),
+    );
     const P = ctx.__P as Record<string, any>[];
-    for (const p of P.slice(4, 11)) expect(p.pmp).toBeCloseTo(60 * p.days / 30, 0);
-    for (const p of P) { expect(Math.abs(p.td.ctrl)).toBeLessThan(1e-9); expect(Math.abs(p.dif)).toBeLessThan(1e-9); expect(p.td.payS).toBeCloseTo(0, 12); }
+    for (const p of P.slice(4, 11)) expect(p.pmp).toBeCloseTo((60 * p.days) / 30, 0);
+    for (const p of P) {
+      expect(Math.abs(p.td.ctrl)).toBeLessThan(1e-9);
+      expect(Math.abs(p.dif)).toBeLessThan(1e-9);
+      expect(p.td.payS).toBeCloseTo(0, 12);
+    }
   });
   it('rendibilidades sobre saldos médios e decomposição DuPont exacta (V-5)', () => {
-    const ctx: Record<string, unknown> = { console, Math, JSON, Number, Object, Array, String, Intl, Date, isFinite, isNaN };
-    runInNewContext(`${VALUATION_ENGINE_SOURCE}\nD=__data;EX=D.ex;compute();globalThis.__P=[...histPeriods().map(metrics),...periods('orc','T',false)];`, Object.assign(ctx, { __data: structuredClone(sample()) }));
+    const ctx: Record<string, unknown> = {
+      console,
+      Math,
+      JSON,
+      Number,
+      Object,
+      Array,
+      String,
+      Intl,
+      Date,
+      isFinite,
+      isNaN,
+    };
+    runInNewContext(
+      `${VALUATION_ENGINE_SOURCE}\nD=__data;EX=D.ex;compute();globalThis.__P=[...histPeriods().map(metrics),...periods('orc','T',false)];`,
+      Object.assign(ctx, { __data: structuredClone(sample()) }),
+    );
     for (const p of ctx.__P as Record<string, any>[]) {
       expect(p.roe).toBeCloseTo(p.margL * p.rot * p.alav, 12);
       if (p.o && p.o.capital != null) {
@@ -156,26 +269,63 @@ describe('Kianda Valora: Excel sem bibliotecas externas', () => {
   });
   it('calendário real: fevereiro com 29 dias e ano de 366 dias nos anos bissextos (V-6)', () => {
     const d = blankValuationData({ entity: 'Teste', lastClosedYear: 2027, historyYears: 2 });
-    const ctx: Record<string, unknown> = { console, Math, JSON, Number, Object, Array, String, Intl, Date, isFinite, isNaN };
-    runInNewContext(`${VALUATION_ENGINE_SOURCE}\nD=__data;EX=D.ex;compute();globalThis.__o={m:periods('orc','M',false).map(p=>p.days),a:periods('orc','A',false)[0].days,h:histPeriods().map(p=>p.days)};`, Object.assign(ctx, { __data: structuredClone(d) }));
+    const ctx: Record<string, unknown> = {
+      console,
+      Math,
+      JSON,
+      Number,
+      Object,
+      Array,
+      String,
+      Intl,
+      Date,
+      isFinite,
+      isNaN,
+    };
+    runInNewContext(
+      `${VALUATION_ENGINE_SOURCE}\nD=__data;EX=D.ex;compute();globalThis.__o={m:periods('orc','M',false).map(p=>p.days),a:periods('orc','A',false)[0].days,h:histPeriods().map(p=>p.days)};`,
+      Object.assign(ctx, { __data: structuredClone(d) }),
+    );
     const o = ctx.__o as { m: number[]; a: number; h: number[] };
-    expect(o.m[1]).toBe(29); expect(o.a).toBe(366); expect(o.h).toEqual([365, 365]);
+    expect(o.m[1]).toBe(29);
+    expect(o.a).toBe(366);
+    expect(o.h).toEqual([365, 365]);
   });
   it('taxa de IVA configurável por análise (V-7)', () => {
     const run = (iva: number | undefined) => {
-      const d = sample(); Object.assign(d.orc, { vendas: 1200, mb: 40, pmr: 60 });
-      if (iva === undefined) delete (d.orc as Record<string, unknown>).iva; else d.orc.iva = iva;
-      const ctx: Record<string, unknown> = { console, Math, JSON, Number, Object, Array, String, Intl, Date, isFinite, isNaN };
-      runInNewContext(`${VALUATION_ENGINE_SOURCE}\nD=__data;EX=D.ex;compute();globalThis.__P=periods('orc','M',false);`, Object.assign(ctx, { __data: structuredClone(d) }));
+      const d = sample();
+      Object.assign(d.orc, { vendas: 1200, mb: 40, pmr: 60 });
+      if (iva === undefined) delete (d.orc as Record<string, unknown>).iva;
+      else d.orc.iva = iva;
+      const ctx: Record<string, unknown> = {
+        console,
+        Math,
+        JSON,
+        Number,
+        Object,
+        Array,
+        String,
+        Intl,
+        Date,
+        isFinite,
+        isNaN,
+      };
+      runInNewContext(
+        `${VALUATION_ENGINE_SOURCE}\nD=__data;EX=D.ex;compute();globalThis.__P=periods('orc','M',false);`,
+        Object.assign(ctx, { __data: structuredClone(d) }),
+      );
       return ctx.__P as Record<string, any>[];
     };
-    const p0 = run(0), p14 = run(14), pDef = run(undefined);
+    const p0 = run(0),
+      p14 = run(14),
+      pDef = run(undefined);
     expect(p14[6].b.clientes / p0[6].b.clientes).toBeCloseTo(1.14, 9);
     expect(pDef[6].b.clientes).toBeCloseTo(p14[6].b.clientes, 9);
     expect(p0[6].pmr).toBeCloseTo(p14[6].pmr, 9);
     for (const p of p0) expect(Math.abs(p.td.ctrl)).toBeLessThan(1e-9);
     expect(blankValuationData({ entity: 'X', lastClosedYear: 2025, historyYears: 2 }).orc.iva).toBe(14);
-    const bad = blankValuationData({ entity: 'X', lastClosedYear: 2025, historyYears: 2 }); (bad.orc as Record<string, unknown>).iva = 150;
+    const bad = blankValuationData({ entity: 'X', lastClosedYear: 2025, historyYears: 2 });
+    (bad.orc as Record<string, unknown>).iva = 150;
     expect(valuationDataIssue(bad)).toBe('Taxa de IVA inválida.');
   });
 });

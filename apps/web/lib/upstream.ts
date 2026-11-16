@@ -2,7 +2,9 @@ import 'server-only';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:4000';
 
-interface ServiceBinding { fetch(input: Request): Promise<Response> }
+interface ServiceBinding {
+  fetch(input: Request): Promise<Response>;
+}
 
 /**
  * Pedido à API.

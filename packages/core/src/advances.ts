@@ -17,14 +17,22 @@ export function addMonths(period: string, n: number): string {
 }
 
 /** Prestações iguais (o resto dos cêntimos vai para a última). */
-export function advancePlan(amountMinor: Minor, installments: number, firstPeriod: string): { period: string; amountMinor: Minor }[] {
+export function advancePlan(
+  amountMinor: Minor,
+  installments: number,
+  firstPeriod: string,
+): { period: string; amountMinor: Minor }[] {
   const n = Math.max(1, Math.floor(installments));
   const each = Math.floor(amountMinor / n);
-  return Array.from({ length: n }, (_, i) => ({ period: addMonths(firstPeriod, i), amountMinor: i === n - 1 ? amountMinor - each * (n - 1) : each }));
+  return Array.from({ length: n }, (_, i) => ({
+    period: addMonths(firstPeriod, i),
+    amountMinor: i === n - 1 ? amountMinor - each * (n - 1) : each,
+  }));
 }
 
 /** Desconto máximo por mês para adiantamentos e outros descontos a crédito: % do salário líquido. */
-export const monthlyDeductionCap = (netMinor: Minor, pack: CountryPack): Minor => Math.floor((netMinor * pack.labour.advances.maxNetShareBps) / 10_000);
+export const monthlyDeductionCap = (netMinor: Minor, pack: CountryPack): Minor =>
+  Math.floor((netMinor * pack.labour.advances.maxNetShareBps) / 10_000);
 
 export interface AdvanceCheckInput {
   amountMinor: Minor;
@@ -50,7 +58,8 @@ export interface AdvanceCheck {
   problems: string[];
 }
 
-const fmt = (m: Minor) => `${(m / 100).toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kz`;
+const fmt = (m: Minor) =>
+  `${(m / 100).toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kz`;
 
 export function checkAdvance(i: AdvanceCheckInput): AdvanceCheck {
   const { maxBaseSalaries, maxNetShareBps } = i.pack.labour.advances;
@@ -60,12 +69,23 @@ export function checkAdvance(i: AdvanceCheckInput): AdvanceCheck {
   const problems: string[] = [];
   if (i.amountMinor <= 0) problems.push('Indique o valor do adiantamento');
   if (i.amountMinor > maxAmountMinor) {
-    problems.push(`O total de adiantamentos não pode exceder ${maxBaseSalaries} salários base (${fmt(i.baseMinor * maxBaseSalaries)})${i.outstandingMinor ? `; já estão em dívida ${fmt(i.outstandingMinor)}` : ''} — máximo agora: ${fmt(maxAmountMinor)}`);
+    problems.push(
+      `O total de adiantamentos não pode exceder ${maxBaseSalaries} salários base (${fmt(i.baseMinor * maxBaseSalaries)})${i.outstandingMinor ? `; já estão em dívida ${fmt(i.outstandingMinor)}` : ''} — máximo agora: ${fmt(maxAmountMinor)}`,
+    );
   }
   if (!maxInstallmentMinor) {
-    problems.push(`Os descontos a crédito já atingem ${maxNetShareBps / 100}% do salário líquido: não há margem para novas prestações`);
+    problems.push(
+      `Os descontos a crédito já atingem ${maxNetShareBps / 100}% do salário líquido: não há margem para novas prestações`,
+    );
   } else if (i.amountMinor > 0 && Math.ceil(i.amountMinor / Math.max(1, i.installments)) > maxInstallmentMinor) {
-    problems.push(`Cada prestação não pode passar de ${fmt(maxInstallmentMinor)} (${maxNetShareBps / 100}% do líquido${i.otherMonthlyDeductionsMinor ? ', descontados outros descontos a crédito' : ''}) — são precisas pelo menos ${minInstallments} prestações`);
+    problems.push(
+      `Cada prestação não pode passar de ${fmt(maxInstallmentMinor)} (${maxNetShareBps / 100}% do líquido${i.otherMonthlyDeductionsMinor ? ', descontados outros descontos a crédito' : ''}) — são precisas pelo menos ${minInstallments} prestações`,
+    );
   }
-  return { maxAmountMinor, maxInstallmentMinor, minInstallments: Number.isFinite(minInstallments) ? minInstallments : 0, problems };
+  return {
+    maxAmountMinor,
+    maxInstallmentMinor,
+    minInstallments: Number.isFinite(minInstallments) ? minInstallments : 0,
+    problems,
+  };
 }

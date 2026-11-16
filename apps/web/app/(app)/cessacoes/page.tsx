@@ -5,7 +5,15 @@ import { TERMINATION_STATUS } from './status';
 
 export const dynamic = 'force-dynamic';
 
-interface Row { id: string; employeeName: string; employeeNumber: string; reasonLabel: string; effectiveDate: string; status: string; createdAt: string }
+interface Row {
+  id: string;
+  employeeName: string;
+  employeeNumber: string;
+  reasonLabel: string;
+  effectiveDate: string;
+  status: string;
+  createdAt: string;
+}
 
 export default async function Cessacoes() {
   const me = (await currentUser())!;
@@ -17,19 +25,41 @@ export default async function Cessacoes() {
       <div className="page-head">
         <div>
           <h1>Saídas da empresa</h1>
-          <p className="sub">Saídas da empresa: o fecho de contas entra no processamento do mês e os documentos saem prontos.</p>
+          <p className="sub">
+            Saídas da empresa: o fecho de contas entra no processamento do mês e os documentos saem prontos.
+          </p>
         </div>
-        {canEdit && <Link className="btn" href="/cessacoes/nova">Nova cessação</Link>}
+        {canEdit && (
+          <Link className="btn" href="/cessacoes/nova">
+            Nova cessação
+          </Link>
+        )}
       </div>
       <div className="card">
         <table>
-          <thead><tr><th>Colaborador</th><th>Motivo</th><th>Último dia</th><th>Situação</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Colaborador</th>
+              <th>Motivo</th>
+              <th>Último dia</th>
+              <th>Situação</th>
+            </tr>
+          </thead>
           <tbody>
-            {rows.map((r) => (
+            {rows.map(r => (
               <tr key={r.id}>
-                <td><Link href={`/cessacoes/${r.id}`}><b>{r.employeeNumber} · {r.employeeName}</b></Link></td>
-                <td>{r.reasonLabel}</td><td>{r.effectiveDate.split('-').reverse().join('/')}</td>
-                <td><span className={TERMINATION_STATUS[r.status]?.[1]}>{TERMINATION_STATUS[r.status]?.[0]}</span></td>
+                <td>
+                  <Link href={`/cessacoes/${r.id}`}>
+                    <b>
+                      {r.employeeNumber} · {r.employeeName}
+                    </b>
+                  </Link>
+                </td>
+                <td>{r.reasonLabel}</td>
+                <td>{r.effectiveDate.split('-').reverse().join('/')}</td>
+                <td>
+                  <span className={TERMINATION_STATUS[r.status]?.[1]}>{TERMINATION_STATUS[r.status]?.[0]}</span>
+                </td>
               </tr>
             ))}
           </tbody>

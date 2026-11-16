@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { ackAudienceIncludes, ackAudienceIssue, ackContentHash, ackState, DEFAULT_CHECKLIST_TEMPLATES } from '../src/index.js';
+import {
+  ackAudienceIncludes,
+  ackAudienceIssue,
+  ackContentHash,
+  ackState,
+  DEFAULT_CHECKLIST_TEMPLATES,
+} from '../src/index.js';
 
 describe('aceitação de documentos: destinatários, impressão digital e estado', () => {
   it('destinatários: todos, o departamento ou o próprio', () => {
@@ -7,7 +13,9 @@ describe('aceitação de documentos: destinatários, impressão digital e estado
     expect(ackAudienceIncludes({ all: true, departmentIds: [], employeeIds: [] }, emp)).toBe(true);
     expect(ackAudienceIncludes({ all: false, departmentIds: ['d1'], employeeIds: [] }, emp)).toBe(true);
     expect(ackAudienceIncludes({ all: false, departmentIds: ['d2'], employeeIds: ['e1'] }, emp)).toBe(true);
-    expect(ackAudienceIncludes({ all: false, departmentIds: ['d2'], employeeIds: [] }, { id: 'e1', departmentId: null })).toBe(false);
+    expect(
+      ackAudienceIncludes({ all: false, departmentIds: ['d2'], employeeIds: [] }, { id: 'e1', departmentId: null }),
+    ).toBe(false);
     expect(ackAudienceIssue({ all: false, departmentIds: [], employeeIds: [] })).toMatch(/destinatários/);
   });
   it('a impressão digital muda com o texto, a versão ou um anexo, e não com a ordem dos anexos', async () => {
@@ -26,6 +34,8 @@ describe('aceitação de documentos: destinatários, impressão digital e estado
     expect(ackState({ status: 'accepted', dueDate: '2026-11-01' }, '2026-11-02')).toBe('accepted');
   });
   it('o acolhimento-tipo liga a tarefa do regulamento à aceitação no portal', () => {
-    expect(DEFAULT_CHECKLIST_TEMPLATES.onboarding.items.find(i => i.link === 'regulamento')).toMatchObject({ responsible: 'employee' });
+    expect(DEFAULT_CHECKLIST_TEMPLATES.onboarding.items.find(i => i.link === 'regulamento')).toMatchObject({
+      responsible: 'employee',
+    });
   });
 });

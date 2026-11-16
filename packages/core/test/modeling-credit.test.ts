@@ -1,9 +1,38 @@
 import { describe, expect, it } from 'vitest';
-import { FINANCIAL_SECTORS, buildFinancialReportBundle, creditDiagnosis, creditDiagnosisText, financialTemplate, runFinancialModel, type FinancialAssumptions } from '../src/index.js';
+import {
+  FINANCIAL_SECTORS,
+  buildFinancialReportBundle,
+  creditDiagnosis,
+  creditDiagnosisText,
+  financialTemplate,
+  runFinancialModel,
+  type FinancialAssumptions,
+} from '../src/index.js';
 
 function graceModel(): FinancialAssumptions {
   const m = financialTemplate('servicos').assumptions;
-  Object.assign(m, { horizonte: 3, anoBase: 2026, inicioOp: 1, preOp: 0, inflacao: 0, ii: 0, royalty: 0, cvar: 0, pessoal: 0, fst: 0, outros: 0, manut: 0, dso: 0, dio: 0, dpo: 0, capitalInicial: 0, payout: 0, caixaMin: 0, valorResidualLiquido: 0, libertarFundoManeio: false });
+  Object.assign(m, {
+    horizonte: 3,
+    anoBase: 2026,
+    inicioOp: 1,
+    preOp: 0,
+    inflacao: 0,
+    ii: 0,
+    royalty: 0,
+    cvar: 0,
+    pessoal: 0,
+    fst: 0,
+    outros: 0,
+    manut: 0,
+    dso: 0,
+    dio: 0,
+    dpo: 0,
+    capitalInicial: 0,
+    payout: 0,
+    caixaMin: 0,
+    valorResidualLiquido: 0,
+    libertarFundoManeio: false,
+  });
   m.receitas = [{ nome: 'Receita', unid: 'unidades', qtd: 1, preco: 200, cresc: 0, esc: 0, ramp: '1,50,100' }];
   m.capex = [{ nome: 'Investimento', ano: 0, valor: 100, vida: 3 }];
   m.divida = { montante: 100, taxa: 10, prazo: 3, carencia: 2, ano: 0, jurosDesembolso: 0 };
@@ -14,7 +43,9 @@ function graceModel(): FinancialAssumptions {
 
 describe('diagnóstico de crédito do Integra', () => {
   it('mede o covenant no reembolso e trata a carência à parte, como necessidade de liquidez', () => {
-    const m = graceModel(), r = runFinancialModel(m), d = creditDiagnosis(m, r)!;
+    const m = graceModel(),
+      r = runFinancialModel(m),
+      d = creditDiagnosis(m, r)!;
     expect(r.minDscr).toBe(0.2); // o motor continua a mostrar o pior ano com serviço da dívida
     expect(d.graceDscr).toBe(0.2);
     expect(d.repaymentDscr).toBe(r.k.dscr[3]);
@@ -23,8 +54,10 @@ describe('diagnóstico de crédito do Integra', () => {
   });
 
   it('considera todos os covenants e só conclui «não bancável» quando o reembolso não é coberto', () => {
-    const m = graceModel(); m.receitas[0]!.preco = 60;
-    const r = runFinancialModel(m), d = creditDiagnosis(m, r)!;
+    const m = graceModel();
+    m.receitas[0]!.preco = 60;
+    const r = runFinancialModel(m),
+      d = creditDiagnosis(m, r)!;
     expect(d.repaymentDscr!).toBeLessThan(1);
     expect(d.level).toBe('r');
     expect(d.breachYears).toContain(2029);
@@ -32,7 +65,9 @@ describe('diagnóstico de crédito do Integra', () => {
   });
 
   it('sem dívida não há diagnóstico', () => {
-    const m = graceModel(); m.divida.montante = 0; m.capitalInicial = 100;
+    const m = graceModel();
+    m.divida.montante = 0;
+    m.capitalInicial = 100;
     expect(creditDiagnosis(m, runFinancialModel(m))).toBeNull();
   });
 
@@ -40,17 +75,22 @@ describe('diagnóstico de crédito do Integra', () => {
     const m = graceModel();
     m.receitas[0]!.ramp = '100';
     m.divida = { ...m.divida, prazo: 10, carencia: 0 };
-    const r = runFinancialModel(m), diagnosis = creditDiagnosis(m, r)!;
+    const r = runFinancialModel(m),
+      diagnosis = creditDiagnosis(m, r)!;
     expect(r.k.debt[3]).toBe(70);
     expect(diagnosis.repaymentDscr).toBeGreaterThan(1);
     expect(diagnosis.level).toBe('a');
     expect(diagnosis.title).toContain('incompleta');
-    expect(diagnosis.conditions).toEqual([expect.stringContaining('70 remanescentes na moeda do projecto em 2029, com calendário até 2036')]);
+    expect(diagnosis.conditions).toEqual([
+      expect.stringContaining('70 remanescentes na moeda do projecto em 2029, com calendário até 2036'),
+    ]);
   });
 
   it('os modelos de exemplo com dívida reembolsam com DSCR positivo e nunca saem «não bancáveis»', () => {
     for (const sector of FINANCIAL_SECTORS) {
-      const m = financialTemplate(sector).assumptions, r = runFinancialModel(m), d = creditDiagnosis(m, r);
+      const m = financialTemplate(sector).assumptions,
+        r = runFinancialModel(m),
+        d = creditDiagnosis(m, r);
       if (!d) continue;
       expect(d.repaymentDscr, sector).not.toBeNull();
       expect(d.repaymentDscr!, sector).toBeGreaterThan(1);
@@ -60,7 +100,15 @@ describe('diagnóstico de crédito do Integra', () => {
 
   it('o relatório de crédito usa o mesmo diagnóstico e assinala o que falta completar', () => {
     const t = financialTemplate('comercio');
-    const bundle = buildFinancialReportBundle(t.assumptions, { companyName: 'Empresa', companyNif: '5000000000', sector: 'Comércio', revision: 1, sourceHash: 'x', asOf: '2026-11-08', state: 'draft' } as never);
+    const bundle = buildFinancialReportBundle(t.assumptions, {
+      companyName: 'Empresa',
+      companyNif: '5000000000',
+      sector: 'Comércio',
+      revision: 1,
+      sourceHash: 'x',
+      asOf: '2026-11-08',
+      state: 'draft',
+    } as never);
     const text = JSON.stringify(bundle.reports.credito);
     expect(text).toContain('DSCR mínimo no reembolso');
     expect(text).toContain('A completar antes de enviar');

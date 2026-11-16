@@ -2,7 +2,51 @@ import { describe, expect, it } from 'vitest';
 import { navigation, navActive } from './navigation';
 import type { Me } from './api';
 
-const me = (role: string, hr = true, modeling = false, valuation = false): Me => ({ user: { sub: 'u', role, employeeId: 'e', name: 'Pessoa de teste', companyId: 'co' }, company: { id: 'co', name: 'Empresa de teste', nif: '0000000000' }, modules: { hr: { subscribed: hr, canAccess: hr, canRead: hr, canWrite: hr, status: hr ? 'active' : 'cancelled', paidUntil: null, trialEndsAt: null }, modeling: { subscribed: modeling, canAccess: modeling, canRead: modeling, canWrite: modeling, status: modeling ? 'active' : 'cancelled', paidUntil: null, trialEndsAt: null, planKey: null, cycle: null, projectLimit: 2, extraUsers: 0, userLimit: 5, primarySector: null, sectors: [] }, valuation: { subscribed: valuation, canAccess: valuation, canRead: valuation, canWrite: valuation, status: valuation ? 'trial' : 'cancelled', paidUntil: null, trialEndsAt: null, analysisLimit: 10, extraUsers: 0, userLimit: 5, planKey: null, cycle: null } } });
+const me = (role: string, hr = true, modeling = false, valuation = false): Me => ({
+  user: { sub: 'u', role, employeeId: 'e', name: 'Pessoa de teste', companyId: 'co' },
+  company: { id: 'co', name: 'Empresa de teste', nif: '0000000000' },
+  modules: {
+    hr: {
+      subscribed: hr,
+      canAccess: hr,
+      canRead: hr,
+      canWrite: hr,
+      status: hr ? 'active' : 'cancelled',
+      paidUntil: null,
+      trialEndsAt: null,
+    },
+    modeling: {
+      subscribed: modeling,
+      canAccess: modeling,
+      canRead: modeling,
+      canWrite: modeling,
+      status: modeling ? 'active' : 'cancelled',
+      paidUntil: null,
+      trialEndsAt: null,
+      planKey: null,
+      cycle: null,
+      projectLimit: 2,
+      extraUsers: 0,
+      userLimit: 5,
+      primarySector: null,
+      sectors: [],
+    },
+    valuation: {
+      subscribed: valuation,
+      canAccess: valuation,
+      canRead: valuation,
+      canWrite: valuation,
+      status: valuation ? 'trial' : 'cancelled',
+      paidUntil: null,
+      trialEndsAt: null,
+      analysisLimit: 10,
+      extraUsers: 0,
+      userLimit: 5,
+      planKey: null,
+      cycle: null,
+    },
+  },
+});
 const links = (user: Me) => navigation(user, { absences: 2, expenses: 3 }).flatMap(g => g.items);
 describe('menu comum e permissões do protótipo RH', () => {
   it('o simulador é uma ferramenta de Salários e não pertence ao espaço do colaborador', () => {
@@ -13,17 +57,51 @@ describe('menu comum e permissões do protótipo RH', () => {
   });
   it('separa relatórios, definições e módulos, conservando os pedidos operacionais em Equipa', () => {
     const groups = navigation(me('owner'), { absences: 2, expenses: 3 });
-    expect(groups.map(g => g.label)).toEqual(['Equipa', 'Tempo', 'Salários', 'Finanças', 'Talento', 'Relatórios', 'Definições', 'Módulos']);
+    expect(groups.map(g => g.label)).toEqual([
+      'Equipa',
+      'Tempo',
+      'Salários',
+      'Finanças',
+      'Talento',
+      'Relatórios',
+      'Definições',
+      'Módulos',
+    ]);
     expect(groups.find(g => g.label === 'Relatórios')!.items.map(i => i.label)).toEqual(['Relatórios', 'BI']);
-    expect(groups.find(g => g.label === 'Definições')!.items.map(i => i.href)).toEqual(['/definicoes', '/sector', '/locais', '/conformidade', '/acessos']);
+    expect(groups.find(g => g.label === 'Definições')!.items.map(i => i.href)).toEqual([
+      '/definicoes',
+      '/sector',
+      '/locais',
+      '/conformidade',
+      '/acessos',
+    ]);
     expect(groups.find(g => g.label === 'Equipa')!.items.some(i => i.href === '/pedidos')).toBe(true);
     expect(links(me('owner')).find(l => l.href === '/ausencias')?.badge).toBe(2);
     expect(links(me('owner')).find(l => l.href === '/despesas')?.badge).toBe(3);
   });
   it('o colaborador tem o seu espaço e não ganha acessos de administração ou de salários da equipa', () => {
     const hrefs = links(me('employee')).map(l => l.href);
-    expect(hrefs).toEqual(expect.arrayContaining(['/', '/recibos', '/ausencias', '/despesas', '/documentos', '/colaboradores/e', '/modulos']));
-    for (const forbidden of ['/colaboradores', '/processamento', '/tesouraria', '/analitica', '/acessos', '/licenca', '/plataforma']) expect(hrefs).not.toContain(forbidden);
+    expect(hrefs).toEqual(
+      expect.arrayContaining([
+        '/',
+        '/recibos',
+        '/ausencias',
+        '/despesas',
+        '/documentos',
+        '/colaboradores/e',
+        '/modulos',
+      ]),
+    );
+    for (const forbidden of [
+      '/colaboradores',
+      '/processamento',
+      '/tesouraria',
+      '/analitica',
+      '/acessos',
+      '/licenca',
+      '/plataforma',
+    ])
+      expect(hrefs).not.toContain(forbidden);
   });
   it('a chefia continua sem as áreas de Finanças e a administração de RH não recebe a Tesouraria', () => {
     expect(links(me('manager')).map(l => l.href)).not.toEqual(expect.arrayContaining(['/tesouraria']));
@@ -36,12 +114,19 @@ describe('menu comum e permissões do protótipo RH', () => {
     const groups = navigation(me('owner', false, true), { absences: 0, expenses: 0 });
     expect(groups.map(g => g.label)).toEqual(['Definições', 'Módulos']);
     expect(groups.find(g => g.label === 'Definições')!.items.map(i => i.href)).toEqual(['/definicoes', '/acessos']);
-    expect(groups.find(g => g.label === 'Módulos')!.items.find(l => l.label === 'Recursos Humanos')).toMatchObject({ href: '/modulos#hr', locked: true });
+    expect(groups.find(g => g.label === 'Módulos')!.items.find(l => l.label === 'Recursos Humanos')).toMatchObject({
+      href: '/modulos#hr',
+      locked: true,
+    });
     expect(groups.find(g => g.label === 'Módulos')!.items.find(l => l.href === '/modelagem')?.locked).toBe(false);
   });
   it('uma licença de Modelagem não ultrapassa a atribuição individual', () => {
-    const user = me('employee', true, true); user.modules.modeling.canAccess = false;
-    expect(links(user).find(l => l.label === 'Modelagem Financeira')).toMatchObject({ href: '/modulos#modeling', locked: true });
+    const user = me('employee', true, true);
+    user.modules.modeling.canAccess = false;
+    expect(links(user).find(l => l.label === 'Modelagem Financeira')).toMatchObject({
+      href: '/modulos#modeling',
+      locked: true,
+    });
     expect(links(user).map(l => l.href)).not.toContain('/modelagem');
   });
   it('o Valora aparece na Plataforma e só abre com licença e acesso individual', () => {
@@ -49,20 +134,28 @@ describe('menu comum e permissões do protótipo RH', () => {
     expect(locked).toMatchObject({ href: '/modulos#valuation', locked: true });
     const open = links(me('owner', true, false, true)).find(l => l.label === 'Análise e Avaliação');
     expect(open).toMatchObject({ href: '/valora', locked: false });
-    const user = me('employee', true, false, true); user.modules.valuation.canAccess = false;
+    const user = me('employee', true, false, true);
+    user.modules.valuation.canAccess = false;
     expect(links(user).map(l => l.href)).not.toContain('/valora');
   });
   it('acolhimento e saída: em Talento para quem gere, «As minhas tarefas» para o colaborador, com o contador do próprio', () => {
     const groups = navigation(me('manager'), { absences: 0, expenses: 0, tasks: 4 });
-    expect(groups.find(g => g.label === 'Talento')!.items[0]).toMatchObject({ href: '/acolhimento', label: 'Acolhimento e saída', badge: 4 });
+    expect(groups.find(g => g.label === 'Talento')!.items[0]).toMatchObject({
+      href: '/acolhimento',
+      label: 'Acolhimento e saída',
+      badge: 4,
+    });
     expect(links(me('employee')).find(l => l.href === '/acolhimento')).toMatchObject({ label: 'As minhas tarefas' });
   });
   it('destaca uma só entrada nas páginas de detalhe e nos separadores de Finanças', () => {
-    for (const path of ['/bi', '/sector', '/definicoes', '/pedidos', '/acessos']) expect(links(me('owner')).filter(l => navActive(l.href, path, new URLSearchParams()))).toHaveLength(1);
+    for (const path of ['/bi', '/sector', '/definicoes', '/pedidos', '/acessos'])
+      expect(links(me('owner')).filter(l => navActive(l.href, path, new URLSearchParams()))).toHaveLength(1);
     expect(navActive('/', '/colaboradores/e', new URLSearchParams())).toBe(false);
     expect(navActive('/colaboradores', '/colaboradores/e', new URLSearchParams())).toBe(true);
     for (const section of ['balancete', 'diario', 'razao', 'exportar', 'plano']) {
-      const selected = links(me('owner')).filter(l => navActive(l.href, '/financas', new URLSearchParams({ s: section })));
+      const selected = links(me('owner')).filter(l =>
+        navActive(l.href, '/financas', new URLSearchParams({ s: section })),
+      );
       expect(selected).toHaveLength(1);
       expect(selected[0]!.label).toBe(section === 'plano' ? 'Plano de contas' : 'Lançamentos contabilísticos');
     }
@@ -70,7 +163,8 @@ describe('menu comum e permissões do protótipo RH', () => {
   it('mudar os grupos não alarga os acessos da chefia nem do colaborador', () => {
     for (const role of ['employee', 'manager']) {
       const hrefs = links(me(role)).map(i => i.href);
-      for (const path of ['/bi', '/relatorios', '/definicoes', '/sector', '/conformidade', '/acessos']) expect(hrefs).not.toContain(path);
+      for (const path of ['/bi', '/relatorios', '/definicoes', '/sector', '/conformidade', '/acessos'])
+        expect(hrefs).not.toContain(path);
     }
     for (const role of ['finance', 'payroll']) {
       const config = navigation(me(role), { absences: 0, expenses: 0 }).find(g => g.label === 'Definições')!;

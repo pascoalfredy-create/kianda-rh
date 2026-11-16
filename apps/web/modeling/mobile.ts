@@ -13,29 +13,50 @@ export function setupModelingMobile(showIosInstructions: () => void) {
   const installed = () => media.matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !/crios|fxios/i.test(navigator.userAgent);
   let deferred: InstallEvent | null = null;
-  const update = () => { button.hidden = installed() || !(deferred || ios); };
+  const update = () => {
+    button.hidden = installed() || !(deferred || ios);
+  };
   const network = () => {
     status.hidden = navigator.onLine;
-    status.textContent = navigator.onLine ? '' : 'Sem ligação. Ligue-se à Internet para carregar projectos e guardar alterações.';
+    status.textContent = navigator.onLine
+      ? ''
+      : 'Sem ligação. Ligue-se à Internet para carregar projectos e guardar alterações.';
   };
   window.addEventListener('beforeinstallprompt', event => {
-    event.preventDefault(); deferred = event as InstallEvent; update();
+    event.preventDefault();
+    deferred = event as InstallEvent;
+    update();
   });
-  window.addEventListener('appinstalled', () => { deferred = null; button.hidden = true; });
+  window.addEventListener('appinstalled', () => {
+    deferred = null;
+    button.hidden = true;
+  });
   window.addEventListener('online', network);
   window.addEventListener('offline', network);
   media.addEventListener('change', update);
   // eslint-disable-next-line @typescript-eslint/no-misused-promises -- o próprio handler trata os erros (try/catch); os testes aguardam a promessa.
   button.addEventListener('click', async () => {
     if (deferred) {
-      const event = deferred; deferred = null; button.disabled = true;
-      try { await event.prompt(); await event.userChoice; }
-      catch { status.hidden = false; status.textContent = 'Não foi possível iniciar a instalação. Use o menu do navegador para adicionar o Kianda ao ecrã inicial.'; }
-      finally { button.disabled = false; update(); }
+      const event = deferred;
+      deferred = null;
+      button.disabled = true;
+      try {
+        await event.prompt();
+        await event.userChoice;
+      } catch {
+        status.hidden = false;
+        status.textContent =
+          'Não foi possível iniciar a instalação. Use o menu do navegador para adicionar o Kianda ao ecrã inicial.';
+      } finally {
+        button.disabled = false;
+        update();
+      }
     } else if (ios) showIosInstructions();
   });
-  update(); network();
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).catch(() => {});
+  update();
+  network();
+  if ('serviceWorker' in navigator)
+    navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).catch(() => {});
 }
 
 /** Cada mapa desloca-se dentro do seu contentor, sem alargar a página no telefone. */
@@ -43,8 +64,10 @@ export function prepareFinancialTables(root: HTMLElement) {
   for (const table of root.querySelectorAll('table')) {
     let wrapper = table.closest<HTMLElement>('.tblwrap');
     if (!wrapper) {
-      wrapper = document.createElement('div'); wrapper.className = 'tblwrap';
-      table.before(wrapper); wrapper.append(table);
+      wrapper = document.createElement('div');
+      wrapper.className = 'tblwrap';
+      table.before(wrapper);
+      wrapper.append(table);
     }
     wrapper.tabIndex = 0;
     wrapper.setAttribute('role', 'region');
