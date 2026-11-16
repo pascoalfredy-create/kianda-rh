@@ -225,17 +225,15 @@ async function assertEditable(db: Db, companyId: string, employeeId: string, wor
 }
 
 const audit = (db: Db, actor: Actor, action: string, entity: string, id: string, before: unknown, after: unknown) =>
-  db
-    .insert(auditLogs)
-    .values({
-      companyId: actor.companyId,
-      actorId: actor.actorId,
-      action,
-      entity,
-      entityId: id,
-      before: before as object,
-      after: after as object,
-    });
+  db.insert(auditLogs).values({
+    companyId: actor.companyId,
+    actorId: actor.actorId,
+    action,
+    entity,
+    entityId: id,
+    before: before as object,
+    after: after as object,
+  });
 
 const view = (e: Entry) => ({ ...e, in: luandaTime(e.clockIn), out: e.clockOut ? luandaTime(e.clockOut) : null });
 
@@ -314,6 +312,230 @@ async function resolveKiosk(
 }
 
 // ───────────────────────── Rotas ─────────────────────────
+
+const clockSchema = z
+  .object({
+    action: z.enum(['in', 'out']),
+    at: z.iso.datetime({ offset: true }).optional(),
+    clientRef: z.string().trim().min(8).max(64).optional(),
+    /** Posição no instante da marcação (só pedida quando a empresa usa o ponto com localização). */
+    location: z
+      .object({
+        lat: z.number().min(-90).max(90),
+        lng: z.number().min(-180).max(180),
+        accuracy: z.number().min(0).max(100_000),
+      })
+      .nullable()
+      .optional(),
+    /** Código do quiosque à entrada: conteúdo do QR ou os 6 dígitos. */
+    kiosk: z.string().trim().min(6).max(120).optional(),
+    /** Identificador aleatório do aparelho (gerado no navegador), para detectar marcações por colegas. */
+    device: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9-]{8,64}$/)
+      .optional(),
+  })
+  .refine(x => !x.at === !x.clientRef, { message: 'Registo offline incompleto' });
+type ClockRequest = z.infer<typeof clockSchema>;
+type Punch = { b: ClockRequest; emp: Employee; now: Date; serverNow: Date; today: string; offline: boolean };
+
+/** Hora da marcação: do servidor, ou do telemóvel nas marcações sem rede (até 72 h atrás, nunca no futuro). */
+function punchTime(b: ClockRequest) {
+  const serverNow = new Date();
+  const offline = Boolean(b.at);
+  const now = offline ? new Date(b.at!) : serverNow;
+  if (offline && now.getTime() > serverNow.getTime() + 5 * 60_000)
+    throw new DomainError(
+      'hora_futura',
+      'A hora do telemóvel está à frente da hora real — acerte o relógio do telemóvel.',
+      400,
+    );
+  if (offline && serverNow.getTime() - now.getTime() > 72 * 3_600_000)
+    throw new DomainError(
+      'offline_antigo',
+      'Registos sem rede com mais de 72 horas não são aceites — peça à chefia para corrigir o ponto.',
+      400,
+    );
+  return { serverNow, offline, now };
+}
+
+/** Reenvio do mesmo registo sem rede: devolve o que já foi gravado. */
+async function offlineDuplicate(db: Db, p: Punch) {
+  if (!p.offline) return undefined;
+  const same =
+    p.b.action === 'in'
+      ? eq(attendanceEntries.clientRef, p.b.clientRef!)
+      : and(
+          eq(attendanceEntries.workDate, p.today),
+          eq(attendanceEntries.offlineOut, true),
+          eq(attendanceEntries.clockOut, p.now),
+        );
+  const [dup] = await db
+    .select()
+    .from(attendanceEntries)
+    .where(and(eq(attendanceEntries.employeeId, p.emp.id), same));
+  return dup;
+}
+
+/** Sinais antifraude: o mesmo aparelho a marcar por outro colaborador no mesmo dia, ou rede fora de Angola. */
+async function fraudSignals(db: Db, actor: Actor, p: Punch, location: PunchLocationRecord, country?: string) {
+  const signals: NonNullable<PunchLocationRecord['signals']> = [];
+  if (p.b.device) {
+    location.device = p.b.device;
+    const [other] = await db
+      .select({ id: attendanceEntries.id })
+      .from(attendanceEntries)
+      .where(
+        and(
+          eq(attendanceEntries.companyId, actor.companyId),
+          eq(attendanceEntries.workDate, p.today),
+          sql`${attendanceEntries.employeeId} <> ${p.emp.id}`,
+          sql`(${attendanceEntries.clockInLocation}->>'device' = ${p.b.device} or ${attendanceEntries.clockOutLocation}->>'device' = ${p.b.device})`,
+        ),
+      )
+      .limit(1);
+    if (other) signals.push('shared_device');
+  }
+  if (country && /^[A-Z]{2}$/.test(country) && country !== 'XX') {
+    location.country = country;
+    if (country !== 'AO' && !p.offline) signals.push('foreign_network');
+  }
+  return signals;
+}
+
+type PunchCheck =
+  | { blocked: { message: string | null; status: string; workplace: string | null; distance: number | null } }
+  | { blocked?: undefined; location: PunchLocationRecord | null; locationIssue: boolean };
+
+/** Ponto com localização: avaliado com a hora da marcação (também nas marcações feitas sem rede). */
+async function checkPunchLocation(db: Db, actor: Actor, p: Punch, country?: string): Promise<PunchCheck> {
+  const { mode, places } = await locationContext(db, actor.companyId);
+  if (mode === 'off') return { location: null, locationIssue: false };
+  const kioskWorkplaceId = p.b.kiosk ? await resolveKiosk(places, p.b.kiosk, p.now) : null;
+  if (p.b.kiosk && !kioskWorkplaceId)
+    throw new DomainError(
+      'codigo_quiosque',
+      'Código do quiosque inválido ou expirado. Leia de novo o código no ecrã à entrada.',
+      400,
+    );
+  const r = evaluatePunchLocation({
+    mode,
+    assignedWorkplaceId: places.some(w => w.id === p.emp.workplaceId) ? p.emp.workplaceId : null,
+    kioskWorkplaceId,
+    fix: p.b.location ?? null,
+    workplaces: places.map(w => ({
+      id: w.id,
+      name: w.name,
+      lat: w.latitude,
+      lng: w.longitude,
+      radius: w.radiusMeters,
+    })),
+  });
+  if (!r.allowed) {
+    // Recusa sem excepção (a tentativa fica na auditoria, que uma excepção desfaria).
+    await db.insert(auditLogs).values({
+      companyId: actor.companyId,
+      actorId: actor.actorId,
+      action: 'punch_blocked',
+      entity: 'employee',
+      entityId: p.emp.id,
+      after: {
+        action: p.b.action,
+        status: r.status,
+        workplace: r.workplaceName,
+        distance: r.distance,
+        offline: p.offline,
+      },
+    });
+    return { blocked: { message: r.message, status: r.status, workplace: r.workplaceName, distance: r.distance } };
+  }
+  if (r.status === 'not_required') return { location: null, locationIssue: false };
+  const fix = r.method === 'gps' && p.b.location;
+  const location: PunchLocationRecord = {
+    status: r.status as PunchLocationRecord['status'],
+    method: r.method,
+    workplaceId: r.workplaceId,
+    workplaceName: r.workplaceName,
+    distance: r.distance,
+    mode,
+    capturedAt: p.now.toISOString(),
+    ...(fix
+      ? {
+          lat: Math.round(fix.lat * 1e6) / 1e6,
+          lng: Math.round(fix.lng * 1e6) / 1e6,
+          accuracy: Math.round(fix.accuracy),
+        }
+      : {}),
+  };
+  const signals = await fraudSignals(db, actor, p, location, country);
+  if (signals.length) location.signals = signals;
+  return { location, locationIssue: r.issue || signals.length > 0 };
+}
+
+/** Grava a entrada ou fecha a entrada em aberto. O ponto regista factos: nunca é bloqueado por processamento fechado. */
+async function recordPunch(
+  db: Db,
+  actor: Actor,
+  p: Punch,
+  location: PunchLocationRecord | null,
+  locationIssue: boolean,
+) {
+  const [open] = await db
+    .select()
+    .from(attendanceEntries)
+    .where(
+      and(
+        eq(attendanceEntries.employeeId, p.emp.id),
+        eq(attendanceEntries.workDate, p.today),
+        isNull(attendanceEntries.clockOut),
+      ),
+    );
+  if (p.b.action === 'in') {
+    if (open)
+      throw new DomainError(
+        'entrada_aberta',
+        `Já registou entrada às ${luandaTime(open.clockIn)}. Registe a saída primeiro.`,
+      );
+    const [e] = await db
+      .insert(attendanceEntries)
+      .values({
+        companyId: actor.companyId,
+        employeeId: p.emp.id,
+        workDate: p.today,
+        clockIn: p.now,
+        source: p.offline ? 'offline' : 'web',
+        createdBy: actor.actorId,
+        clientRef: p.b.clientRef ?? null,
+        note: p.offline ? `Registado sem rede; enviado às ${luandaTime(p.serverNow)}` : null,
+        clockInLocation: location,
+        locationIssue,
+      })
+      .returning();
+    return { entry: e!, created: true };
+  }
+  if (!open) throw new DomainError('sem_entrada', 'Não há entrada registada hoje. Registe a entrada primeiro.');
+  if (p.now.getTime() - open.clockIn.getTime() < 60_000)
+    throw new DomainError('demasiado_cedo', 'A saída tem de ser pelo menos 1 minuto depois da entrada.');
+  const [e] = await db
+    .update(attendanceEntries)
+    .set({
+      clockOut: p.now,
+      clockOutLocation: location,
+      locationIssue: open.locationIssue || locationIssue,
+      ...(p.offline
+        ? {
+            offlineOut: true,
+            note: [open.note, `Saída registada sem rede; enviada às ${luandaTime(p.serverNow)}`]
+              .filter(Boolean)
+              .join(' · '),
+          }
+        : {}),
+    })
+    .where(eq(attendanceEntries.id, open.id))
+    .returning();
+  return { entry: e!, created: false };
+}
 
 export function attendanceRoutes() {
   const app = new Hono<AppEnv>();
@@ -399,225 +621,22 @@ export function attendanceRoutes() {
         { error: 'sem_ficha', message: 'O seu utilizador não está associado a uma ficha de colaborador.' },
         409,
       );
-    const b = z
-      .object({
-        action: z.enum(['in', 'out']),
-        at: z.iso.datetime({ offset: true }).optional(),
-        clientRef: z.string().trim().min(8).max(64).optional(),
-        /** Posição no instante da marcação (só pedida quando a empresa usa o ponto com localização). */
-        location: z
-          .object({
-            lat: z.number().min(-90).max(90),
-            lng: z.number().min(-180).max(180),
-            accuracy: z.number().min(0).max(100_000),
-          })
-          .nullable()
-          .optional(),
-        /** Código do quiosque à entrada: conteúdo do QR ou os 6 dígitos. */
-        kiosk: z.string().trim().min(6).max(120).optional(),
-        /** Identificador aleatório do aparelho (gerado no navegador), para detectar marcações por colegas. */
-        device: z
-          .string()
-          .trim()
-          .regex(/^[A-Za-z0-9-]{8,64}$/)
-          .optional(),
-      })
-      .refine(x => !x.at === !x.clientRef, { message: 'Registo offline incompleto' })
-      .parse(await body(c));
+    const b = clockSchema.parse(await body(c));
     const db = getDb();
-    const serverNow = new Date();
-    const offline = Boolean(b.at);
-    const now = offline ? new Date(b.at!) : serverNow;
-    if (offline) {
-      if (now.getTime() > serverNow.getTime() + 5 * 60_000)
-        throw new DomainError(
-          'hora_futura',
-          'A hora do telemóvel está à frente da hora real — acerte o relógio do telemóvel.',
-          400,
-        );
-      if (serverNow.getTime() - now.getTime() > 72 * 3_600_000)
-        throw new DomainError(
-          'offline_antigo',
-          'Registos sem rede com mais de 72 horas não são aceites — peça à chefia para corrigir o ponto.',
-          400,
-        );
-    }
-    const today = luandaDate(now);
+    const { now, serverNow, offline } = punchTime(b);
     const emp = await loadEmployee(db, actor, actor.employeeId);
     if (emp.status !== 'active')
       throw new DomainError('inactivo', 'Ficha suspensa ou cessada: não é possível registar ponto.', 403);
-    // Reenvio do mesmo registo offline: devolve o que já foi gravado.
-    if (offline && b.action === 'in') {
-      const [dup] = await db
-        .select()
-        .from(attendanceEntries)
-        .where(and(eq(attendanceEntries.employeeId, emp.id), eq(attendanceEntries.clientRef, b.clientRef!)));
-      if (dup) return c.json(view(dup), 200);
+    const punch: Punch = { b, emp, now, serverNow, today: luandaDate(now), offline };
+    const dup = await offlineDuplicate(db, punch);
+    if (dup) return c.json(view(dup), 200);
+    const checked = await checkPunchLocation(db, actor, punch, c.req.header('cf-ipcountry')?.toUpperCase());
+    if (checked.blocked) {
+      const { message, ...location } = checked.blocked;
+      return c.json({ error: 'fora_do_local', message, location }, 403);
     }
-    if (offline && b.action === 'out') {
-      const [dup] = await db
-        .select()
-        .from(attendanceEntries)
-        .where(
-          and(
-            eq(attendanceEntries.employeeId, emp.id),
-            eq(attendanceEntries.workDate, today),
-            eq(attendanceEntries.offlineOut, true),
-            eq(attendanceEntries.clockOut, now),
-          ),
-        );
-      if (dup) return c.json(view(dup), 200);
-    }
-    // Ponto com localização: avaliado com a hora da marcação (também nas marcações feitas sem rede).
-    const { mode, places } = await locationContext(db, actor.companyId);
-    let location: PunchLocationRecord | null = null,
-      locationIssue = false;
-    if (mode !== 'off') {
-      const kioskWorkplaceId = b.kiosk ? await resolveKiosk(places, b.kiosk, now) : null;
-      if (b.kiosk && !kioskWorkplaceId)
-        throw new DomainError(
-          'codigo_quiosque',
-          'Código do quiosque inválido ou expirado. Leia de novo o código no ecrã à entrada.',
-          400,
-        );
-      const assignedWorkplaceId = places.some(w => w.id === emp.workplaceId) ? emp.workplaceId : null;
-      const r = evaluatePunchLocation({
-        mode,
-        assignedWorkplaceId,
-        kioskWorkplaceId,
-        fix: b.location ?? null,
-        workplaces: places.map(w => ({
-          id: w.id,
-          name: w.name,
-          lat: w.latitude,
-          lng: w.longitude,
-          radius: w.radiusMeters,
-        })),
-      });
-      if (!r.allowed) {
-        // Recusa sem excepção (a tentativa fica na auditoria, que uma excepção desfaria).
-        await db
-          .insert(auditLogs)
-          .values({
-            companyId: actor.companyId,
-            actorId: actor.actorId,
-            action: 'punch_blocked',
-            entity: 'employee',
-            entityId: emp.id,
-            after: { action: b.action, status: r.status, workplace: r.workplaceName, distance: r.distance, offline },
-          });
-        return c.json(
-          {
-            error: 'fora_do_local',
-            message: r.message,
-            location: { status: r.status, workplace: r.workplaceName, distance: r.distance },
-          },
-          403,
-        );
-      }
-      if (r.status !== 'not_required') {
-        location = {
-          status: r.status as PunchLocationRecord['status'],
-          method: r.method,
-          workplaceId: r.workplaceId,
-          workplaceName: r.workplaceName,
-          distance: r.distance,
-          mode,
-          capturedAt: now.toISOString(),
-          ...(r.method === 'gps' && b.location
-            ? {
-                lat: Math.round(b.location.lat * 1e6) / 1e6,
-                lng: Math.round(b.location.lng * 1e6) / 1e6,
-                accuracy: Math.round(b.location.accuracy),
-              }
-            : {}),
-        };
-        locationIssue = r.issue;
-        // Sinais antifraude: o mesmo aparelho a marcar por outro colaborador no mesmo dia, ou rede fora de Angola.
-        const signals: NonNullable<PunchLocationRecord['signals']> = [];
-        if (b.device) {
-          location.device = b.device;
-          const [other] = await db
-            .select({ id: attendanceEntries.id })
-            .from(attendanceEntries)
-            .where(
-              and(
-                eq(attendanceEntries.companyId, actor.companyId),
-                eq(attendanceEntries.workDate, today),
-                sql`${attendanceEntries.employeeId} <> ${emp.id}`,
-                sql`(${attendanceEntries.clockInLocation}->>'device' = ${b.device} or ${attendanceEntries.clockOutLocation}->>'device' = ${b.device})`,
-              ),
-            )
-            .limit(1);
-          if (other) signals.push('shared_device');
-        }
-        const country = c.req.header('cf-ipcountry')?.toUpperCase();
-        if (country && /^[A-Z]{2}$/.test(country) && country !== 'XX') {
-          location.country = country;
-          if (country !== 'AO' && !offline) signals.push('foreign_network');
-        }
-        if (signals.length) {
-          location.signals = signals;
-          locationIssue = true;
-        }
-      }
-    }
-    // O ponto regista factos: nunca é bloqueado por processamento fechado (é comum fechar a 20–25 do mês);
-    // as horas desses dias seguem na aprovação do mês e no processamento seguinte.
-    const [open] = await db
-      .select()
-      .from(attendanceEntries)
-      .where(
-        and(
-          eq(attendanceEntries.employeeId, emp.id),
-          eq(attendanceEntries.workDate, today),
-          isNull(attendanceEntries.clockOut),
-        ),
-      );
-    if (b.action === 'in') {
-      if (open)
-        throw new DomainError(
-          'entrada_aberta',
-          `Já registou entrada às ${luandaTime(open.clockIn)}. Registe a saída primeiro.`,
-        );
-      const [e] = await db
-        .insert(attendanceEntries)
-        .values({
-          companyId: actor.companyId,
-          employeeId: emp.id,
-          workDate: today,
-          clockIn: now,
-          source: offline ? 'offline' : 'web',
-          createdBy: actor.actorId,
-          clientRef: b.clientRef ?? null,
-          note: offline ? `Registado sem rede; enviado às ${luandaTime(serverNow)}` : null,
-          clockInLocation: location,
-          locationIssue,
-        })
-        .returning();
-      return c.json(view(e!), 201);
-    }
-    if (!open) throw new DomainError('sem_entrada', 'Não há entrada registada hoje. Registe a entrada primeiro.');
-    if (now.getTime() - open.clockIn.getTime() < 60_000)
-      throw new DomainError('demasiado_cedo', 'A saída tem de ser pelo menos 1 minuto depois da entrada.');
-    const [e] = await db
-      .update(attendanceEntries)
-      .set({
-        clockOut: now,
-        clockOutLocation: location,
-        locationIssue: open.locationIssue || locationIssue,
-        ...(offline
-          ? {
-              offlineOut: true,
-              note: [open.note, `Saída registada sem rede; enviada às ${luandaTime(serverNow)}`]
-                .filter(Boolean)
-                .join(' · '),
-            }
-          : {}),
-      })
-      .where(eq(attendanceEntries.id, open.id))
-      .returning();
-    return c.json(view(e!));
+    const { entry, created } = await recordPunch(db, actor, punch, checked.location, checked.locationIssue);
+    return created ? c.json(view(entry), 201) : c.json(view(entry));
   });
 
   /** Folha mensal de um colaborador (o próprio, a chefia da equipa, RH/processamento/finanças). */
