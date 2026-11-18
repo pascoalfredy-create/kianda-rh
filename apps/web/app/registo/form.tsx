@@ -1,6 +1,14 @@
 'use client';
 
-import { CYCLES, DEFAULT_TIERS, MODELING_PLANS, SECTORS, TRIAL_DAYS, VALUATION_PLANS } from '@kianda/core';
+import {
+  registrationNameProblem,
+  CYCLES,
+  DEFAULT_TIERS,
+  MODELING_PLANS,
+  SECTORS,
+  TRIAL_DAYS,
+  VALUATION_PLANS,
+} from '@kianda/core';
 import type { RegistrationSelection } from '../../lib/registration-selection';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -29,6 +37,9 @@ export function RegistoForm({ selection = null }: { selection?: RegistrationSele
         onSubmit={async e => {
           e.preventDefault();
           const f = new FormData(e.currentTarget);
+          const ownerProblem = registrationNameProblem(String(f.get('name') ?? ''));
+          const companyProblem = registrationNameProblem(String(f.get('companyName') ?? ''));
+          if (ownerProblem || companyProblem) return setError(ownerProblem ?? companyProblem ?? '');
           if (f.get('password') !== f.get('password2')) return setError('As palavras-passe não coincidem.');
           setBusy(true);
           setError('');
@@ -104,7 +115,7 @@ export function RegistoForm({ selection = null }: { selection?: RegistrationSele
         <h3 className="auth-section-title">Empresa</h3>
         <label>
           Denominação social
-          <input name="companyName" required minLength={2} placeholder="Ex.: Kwanza Logística, Lda." />
+          <input name="companyName" required minLength={2} maxLength={200} placeholder="Ex.: Kwanza Logística, Lda." />
         </label>
         <label>
           NIF da empresa *
@@ -146,7 +157,14 @@ export function RegistoForm({ selection = null }: { selection?: RegistrationSele
         <h3 className="auth-section-title">Responsável pela conta</h3>
         <label>
           Nome
-          <input name="name" required minLength={2} />
+          <input
+            name="name"
+            required
+            minLength={2}
+            maxLength={150}
+            autoComplete="name"
+            placeholder="Nome completo do proprietário"
+          />
         </label>
         <label>
           Email

@@ -54,6 +54,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!me) redirect('/login');
   if (me.user.requiresEmailVerification) redirect('/confirmar-email');
   if (me.platformAdmin) redirect('/plataforma');
+  if (me.company?.registrationReviewRequired) redirect('/cadastro-em-revisao');
   const counts = me.notifications ?? { absences: 0, expenses: 0, tasks: 0, acks: 0 };
   return (
     <Suspense fallback={<div className="empty">A abrir o Kianda…</div>}>

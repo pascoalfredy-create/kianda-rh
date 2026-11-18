@@ -12,6 +12,7 @@ import { redirect } from 'next/navigation';
 import { api, currentUser } from '@/lib/api';
 import { PlatformShell } from '@/components/platform-shell';
 import { PurgeCompany } from '@/components/privacy-actions';
+import { RegistrationReview } from './forms';
 import { Visits, type VisitsSummary } from './visits';
 import {
   ConfirmPayment,
@@ -27,6 +28,7 @@ import {
 export const dynamic = 'force-dynamic';
 
 interface Co {
+  registrationReviewReasons: string[];
   id: string;
   name: string;
   nif: string;
@@ -284,6 +286,17 @@ export default async function Plataforma() {
                     {c.sectorLabel ? ` · ${c.sectorLabel}` : ''}
                   </div>
                   {c.notes && <div className="muted">{c.notes}</div>}
+                  {c.registrationReviewReasons.length > 0 && (
+                    <div>
+                      <span className="st pending">Cadastro em revisão</span>
+                      {c.registrationReviewReasons.map(reason => (
+                        <p className="muted" key={reason}>
+                          {reason}
+                        </p>
+                      ))}
+                      <RegistrationReview companyId={c.id} />
+                    </div>
+                  )}
                 </td>
                 <td>
                   {c.owner?.name ?? '—'}

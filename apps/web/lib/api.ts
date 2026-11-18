@@ -42,6 +42,7 @@ async function requestJson(path: string, init: RequestInit = {}): Promise<ApiRes
   const actor = role && sub ? { sub, role, employeeId: res.headers.get('X-Kianda-Employee') || null } : null;
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
+    if (res.status === 403 && error.error === 'cadastro_em_revisao') redirect('/cadastro-em-revisao');
     if (res.status === 403 && error.error === 'conta_da_plataforma') redirect('/plataforma');
     throw new ApiError(res.status, error.message ?? `Erro ${res.status}`, actor);
   }
@@ -80,7 +81,14 @@ export interface Me {
     employeeId: string | null;
     requiresEmailVerification?: boolean;
   };
-  company: { id: string; name: string; nif: string; code?: string | null; hasLogo?: boolean } | null;
+  company: {
+    id: string;
+    name: string;
+    nif: string;
+    code?: string | null;
+    registrationReviewRequired?: boolean;
+    hasLogo?: boolean;
+  } | null;
   licence?: {
     status: string;
     label: string;

@@ -580,6 +580,31 @@ export function platformRoutes() {
     });
   });
 
+  app.post('/v1/platform/companies/:id/registration-review', async c => {
+    const actor = c.get('actor');
+    const input = z.object({ note: z.string().trim().min(5).max(500) }).parse(await body(c));
+    return getDb().transaction(async db => {
+      const [company] = await db
+        .select()
+        .from(companies)
+        .where(eq(companies.id, c.req.param('id')))
+        .for('update');
+      if (!company || company.nif === PLATFORM_NIF) throw new DomainError('nao_encontrado', 'Empresa inexistente', 404);
+      if (!company.registrationReviewReasons.length) return c.json({ ok: true });
+      await db.update(companies).set({ registrationReviewReasons: [] }).where(eq(companies.id, company.id));
+      await db.insert(auditLogs).values({
+        companyId: company.id,
+        actorId: actor.actorId,
+        action: 'approve_registration',
+        entity: 'company',
+        entityId: company.id,
+        before: { registrationReviewReasons: company.registrationReviewReasons },
+        after: { registrationReviewReasons: [], note: input.note },
+      });
+      return c.json({ ok: true });
+    });
+  });
+
   app.get('/v1/platform/companies', async c => {
     const db = getDb();
     // Tudo em consultas agregadas (sem uma ronda de consultas por empresa).
@@ -639,6 +664,7 @@ export function platformRoutes() {
           code: co.code,
           createdAt: co.createdAt,
           owner: owner ?? null,
+          registrationReviewReasons: co.registrationReviewReasons,
           activeEmployees: active,
           modules,
           modelingMrr: mrr.modeling,

@@ -79,6 +79,7 @@ export const companies = pgTable('companies', {
   id: id(),
   name: text('name').notNull(),
   nif: text('nif').notNull().unique(),
+  registrationReviewReasons: jsonb('registration_review_reasons').$type<string[]>().notNull().default([]),
   inssNumber: text('inss_number'),
   address: text('address'),
   /** Sede (mapa de remunerações da AGT): usados quando a ficha do colaborador não indica outro local de trabalho. */
