@@ -38,7 +38,7 @@ test('Acolhimento: o RH acompanha a lista, ajusta o modelo e o colaborador vê s
   await expect(page.getByRole('heading', { name: 'Acolhimento · Joana Lutete' })).toBeVisible();
   const task = page.getByRole('row', { name: /Contrato de trabalho assinado/ });
   await task.getByRole('button', { name: 'Marcar como feita' }).click();
-  await expect(task).toContainText('Feita por Dona E2E');
+  await expect(task).toContainText('Feita por Dona Ensaio');
   await expect(page.locator('.kpi', { hasText: 'Feitas' })).toContainText('1 de 11');
   await page.screenshot({ path: '/tmp/e2e/acolhimento-02-lista.png', fullPage: false });
 
