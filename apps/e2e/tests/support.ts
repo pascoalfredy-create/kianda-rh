@@ -37,7 +37,7 @@ export async function registerCompany(
     data: {
       acceptTerms: true,
       company: { name, sector: 'services', nif: id.slice(-10).padStart(10, '0') },
-      name: 'Dona E2E',
+      name: 'Amélia Kiluanje',
       email,
       password: PASSWORD,
       modules,
