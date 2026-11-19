@@ -87,6 +87,7 @@ export interface Me {
     nif: string;
     code?: string | null;
     registrationReviewRequired?: boolean;
+    registrationDataIssues?: string[];
     hasLogo?: boolean;
   } | null;
   licence?: {

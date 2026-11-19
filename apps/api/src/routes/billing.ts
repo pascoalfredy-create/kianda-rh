@@ -2,6 +2,7 @@ import { modelingUsage, requireModelingPlanUsage, validateModelingSectors } from
 import { requireValuationPlanUsage, valuationUsage } from '../services/valuation-policy.js';
 import { storageMode } from '../services/storage.js';
 import {
+  ownerRegistrationIssues,
   CYCLES,
   cyclePrice,
   DEFAULT_TIERS,
@@ -665,6 +666,7 @@ export function platformRoutes() {
           createdAt: co.createdAt,
           owner: owner ?? null,
           registrationReviewReasons: co.registrationReviewReasons,
+          registrationDataIssues: owner ? ownerRegistrationIssues(owner.name, owner.email) : [],
           activeEmployees: active,
           modules,
           modelingMrr: mrr.modeling,

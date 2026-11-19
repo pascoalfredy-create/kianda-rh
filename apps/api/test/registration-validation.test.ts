@@ -72,6 +72,18 @@ describe.skipIf(!process.env.DATABASE_URL)('revisão de cadastro', () => {
     expect(decision.some(row => row.entityId === id && row.actorId)).toBe(true);
     const allowed = await app.inject({ method: 'GET', url: '/v1/employees', headers: { cookie } });
     expect(allowed.statusCode, allowed.body).toBe(200);
+    await getDb()
+      .update(users)
+      .set({ name: 'Responsável 123', email: 'teste@gmail.com' })
+      .where(eq(users.id, response.json().user.id));
+    const notice = await app.inject({ method: 'GET', url: '/v1/auth/me', headers: { cookie } });
+    expect(notice.statusCode, notice.body).toBe(200);
+    expect(notice.json().company.registrationDataIssues).toHaveLength(2);
+    await getDb()
+      .update(users)
+      .set({ name: 'Pascoal Frederico', email: payload.email })
+      .where(eq(users.id, response.json().user.id));
+
     const duplicate = await app.inject({
       method: 'POST',
       url: '/v1/auth/register',

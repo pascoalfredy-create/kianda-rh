@@ -1,4 +1,4 @@
-import type { CompanyModulesOverview } from '@kianda/core';
+import { ownerRegistrationIssues, type CompanyModulesOverview } from '@kianda/core';
 import {
   and,
   companies,
@@ -53,6 +53,9 @@ export async function accountOverview(db: Db, actor: Actor) {
         code: companies.code,
         hasLogo: sql<boolean>`coalesce(length(${companies.logoDataUrl}), 0) > 0`,
       },
+      owners: sql<
+        { name: string; email: string | null }[]
+      >`(select coalesce(json_agg(json_build_object('name', u.name, 'email', u.email)), '[]'::json) from users u where u.company_id = ${companies.id} and u.role = 'owner')`,
       sector: companies.sector,
       sub: subscriptions,
       grant: companyModules,
@@ -85,7 +88,14 @@ export async function accountOverview(db: Db, actor: Actor) {
     valuationMember: first?.valuationMemberEnabled == null ? null : { enabled: first.valuationMemberEnabled },
   });
   return {
-    company: first?.company ?? null,
+    company: first?.company
+      ? {
+          ...first.company,
+          registrationDataIssues: [
+            ...new Set((first.owners ?? []).flatMap(owner => ownerRegistrationIssues(owner.name, owner.email))),
+          ],
+        }
+      : null,
     licence: {
       status: licence.status,
       label: licence.statusLabel,

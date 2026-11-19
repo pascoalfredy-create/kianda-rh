@@ -15,6 +15,9 @@ export default async function CadastroEmRevisao() {
         <h1>Cadastro em revisão</h1>
         <p>Precisamos de confirmar os dados de {me.company.name} antes de disponibilizar os módulos.</p>
         <p>Contacte o suporte Kianda e indique o nome da empresa e o NIF {me.company.nif}.</p>
+        {me.company.registrationDataIssues?.map(issue => (
+          <p key={issue}>{issue}</p>
+        ))}
         <p>Depois da aprovação, poderá continuar com a sua conta.</p>
         <Link className="btn" href="/modulos">
           Verificar aprovação

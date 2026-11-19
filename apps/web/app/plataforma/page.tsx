@@ -29,6 +29,7 @@ export const dynamic = 'force-dynamic';
 
 interface Co {
   registrationReviewReasons: string[];
+  registrationDataIssues: string[];
   id: string;
   name: string;
   nif: string;
@@ -285,6 +286,14 @@ export default async function Plataforma() {
                     NIF {c.nif} · código {c.code ?? '—'}
                     {c.sectorLabel ? ` · ${c.sectorLabel}` : ''}
                   </div>
+                  {c.registrationDataIssues.length > 0 && (
+                    <div className="warn">
+                      <b>Dados do proprietário por confirmar</b>
+                      {c.registrationDataIssues.map(issue => (
+                        <p key={issue}>{issue}</p>
+                      ))}
+                    </div>
+                  )}
                   {c.notes && <div className="muted">{c.notes}</div>}
                   {c.registrationReviewReasons.length > 0 && (
                     <div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { registrationNameProblem, registrationReviewReasons } from '../src/index.js';
+import { ownerRegistrationIssues, registrationNameProblem, registrationReviewReasons } from '../src/index.js';
 
 describe('dados de cadastro', () => {
   it('rejeita nomes provisórios completos normalizando acentos, espaços e maiúsculas', () => {
@@ -15,4 +15,11 @@ describe('dados de cadastro', () => {
     expect(registrationReviewReasons('1234567890')).toHaveLength(1);
     expect(registrationReviewReasons('5417433373')).toEqual([]);
   });
+});
+
+it('avisa os proprietários com dados provisórios e aceita caracteres válidos', () => {
+  expect(ownerRegistrationIssues('Teste', 'teste@gmail.com')).toHaveLength(2);
+  expect(ownerRegistrationIssues('João D’Ávila', 'joao.silva+rh@empresa.co.ao')).toEqual([]);
+  expect(ownerRegistrationIssues('Maria Silva', 'email sem arroba')).toHaveLength(1);
+  expect(ownerRegistrationIssues('Maria Silva', 'admin@empresa.ao')).toEqual([]);
 });
