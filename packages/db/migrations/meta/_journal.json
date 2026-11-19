@@ -477,6 +477,13 @@
       "when": 1794611200004,
       "tag": "0067_release_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1794611200005,
+      "tag": "0068_registration_review",
+      "breakpoints": true
     }
   ]
 }

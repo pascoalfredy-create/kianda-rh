@@ -35,7 +35,7 @@ test('cadastro sem planos: NIF obrigatório, palavra-passe visível e confirmaç
   await page.getByLabel('Denominação social').fill('Empresa cadastro E2E');
   await nif.fill('123');
   await page.getByLabel('Sector de actividade').selectOption('services');
-  await page.getByLabel('Nome', { exact: true }).fill('Responsável E2E');
+  await page.getByLabel('Nome', { exact: true }).fill('Pascoal Frederico');
   await page.getByLabel('Email', { exact: true }).fill(email);
   await page.getByLabel('Palavra-passe', { exact: true }).fill('PalavraSegura2026');
   await page.getByLabel('Confirmar palavra-passe', { exact: true }).fill('PalavraSegura2026');

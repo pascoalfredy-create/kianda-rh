@@ -116,7 +116,7 @@ test('versões: aprovar, descarregar o PDF aprovado, consultar em só leitura e 
   await page.fill('#versionLabel', 'Comité de investimento');
   await page.click('[data-act="approveVersion"]');
   await expect(page.locator('#modal')).toContainText('Esta revisão já foi aprovada como v1 (Comité de investimento)');
-  await expect(page.locator('#modal tbody tr').first()).toContainText('Dona E2E');
+  await expect(page.locator('#modal tbody tr').first()).toContainText('Dona Ensaio');
   const [download] = await Promise.all([page.waitForEvent('download'), page.click('[data-act="versionPdf"]')]);
   expect(download.suggestedFilename()).toMatch(/-v1-sumario\.pdf$/);
   await expectRecoveryPdf(download, 'Significado do resultado');
@@ -134,7 +134,7 @@ test('versões: aprovar, descarregar o PDF aprovado, consultar em só leitura e 
   await expect(page.locator('#modal')).toContainText('O rascunho tem alterações posteriores');
   await page.click('[data-act="openVersion"]');
   const banner = page.locator('.alert:has-text("Versão aprovada v1")');
-  await expect(banner).toContainText('aprovada por Dona E2E');
+  await expect(banner).toContainText('aprovada por Dona Ensaio');
   await expect(banner).toContainText('reproduzem o cálculo aprovado');
   await expect(page.locator('#mSel option:checked')).toHaveText('Versão v1 · Expansão Benguela');
   await openCosts(page);

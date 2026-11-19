@@ -464,3 +464,32 @@ export function MockPayment({ id }: { id: string }) {
     </span>
   );
 }
+
+export function RegistrationReview({ companyId }: { companyId: string }) {
+  const { busy, error, run } = useMutation();
+  const [note, setNote] = useState('');
+  return (
+    <form
+      onSubmit={event => {
+        event.preventDefault();
+        void run(`/v1/platform/companies/${companyId}/registration-review`, 'POST', { note });
+      }}
+    >
+      <label>
+        Confirmação dos dados
+        <input
+          required
+          minLength={5}
+          maxLength={500}
+          value={note}
+          onChange={event => setNote(event.target.value)}
+          placeholder="Indique como confirmou os dados do cadastro"
+        />
+      </label>
+      {error && <span className="err">{error}</span>}
+      <button className="btn sm" disabled={busy}>
+        Aprovar cadastro
+      </button>
+    </form>
+  );
+}

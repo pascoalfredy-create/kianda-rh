@@ -5,6 +5,8 @@ import {
   MODELING_PLANS,
   defaultModelingSector,
   isValidCompanyNif,
+  registrationNameProblem,
+  registrationReviewReasons,
   luandaDate,
   SECTORS,
   sha256Hex,
@@ -178,13 +180,26 @@ export function authRoutes() {
     const b = z
       .object({
         company: z.object({
-          name: z.string().trim().min(2),
+          name: z
+            .string()
+            .trim()
+            .min(2)
+            .max(200)
+            .refine(value => !registrationNameProblem(value), 'Indique a denominação real da empresa.'),
           nif: z.string().trim().refine(isValidCompanyNif, 'NIF de empresa deve ter 10 dígitos'),
           sector: z.enum(Object.keys(SECTORS) as [keyof typeof SECTORS]).optional(),
           address: z.string().trim().max(200).optional().nullable(),
           employeesEstimate: z.number().int().min(1).max(100_000).optional(),
         }),
-        name: z.string().min(2),
+        name: z
+          .string()
+          .trim()
+          .min(2)
+          .max(150)
+          .refine(
+            value => !registrationNameProblem(value) && /^[\p{L}\p{M} .’'\-]+$/u.test(value),
+            'Indique o nome real do proprietário, sem números ou valores como Teste, Demo ou Admin.',
+          ),
         email: z.email(),
         password,
         acceptTerms: z.literal(true, { message: 'É necessário aceitar os termos de utilização' }),
@@ -240,6 +255,18 @@ export function authRoutes() {
     if (hasModeling && modelingPlan.prices[modelingCycle] === null)
       return c.json({ error: 'ciclo_indisponivel', message: 'O plano não está disponível no ciclo escolhido.' }, 400);
     const db = getDb();
+    const [existingCompany] = await db
+      .select({ id: companies.id })
+      .from(companies)
+      .where(eq(companies.nif, b.company.nif));
+    if (existingCompany)
+      return c.json(
+        {
+          error: 'nif_duplicado',
+          message: 'Já existe uma empresa registada com este NIF. Entre na conta existente ou contacte o suporte.',
+        },
+        409,
+      );
     const passwordHash = await hashPassword(b.password);
     const result = await db.transaction(async tx => {
       const [co] = await tx
@@ -247,6 +274,7 @@ export function authRoutes() {
         .values({
           name: b.company.name,
           nif: b.company.nif,
+          registrationReviewReasons: registrationReviewReasons(b.company.nif),
           sector: b.company.sector ?? null,
           address: b.company.address ?? null,
           code: companyCode(),
@@ -347,6 +375,11 @@ export function authRoutes() {
       title: `Bem-vindo ao Kianda, ${result.user.name.split(' ')[0]}`,
       paragraphs: [
         `A conta de ${result.company.name} está criada. Confirme o email na ligação enviada separadamente para iniciar os ${TRIAL_DAYS} dias de experiência nos módulos escolhidos: ${new Intl.ListFormat('pt', { type: 'conjunction' }).format([hasHr ? 'Recursos Humanos' : '', hasModeling ? 'Modelagem Financeira' : '', hasValuation ? 'Análise e Avaliação (Valora)' : ''].filter(Boolean))}.`,
+        ...(result.company.registrationReviewReasons.length
+          ? [
+              'O cadastro aguarda confirmação pela equipa Kianda antes do acesso aos módulos. Contacte o suporte para confirmar os dados.',
+            ]
+          : []),
         'Sem cobrança automática. Durante a avaliação, pode introduzir dados e pré-visualizar os documentos; exportar e imprimir exige uma subscrição paga. Escolha o plano e o pagamento depois de entrar na conta, em Módulos e licenças.',
       ],
       facts: [['Código da empresa', result.company.code ?? '—']],
@@ -361,6 +394,7 @@ export function authRoutes() {
         paragraphs: [
           `${result.company.name} (NIF ${result.company.nif}) registou-se${b.company.sector ? ` — sector ${SECTORS[b.company.sector]}` : ''}${b.company.employeesEstimate ? `, cerca de ${b.company.employeesEstimate} colaboradores` : ''}.`,
           `Proprietário: ${result.user.name} (${result.user.email}).`,
+          ...result.company.registrationReviewReasons,
         ],
         button: base ? { label: 'Abrir consola', url: `${base}/plataforma` } : null,
       });

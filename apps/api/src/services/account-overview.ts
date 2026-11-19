@@ -49,6 +49,7 @@ export async function accountOverview(db: Db, actor: Actor) {
         id: companies.id,
         name: companies.name,
         nif: companies.nif,
+        registrationReviewRequired: sql<boolean>`jsonb_array_length(${companies.registrationReviewReasons}) > 0`,
         code: companies.code,
         hasLogo: sql<boolean>`coalesce(length(${companies.logoDataUrl}), 0) > 0`,
       },

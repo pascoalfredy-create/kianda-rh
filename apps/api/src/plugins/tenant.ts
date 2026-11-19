@@ -100,6 +100,7 @@ const sessionGuard =
         emailVerifiedAt: users.emailVerifiedAt,
         revoked: revokedSessions.tokenHash,
         nif: companies.nif,
+        registrationReviewReasons: companies.registrationReviewReasons,
         adminEmail: platformAdmins.email,
       })
       .from(users)
@@ -128,6 +129,15 @@ const sessionGuard =
         { error: 'conta_da_plataforma', message: 'Esta conta dá acesso à consola da plataforma Kianda.' },
         403,
       );
+    if (scope === 'company' && user.registrationReviewReasons.length && c.req.path !== '/v1/auth/me') {
+      return c.json(
+        {
+          error: 'cadastro_em_revisao',
+          message: 'O cadastro da empresa aguarda confirmação pela equipa Kianda. Contacte o suporte.',
+        },
+        403,
+      );
+    }
     const requiresEmailVerification = user.emailVerificationRequired && !user.emailVerifiedAt;
     if (
       requiresEmailVerification &&

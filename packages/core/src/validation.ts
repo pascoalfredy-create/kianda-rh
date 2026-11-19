@@ -58,3 +58,32 @@ export function formatIban(value: string): string {
 export function isValidCompanyNif(value: string): boolean {
   return /^\d{10}$/.test(value.trim());
 }
+
+/** Valores provisórios completos. A comparação nunca procura partes de apelidos. */
+export function registrationNameProblem(value: string): string | null {
+  const normalized = value.normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase();
+  const words = normalized.match(/[\p{L}\p{N}]+/gu) ?? [];
+  const placeholders = new Set([
+    'test',
+    'teste',
+    'demo',
+    'admin',
+    'administrador',
+    'administrator',
+    'exemplo',
+    'asdf',
+    'qwerty',
+  ]);
+  if (!/\p{L}/u.test(normalized) || (words.length > 0 && words.every(word => placeholders.has(word)))) {
+    return 'Indique um nome real. Valores como Teste, Demo ou Admin não são aceites.';
+  }
+  return null;
+}
+
+/** Sinais para revisão humana, sem afirmar a existência ou titularidade fiscal. */
+export function registrationReviewReasons(nif: string): string[] {
+  if (/(\d)\1{5}/.test(nif) || '01234567890123456789'.includes(nif) || '98765432109876543210'.includes(nif)) {
+    return ['O NIF apresenta uma sequência ou repetição de dígitos que requer confirmação.'];
+  }
+  return [];
+}
