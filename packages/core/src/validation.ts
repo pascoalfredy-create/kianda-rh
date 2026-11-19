@@ -87,3 +87,19 @@ export function registrationReviewReasons(nif: string): string[] {
   }
   return [];
 }
+
+/** Aviso de regularização, incluindo contas anteriores às validações do cadastro. */
+export function ownerRegistrationIssues(name: string, email: string | null): string[] {
+  const issues: string[] = [];
+  if (registrationNameProblem(name) || !/^[\p{L}\p{M} .’'\-]+$/u.test(name.trim())) {
+    issues.push('Confirme o nome completo do proprietário.');
+  }
+  if (
+    !email ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+    /^(?:teste?|demo|exemplo)(?:[0-9._+-]*|[._+-][^@]*)@/i.test(email)
+  ) {
+    issues.push('Confirme o email do proprietário e utilize um endereço real ao qual tenha acesso.');
+  }
+  return issues;
+}

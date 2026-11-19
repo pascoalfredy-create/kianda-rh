@@ -64,6 +64,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       >
         <DocumentExportAccess allowed={canExportDocuments(me.modules.hr.status)}>
           <AppShell me={me} counts={counts}>
+            {!!me.company?.registrationDataIssues?.length && ['owner', 'hr_admin'].includes(me.user.role) && (
+              <div className="warn no-print" role="status">
+                <b>Actualize os dados do cadastro.</b>
+                {me.company.registrationDataIssues.map(issue => (
+                  <p key={issue}>{issue}</p>
+                ))}
+                <Link href="/conta">Ver a minha conta</Link> · Contacte o suporte se precisar de corrigir os dados.
+              </div>
+            )}
             <LicenceBanner me={me} />
             <NewsBanner notes={me.news ?? []} />
             {children}
