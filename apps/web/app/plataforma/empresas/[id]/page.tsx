@@ -1,7 +1,6 @@
 import { CYCLES, DEFAULT_TIERS, LEGACY_CUSTOM_TIER, MODELING_PLANS, VALUATION_PLANS } from '@kianda/core';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { PlatformShell } from '@/components/platform-shell';
 import { PurgeCompany } from '@/components/privacy-actions';
 import { hrModule, loadCompanies, moduleState, pt, requirePlatformAdmin } from '../../data';
 import { EditSubscription, EditValuation, RegistrationReview } from '../../forms';
@@ -10,17 +9,17 @@ export const dynamic = 'force-dynamic';
 
 /** Ficha de uma empresa cliente: dados, revisão do cadastro, licença de cada módulo e eliminação. */
 export default async function Empresa({ params }: { params: Promise<{ id: string }> }) {
-  await requirePlatformAdmin();
   const { id } = await params;
-  const { companies } = await loadCompanies();
-  const c = companies.find(x => x.id === id);
+  if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
+  const [, { companies }] = await Promise.all([requirePlatformAdmin(), loadCompanies({ id })]);
+  const c = companies[0];
   if (!c) notFound();
   const hr = moduleState(hrModule(c)),
     mo = moduleState(c.modules.modeling),
     va = moduleState(c.modules.valuation);
   const review = c.registrationReviewReasons.length + c.registrationDataIssues.length > 0;
   return (
-    <PlatformShell current="platform">
+    <>
       <div className="crumb">
         <Link href="/plataforma/empresas">Empresas</Link> / {c.name}
       </div>
@@ -143,6 +142,6 @@ export default async function Empresa({ params }: { params: Promise<{ id: string
           />
         </div>
       </div>
-    </PlatformShell>
+    </>
   );
 }

@@ -1,5 +1,4 @@
 import { CYCLES, DEFAULT_TIERS, MODELING_PLANS, VALUATION_PLANS, formatKz } from '@kianda/core';
-import { PlatformShell } from '@/components/platform-shell';
 import { OUTCOME, loadIntegrations, loadPayments, pt, requirePlatformAdmin, when } from '../data';
 import { ConfirmPayment, IssueInvoice, MockPayment } from '../forms';
 
@@ -7,12 +6,11 @@ export const dynamic = 'force-dynamic';
 
 /** Pagamentos: os que esperam confirmação, os pagos sem factura e o que o Multicaixa comunicou. */
 export default async function Pagamentos() {
-  await requirePlatformAdmin();
-  const [pays, integ] = await Promise.all([loadPayments(), loadIntegrations()]);
+  const [, pays, integ] = await Promise.all([requirePlatformAdmin(), loadPayments(), loadIntegrations()]);
   const st = integ.status;
   const sandbox = st.proxypay.enabled && st.proxypay.environment === 'sandbox';
   return (
-    <PlatformShell current="platform">
+    <>
       <h1>Pagamentos</h1>
       <p className="sub">Confirme os pagamentos das subscrições e acompanhe a facturação.</p>
       <div className="card section">
@@ -144,6 +142,6 @@ export default async function Pagamentos() {
           </table>
         )}
       </div>
-    </PlatformShell>
+    </>
   );
 }

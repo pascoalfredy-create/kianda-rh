@@ -114,6 +114,8 @@ export const ST: Record<string, string> = {
 
 export interface Summary {
   total: number;
+  inReview: number;
+  ownerDataIssues: number;
   trial: number;
   active: number;
   pastDue: number;
@@ -129,7 +131,10 @@ export interface Settings {
   admins: string[];
 }
 
-export const loadCompanies = () => api<{ companies: Co[]; summary: Summary }>('/v1/platform/companies');
+export const loadCompanies = (opts: { id?: string; summary?: boolean } = {}) =>
+  api<{ companies: Co[]; summary: Summary }>(
+    `/v1/platform/companies${opts.id ? `?id=${encodeURIComponent(opts.id)}` : opts.summary ? '?summary=1' : ''}`,
+  );
 export const loadPayments = () => api<Pay[]>('/v1/platform/payment-requests');
 export const loadSettings = () => api<Settings>('/v1/platform/settings');
 export const loadIntegrations = () => api<Integrations>('/v1/platform/integrations');
@@ -165,9 +170,9 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 /** Pontos que pedem acção da administração, com a ligação para o ecrã onde se resolvem. */
-export function attention(companies: Co[], pays: Pay[], integ: Integrations) {
-  const review = companies.filter(c => c.registrationReviewReasons.length > 0).length;
-  const ownerData = companies.filter(c => c.registrationDataIssues.length > 0).length;
+export function attention(summary: Summary, pays: Pay[], integ: Integrations) {
+  const review = summary.inReview;
+  const ownerData = summary.ownerDataIssues;
   const failed = integ.emails.filter(e => e.status === 'failed').length;
   return [
     {

@@ -1,14 +1,12 @@
-import { PlatformShell } from '@/components/platform-shell';
 import { MAIL, loadIntegrations, requirePlatformAdmin, when } from '../data';
 
 export const dynamic = 'force-dynamic';
 
 /** Emails enviados pelo Kianda: confirmações, avisos e recibos, com o estado de cada envio. */
 export default async function Emails() {
-  await requirePlatformAdmin();
-  const integ = await loadIntegrations();
+  const [, integ] = await Promise.all([requirePlatformAdmin(), loadIntegrations()]);
   return (
-    <PlatformShell current="platform">
+    <>
       <h1>Emails</h1>
       <p className="sub">Os emails mais recentes enviados pela plataforma.</p>
       <div className="card section">
@@ -38,6 +36,6 @@ export default async function Emails() {
           <div className="empty">Ainda não há emails.</div>
         )}
       </div>
-    </PlatformShell>
+    </>
   );
 }
