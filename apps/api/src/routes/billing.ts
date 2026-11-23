@@ -606,11 +606,25 @@ export function platformRoutes() {
     });
   });
 
+  /**
+   * Empresas clientes. `?id=` devolve só uma (ficha); `?summary=1` só os totais (visão geral).
+   * Tudo em consultas agregadas e índices em memória: o tempo cresce em linha com o número de empresas.
+   */
   app.get('/v1/platform/companies', async c => {
+    const onlyId = z
+      .string()
+      .uuid()
+      .optional()
+      .parse(c.req.query('id') || undefined);
+    const summaryOnly = c.req.query('summary') === '1';
     const db = getDb();
     // Tudo em consultas agregadas (sem uma ronda de consultas por empresa).
     const [cos, subs, counts, owners, pending, grants, paidCycles] = await Promise.all([
-      db.select().from(companies).where(ne(companies.nif, PLATFORM_NIF)).orderBy(desc(companies.createdAt)),
+      db
+        .select()
+        .from(companies)
+        .where(and(ne(companies.nif, PLATFORM_NIF), onlyId ? eq(companies.id, onlyId) : undefined))
+        .orderBy(desc(companies.createdAt)),
       db.select().from(subscriptions),
       db
         .select({ companyId: employees.companyId, n: sql<number>`count(*)::int` })
@@ -642,16 +656,22 @@ export function platformRoutes() {
         .orderBy(desc(paymentRequests.paidAt), desc(paymentRequests.id)),
     ]);
     const paidByCompany = groupBy(paidCycles, row => row.companyId);
+    const subOf = new Map(subs.map(x => [x.companyId, x])),
+      countOf = new Map(counts.map(x => [x.companyId, x.n])),
+      pendingOf = new Map(pending.map(x => [x.companyId, x.n])),
+      grantsOf = groupBy(grants, g => g.companyId),
+      ownerOf = new Map<string, (typeof owners)[number]>();
+    for (const o of owners) if (!ownerOf.has(o.companyId)) ownerOf.set(o.companyId, o);
     const out = await Promise.all(
       cos.map(async co => {
-        const sub = subs.find(s => s.companyId === co.id) ?? null,
-          active = counts.find(x => x.companyId === co.id)?.n ?? 0;
+        const sub = subOf.get(co.id) ?? null,
+          active = countOf.get(co.id) ?? 0;
         const l = licenceFromRows(sub, active);
-        const owner = owners.find(o => o.companyId === co.id);
+        const owner = ownerOf.get(co.id);
         const modules = await companyModulesOverview(db, co.id, owner?.id ?? '', 'owner', {
           licence: l,
           sector: co.sector,
-          grants: grants.filter(g => g.companyId === co.id),
+          grants: grantsOf.get(co.id) ?? [],
           member: undefined,
           valuationMember: undefined,
         } as never);
@@ -685,7 +705,7 @@ export function platformRoutes() {
             modules.hr.subscribed && (l.status === 'active' || l.status === 'past_due') && sub
               ? tierOf(sub).monthlyMinor
               : null,
-          pendingPayments: pending.find(p => p.companyId === co.id)?.n ?? 0,
+          pendingPayments: pendingOf.get(co.id) ?? 0,
         };
       }),
     );
@@ -697,9 +717,11 @@ export function platformRoutes() {
     });
     const mrrByModule = { hr: sum('hrMrr'), modeling: sum('modelingMrr'), valuation: sum('valuationMrr') };
     return c.json({
-      companies: out,
+      companies: summaryOnly ? [] : out,
       summary: {
         total: out.length,
+        inReview: out.filter(x => x.registrationReviewReasons.length > 0).length,
+        ownerDataIssues: out.filter(x => x.registrationDataIssues.length > 0).length,
         trial: out.filter(x => x.status === 'trial').length,
         active: out.filter(x => x.status === 'active').length,
         pastDue: out.filter(x => x.status === 'past_due').length,
@@ -764,29 +786,32 @@ export function platformRoutes() {
   /** Integrações: estado (sem segredos), parâmetros de facturação, eventos do gateway e emails recentes. */
   app.get('/v1/platform/integrations', async c => {
     const db = getDb();
-    const events = await db.select().from(gatewayEvents).orderBy(desc(gatewayEvents.createdAt)).limit(30);
-    const emails = await db.select().from(outboundEmails).orderBy(desc(outboundEmails.createdAt)).limit(30);
-    const invoiceIssues = await db
-      .select({
-        id: paymentRequests.id,
-        number: paymentRequests.number,
-        error: paymentRequests.invoiceError,
-        company: companies.name,
-      })
-      .from(paymentRequests)
-      .innerJoin(companies, eq(companies.id, paymentRequests.companyId))
-      .where(and(eq(paymentRequests.status, 'paid'), sql`${paymentRequests.invoiceRef} is null`))
-      .orderBy(desc(paymentRequests.paidAt))
-      .limit(50);
-    const [used] = await db
-      .select({ n: sql<number>`count(*)::int`, bytes: sql<number>`coalesce(sum(${files.sizeBytes}), 0)::bigint` })
-      .from(files);
+    const [events, emails, invoiceIssues, [used], invoicing] = await Promise.all([
+      db.select().from(gatewayEvents).orderBy(desc(gatewayEvents.createdAt)).limit(30),
+      db.select().from(outboundEmails).orderBy(desc(outboundEmails.createdAt)).limit(30),
+      db
+        .select({
+          id: paymentRequests.id,
+          number: paymentRequests.number,
+          error: paymentRequests.invoiceError,
+          company: companies.name,
+        })
+        .from(paymentRequests)
+        .innerJoin(companies, eq(companies.id, paymentRequests.companyId))
+        .where(and(eq(paymentRequests.status, 'paid'), sql`${paymentRequests.invoiceRef} is null`))
+        .orderBy(desc(paymentRequests.paidAt))
+        .limit(50),
+      db
+        .select({ n: sql<number>`count(*)::int`, bytes: sql<number>`coalesce(sum(${files.sizeBytes}), 0)::bigint` })
+        .from(files),
+      invoiceSettingsGet(db),
+    ]);
     return c.json({
       status: {
         ...integrationStatus(),
         files: { mode: storageMode(), count: used?.n ?? 0, bytes: Number(used?.bytes ?? 0) },
       },
-      invoicing: await invoiceSettingsGet(db),
+      invoicing,
       events,
       emails,
       invoiceIssues,

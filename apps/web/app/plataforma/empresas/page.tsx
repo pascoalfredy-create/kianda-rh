@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { PlatformShell } from '@/components/platform-shell';
 import { hrModule, loadCompanies, moduleState, pt, requirePlatformAdmin, type Co } from '../data';
 
 export const dynamic = 'force-dynamic';
@@ -24,9 +23,7 @@ export default async function Empresas({
 }: {
   searchParams: Promise<{ q?: string; ver?: string; p?: string }>;
 }) {
-  await requirePlatformAdmin();
-  const sp = await searchParams;
-  const { companies } = await loadCompanies();
+  const [, sp, { companies }] = await Promise.all([requirePlatformAdmin(), searchParams, loadCompanies()]);
   const q = (sp.q ?? '').trim().toLowerCase();
   const filter = FILTERS.find(f => f[0] === sp.ver) ?? FILTERS[0]!;
   const rows = companies.filter(
@@ -38,7 +35,7 @@ export default async function Empresas({
   const page = Math.min(pages, Math.max(1, Number(sp.p) || 1));
   const shown = rows.slice((page - 1) * PAGE, page * PAGE);
   return (
-    <PlatformShell current="platform">
+    <>
       <h1>Empresas</h1>
       <p className="sub">
         {companies.length} empresas clientes. Abra uma empresa para ver os dados e ajustar as licenças.
@@ -148,6 +145,6 @@ export default async function Empresas({
           )}
         </div>
       )}
-    </PlatformShell>
+    </>
   );
 }

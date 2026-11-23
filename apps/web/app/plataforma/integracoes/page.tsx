@@ -1,4 +1,3 @@
-import { PlatformShell } from '@/components/platform-shell';
 import { loadIntegrations, requirePlatformAdmin } from '../data';
 import { InvoicingForm, JobButtons } from '../forms';
 
@@ -6,11 +5,10 @@ export const dynamic = 'force-dynamic';
 
 /** Integrações: Multicaixa, email, ficheiros e facturação AGT, com as tarefas manuais. */
 export default async function Integracoes() {
-  await requirePlatformAdmin();
-  const integ = await loadIntegrations();
+  const [, integ] = await Promise.all([requirePlatformAdmin(), loadIntegrations()]);
   const st = integ.status;
   return (
-    <PlatformShell current="platform">
+    <>
       <h1>Integrações</h1>
       <p className="sub">Serviços externos ligados ao Kianda e o estado de cada um.</p>
       <div className="card section">
@@ -80,6 +78,6 @@ export default async function Integracoes() {
           </>
         )}
       </div>
-    </PlatformShell>
+    </>
   );
 }

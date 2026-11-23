@@ -1,4 +1,3 @@
-import { PlatformShell } from '@/components/platform-shell';
 import { loadSettings, requirePlatformAdmin } from '../data';
 import { SettingsForm } from '../forms';
 
@@ -6,10 +5,9 @@ export const dynamic = 'force-dynamic';
 
 /** Definições da plataforma: dados bancários e contactos que aparecem aos clientes, e quem administra. */
 export default async function Definicoes() {
-  await requirePlatformAdmin();
-  const settings = await loadSettings();
+  const [, settings] = await Promise.all([requirePlatformAdmin(), loadSettings()]);
   return (
-    <PlatformShell current="platform">
+    <>
       <h1>Definições</h1>
       <p className="sub">Parâmetros comerciais mostrados aos clientes nas cobranças e no suporte.</p>
       <div className="card section">
@@ -24,6 +22,6 @@ export default async function Definicoes() {
           ))}
         </ul>
       </div>
-    </PlatformShell>
+    </>
   );
 }

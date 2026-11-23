@@ -774,3 +774,12 @@ details.optional-changes[open]>summary{margin-bottom:10px}
 .news-list { display: grid; gap: 12px; }
 .news-list .news-item { padding: 16px; }
 .news-list .news-item h2 { font-size: 15px; margin: 4px 0 0; }
+
+/* Esqueleto enquanto um ecrã da consola carrega. */
+.platform-loading .sk { background: linear-gradient(90deg, #eef0f2 0%, #f6f7f8 50%, #eef0f2 100%); background-size: 200% 100%; animation: sk 1.2s ease-in-out infinite; border-radius: 10px; }
+.platform-loading .sk-title { width: 260px; height: 30px; margin: 6px 0 10px; }
+.platform-loading .sk-sub { width: 420px; max-width: 80%; height: 14px; margin-bottom: 22px; }
+.platform-loading .sk-card { height: 96px; border: 0; }
+.platform-loading .sk-block { height: 280px; border: 0; }
+@keyframes sk { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .platform-loading .sk { animation: none; } }

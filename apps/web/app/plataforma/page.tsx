@@ -1,7 +1,6 @@
 import { formatKz } from '@kianda/core';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import { PlatformShell } from '@/components/platform-shell';
 import { attention, loadCompanies, loadIntegrations, loadPayments, requirePlatformAdmin } from './data';
 import type { VisitsSummary } from './visits';
 
@@ -9,17 +8,17 @@ export const dynamic = 'force-dynamic';
 
 /** Visão geral: os números do negócio e o que pede acção hoje. Cada bloco tem o seu ecrã. */
 export default async function Plataforma() {
-  await requirePlatformAdmin();
-  const [{ companies, summary }, pays, integ, visits] = await Promise.all([
-    loadCompanies(),
+  const [, { summary }, pays, integ, visits] = await Promise.all([
+    requirePlatformAdmin(),
+    loadCompanies({ summary: true }),
     loadPayments(),
     loadIntegrations(),
     api<VisitsSummary>('/v1/platform/visits?days=30'),
   ]);
-  const todo = attention(companies, pays, integ);
+  const todo = attention(summary, pays, integ);
   const m = summary.modules;
   return (
-    <PlatformShell current="platform">
+    <>
       <h1>Plataforma Kianda</h1>
       <p className="sub">Visão geral do negócio: clientes, receita e o que pede a sua atenção.</p>
       <div className="grid">
@@ -121,6 +120,6 @@ export default async function Plataforma() {
           </div>
         </Link>
       </div>
-    </PlatformShell>
+    </>
   );
 }
