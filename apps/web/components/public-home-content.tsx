@@ -19,6 +19,7 @@ import { registrationHref } from '../lib/registration-selection';
 const money = (minor: number) => formatKz(minor).replace(/\s*Kz$/, '');
 const moduleContent = {
   hr: {
+    shot: '/site/kianda-rh-processamento.webp',
     name: 'Kianda RH',
     heading: 'Pessoas organizadas. Gestão mais clara.',
     description:
@@ -33,6 +34,7 @@ const moduleContent = {
     count: 'Uma faixa fixa por dimensão da equipa',
   },
   modeling: {
+    shot: '/site/kianda-integra-painel.webp',
     name: 'Kianda Integra',
     heading: 'Do pressuposto à decisão de investimento.',
     description:
@@ -52,6 +54,7 @@ const moduleContent = {
     count: 'Projectos e sectores conforme o plano · 5 utilizadores',
   },
   valuation: {
+    shot: '/site/kianda-valora-sintese.webp',
     name: 'Kianda Valora',
     heading: 'Conheça o valor da empresa. Controle o exercício.',
     description:
@@ -219,83 +222,99 @@ export function PublicHomeContent({ preview = false }: { preview?: boolean }) {
             </div>
             <p className={s.smallPrint}>Sem cartão · Sem cobrança automática · Documentos em pré-visualização</p>
           </div>
-          <div className={s.heroVisual} aria-label="Três módulos na mesma conta">
-            <div className={s.visualHeading}>
-              <span className={s.visualMark}>K</span>
-              <div>
-                <b>A sua empresa, no Kianda</b>
-                <small>Uma conta. Três caminhos para gerir.</small>
+          <div className={s.heroStage}>
+            <figure className={s.browser} aria-hidden="true">
+              <div className={s.browserBar}>
+                <i />
+                <i />
+                <i />
+                <span>kianda.yelaperformance.com</span>
               </div>
-              <span className={s.liveDot} aria-hidden="true" />
-            </div>
-            <div className={s.visualModule}>
-              <span className={s.moduleIcon} aria-hidden="true">
-                <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
-                  <circle cx="9" cy="7" r="3" stroke="currentColor" strokeWidth="1.7" />
-                  <path
-                    d="M3 20v-3a6 6 0 0 1 12 0v3M17 4a3 3 0 0 1 0 6m1 3c2 .8 3 2.2 3 4v3"
-                    stroke="currentColor"
-                    strokeWidth="1.7"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </span>
-              <div>
-                <small>KIANDA RH</small>
-                <h2>As pessoas no centro</h2>
-                <p>Equipa · Tempo · Remunerações</p>
+              <img src="/site/kianda-rh-hoje.webp" alt="" width={1366} height={700} />
+            </figure>
+            <div className={s.heroVisual} aria-label="Três módulos na mesma conta">
+              <div className={s.visualHeading}>
+                <span className={s.visualMark}>K</span>
+                <div>
+                  <b>A sua empresa, no Kianda</b>
+                  <small>Uma conta. Três caminhos para gerir.</small>
+                </div>
+                <span className={s.liveDot} aria-hidden="true" />
               </div>
-              <Check />
-            </div>
-            <div className={s.visualConnector}>
-              <span />
-              <small>MESMA CONTA · ACESSOS PRÓPRIOS</small>
-              <span />
-            </div>
-            <div className={s.visualModule}>
-              <span className={`${s.moduleIcon} ${s.lime}`} aria-hidden="true">
-                <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M4 20V11m7 9V6m7 14V3M2 21h20"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </span>
-              <div>
-                <small>KIANDA INTEGRA</small>
-                <h2>Os números com contexto</h2>
-                <p>Projectos · Cenários · Avaliação</p>
+              <div className={s.visualModule}>
+                <span className={s.moduleIcon} aria-hidden="true">
+                  <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
+                    <circle cx="9" cy="7" r="3" stroke="currentColor" strokeWidth="1.7" />
+                    <path
+                      d="M3 20v-3a6 6 0 0 1 12 0v3M17 4a3 3 0 0 1 0 6m1 3c2 .8 3 2.2 3 4v3"
+                      stroke="currentColor"
+                      strokeWidth="1.7"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </span>
+                <div>
+                  <small>KIANDA RH</small>
+                  <h2>As pessoas no centro</h2>
+                  <p>Equipa · Tempo · Remunerações</p>
+                </div>
+                <Check />
               </div>
-              <Check />
-            </div>
-            <div className={s.visualConnector}>
-              <span />
-              <small>MESMA CONTA · LICENÇA PRÓPRIA</small>
-              <span />
-            </div>
-            <div className={s.visualModule}>
-              <span className={`${s.moduleIcon} ${s.sky}`} aria-hidden="true">
-                <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 3v9h9A9 9 0 1 1 12 3Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-                  <path
-                    d="M15 3.5A9 9 0 0 1 20.5 9H15V3.5Z"
-                    stroke="currentColor"
-                    strokeWidth="1.7"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </span>
-              <div>
-                <small>KIANDA VALORA</small>
-                <h2>O valor da empresa, mês a mês</h2>
-                <p>Demonstrações · Orçamento · Avaliação</p>
+              <div className={s.visualConnector}>
+                <span />
+                <small>MESMA CONTA · ACESSOS PRÓPRIOS</small>
+                <span />
               </div>
-              <Check />
-            </div>
-            <div className={s.visualFoot}>
-              <span aria-hidden="true">◈</span> No computador, tablet e telefone
+              <div className={s.visualModule}>
+                <span className={`${s.moduleIcon} ${s.lime}`} aria-hidden="true">
+                  <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M4 20V11m7 9V6m7 14V3M2 21h20"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </span>
+                <div>
+                  <small>KIANDA INTEGRA</small>
+                  <h2>Os números com contexto</h2>
+                  <p>Projectos · Cenários · Avaliação</p>
+                </div>
+                <Check />
+              </div>
+              <div className={s.visualConnector}>
+                <span />
+                <small>MESMA CONTA · LICENÇA PRÓPRIA</small>
+                <span />
+              </div>
+              <div className={s.visualModule}>
+                <span className={`${s.moduleIcon} ${s.sky}`} aria-hidden="true">
+                  <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M12 3v9h9A9 9 0 1 1 12 3Z"
+                      stroke="currentColor"
+                      strokeWidth="1.7"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M15 3.5A9 9 0 0 1 20.5 9H15V3.5Z"
+                      stroke="currentColor"
+                      strokeWidth="1.7"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>
+                <div>
+                  <small>KIANDA VALORA</small>
+                  <h2>O valor da empresa, mês a mês</h2>
+                  <p>Demonstrações · Orçamento · Avaliação</p>
+                </div>
+                <Check />
+              </div>
+              <div className={s.visualFoot}>
+                <span aria-hidden="true">◈</span> No computador, tablet e telefone
+              </div>
             </div>
           </div>
         </section>
@@ -382,17 +401,28 @@ export function PublicHomeContent({ preview = false }: { preview?: boolean }) {
                   Ver condições do {current.name} <span aria-hidden="true">→</span>
                 </button>
               </div>
-              <aside className={s.moduleMap}>
-                <p className={s.eyebrow}>{current.label}</p>
-                <h3>O que vai encontrar</h3>
-                {current.maps.map((item, i) => (
-                  <div key={item}>
-                    <span>0{i + 1}</span>
-                    <b>{item}</b>
-                    <Check />
+              <aside className={s.moduleSide}>
+                <figure className={s.browser}>
+                  <div className={s.browserBar} aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                    <span>{current.name}</span>
                   </div>
-                ))}
-                <p className={s.mapNote}>{current.count}</p>
+                  <img src={current.shot} alt={`Ecrã do ${current.name}`} width={1366} height={760} loading="lazy" />
+                </figure>
+                <div className={s.moduleMap}>
+                  <p className={s.eyebrow}>{current.label}</p>
+                  <h3>O que vai encontrar</h3>
+                  {current.maps.map((item, i) => (
+                    <div key={item}>
+                      <span>0{i + 1}</span>
+                      <b>{item}</b>
+                      <Check />
+                    </div>
+                  ))}
+                  <p className={s.mapNote}>{current.count}</p>
+                </div>
               </aside>
             </div>
           </div>
@@ -462,16 +492,50 @@ export function PublicHomeContent({ preview = false }: { preview?: boolean }) {
         </section>
       </main>
       <footer className={s.footer}>
-        <span>
-          <b>Kianda</b> Recursos Humanos, Modelagem Financeira & Análise e Avaliação · Angola
-        </span>
-        <div>
-          <button type="button" onClick={() => openPlans()}>
-            Planos e condições
-          </button>
+        <div className={s.footerGrid}>
+          <div className={s.footerBrand}>
+            <span className={s.logo}>
+              <span className={s.mark}>K</span>
+              <span>
+                Kianda<small>Empresas · Angola</small>
+              </span>
+            </span>
+            <p>Recursos Humanos, Modelagem Financeira & Análise e Avaliação · Angola</p>
+          </div>
+          <nav aria-label="Módulos">
+            <h2>Módulos</h2>
+            {(['hr', 'modeling', 'valuation'] as const).map(key => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  setView('modulos');
+                  setModule(key);
+                  document.getElementById('explorar')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+              >
+                {moduleContent[key].name}
+              </button>
+            ))}
+          </nav>
+          <nav aria-label="Conta">
+            <h2>Conta</h2>
+            <a href="/registo">Experimentar um mês grátis</a>
+            <a href="/login">Entrar</a>
+            <button type="button" onClick={() => openPlans()}>
+              Planos e condições
+            </button>
+          </nav>
+          <nav aria-label="Suporte">
+            <h2>Suporte</h2>
+            {support?.email && <a href={`mailto:${support.email}`}>{support.email}</a>}
+            {support?.phone && <a href={`tel:${support.phone.replace(/[^+\d]/g, '')}`}>{support.phone}</a>}
+            <a href="/termos">Termos e privacidade</a>
+          </nav>
+        </div>
+        <div className={s.footerLine}>
+          <span>© {new Date().getFullYear()} Kianda</span>
           <a href="/termos">Termos e privacidade</a>
-          {support?.email && <a href={`mailto:${support.email}`}>Suporte: {support.email}</a>}
-          {support?.phone && <a href={`tel:${support.phone.replace(/[^+\d]/g, '')}`}>{support.phone}</a>}
         </div>
       </footer>
       <dialog
