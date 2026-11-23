@@ -47,7 +47,7 @@ test('visitas ao site: a página inicial conta a visita e a consola mostra-a', a
     .poll(async () => (await apiAs(admin.token, 'GET', '/v1/platform/visits?days=7')).body.totals.views)
     .toBeGreaterThan(before);
   await signIn(context, admin.token);
-  await page.goto('/plataforma');
+  await page.goto('/plataforma/visitas');
   const zone = page.locator('#visitas');
   await expect(zone.getByRole('heading', { name: /Visitas ao site/ })).toBeVisible();
   await expect(zone.getByText('Telemóvel')).toBeVisible();
@@ -70,6 +70,31 @@ test('administração entra directamente na consola e mantém a conta de empresa
   const nav = page.getByRole('navigation', { name: 'Administração da plataforma' });
   await expect(nav.getByRole('link')).toHaveText(['Plataforma', 'A minha conta']);
   await expect(page.getByRole('heading', { name: 'Plataforma Kianda' })).toBeVisible();
+  // Um ecrã para cada bloco da consola.
+  const tabs = page.getByRole('navigation', { name: 'Secções da consola' });
+  await expect(tabs.getByRole('link')).toHaveText([
+    'Visão geral',
+    'Empresas',
+    'Pagamentos',
+    'Visitas ao site',
+    'Emails',
+    'Integrações',
+    'Definições',
+  ]);
+  for (const [tab, heading] of [
+    ['Empresas', 'Empresas'],
+    ['Pagamentos', 'Pagamentos'],
+    ['Definições', 'Definições'],
+  ]) {
+    await tabs.getByRole('link', { name: tab }).click();
+    await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+  }
+  await tabs.getByRole('link', { name: 'Empresas' }).click();
+  await page.getByLabel('Procurar empresa').fill(customer.email);
+  await page.getByLabel('Procurar empresa').press('Enter');
+  await page.getByRole('link', { name: 'Abrir' }).first().click();
+  await expect(page.getByRole('heading', { name: 'Kianda RH' })).toBeVisible();
+  await tabs.getByRole('link', { name: 'Visão geral' }).click();
   await expect.poll(() => page.evaluate<boolean>("caches.match('/recibos').then(Boolean)")).toBe(false);
   await expect(page.getByRole('link', { name: 'Módulos e licenças' })).toHaveCount(0);
   for (const route of ['/', '/colaboradores', '/licenca', '/modelagem', '/valora']) {
