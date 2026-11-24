@@ -565,32 +565,34 @@ export function PublicHomeContent({ preview = false }: { preview?: boolean }) {
                 investimentos e relatórios têm de bater certo todos os meses. Juntámos tudo numa só conta, com as regras
                 locais aplicadas desde o primeiro dia.
               </p>
+              <dl>
+                <div>
+                  <dt>3</dt>
+                  <dd>módulos na mesma conta</dd>
+                </div>
+                <div>
+                  <dt>16</dt>
+                  <dd>sectores de actividade</dd>
+                </div>
+                <div>
+                  <dt>30</dt>
+                  <dd>dias grátis em cada módulo</dd>
+                </div>
+              </dl>
             </div>
-            <dl>
-              <div>
-                <dt>3</dt>
-                <dd>módulos na mesma conta</dd>
-              </div>
-              <div>
-                <dt>16</dt>
-                <dd>sectores de actividade</dd>
-              </div>
-              <div>
-                <dt>30</dt>
-                <dd>dias grátis em cada módulo</dd>
-              </div>
-            </dl>
-          </div>
-          <div className={s.aboutGrid}>
-            {ABOUT.map(([title, body, d]) => (
-              <article key={title}>
-                <span className={s.aboutIcon}>
-                  <Icon d={d} size={22} />
-                </span>
-                <h3>{title}</h3>
-                <p>{body}</p>
-              </article>
-            ))}
+            <ul className={s.aboutList}>
+              {ABOUT.map(([title, body, d]) => (
+                <li key={title}>
+                  <span className={s.aboutIcon}>
+                    <Icon d={d} size={20} />
+                  </span>
+                  <div>
+                    <h3>{title}</h3>
+                    <p>{body}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
         </section>
         <section className={s.safety} aria-labelledby="seguranca-titulo">
@@ -615,9 +617,16 @@ export function PublicHomeContent({ preview = false }: { preview?: boolean }) {
               <br />A exportação e a impressão ficam disponíveis com uma subscrição paga.
             </p>
           </div>
-          <a className={s.lightButton} href="/registo">
-            Começar gratuitamente <Arrow />
-          </a>
+          <div className={s.trialActions}>
+            <a className={s.lightButton} href="/registo">
+              Começar gratuitamente <Arrow />
+            </a>
+            {support?.email && (
+              <a className={s.ghostLight} href={`mailto:${support.email}`}>
+                Fale connosco
+              </a>
+            )}
+          </div>
         </section>
       </main>
       <footer className={s.footer}>
