@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { PurgeCompany } from '@/components/privacy-actions';
 import { hrModule, loadCompanies, moduleState, pt, requirePlatformAdmin } from '../../data';
 import { EditSubscription, EditValuation, RegistrationReview } from '../../forms';
+import { statusLabel } from '@/lib/registration';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,21 +33,35 @@ export default async function Empresa({ params }: { params: Promise<{ id: string
       {review && (
         <div className="card section" style={{ borderColor: '#f3d9a6' }}>
           <h2>Cadastro por rever</h2>
-          <div style={{ padding: '4px 16px 16px' }}>
-            {c.registrationDataIssues.length > 0 && (
-              <div className="warn">
-                <b>Dados do proprietário por confirmar</b>
-                {c.registrationDataIssues.map(issue => (
-                  <p key={issue}>{issue}</p>
-                ))}
+          <div className="reg-list" style={{ padding: '0 16px 16px' }}>
+            {c.registrationChecklist.map(item => (
+              <div className="reg-row" key={item.key} data-check={item.key}>
+                <div className="reg-head">
+                  <div>
+                    <b>{item.label}</b>
+                    {item.value && <span className="muted"> · {item.value}</span>}
+                    {item.message && <p className="muted reg-msg">{item.message}</p>}
+                  </div>
+                  <span className="reg-pills">
+                    <span className={`st ${item.status === 'ok' ? 'approved' : 'pending'}`}>{statusLabel(item)}</span>
+                    {item.status !== 'ok' && (
+                      <span className={`st ${item.blocking ? 'rejected' : 'cancelled'}`}>
+                        {item.blocking ? 'Bloqueia o acesso' : 'Aviso, não bloqueia'}
+                      </span>
+                    )}
+                  </span>
+                </div>
               </div>
-            )}
-            {c.registrationReviewReasons.map(reason => (
-              <p className="muted" key={reason}>
-                {reason}
-              </p>
             ))}
-            {c.registrationReviewReasons.length > 0 && <RegistrationReview companyId={c.id} />}
+            {c.registrationReviewReasons.length > 0 ? (
+              <div className="reg-row">
+                <RegistrationReview companyId={c.id} />
+              </div>
+            ) : (
+              <p className="muted reg-msg">
+                O acesso não está bloqueado. Os pontos acima são avisos que o cliente corrige na conta.
+              </p>
+            )}
           </div>
         </div>
       )}

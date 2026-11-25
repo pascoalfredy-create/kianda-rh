@@ -70,7 +70,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 {me.company.registrationDataIssues.map(issue => (
                   <p key={issue}>{issue}</p>
                 ))}
-                <Link href="/conta">Ver a minha conta</Link> · Contacte o suporte se precisar de corrigir os dados.
+                <Link href="/conta#cadastro">Corrigir na minha conta</Link>
               </div>
             )}
             <LicenceBanner me={me} />

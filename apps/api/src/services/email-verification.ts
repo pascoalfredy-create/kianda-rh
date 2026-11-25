@@ -6,7 +6,9 @@ import {
   desc,
   emailVerifications,
   eq,
+  gt,
   isNull,
+  ne,
   subscriptions,
   users,
   type Db,
@@ -49,6 +51,7 @@ export async function issueEmailVerification(db: Db, userId: string) {
       companyId: u.companyId,
       userId: u.id,
       email: u.email,
+      purpose: 'confirm',
       tokenHash: await sha256Hex(token),
       expiresAt: new Date(now.getTime() + EMAIL_VERIFICATION_HOURS * 3_600_000),
     });
@@ -88,7 +91,8 @@ export async function confirmEmail(db: Db, token: string) {
     // A mesma ordem de bloqueio do reenvio (utilizador antes da ligação) evita deadlocks.
     const [u] = await tx.select().from(users).where(eq(users.id, lookup.userId)).for('update');
     const [v] = await tx.select().from(emailVerifications).where(eq(emailVerifications.id, lookup.id)).for('update');
-    if (!u || !v || u.disabledAt || u.email !== v.email || u.companyId !== v.companyId)
+    const change = v?.purpose === 'change';
+    if (!u || !v || u.disabledAt || (!change && u.email !== v.email) || u.companyId !== v.companyId)
       throw new DomainError('confirmacao_invalida', 'A ligação de confirmação é inválida. Peça uma nova ligação.', 400);
     const row = { u, v };
     if (row.v.usedAt || row.v.revokedAt || row.v.expiresAt <= now)
@@ -97,7 +101,17 @@ export async function confirmEmail(db: Db, token: string) {
         'A ligação já foi usada ou expirou. Inicie sessão e peça uma nova ligação.',
         410,
       );
-    await tx.update(users).set({ emailVerifiedAt: now }).where(eq(users.id, row.u.id));
+    if (change) {
+      const [taken] = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.companyId, row.u.companyId), eq(users.email, row.v.email), ne(users.id, row.u.id)));
+      if (taken) throw new DomainError('email_em_uso', 'Este email já é usado por outro acesso da empresa.', 409);
+    }
+    await tx
+      .update(users)
+      .set(change ? { emailVerifiedAt: now, email: row.v.email } : { emailVerifiedAt: now })
+      .where(eq(users.id, row.u.id));
     await tx.update(emailVerifications).set({ usedAt: now }).where(eq(emailVerifications.id, row.v.id));
     await tx
       .update(emailVerifications)
@@ -136,11 +150,111 @@ export async function confirmEmail(db: Db, token: string) {
     await tx.insert(auditLogs).values({
       companyId: row.u.companyId,
       actorId: row.u.id,
-      action: 'email_confirmed',
+      action: change ? 'email_changed' : 'email_confirmed',
       entity: 'user',
       entityId: row.u.id,
-      after: { email: maskEmail(row.u.email) },
+      before: change ? { email: maskEmail(row.u.email) } : null,
+      after: { email: maskEmail(row.v.email) },
     });
-    return { ok: true, message: 'Email confirmado. A sua conta está pronta para começar.' };
+    return change
+      ? { ok: true, message: 'Email alterado. Passe a entrar no Kianda com o novo endereço.', previous: row.u.email }
+      : { ok: true, message: 'Email confirmado. A sua conta está pronta para começar.' };
   });
+}
+
+/**
+ * Novo email do proprietário: a conta continua com o endereço actual até o novo ser confirmado
+ * pela ligação enviada para ele. Devolve o endereço mascarado para o ecrã.
+ */
+export async function issueEmailChange(db: Db, userId: string, newEmail: string) {
+  if (!emailDeliveryEnabled())
+    throw new DomainError(
+      'email_indisponivel',
+      'O envio de emails está temporariamente indisponível. Tente mais tarde ou contacte o suporte.',
+      503,
+    );
+  const email = newEmail.trim().toLowerCase(),
+    token = randomToken(),
+    now = new Date();
+  const u = await db.transaction(async tx => {
+    const [u] = await tx.select().from(users).where(eq(users.id, userId)).for('update');
+    if (!u || u.disabledAt) throw new DomainError('nao_encontrado', 'Conta inexistente', 404);
+    if (u.email === email) throw new DomainError('email_igual', 'Este já é o email da sua conta.', 400);
+    const [taken] = await tx
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.companyId, u.companyId), eq(users.email, email)));
+    if (taken) throw new DomainError('email_em_uso', 'Este email já é usado por outro acesso da empresa.', 409);
+    const [last] = await tx
+      .select()
+      .from(emailVerifications)
+      .where(and(eq(emailVerifications.userId, u.id), eq(emailVerifications.purpose, 'change')))
+      .orderBy(desc(emailVerifications.createdAt))
+      .limit(1);
+    if (last && now.getTime() - last.createdAt.getTime() < 120_000)
+      throw new DomainError('aguarde', 'Aguarde dois minutos antes de pedir outra alteração.', 429);
+    await tx
+      .update(emailVerifications)
+      .set({ revokedAt: now })
+      .where(
+        and(
+          eq(emailVerifications.userId, u.id),
+          eq(emailVerifications.purpose, 'change'),
+          isNull(emailVerifications.usedAt),
+          isNull(emailVerifications.revokedAt),
+        ),
+      );
+    await tx.insert(emailVerifications).values({
+      companyId: u.companyId,
+      userId: u.id,
+      email,
+      purpose: 'change',
+      tokenHash: await sha256Hex(token),
+      expiresAt: new Date(now.getTime() + EMAIL_VERIFICATION_HOURS * 3_600_000),
+    });
+    await tx.insert(auditLogs).values({
+      companyId: u.companyId,
+      actorId: u.id,
+      action: 'email_change_requested',
+      entity: 'user',
+      entityId: u.id,
+      after: { email: maskEmail(email) },
+    });
+    return u;
+  });
+  await sendMail(db, {
+    to: email,
+    companyId: u.companyId,
+    kind: 'alteracao_email',
+    subject: 'Confirme o novo email — Kianda',
+    title: 'Confirme o novo email da sua conta',
+    paragraphs: [
+      `Pediu para passar a usar este endereço na sua conta Kianda, em vez de ${maskEmail(u.email)}.`,
+      `A ligação é pessoal, só pode ser usada uma vez e expira em ${EMAIL_VERIFICATION_HOURS} horas. Até a confirmar, a conta continua com o email actual. Se não fez este pedido, ignore esta mensagem.`,
+    ],
+    button: {
+      label: 'Confirmar o novo email',
+      url: `${appBaseUrl()}/confirmar-email?token=${encodeURIComponent(token)}`,
+    },
+  });
+  return { email: maskEmail(email) };
+}
+
+/** Pedido de alteração de email ainda por confirmar (para mostrar «a confirmar» na lista de pontos). */
+export async function pendingEmailChange(db: Db, userId: string) {
+  const [row] = await db
+    .select({ email: emailVerifications.email })
+    .from(emailVerifications)
+    .where(
+      and(
+        eq(emailVerifications.userId, userId),
+        eq(emailVerifications.purpose, 'change'),
+        isNull(emailVerifications.usedAt),
+        isNull(emailVerifications.revokedAt),
+        gt(emailVerifications.expiresAt, new Date()),
+      ),
+    )
+    .orderBy(desc(emailVerifications.createdAt))
+    .limit(1);
+  return row ? maskEmail(row.email) : null;
 }

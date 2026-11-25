@@ -25,6 +25,7 @@ import {
 } from '@kianda/core';
 import {
   and,
+  asc,
   auditLogs,
   companyModules,
   companies,
@@ -84,6 +85,8 @@ import { dailyReminders } from '../services/jobs.js';
 import { exportCompany, purgeCompany } from '../services/privacy.js';
 import { companyModulesOverview } from '../services/modules.js';
 import { visitsSummary } from '../services/site-visits.js';
+import { checklistFor, sendRegistrationApproved } from '../services/registration.js';
+import { maskEmail, pendingEmailChange } from '../services/email-verification.js';
 
 const addDays = (d: string, n: number) => new Date(Date.parse(d) + n * 86_400_000).toISOString().slice(0, 10);
 
@@ -602,6 +605,8 @@ export function platformRoutes() {
         before: { registrationReviewReasons: company.registrationReviewReasons },
         after: { registrationReviewReasons: [], note: input.note },
       });
+      // O cliente fica a saber que pode entrar, e o que ainda falta corrigir.
+      await sendRegistrationApproved(db, company.id);
       return c.json({ ok: true });
     });
   });
@@ -634,7 +639,8 @@ export function platformRoutes() {
       db
         .select({ id: users.id, companyId: users.companyId, email: users.email, name: users.name })
         .from(users)
-        .where(eq(users.role, 'owner')),
+        .where(eq(users.role, 'owner'))
+        .orderBy(asc(users.createdAt), asc(users.id)),
       db
         .select({ companyId: paymentRequests.companyId, n: sql<number>`count(*)::int` })
         .from(paymentRequests)
@@ -687,6 +693,11 @@ export function platformRoutes() {
           owner: owner ?? null,
           registrationReviewReasons: co.registrationReviewReasons,
           registrationDataIssues: owner ? ownerRegistrationIssues(owner.name, owner.email) : [],
+          registrationChecklist: checklistFor(
+            co,
+            owner ?? null,
+            onlyId && owner ? await pendingEmailChange(db, owner.id) : null,
+          ).map(item => (item.key === 'ownerEmail' ? { ...item, value: maskEmail(item.value) || null } : item)),
           activeEmployees: active,
           modules,
           modelingMrr: mrr.modeling,

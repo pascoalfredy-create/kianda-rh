@@ -169,6 +169,8 @@ export const emailVerifications = pgTable(
       .notNull()
       .references(() => users.id),
     email: text('email').notNull(),
+    /** confirm: confirmar o email da conta · change: novo email pedido pelo proprietário (só muda ao confirmar). */
+    purpose: text('purpose').$type<'confirm' | 'change'>().notNull().default('confirm'),
     tokenHash: text('token_hash').notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     usedAt: timestamp('used_at', { withTimezone: true }),
