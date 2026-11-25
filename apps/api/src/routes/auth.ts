@@ -57,6 +57,7 @@ import {
 import { applySectorPreset } from '../services/sector.js';
 import { appBaseUrl } from '../services/integrations.js';
 import { sendMail } from '../services/mail.js';
+import { checklistFor, welcomeChecklistLines } from '../services/registration.js';
 import { validateModelingSectors } from '../services/modeling-policy.js';
 import { accountOverview } from '../services/account-overview.js';
 import { issueEmailVerification } from '../services/email-verification.js';
@@ -367,23 +368,33 @@ export function authRoutes() {
     const verification = await issueEmailVerification(db, result.user.id);
     // Boas-vindas ao proprietário e aviso à administração da plataforma (sem bloquear o registo).
     const base = appBaseUrl();
+    const checklistLines = welcomeChecklistLines(checklistFor(result.company, result.user, null));
     await sendMail(db, {
       to: result.user.email,
       companyId: result.company.id,
       kind: 'boas_vindas',
-      subject: 'Bem-vindo ao Kianda',
+      subject: result.company.registrationReviewReasons.length
+        ? 'Bem-vindo ao Kianda — cadastro por confirmar'
+        : 'Bem-vindo ao Kianda',
       title: `Bem-vindo ao Kianda, ${result.user.name.split(' ')[0]}`,
       paragraphs: [
         `A conta de ${result.company.name} está criada. Confirme o email na ligação enviada separadamente para iniciar os ${TRIAL_DAYS} dias de experiência nos módulos escolhidos: ${new Intl.ListFormat('pt', { type: 'conjunction' }).format([hasHr ? 'Recursos Humanos' : '', hasModeling ? 'Modelagem Financeira' : '', hasValuation ? 'Análise e Avaliação (Valora)' : ''].filter(Boolean))}.`,
-        ...(result.company.registrationReviewReasons.length
+        ...(checklistLines.length
           ? [
-              'O cadastro aguarda confirmação pela equipa Kianda antes do acesso aos módulos. Contacte o suporte para confirmar os dados.',
+              result.company.registrationReviewReasons.length
+                ? 'Antes de abrir os módulos, há pontos do cadastro a rever. Pode corrigi-los na sua conta ou enviar o comprovativo ao suporte:'
+                : 'Há pontos do cadastro a rever na sua conta:',
+              ...checklistLines.map(line => `• ${line}`),
             ]
           : []),
         'Sem cobrança automática. Durante a avaliação, pode introduzir dados e pré-visualizar os documentos; exportar e imprimir exige uma subscrição paga. Escolha o plano e o pagamento depois de entrar na conta, em Módulos e licenças.',
       ],
       facts: [['Código da empresa', result.company.code ?? '—']],
-      button: base ? { label: 'Ver módulos e licenças', url: `${base}/licenca` } : null,
+      button: base
+        ? result.company.registrationReviewReasons.length
+          ? { label: 'Rever o cadastro', url: `${base}/cadastro-em-revisao` }
+          : { label: 'Ver módulos e licenças', url: `${base}/licenca` }
+        : null,
     });
     for (const a of await db.select().from(platformAdmins)) {
       await sendMail(db, {

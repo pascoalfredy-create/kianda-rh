@@ -475,21 +475,25 @@ export function RegistrationReview({ companyId }: { companyId: string }) {
         void run(`/v1/platform/companies/${companyId}/registration-review`, 'POST', { note });
       }}
     >
-      <label>
+      <label style={{ display: 'grid', gap: 6, maxWidth: 640 }}>
         Confirmação dos dados
         <input
           required
           minLength={5}
           maxLength={500}
+          style={{ width: '100%' }}
           value={note}
           onChange={event => setNote(event.target.value)}
-          placeholder="Indique como confirmou os dados do cadastro"
+          placeholder="Como confirmou o NIF (certidão, portal da AGT, contacto)"
         />
       </label>
       {error && <span className="err">{error}</span>}
-      <button className="btn sm" disabled={busy}>
-        Aprovar cadastro
-      </button>
+      <div className="reg-act">
+        <button className="btn sm" disabled={busy}>
+          Aprovar cadastro
+        </button>
+        <span className="muted">O cliente recebe o email «Cadastro aprovado».</span>
+      </div>
     </form>
   );
 }

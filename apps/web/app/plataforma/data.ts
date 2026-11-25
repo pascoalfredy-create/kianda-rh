@@ -1,3 +1,4 @@
+import type { RegistrationCheck } from '@/lib/registration';
 import { type CompanyModulesOverview } from '@kianda/core';
 import { redirect } from 'next/navigation';
 import { api, currentUser } from '@/lib/api';
@@ -14,6 +15,7 @@ export async function requirePlatformAdmin() {
 export interface Co {
   registrationReviewReasons: string[];
   registrationDataIssues: string[];
+  registrationChecklist: RegistrationCheck[];
   id: string;
   name: string;
   nif: string;

@@ -8,6 +8,7 @@ import {
   issueEmailVerification,
   maskEmail,
 } from '../services/email-verification.js';
+import { sendMail } from '../services/mail.js';
 
 export function emailVerificationRoutes() {
   const app = new Hono<AppEnv>();
@@ -53,7 +54,23 @@ export function emailVerificationRoutes() {
   );
   app.post('/v1/public/email-verification', rateLimit('verify-email', 10, 900_000), async c => {
     const b = z.object({ token: z.string().min(24).max(200) }).parse(await body(c));
-    return c.json(await confirmEmail(getDb(), b.token));
+    const db = getDb();
+    const { previous, ...result } = (await confirmEmail(db, b.token)) as Awaited<ReturnType<typeof confirmEmail>> & {
+      previous?: string | null;
+    };
+    // Alteração de email: o endereço antigo fica a saber, para o caso de não ter sido o titular.
+    if (previous)
+      await sendMail(db, {
+        to: previous,
+        kind: 'email_alterado',
+        title: 'O email da sua conta foi alterado',
+        subject: 'O email da sua conta Kianda foi alterado',
+        paragraphs: [
+          'O email de acesso à sua conta Kianda foi alterado e confirmado. Este endereço deixa de servir para entrar.',
+          'Se não reconhece esta alteração, contacte de imediato o suporte Kianda.',
+        ],
+      });
+    return c.json(result);
   });
   return app;
 }

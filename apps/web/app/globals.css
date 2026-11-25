@@ -783,3 +783,12 @@ details.optional-changes[open]>summary{margin-bottom:10px}
 .platform-loading .sk-block { height: 280px; border: 0; }
 @keyframes sk { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .platform-loading .sk { animation: none; } }
+
+/* Lista de pontos do cadastro (cliente e consola) */
+.reg-list { display: grid; gap: 0; }
+.reg-row { border-top: 1px solid var(--line); padding: 12px 0; }
+.reg-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.reg-pills { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; flex-shrink: 0; }
+.reg-msg { margin: 4px 0 0; }
+.reg-act { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+@media (max-width: 560px) { .reg-head { flex-direction: column; } .reg-pills { justify-content: flex-start; } }
